@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "src/app/api/work-os/**/*.ts",
+    "src/app/work-os/**/*.tsx",
+    "src/lib/integrations/nifty.ts",
+    "src/lib/request-origin.ts",
+    "src/lib/supabase/*.ts",
+    "src/lib/userRoles.ts",
+    "src/lib/work-os*.ts",
+    "src/lib/worktivity*.ts",
+    "src/modules/work-os/**/*.tsx",
+    "scripts/work-os-pilot-audit.ts",
+    "test/work-os*.mts"
+  ],
+  "exclude": ["node_modules", "downloads"]
+}
