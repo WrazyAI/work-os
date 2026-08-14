@@ -13,6 +13,9 @@ const rust = read("src-tauri/src/lib.rs");
 assert.doesNotMatch(rust, /WebviewUrl::App\("index\.html\?debug=1"/);
 assert.doesNotMatch(rust, /get_webview_window\("debug"\)/);
 assert.match(rust, /set_focus\(\)/);
+const debugHost = read("src-tauri/src/debug_window.rs");
+assert.match(debugHost, /WebviewUrl::App\("debug\.html"\.into\(\)\)/);
+assert.doesNotMatch(debugHost, /\?debug=1/);
 
 const frontend = read("src/main.tsx");
 assert.doesNotMatch(frontend, /getCurrentWindow\(\)\.label === "debug"/);
@@ -48,6 +51,9 @@ assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 assert.match(app, /secureState\.clearAccount\(\)/);
 assert.match(app, /Account session/);
+assert.match(app, /ui\.action\.blocked/);
+assert.match(read("src/sessionGate.ts"), /Clock in explicitly/);
+assert.doesNotMatch(app, /disabled=\{!active \|\| !input\.trim\(\) \|\| busy\}/);
 
 const debugWindow = read("src/DebugWindow.tsx");
 assert.match(debugWindow, /if \(!isTauri\(\)\)/);
@@ -56,8 +62,13 @@ for (const event of ["work-os://debug-request", "work-os://debug-current", "work
 }
 assert.match(debugWindow, /\.\.\.DEFAULT_DEBUG_SCENARIO, \.\.\.preset/);
 const main = read("src/main.tsx");
-assert.match(main, /import DebugWindow from "\.\/DebugWindow"/);
-assert.match(main, /params\.has\("debug"\)/);
+const debug = read("src/debug.tsx");
+const debugHtml = read("debug.html");
+assert.doesNotMatch(main, /import DebugWindow/);
+assert.match(debug, /import DebugWindow from "\.\/DebugWindow"/);
+assert.match(debugHtml, /src="\/src\/debug\.tsx"/);
+assert.match(read("vite.config.ts"), /debug: resolve\(__dirname, "debug\.html"\)/);
+assert.match(read("src-tauri/capabilities/debug.json"), /allow-debug-commands/);
 
 const api = read("src/api.ts");
 assert.match(api, /AbortSignal\.timeout\(20_000\)/);

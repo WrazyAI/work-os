@@ -8,7 +8,9 @@
     "core:event:default",
     "core:path:default",
     "core:window:allow-close",
+    "core:window:allow-hide",
     "core:window:allow-show",
+    "allow-debug-commands",
     "opener:default"
   ]
 }

@@ -23,7 +23,7 @@ vi.mock("./diagnostics", () => ({
   diagnostics: { withSpan: vi.fn(async (_category: string, action: () => Promise<unknown>) => action()), warn: vi.fn() },
 }));
 
-import { flushQueue, sendOrQueue } from "./api";
+import { apiRequest, flushQueue, sendOrQueue } from "./api";
 
 describe("offline action replay", () => {
   beforeEach(() => {
@@ -50,5 +50,32 @@ describe("offline action replay", () => {
     expect(onlineFetch).toHaveBeenCalledTimes(2);
     expect(String(onlineFetch.mock.calls[1][0])).toContain("/api/work-os/me/workday");
     expect((onlineFetch.mock.calls[1][1] as RequestInit).headers).toMatchObject({ "Idempotency-Key": expect.any(String) });
+  });
+
+  it("sends authenticated proposal decisions even when no work session is active", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    const onlineFetch = vi.fn(async () => new Response(JSON.stringify({ proposal: { status: "accepted" } }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", onlineFetch);
+
+    await sendOrQueue("/api/work-os/proposals/proposal-1", "PATCH", { decision: "accept" });
+
+    const [url, init] = onlineFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://work.example.test/api/work-os/proposals/proposal-1");
+    expect(init.headers).toMatchObject({
+      Authorization: "Bearer desktop-token",
+      "X-Work-OS-Organization-Id": "org-a",
+      "Content-Type": "application/json",
+      "Idempotency-Key": expect.any(String),
+    });
+    expect(JSON.parse(String(init.body))).toMatchObject({ decision: "accept", observed_at: expect.any(String) });
+    expect(mockState.queue).toEqual([]);
+  });
+
+  it("surfaces server validation errors instead of hiding them in the offline queue", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Clock in before confirming a plan." }), { status: 409, headers: { "content-type": "application/json" } })));
+
+    await expect(apiRequest("/api/work-os/me/plan", { method: "PATCH", body: "{}" })).rejects.toThrow("Clock in before confirming a plan.");
+    expect(mockState.queue).toEqual([]);
   });
 });

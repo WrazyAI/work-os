@@ -89,6 +89,8 @@ describe("debug window contract", () => {
     expect(debug).not.toContain("stronghold");
     expect(debug).not.toContain("deny-get-vault-password");
     expect(debug).toContain('"debug"');
+    expect(debug).toContain("allow-debug-commands");
+    expect(debug).toContain("core:window:allow-hide");
     expect(mainCap).not.toContain('"debug"');
     expect(mainCap).toContain("stronghold:default");
   });

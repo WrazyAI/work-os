@@ -1,0 +1,13 @@
+.session-gate {
+  background: #f2f0db;
+  border-color: #d8d39e;
+}
+
+.session-gate span {
+  line-height: 1.4;
+}
+
+.session-gate .primary {
+  margin-left: auto;
+  min-height: 32px;
+}

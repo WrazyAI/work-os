@@ -14,7 +14,7 @@ pub fn open_debug_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let result = WebviewWindowBuilder::new(&app, DEBUG_LABEL, WebviewUrl::App("/?debug=1".into()))
+    let result = WebviewWindowBuilder::new(&app, DEBUG_LABEL, WebviewUrl::App("debug.html".into()))
         .title("Work OS Debugger")
         .inner_size(760.0, 860.0)
         .min_inner_size(520.0, 560.0)

@@ -46,7 +46,7 @@ export default function DebugWindow() {
 
   function closeWindow() {
     if (!isTauri()) { window.close(); return; }
-    void getCurrentWindow().close().catch(() => undefined);
+    void getCurrentWindow().hide().catch(() => undefined);
   }
 
   function update(patch: Partial<DebugScenario>) {
