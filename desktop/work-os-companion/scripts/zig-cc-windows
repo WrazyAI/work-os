@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=()
+lib_dirs=()
+for arg in "$@"; do
+  [[ "$arg" == "--target=x86_64-pc-windows-gnu" ]] && continue
+  args+=("$arg")
+  if [[ "$arg" == -L* && "$arg" != -L ]]; then
+    lib_dirs+=("${arg#-L}")
+  fi
+done
+
+resolved=()
+prev=""
+for arg in "${args[@]}"; do
+  if [[ "$prev" == "-L" ]]; then
+    lib_dirs+=("$arg")
+  fi
+  prev="$arg"
+done
+
+find_lib() {
+  local name="$1"
+  local candidate
+  for dir in "${lib_dirs[@]}"; do
+    for candidate in \
+      "$dir/lib${name}.a" \
+      "$dir/${name}.lib" \
+      "$dir/${name}.dll.lib" \
+      "$dir/lib${name}.dll.a" \
+      "$dir/${name}.a" \
+      "$dir/${name}.dll"
+    do
+      if [[ -f "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+final=()
+for arg in "${args[@]}"; do
+  # rustc passes -nodefaultlibs and then -lmsvcrt; Zig must keep its MinGW CRT.
+  [[ "$arg" == "-nodefaultlibs" || "$arg" == "-nolibc" ]] && continue
+  if [[ "$arg" == -l* && "$arg" != -l ]]; then
+    name="${arg#-l}"
+    case "$name" in
+      msvcrt|mingwex|mingw32|gcc|:libpthread.a|pthread)
+        continue
+        ;;
+    esac
+    if found="$(find_lib "$name")"; then
+      final+=("$found")
+      continue
+    fi
+  fi
+  final+=("$arg")
+done
+
+exec /home/maigreeks/Downloads/toolchains/zig-x86_64-linux-0.15.1/zig cc -target x86_64-windows-gnu "${final[@]}"

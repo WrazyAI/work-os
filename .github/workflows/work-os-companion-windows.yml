@@ -1,0 +1,97 @@
+name: Work OS Companion Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_channel:
+        description: Release channel
+        required: true
+        default: pilot
+        type: choice
+        options: [pilot, stable]
+
+permissions:
+  contents: read
+
+jobs:
+  signed-windows-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop/work-os-companion
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      VITE_WORK_OS_API_URL: https://app.wrazyos.com
+      VITE_WORK_OS_UPDATE_ORIGIN: https://app.wrazyos.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/work-os-companion/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require release signing secrets
+        shell: pwsh
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { $missing += "TAURI_SIGNING_PRIVATE_KEY" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { $missing += "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:CERTIFICATE_BASE64)) { $missing += "WINDOWS_CERTIFICATE_BASE64" }
+          if ([string]::IsNullOrWhiteSpace($env:CERTIFICATE_PASSWORD)) { $missing += "WINDOWS_CERTIFICATE_PASSWORD" }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATER_PUBLIC_KEY)) { $missing += "TAURI_UPDATER_PUBLIC_KEY" }
+          if ($missing.Count -gt 0) { throw "Missing release signing secrets: $($missing -join ', ')" }
+
+      - name: Import Authenticode certificate
+        shell: pwsh
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "work-os-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERTIFICATE_BASE64))
+          $secure = ConvertTo-SecureString $env:CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          $config = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = "sha256"; timestampUrl = "http://timestamp.digicert.com" } }; plugins = @{ updater = @{ pubkey = $env:UPDATER_PUBLIC_KEY } } } | ConvertTo-Json -Depth 6 -Compress
+          "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify packaged frontend
+        run: npm run build
+
+      - name: Build signed MSI, NSIS, and updater artifacts
+        run: npm run tauri:build
+
+      - name: Verify signed outputs
+        shell: pwsh
+        run: |
+          $bundle = Resolve-Path "src-tauri/target/release/bundle"
+          $executables = @(Get-ChildItem $bundle -Recurse -File -Filter "*.exe")
+          $msi = @(Get-ChildItem $bundle -Recurse -File -Filter "*.msi")
+          $signatures = @(Get-ChildItem $bundle -Recurse -File -Filter "*.sig")
+          if ($executables.Count -eq 0) { throw "No Windows executable artifacts were produced" }
+          if ($msi.Count -eq 0) { throw "No MSI artifact was produced" }
+          if ($signatures.Count -eq 0) { throw "No updater signature artifacts were produced" }
+          foreach ($file in $executables) {
+            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+            if ($signature.Status -ne "Valid") { throw "Authenticode verification failed for $($file.FullName): $($signature.Status)" }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: work-os-companion-${{ inputs.release_channel }}
+          path: |
+            desktop/work-os-companion/src-tauri/target/release/bundle/msi/*
+            desktop/work-os-companion/src-tauri/target/release/bundle/nsis/*
+          if-no-files-found: error

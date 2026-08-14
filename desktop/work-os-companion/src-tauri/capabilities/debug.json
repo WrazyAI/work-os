@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "debug",
+  "description": "Restricted capabilities for the Work OS diagnostics window. Do not add command denies here: Tauri applies denied commands globally by origin, which would also block the main window.",
+  "windows": ["debug"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:path:default",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "opener:default"
+  ]
+}

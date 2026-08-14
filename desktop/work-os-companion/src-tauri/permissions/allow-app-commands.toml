@@ -1,0 +1,12 @@
+[[permission]]
+identifier = "allow-app-commands"
+description = "Allow the main companion window to use local IPC commands."
+commands.allow = [
+  "get_vault_password",
+  "open_work_os_auth",
+  "open_debug_window",
+  "diagnostics_emit",
+  "diagnostics_snapshot",
+  "diagnostics_export",
+  "open_logs_dir"
+]

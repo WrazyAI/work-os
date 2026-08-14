@@ -1,0 +1,81 @@
+import { invoke } from "@tauri-apps/api/core";
+import { appDataDir, join } from "@tauri-apps/api/path";
+import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
+import type { DesktopSession, OfflineAction } from "./types";
+
+let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
+const defaultApiBase = import.meta.env.VITE_WORK_OS_API_URL || "https://app.wrazyos.com";
+
+function httpsOrigin(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:") throw new Error("Use the HTTPS WrazyOS URL.");
+  return url.origin;
+}
+
+async function vault() {
+  if (!context) context = (async () => {
+    const path = await join(await appDataDir(), "work-os-vault.hold");
+    const password = await invoke<string>("get_vault_password");
+    const stronghold = await Stronghold.load(path, password);
+    let client: Client;
+    try { client = await stronghold.loadClient("work-os"); }
+    catch { client = await stronghold.createClient("work-os"); }
+    return { stronghold, client };
+  })();
+  return context;
+}
+
+async function get<T>(key: string): Promise<T | null> {
+  const { client } = await vault();
+  const value = await client.getStore().get(key);
+  if (!value) return null;
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(value))) as T;
+}
+
+async function set(key: string, value: unknown) {
+  const { stronghold, client } = await vault();
+  await client.getStore().insert(key, [...new TextEncoder().encode(JSON.stringify(value))]);
+  await stronghold.save();
+}
+
+async function remove(key: string) {
+  const { stronghold, client } = await vault();
+  await client.getStore().remove(key);
+  await stronghold.save();
+}
+
+export const secureState = {
+  session: async () => {
+    const session = await get<DesktopSession>("session");
+    if (!session) return null;
+    try { return { ...session, apiBase: httpsOrigin(session.apiBase) }; }
+    catch { await remove("session"); return null; }
+  },
+  saveSession: (session: DesktopSession) => set("session", session),
+  clearSession: () => remove("session"),
+  clearAccount: async () => {
+    await remove("session");
+    await remove("pending-auth");
+    await remove("offline-queue");
+  },
+  queue: async () => (await get<OfflineAction[]>("offline-queue")) ?? [],
+  saveQueue: (queue: OfflineAction[]) => set("offline-queue", queue),
+  pendingAuth: async () => {
+    const pending = await get<{ verifier: string; state: string; apiBase: string }>("pending-auth");
+    if (!pending) return null;
+    try { return { ...pending, apiBase: httpsOrigin(pending.apiBase) }; }
+    catch { await remove("pending-auth"); return null; }
+  },
+  savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => set("pending-auth", value),
+  clearPendingAuth: () => remove("pending-auth"),
+  settings: async () => {
+    const settings = await get<{ apiBase: string }>("settings");
+    try { return { apiBase: httpsOrigin(settings?.apiBase || defaultApiBase) }; }
+    catch {
+      const fallback = { apiBase: httpsOrigin(defaultApiBase) };
+      await set("settings", fallback);
+      return fallback;
+    }
+  },
+  saveSettings: (settings: { apiBase: string }) => set("settings", { apiBase: httpsOrigin(settings.apiBase) }),
+};

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="Work OS Companion"
+    Language="1033"
+    Version="0.2.1"
+    Manufacturer="WrazyOS"
+    UpgradeCode="7E2C1A6D-64A2-4E62-9E20-1A50C5AE2D7A">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" />
+    <Media Id="1" Cabinet="work-os-companion.cab" EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="WrazyOSFolder" Name="WrazyOS">
+          <Directory Id="INSTALLFOLDER" Name="Work OS Companion" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" Name=".">
+        <Directory Id="WrazyOSPrograms" Name="WrazyOS" />
+      </Directory>
+    </Directory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="ApplicationComponent" Guid="*">
+        <File Id="WorkOsCompanionExe" Source="$(var.SourceDir)/Work OS Companion.exe" KeyPath="yes" />
+        <File Id="WebView2LoaderDll" Source="$(var.SourceDir)/WebView2Loader.dll" />
+      </Component>
+      <Component Id="ProtocolComponent" Guid="*">
+        <RegistryKey Root="HKCU" Key="Software\Classes\wrazy-workos">
+          <RegistryValue Name="" Value="URL:WrazyOS Work OS Companion" Type="string" />
+          <RegistryValue Name="URL Protocol" Value="" Type="string" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\wrazy-workos\DefaultIcon">
+          <RegistryValue Name="" Value="[INSTALLFOLDER]Work OS Companion.exe,0" Type="string" />
+        </RegistryKey>
+        <RegistryKey Root="HKCU" Key="Software\Classes\wrazy-workos\shell\open\command">
+          <RegistryValue Name="" Value="&quot;[INSTALLFOLDER]Work OS Companion.exe&quot; &quot;%1&quot;" Type="string" />
+        </RegistryKey>
+      </Component>
+
+      <Component Id="UninstallMetadataComponent" Guid="*">
+        <RegistryKey Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\WrazyOSWorkOSCompanion">
+          <RegistryValue Name="DisplayName" Value="Work OS Companion" Type="string" />
+          <RegistryValue Name="DisplayVersion" Value="0.2.1" Type="string" />
+          <RegistryValue Name="Publisher" Value="WrazyOS" Type="string" />
+          <RegistryValue Name="InstallLocation" Value="[INSTALLFOLDER]" Type="string" />
+          <RegistryValue Name="DisplayIcon" Value="[INSTALLFOLDER]Work OS Companion.exe" Type="string" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="WrazyOSPrograms">
+      <Component Id="StartMenuComponent" Guid="*">
+        <Shortcut
+          Id="WorkOsCompanionShortcut"
+          Name="Work OS Companion"
+          Description="WrazyOS employee companion"
+          Target="[INSTALLFOLDER]Work OS Companion.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveWrazyOSPrograms" On="uninstall" />
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\WrazyOS\WorkOSCompanion"
+          Name="StartMenuShortcut"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="ProductFeature" Title="Work OS Companion" Level="1">
+      <ComponentRef Id="ApplicationComponent" />
+      <ComponentRef Id="StartMenuComponent" />
+      <ComponentRef Id="ProtocolComponent" />
+      <ComponentRef Id="UninstallMetadataComponent" />
+    </Feature>
+  </Product>
+</Wix>
