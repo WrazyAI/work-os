@@ -176,7 +176,11 @@ jobs:
             $hash = (Get-FileHash "$stage/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $name"
           }
-          $checksumLines | Set-Content "$stage/SHA256SUMS.txt" -Encoding ascii
+          [IO.File]::WriteAllText(
+            "$stage/SHA256SUMS.txt",
+            (($checksumLines -join "`n") + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
 
           $zipList = tar -tf "$stage/Work-OS-Companion-Portable-UNSIGNED.zip"
           if ($LASTEXITCODE -ne 0 -or $zipList -notcontains "Work-OS-Companion-UNSIGNED.exe") { throw "Portable archive validation failed" }
