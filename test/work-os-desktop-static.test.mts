@@ -52,6 +52,9 @@ assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 assert.match(app, /secureState\.clearAccount\(\)/);
 assert.match(app, /Account session/);
 assert.match(app, /ui\.action\.blocked/);
+assert.match(app, /shiftPulse/);
+assert.doesNotMatch(app, /width: active \? "42%"/);
+assert.match(app, /will enter the plan at explicit clock-in/);
 assert.match(read("src/sessionGate.ts"), /Clock in explicitly/);
 assert.doesNotMatch(app, /disabled=\{!active \|\| !input\.trim\(\) \|\| busy\}/);
 

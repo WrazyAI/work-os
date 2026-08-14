@@ -3,20 +3,20 @@ Unicode True
 !cd ".."
 
 !define PRODUCT_NAME "Work OS Companion"
-!define PRODUCT_VERSION "0.2.2"
+!define PRODUCT_VERSION "0.2.3"
 !define PRODUCT_PUBLISHER "WrazyOS"
 !define PRODUCT_EXE "Work OS Companion.exe"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\WrazyOSWorkOSCompanion"
 
 Name "${PRODUCT_NAME}"
-OutFile "../../downloads/work-os-companion-0.2.2-unsigned-pilot-setup.exe"
+OutFile "../../downloads/work-os-companion-0.2.3-unsigned-pilot-setup.exe"
 InstallDir "$LOCALAPPDATA\WrazyOS\Work OS Companion"
 InstallDirRegKey HKCU "Software\WrazyOS\WorkOSCompanion" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 Icon "src-tauri\icons\icon.ico"
 UninstallIcon "src-tauri\icons\icon.ico"
-VIProductVersion "0.2.2.0"
+VIProductVersion "0.2.3.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey "CompanyName" "${PRODUCT_PUBLISHER}"

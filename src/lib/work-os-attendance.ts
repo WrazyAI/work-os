@@ -1,8 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { activeSession } from "@/lib/work-os-workday";
-import { worktivityConfigured, wtPost, type WtEmployee, type WtPaged } from "@/lib/worktivity";
-import { projectWorktivityAttendance, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
+import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
+import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 
 const CACHE_MS = 55_000;
 const cache = new Map<string, { fetchedAt: number; projection: AttendanceProjection; employee: WtEmployee | null }>();
@@ -14,10 +14,24 @@ async function employeeAttendance(employeeId: string, observedAt: string): Promi
     return { employee: previous.employee, projection: { ...previous.projection, observedAt } };
   }
   try {
-    const data = await wtPost<WtPaged<WtEmployee>>("/Employee/List", { page: 1, pageSize: 200 });
+    const end = new Date(observedAt);
+    const start = new Date(end.getTime() - 12 * 60 * 60_000);
+    const [data, activity] = await Promise.all([
+      wtPost<WtPaged<WtEmployee>>("/Employee/List", { page: 1, pageSize: 200 }),
+      wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", {
+        EmployeeId: employeeId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        page: 1,
+        pageSize: 20,
+      }),
+    ]);
     const employee = (data.Items ?? []).find((candidate) => candidate.ID === employeeId) ?? null;
+    const latestActivity = (activity.Items ?? [])
+      .filter((candidate) => candidate.EmployeeId === employeeId)
+      .sort((left, right) => Date.parse(right.CreateDate) - Date.parse(left.CreateDate))[0] ?? null;
     const projection = employee
-      ? projectWorktivityAttendance(employee.Statistics, observedAt)
+      ? projectWorktivityAttendanceWithActivity(employee.Statistics, latestActivity, observedAt)
       : unknownAttendance("The mapped employee was not returned by Worktivity.", observedAt);
     const result = { fetchedAt: Date.now(), projection, employee };
     cache.set(employeeId, result);

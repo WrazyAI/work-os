@@ -4,7 +4,7 @@
     Id="*"
     Name="Work OS Companion"
     Language="1033"
-    Version="0.2.2"
+    Version="0.2.3"
     Manufacturer="WrazyOS"
     UpgradeCode="7E2C1A6D-64A2-4E62-9E20-1A50C5AE2D7A">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" />
@@ -42,7 +42,7 @@
       <Component Id="UninstallMetadataComponent" Guid="*">
         <RegistryKey Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\WrazyOSWorkOSCompanion">
           <RegistryValue Name="DisplayName" Value="Work OS Companion" Type="string" />
-          <RegistryValue Name="DisplayVersion" Value="0.2.2" Type="string" />
+          <RegistryValue Name="DisplayVersion" Value="0.2.3" Type="string" />
           <RegistryValue Name="Publisher" Value="WrazyOS" Type="string" />
           <RegistryValue Name="InstallLocation" Value="[INSTALLFOLDER]" Type="string" />
           <RegistryValue Name="DisplayIcon" Value="[INSTALLFOLDER]Work OS Companion.exe" Type="string" />

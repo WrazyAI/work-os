@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { inferArchetype, normalizeProfileItems, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
-import { projectWorktivityAttendance } from "../src/modules/work-os/attendance";
+import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } from "../src/modules/work-os/attendance";
 
 test("catalog exposes eight reviewed employee archetypes", () => {
   assert.equal(WORK_ARCHETYPES.length, 8);
@@ -40,4 +40,21 @@ test("Worktivity statuses project attendance without scoring idle", () => {
   assert.equal(projectWorktivityAttendance({ Status: 4, ClockOut: at }, at).state, "off_shift");
   assert.equal(projectWorktivityAttendance({ Status: 5 }, at).state, "off_shift");
   assert.equal(projectWorktivityAttendance(null, at).state, "unknown");
+});
+
+test("recent employee-scoped activity overrides stale roster attendance", () => {
+  const at = "2026-08-14T19:30:00.000Z";
+  const live = projectWorktivityAttendanceWithActivity(
+    { Status: 5 },
+    { Status: 1, CreateDate: "2026-08-14T19:29:19.000Z" },
+    at,
+  );
+  assert.equal(live.state, "active");
+  assert.equal(live.status, "working");
+  const stale = projectWorktivityAttendanceWithActivity(
+    { Status: 5 },
+    { Status: 1, CreateDate: "2026-08-14T19:10:00.000Z" },
+    at,
+  );
+  assert.equal(stale.state, "off_shift");
 });

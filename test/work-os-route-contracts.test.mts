@@ -32,6 +32,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(workday, /clockIn\(auth\.access/);
   assert.doesNotMatch(workday, /reconcileWorktivityAttendance|work_os_fallback/);
   assert.match(attendance, /observeWorktivityAttendance/);
+  assert.match(attendance, /\/ActivityLogs\/List/);
+  assert.match(attendance, /EmployeeId: employeeId/);
   assert.doesNotMatch(attendance, /\.from\("work_sessions"\)\.insert/);
   assert.doesNotMatch(attendance, /state:\s*desiredState/);
   assert.match(attendanceProjection, /Worktivity activity observed; Work OS clock-in is explicit/);
