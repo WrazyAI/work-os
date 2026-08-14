@@ -196,7 +196,7 @@ export default function App() {
   }
 
   function clockIn() {
-    void act("shift.clock_in", () => sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop", late_acknowledged: true }));
+    void act("shift.clock_in", () => sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop", late_acknowledged: true, unscheduled_acknowledged: true }));
   }
 
   function requireActive(label: string, action: () => Promise<unknown>) {
@@ -238,7 +238,7 @@ export default function App() {
       {!active && <div className="notice session-gate" role="status"><Clock3 size={15} /><span>{gate.message}</span>{gate.canClockIn && <button className="primary" disabled={busy} onClick={clockIn}><CirclePlay size={15} /> Clock in</button>}</div>}
       {view === "day" && <main className="day-grid">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : "Ready when you are"}</span><h2>{active ? paused ? "Take the pause." : "Make today count." : "Your workday, in focus."}</h2><p>{active ? visibleDay?.prompt.reason : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}. Clock in when you begin.` : "No scheduled shift is available today."}</p>
+          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : "Ready when you are"}</span><h2>{active ? paused ? "Take the pause." : "Make today count." : "Your workday, in focus."}</h2><p>{active ? visibleDay?.prompt.reason : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}. Clock in when you begin.` : "No scheduled shift is active. An explicit clock-in starts an exception session without an inferred EOD time."}</p>
             <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <><button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button><button disabled={busy} onClick={() => window.confirm("Clock out and close today’s plan?") && void act("shift.clock_out", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: "clock_out", extended_acknowledged: true }))}>Clock out</button></>}</div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
           </div><img className="companion" src={assetUrl(companionArt)} alt="Abstract Work OS companion" />

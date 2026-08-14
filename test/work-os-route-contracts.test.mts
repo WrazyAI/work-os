@@ -18,6 +18,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const removals = await source("src/app/api/work-os/me/plan/removals/route.ts");
   const attendance = await source("src/lib/work-os-attendance.ts");
   const attendanceProjection = await source("src/modules/work-os/attendance.ts");
+  const workdayService = await source("src/lib/work-os-workday.ts");
   assert.match(checkIns, /idempotency-key/);
   assert.match(proposals, /decision_idempotency_key/);
   assert.match(reports, /requireWorkOsPersonAccess/);
@@ -37,6 +38,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.doesNotMatch(attendance, /\.from\("work_sessions"\)\.insert/);
   assert.doesNotMatch(attendance, /state:\s*desiredState/);
   assert.match(attendanceProjection, /Worktivity activity observed; Work OS clock-in is explicit/);
+  assert.match(workdayService, /Unscheduled clock-in acknowledgement is required/);
+  assert.match(workdayService, /scheduled_starts_at: shift\?\.startsAt \?\? null/);
 });
 
 test("privacy and provider routes retain the pilot safety gates", async () => {

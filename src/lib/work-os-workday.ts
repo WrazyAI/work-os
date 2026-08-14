@@ -52,6 +52,14 @@ export async function activeSession(access: WorkOsAccess) {
   return data;
 }
 
+async function unscheduledSessionContext(access: WorkOsAccess, at: Date) {
+  const { data, error } = await db().from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).maybeSingle();
+  if (error) throw new Error(`load employee timezone: ${error.message}`);
+  const timezone = typeof data?.timezone === "string" && data.timezone.trim() ? data.timezone : "UTC";
+  return { timezone, shiftDate: localDateForTimezone(at, timezone) };
+}
+
 async function loadPlan(access: WorkOsAccess, sessionId?: string | null) {
   if (!sessionId) return null;
   const { data, error } = await db().from("work_daily_plans").select("*, items:work_daily_plan_items(*)")
@@ -170,13 +178,16 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   if (await activeSession(access)) throw new Error("Only one active work session is allowed.");
   const observedAt = value(body.observed_at) ?? new Date().toISOString();
   const observed = new Date(observedAt); if (Number.isNaN(observed.getTime())) throw new Error("observed_at must be a valid timestamp");
-  const shift = await shiftFor(access, observed); if (!shift) throw new Error("No scheduled shift is available to clock into.");
-  const late = observed.getTime() > Date.parse(shift.startsAt) + 15 * 60_000;
+  const shift = await shiftFor(access, observed);
+  const unscheduled = !shift;
+  if (unscheduled && body.unscheduled_acknowledged !== true) throw new Error("Unscheduled clock-in acknowledgement is required.");
+  const context = shift ?? await unscheduledSessionContext(access, observed);
+  const late = !!shift && observed.getTime() > Date.parse(shift.startsAt) + 15 * 60_000;
   if (late && body.late_acknowledged !== true) throw new Error("Late clock-in acknowledgement is required.");
   const { data: session, error } = await db().from("work_sessions").insert({
-    organization_id: access.organizationId, person_id: access.personId, schedule_id: shift.scheduleId,
-    shift_date: shift.shiftDate, state: "clocked_in", timezone: shift.timezone,
-    scheduled_starts_at: shift.startsAt, scheduled_ends_at: shift.endsAt, clocked_in_at: observed.toISOString(),
+    organization_id: access.organizationId, person_id: access.personId, schedule_id: shift?.scheduleId ?? null,
+    shift_date: context.shiftDate, state: "clocked_in", timezone: context.timezone,
+    scheduled_starts_at: shift?.startsAt ?? null, scheduled_ends_at: shift?.endsAt ?? null, clocked_in_at: observed.toISOString(),
     source: value(body.source) ?? "desktop", clock_in_idempotency_key: idempotencyKey,
     late_acknowledged_at: late ? observed.toISOString() : null, created_by: access.ctx.user.id,
   }).select("*").single();
@@ -191,7 +202,7 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
     throw new Error(`clock in: ${error.message}`);
   }
   const source = value(body.source);
-  await audit(access, session.id as string, "clock_in", "scheduled", "clocked_in", idempotencyKey, observed.toISOString(), { late }, source === "web" || source === "agent" || source === "system" ? source : "desktop");
+  await audit(access, session.id as string, "clock_in", shift ? "scheduled" : null, "clocked_in", idempotencyKey, observed.toISOString(), { late, unscheduled }, source === "web" || source === "agent" || source === "system" ? source : "desktop");
   return { session, plan: await ensureDailyPlan(access, session) };
 }
 

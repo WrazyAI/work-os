@@ -25,8 +25,12 @@ describe("desktop session gate", () => {
     expect(sessionGate(day(null))).toEqual({ active: false, canClockIn: true, message: "Clock in explicitly to confirm a plan or send work updates." });
   });
 
-  it("explains schedule and closed-session blockers", () => {
-    expect(sessionGate(day(null, false)).message).toMatch(/No scheduled shift/);
+  it("allows an explicit acknowledged exception session without a current shift", () => {
+    expect(sessionGate(day(null, false))).toMatchObject({ active: false, canClockIn: true });
+    expect(sessionGate(day(null, false)).message).toMatch(/exception session/);
+  });
+
+  it("keeps a closed session blocked", () => {
     expect(sessionGate(day({ ...baseSession, state: "clocked_out" }))).toMatchObject({ active: false, canClockIn: false });
   });
 });

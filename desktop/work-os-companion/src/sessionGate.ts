@@ -17,7 +17,7 @@ export function sessionGate(day: DayData | null): SessionGate {
     return { active: false, canClockIn: false, message: "Today’s Work OS session is closed." };
   }
   if (!day?.shift) {
-    return { active: false, canClockIn: false, message: "No scheduled shift is available. Ask a manager to check your Work OS schedule." };
+    return { active: false, canClockIn: true, message: "No scheduled shift is active. Clock in explicitly for an exception session; Work OS will not invent an EOD time." };
   }
   return { active: false, canClockIn: true, message: "Clock in explicitly to confirm a plan or send work updates." };
 }

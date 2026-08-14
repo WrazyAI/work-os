@@ -42,6 +42,7 @@ assert.match(app, /Couldn’t load Work OS/);
 assert.match(app, />Retry</);
 assert.match(app, /\/api\/work-os\/me\/workday/);
 assert.match(app, /source: "desktop"/);
+assert.match(app, /unscheduled_acknowledged: true/);
 assert.match(app, /\/api\/work-os\/me\/plan\/removals/);
 assert.doesNotMatch(app, /Clock in through Worktivity/);
 assert.doesNotMatch(app, /Fallback clock in/);
