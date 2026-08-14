@@ -13,11 +13,17 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const proposals = await source("src/app/api/work-os/proposals/[proposalId]/route.ts");
   const reports = await source("src/app/api/work-os/reports/[reportId]/submit/route.ts");
   const evidence = await source("src/app/api/work-os/evidence/route.ts");
+  const workday = await source("src/app/api/work-os/me/workday/route.ts");
+  const plan = await source("src/app/api/work-os/me/plan/route.ts");
   assert.match(checkIns, /idempotency-key/);
   assert.match(proposals, /decision_idempotency_key/);
   assert.match(reports, /requireWorkOsPersonAccess/);
   assert.match(reports, /organization_id[\s\S]*auth\.access\.organizationId/);
   assert.match(evidence, /idempotency-key/);
+  assert.match(workday, /Idempotency-Key is required/);
+  assert.match(workday, /requirePerson: true/);
+  assert.match(plan, /Idempotency-Key is required/);
+  assert.match(plan, /requirePerson: true/);
 });
 
 test("privacy and provider routes retain the pilot safety gates", async () => {
@@ -28,6 +34,10 @@ test("privacy and provider routes retain the pilot safety gates", async () => {
   const ghl = await source("src/app/api/work-os/integrations/ghl/webhook/route.ts");
   assert.match(onboarding, /export async function PATCH/);
   assert.match(onboarding, /updateEmployeeConsent/);
+  assert.match(onboarding, /export async function PUT/);
+  assert.match(onboarding, /saveEmployeeOnboardingDraft/);
+  assert.match(onboarding, /export async function DELETE/);
+  assert.match(onboarding, /resetEmployeeOnboarding/);
   assert.match(screenshots, /feature: "screenshot_summaries"/);
   assert.match(retention, /CRON_SECRET/);
   assert.match(github, /isValidGithubWebhookSignature/);

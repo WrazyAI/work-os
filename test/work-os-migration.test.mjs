@@ -15,6 +15,9 @@ const migrations = [
   "supabase/migrations/0009_work_os_people_email_merge.sql",
   "supabase/migrations/0010_work_os_employee_companion.sql",
   "supabase/migrations/0011_work_os_employee_onboarding.sql",
+  "supabase/migrations/0014_work_tasks_milestone_id.sql",
+  "supabase/migrations/0015_work_os_workday_foundation.sql",
+  "supabase/migrations/0016_work_os_guided_onboarding.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -42,6 +45,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
     "work_evidence_events", "work_screenshot_summaries", "work_screenshot_access_log",
     "work_report_versions", "work_desktop_sessions", "work_audit_log",
     "work_employee_onboarding", "work_consent_records",
+    "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_session_events",
   ];
   const tables = await db.query(`
     select table_name from information_schema.tables
@@ -110,6 +114,29 @@ test("Work OS companion migration is complete and idempotent", async () => {
   `, [orgA, personA, owner.id, orgB, personB, owner.id]);
   const scheduleA = schedules.rows.find((row) => row.organization_id === orgA).id;
   const scheduleB = schedules.rows.find((row) => row.organization_id === orgB).id;
+  const workSessions = await db.query(`
+    insert into work_sessions(organization_id,person_id,schedule_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clocked_in_at,clock_in_idempotency_key)
+    values ($1,$2,$3,'2026-08-11','active','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z','2026-08-11T09:03:00Z','clock-a'),
+           ($4,$5,$6,'2026-08-11','active','UTC','2026-08-11T10:00:00Z','2026-08-11T18:00:00Z','2026-08-11T10:02:00Z','clock-b')
+    returning id,organization_id
+  `, [orgA, personA, scheduleA, orgB, personB, scheduleB]);
+  const workSessionA = workSessions.rows.find((row) => row.organization_id === orgA).id;
+  await assert.rejects(() => db.query(`
+    insert into work_sessions(organization_id,person_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at)
+    values ($1,$2,'2026-08-11','clocked_in','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z')
+  `, [orgA, personA]), /work_sessions_active_person_uidx/);
+  await assert.rejects(() => db.query(`
+    insert into work_sessions(organization_id,person_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clock_in_idempotency_key)
+    values ($1,$2,'2026-08-10','clocked_out','UTC','2026-08-10T09:00:00Z','2026-08-10T17:00:00Z','clock-a')
+  `, [orgA, personA]), /work_sessions_clock_in_idempotency_uidx/);
+  const dailyPlan = await db.query(`
+    insert into work_daily_plans(organization_id,person_id,session_id,shift_date,status,confirmation_idempotency_key)
+    values ($1,$2,$3,'2026-08-11','confirmed','plan-a') returning id
+  `, [orgA, personA, workSessionA]);
+  await db.query(`
+    insert into work_daily_plan_items(organization_id,plan_id,person_id,task_id,source,title_snapshot)
+    values ($1,$2,$3,$4,'due_today','Private A')
+  `, [orgA, dailyPlan.rows[0].id, personA, taskA.id]);
   const checkIns = await db.query(`
     insert into work_check_ins(organization_id,person_id,schedule_id,shift_date,kind,input_text,created_by,client_request_id)
     values ($1,$2,$3,'2026-08-11','plan','Plan A',$4,'check-in-a'),($5,$6,$7,'2026-08-11','plan','Plan B',$8,'check-in-b')
@@ -186,6 +213,8 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_people where organization_id=$1)::int as people,
       (select count(*) from work_schedules where organization_id=$1)::int as schedules,
       (select count(*) from work_check_ins where organization_id=$1)::int as check_ins,
+      (select count(*) from work_sessions where organization_id=$1)::int as sessions,
+      (select count(*) from work_daily_plans where organization_id=$1)::int as daily_plans,
       (select count(*) from work_task_proposals where organization_id=$1)::int as proposals,
       (select count(*) from work_evidence_events where organization_id=$1)::int as evidence_events,
       (select count(*) from work_screenshot_summaries where organization_id=$1)::int as screenshots,
@@ -197,7 +226,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_audit_log where organization_id=$1)::int as audit_rows
   `, [orgA]));
   assert.deepEqual(employeeAVisibility.rows[0], {
-    people: 1, schedules: 1, check_ins: 1, proposals: 1, evidence_events: 1, screenshots: 1,
+    people: 1, schedules: 1, check_ins: 1, sessions: 1, daily_plans: 1, proposals: 1, evidence_events: 1, screenshots: 1,
     reports: 1, report_versions: 1, provider_connections: 0, provider_credentials: 0,
     source_accounts: 0, audit_rows: 0,
   });
@@ -207,6 +236,8 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_people where organization_id=$1)::int as people,
       (select count(*) from work_schedules where organization_id=$1)::int as schedules,
       (select count(*) from work_check_ins where organization_id=$1)::int as check_ins,
+      (select count(*) from work_sessions where organization_id=$1)::int as sessions,
+      (select count(*) from work_daily_plans where organization_id=$1)::int as daily_plans,
       (select count(*) from work_task_proposals where organization_id=$1)::int as proposals,
       (select count(*) from work_evidence_events where organization_id=$1)::int as evidence_events,
       (select count(*) from work_screenshot_summaries where organization_id=$1)::int as screenshots,
@@ -218,7 +249,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_audit_log where organization_id=$1)::int as audit_rows
   `, [orgA]));
   assert.deepEqual(employeeBCrossOrg.rows[0], {
-    people: 0, schedules: 0, check_ins: 0, proposals: 0, evidence_events: 0, screenshots: 0,
+    people: 0, schedules: 0, check_ins: 0, sessions: 0, daily_plans: 0, proposals: 0, evidence_events: 0, screenshots: 0,
     reports: 0, report_versions: 0, provider_connections: 0, provider_credentials: 0,
     source_accounts: 0, audit_rows: 0,
   });

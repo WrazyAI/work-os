@@ -30,6 +30,8 @@ import {
   type WorkOsScheduleException,
   type WorkOsScheduleRule,
 } from "@/modules/work-os/companion";
+import { getWorkday } from "@/lib/work-os-workday";
+import { reconcileWorktivityAttendance } from "@/lib/work-os-attendance";
 
 type Json = Record<string, unknown>;
 type ProposalOperation =
@@ -215,6 +217,7 @@ async function loadShiftData(access: WorkOsAccess, personId: string, at: Date) {
 }
 
 export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = new Date()) {
+  const attendance = await reconcileWorktivityAttendance(access, at);
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, at);
   const shift = resolveShiftWindow(rules, exceptions, at);
   const shiftDate = shift?.shiftDate ?? localDateForTimezone(at, timezone);
@@ -272,7 +275,8 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
     .limit(1)
     .maybeSingle();
   if (reportError) throw new Error(`load current EOD report: ${reportError.message}`);
-  return { at: at.toISOString(), shiftDate, shift, prompt, niftySync, tasks, evidence, proposals: proposals ?? [], report };
+  const workday = await getWorkday(access, at);
+  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, tasks, evidence, proposals: proposals ?? [], report };
 }
 
 interface ParsedProposal {
@@ -399,6 +403,13 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   const source = ["web", "desktop", "agent"].includes(text(body.source) ?? "") ? text(body.source) : "web";
   const ownerId = await organizationOwnerId(access.organizationId);
   const clientRequestId = text(body.client_request_id);
+  const updateKind = text(body.update_kind);
+  const allowedUpdateKinds = ["starting", "continuing", "material_progress", "completion_claim", "blocked", "priority_change", "unplanned_work"];
+  if (updateKind && !allowedUpdateKinds.includes(updateKind)) throw new Error("invalid progress update kind");
+  const { data: activeSession, error: activeSessionError } = await db().from("work_sessions").select("id")
+    .eq("organization_id", access.organizationId).eq("person_id", personId)
+    .in("state", ["clocked_in", "active", "paused", "eod_due"]).maybeSingle();
+  if (activeSessionError) throw new Error(`load active work session: ${activeSessionError.message}`);
   if (clientRequestId) {
     const { data: existing, error: existingError } = await db().from("work_check_ins").select("*")
       .eq("organization_id", access.organizationId).eq("person_id", personId).eq("client_request_id", clientRequestId).maybeSingle();
@@ -422,6 +433,10 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     confirmed_existing_tasks: confirmedExisting,
     snoozed_until: snoozedUntil,
     client_request_id: clientRequestId,
+    session_id: activeSession?.id ?? null,
+    update_kind: updateKind,
+    structured_claims: body.structured_claims && typeof body.structured_claims === "object" ? body.structured_claims : {},
+    inference_metadata: {},
     created_by: access.ctx.user.id,
   }).select("*").single();
   if (checkInError) throw new Error(`create Work OS check-in: ${checkInError.message}`);
@@ -447,6 +462,9 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     proposals = data ?? [];
   }
   await audit(access, "check_in.created", "check_in", checkIn.id as string, { kind, proposalCount: proposals.length });
+  if (activeSession?.id && (input || confirmedExisting)) {
+    await db().from("work_sessions").update({ state: "active", last_substantive_update_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", activeSession.id);
+  }
   return { checkIn, proposals };
 }
 

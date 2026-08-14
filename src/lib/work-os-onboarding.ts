@@ -1,6 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { validateWorkOsBreakWindows, validateWorkOsTime, validateWorkOsTimezone } from "@/lib/work-os-schedule-validation";
+import {
+  WORK_PROFILE_CATALOG_VERSION,
+  inferArchetype,
+  normalizeProfileItems,
+  validateArchetypeSelection,
+  workProfileCatalog,
+} from "@/modules/work-os/onboarding";
 
 type Json = Record<string, unknown>;
 
@@ -88,7 +95,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
   const supabase = db();
   const today = new Date().toISOString().slice(0, 10);
   const [personResult, onboardingResult, consentResult, scheduleResult, teamResult] = await Promise.all([
-    supabase.from("work_people").select("id,display_name,email,role_profile_id,nifty_member_id,worktivity_employee_id,raw,role_profile:work_role_profiles(id,slug,name)")
+    supabase.from("work_people").select("id,display_name,email,role_profile_id,nifty_member_id,worktivity_employee_id,github_username,work_profile,raw,role_profile:work_role_profiles(id,slug,name)")
       .eq("organization_id", access.organizationId).eq("id", access.personId).single(),
     supabase.from("work_employee_onboarding").select("*").eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle(),
     supabase.from("work_consent_records").select("policy_version,decision,occurred_at").eq("organization_id", access.organizationId).eq("person_id", access.personId)
@@ -131,10 +138,19 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     ? onboarding.notification_preferences as Json : {};
   const privacy = onboarding?.privacy_preferences && typeof onboarding.privacy_preferences === "object"
     ? onboarding.privacy_preferences as Json : {};
+  const workPreferences = onboarding?.work_preferences && typeof onboarding.work_preferences === "object"
+    ? onboarding.work_preferences as Json : {};
   const proposedSchedule = onboarding?.schedule_proposal && typeof onboarding.schedule_proposal === "object"
     ? onboarding.schedule_proposal as Json : null;
   const officialSchedule = scheduleResult.data as Json | null;
   const roleProfile = Array.isArray(person.role_profile) ? person.role_profile[0] : person.role_profile;
+  const structuredItems = normalizeProfileItems(workPreferences.items, {
+    responsibility: workPreferences.responsibilities,
+    deliverable: workPreferences.outputTypes,
+    evidence: workPreferences.evidenceSources,
+  });
+  const importedTitle = String((roleProfile as Json | null)?.name ?? nifty.role ?? "").trim() || null;
+  const inferredArchetypeId = inferArchetype(importedTitle);
   const employeeRequirements = {
     consentProvided,
     profileConfirmed: !!onboarding?.profile_confirmed_at,
@@ -172,6 +188,18 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
         screenshotAnalysisConsent: privacy.screenshotAnalysisConsent === true,
         sensitiveAppExclusions: Array.isArray(privacy.sensitiveAppExclusions) ? privacy.sensitiveAppExclusions : [],
       },
+      workPreferences: {
+        archetypeId: typeof workPreferences.archetypeId === "string" ? workPreferences.archetypeId : inferredArchetypeId,
+        inferredArchetypeId,
+        customRoleTitle: typeof workPreferences.customRoleTitle === "string" ? workPreferences.customRoleTitle : "",
+        specialtyIds: Array.isArray(workPreferences.specialtyIds) ? workPreferences.specialtyIds : [],
+        items: structuredItems,
+        responsibilities: structuredItems.filter((item) => item.kind === "responsibility").map((item) => item.label),
+        outputTypes: structuredItems.filter((item) => item.kind === "deliverable").map((item) => item.label),
+        evidenceSources: structuredItems.filter((item) => item.kind === "evidence").map((item) => item.label),
+        voiceUpdatesEnabled: workPreferences.voiceUpdatesEnabled === true,
+        githubUsername: person.github_username ?? "",
+      },
     },
     providerPrefill: {
       nifty: { mapped: !!person.nifty_member_id, timezone: nifty.tz_iana ?? null, language: nifty.language ?? null, team: nifty.team ?? null, role: nifty.role ?? null },
@@ -189,7 +217,86 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     },
     status: onboarding?.status ?? "not_started",
     submittedAt: onboarding?.employee_submitted_at ?? null,
+    draft: { step: onboarding?.draft_step ?? "seen", updatedAt: onboarding?.draft_updated_at ?? null },
+    catalog: workProfileCatalog(),
   };
+}
+
+export async function saveEmployeeOnboardingDraft(access: WorkOsAccess, body: Json) {
+  if (!access.personId) throw new Error("Work OS person mapping required");
+  if ("acceptTrackingConsent" in body || "privacyNoticeAcknowledged" in body) {
+    throw new Error("Consent can only be recorded during final onboarding submission.");
+  }
+  const allowedSteps = ["seen", "understood", "profile", "prepared", "safe"];
+  const step = text(body.step, 32);
+  if (!step || !allowedSteps.includes(step)) throw new Error("A valid onboarding draft step is required.");
+  const supabase = db();
+  const { data: existing, error: existingError } = await supabase.from("work_employee_onboarding").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle();
+  if (existingError) throw new Error(`load onboarding draft: ${existingError.message}`);
+  const currentWork = existing?.work_preferences && typeof existing.work_preferences === "object" ? existing.work_preferences as Json : {};
+  const workInput = body.workPreferences && typeof body.workPreferences === "object" ? body.workPreferences as Json : {};
+  const archetypeId = workInput.archetypeId ?? currentWork.archetypeId;
+  const specialtyIds = workInput.specialtyIds ?? currentWork.specialtyIds;
+  let workPreferences = currentWork;
+  if (archetypeId) {
+    const selection = validateArchetypeSelection(archetypeId, specialtyIds);
+    const items = normalizeProfileItems(workInput.items ?? currentWork.items);
+    const customRoleTitle = selection.archetype.id === "custom" ? text(workInput.customRoleTitle ?? currentWork.customRoleTitle, 120) : null;
+    if (selection.archetype.id === "custom" && !customRoleTitle) throw new Error("Describe your custom work role.");
+    workPreferences = {
+      ...currentWork,
+      archetypeId: selection.archetype.id,
+      specialtyIds: selection.specialtyIds,
+      customRoleTitle,
+      items,
+      responsibilities: items.filter((item) => item.kind === "responsibility").map((item) => item.label),
+      outputTypes: items.filter((item) => item.kind === "deliverable").map((item) => item.label),
+      evidenceSources: items.filter((item) => item.kind === "evidence").map((item) => item.label),
+      voiceUpdatesEnabled: typeof workInput.voiceUpdatesEnabled === "boolean" ? workInput.voiceUpdatesEnabled : currentWork.voiceUpdatesEnabled === true,
+    };
+  } else if (typeof workInput.voiceUpdatesEnabled === "boolean") {
+    workPreferences = { ...currentWork, voiceUpdatesEnabled: workInput.voiceUpdatesEnabled };
+  }
+  const now = new Date().toISOString();
+  const draft: Json = {
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    status: "in_progress",
+    draft_step: step,
+    draft_updated_at: now,
+    catalog_version: WORK_PROFILE_CATALOG_VERSION,
+    work_preferences: workPreferences,
+    updated_at: now,
+  };
+  if (body.preferredName !== undefined) draft.preferred_name = text(body.preferredName, 120);
+  if (body.email !== undefined) draft.confirmed_email = text(body.email, 320);
+  if (body.timezone !== undefined) draft.timezone = validateWorkOsTimezone(body.timezone);
+  if (body.language !== undefined) draft.language = text(body.language, 20) ?? "en";
+  if (body.schedule !== undefined) draft.schedule_proposal = scheduleProposal(body.schedule);
+  if (body.notifications && typeof body.notifications === "object") {
+    const notifications = body.notifications as Json;
+    if (typeof notifications.desktopEnabled !== "boolean") throw new Error("Desktop notification preference must be true or false.");
+    draft.notification_preferences = { desktopEnabled: notifications.desktopEnabled };
+  }
+  if (body.privacy && typeof body.privacy === "object") {
+    const privacy = body.privacy as Json;
+    draft.privacy_preferences = {
+      ...((existing?.privacy_preferences && typeof existing.privacy_preferences === "object") ? existing.privacy_preferences : {}),
+      screenshotAnalysisConsent: privacy.screenshotAnalysisConsent === true,
+      sensitiveAppExclusions: Array.isArray(privacy.sensitiveAppExclusions)
+        ? privacy.sensitiveAppExclusions.map((entry) => text(entry, 100)).filter(Boolean).slice(0, 30)
+        : [],
+    };
+  }
+  const { error } = await supabase.from("work_employee_onboarding").upsert(draft, { onConflict: "organization_id,person_id" });
+  if (error) throw new Error(`save onboarding draft: ${error.message}`);
+  await supabase.from("work_audit_log").insert({
+    organization_id: access.organizationId, actor_user_id: access.ctx.user.id,
+    action: "onboarding.draft_saved", target_type: "person", target_id: access.personId,
+    metadata: { step, catalogVersion: WORK_PROFILE_CATALOG_VERSION, source: "desktop" },
+  });
+  return getEmployeeOnboarding(access);
 }
 
 export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json) {
@@ -208,6 +315,16 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
   const notificationsInput = body.notifications && typeof body.notifications === "object" ? body.notifications as Json : {};
   if (typeof notificationsInput.desktopEnabled !== "boolean") throw new Error("desktop notification preference is required");
   const privacyInput = body.privacy && typeof body.privacy === "object" ? body.privacy as Json : {};
+  const workInput = body.workPreferences && typeof body.workPreferences === "object" ? body.workPreferences as Json : {};
+  const selection = validateArchetypeSelection(workInput.archetypeId, workInput.specialtyIds);
+  const profileItems = normalizeProfileItems(workInput.items, {
+    responsibility: workInput.responsibilities,
+    deliverable: workInput.outputTypes,
+    evidence: workInput.evidenceSources,
+  });
+  if (!profileItems.length) throw new Error("Confirm at least one responsibility, deliverable, or evidence source.");
+  const customRoleTitle = selection.archetype.id === "custom" ? text(workInput.customRoleTitle, 120) : null;
+  if (selection.archetype.id === "custom" && !customRoleTitle) throw new Error("Describe your custom work role.");
   const exclusions = Array.isArray(privacyInput.sensitiveAppExclusions)
     ? privacyInput.sensitiveAppExclusions.map((item) => text(item, 100)).filter(Boolean).slice(0, 30)
     : [];
@@ -227,12 +344,30 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
       sensitiveAppExclusions: exclusions,
       noticeAcknowledgedAt: now,
     },
+    work_preferences: {
+      archetypeId: selection.archetype.id,
+      specialtyIds: selection.specialtyIds,
+      customRoleTitle,
+      items: profileItems,
+      responsibilities: profileItems.filter((item) => item.kind === "responsibility").map((item) => item.label),
+      outputTypes: profileItems.filter((item) => item.kind === "deliverable").map((item) => item.label),
+      evidenceSources: profileItems.filter((item) => item.kind === "evidence").map((item) => item.label),
+      voiceUpdatesEnabled: workInput.voiceUpdatesEnabled === true,
+    },
+    catalog_version: WORK_PROFILE_CATALOG_VERSION,
+    draft_step: "connected",
+    draft_updated_at: now,
     profile_confirmed_at: now,
     employee_submitted_at: now,
     status: "submitted",
     updated_at: now,
   }, { onConflict: "organization_id,person_id" });
   if (onboardingError) throw new Error(`save employee onboarding: ${onboardingError.message}`);
+  const { error: profileError } = await supabase.from("work_people").update({
+    github_username: text(workInput.githubUsername, 120),
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("id", access.personId);
+  if (profileError) throw new Error(`save employee work profile: ${profileError.message}`);
 
   const { data: latestConsent, error: consentReadError } = await supabase.from("work_consent_records").select("policy_version,decision")
     .eq("organization_id", access.organizationId).eq("person_id", access.personId).eq("purpose", WORK_OS_TRACKING_POLICY.purpose)
@@ -351,5 +486,54 @@ export async function updateEmployeeConsent(access: WorkOsAccess, body: Json) {
     metadata: { policyVersion: WORK_OS_TRACKING_POLICY.version },
   });
   if (auditError) throw new Error(`audit consent change: ${auditError.message}`);
+  return getEmployeeOnboarding(access);
+}
+
+export async function resetEmployeeOnboarding(access: WorkOsAccess) {
+  if (!access.personId) throw new Error("Work OS person mapping required");
+  const supabase = db();
+  const now = new Date().toISOString();
+  const { error: resetError } = await supabase.from("work_employee_onboarding").upsert({
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    preferred_name: null,
+    confirmed_email: null,
+    timezone: null,
+    language: null,
+    schedule_proposal: {},
+    notification_preferences: {},
+    privacy_preferences: {},
+    work_preferences: {},
+    catalog_version: null,
+    draft_step: null,
+    draft_updated_at: null,
+    profile_confirmed_at: null,
+    employee_submitted_at: null,
+    status: "not_started",
+    reviewed_by: null,
+    reviewed_at: null,
+    review_note: null,
+    updated_at: now,
+  }, { onConflict: "organization_id,person_id" });
+  if (resetError) throw new Error(`reset employee onboarding: ${resetError.message}`);
+
+  const { error: profileError } = await supabase.from("work_people").update({
+    github_username: null,
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("id", access.personId);
+  if (profileError) throw new Error(`reset employee profile preferences: ${profileError.message}`);
+
+  const { error: auditError } = await supabase.from("work_audit_log").insert({
+    organization_id: access.organizationId,
+    actor_user_id: access.ctx.user.id,
+    action: "onboarding.employee_reset",
+    target_type: "person",
+    target_id: access.personId,
+    metadata: {
+      source: "desktop",
+      preserved: ["role_profile", "team", "manager", "official_schedule", "consent_history"],
+    },
+  });
+  if (auditError) throw new Error(`audit employee onboarding reset: ${auditError.message}`);
   return getEmployeeOnboarding(access);
 }
