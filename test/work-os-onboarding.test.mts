@@ -32,6 +32,7 @@ test("Worktivity statuses project attendance without scoring idle", () => {
   const at = "2026-08-12T10:00:00.000Z";
   assert.equal(projectWorktivityAttendance({ Status: 0, ClockIn: at }, at).state, "active");
   assert.equal(projectWorktivityAttendance({ Status: 1, ClockIn: at }, at).state, "active");
+  assert.match(projectWorktivityAttendance({ Status: 1, ClockIn: at }, at).message, /clock-in is explicit/);
   assert.equal(projectWorktivityAttendance({ Status: 2, ClockIn: at }, at).state, "paused");
   const idle = projectWorktivityAttendance({ Status: 3, ClockIn: at }, at);
   assert.equal(idle.state, "active");

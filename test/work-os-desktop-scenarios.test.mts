@@ -62,6 +62,15 @@ assert.match(eod?.niftySync?.error ?? "", /Simulated/);
 
 const paused = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "paused" });
 assert.equal(paused?.session?.state, "paused");
+const scheduled = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "scheduled" });
+assert.equal(scheduled?.session, null);
+assert.equal(scheduled?.plan, null);
+const clockedIn = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "clocked_in" });
+assert.equal(clockedIn?.session?.state, "clocked_in");
+assert.equal(clockedIn?.prompt.kind, "plan");
+const eodDue = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "eod_due" });
+assert.equal(eodDue?.session?.state, "eod_due");
+assert.equal(eodDue?.prompt.kind, "eod");
 const clockedOut = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "clocked_out" });
 assert.equal(clockedOut?.session?.state, "clocked_out");
 assert.equal(clockedOut?.prompt.kind, null);

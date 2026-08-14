@@ -28,12 +28,15 @@ interface DayResponse {
     timezone: string;
     breaks: Array<{ startsAt: string; endsAt: string }>;
   } | null;
-  prompt: { kind: "plan" | "catch_up" | "optional" | "eod" | null; nextPromptAt: string | null; required: boolean; reason: string };
+  prompt: { kind: "plan" | "catch_up" | "optional" | "follow_up" | "hourly_fallback" | "eod" | null; nextPromptAt: string | null; required: boolean; reason: string };
   niftySync?: { fresh: boolean; syncedAt: string | null; error?: string };
   tasks: AnyRow[];
   evidence: AnyRow[];
   proposals: AnyRow[];
   report: AnyRow | null;
+  session: AnyRow | null;
+  plan: { id: string; status: "draft" | "confirmed" | "closed"; freeform_intent: string | null; items: AnyRow[] } | null;
+  attendance?: AnyRow;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -59,6 +62,10 @@ function operationLabel(value: string) {
 function proposalSummary(proposal: AnyRow) {
   const change = proposal.proposed_change ?? {};
   return change.name || change.title || change.summary || change.progress || change.description || proposal.input_text;
+}
+
+function requestId() {
+  return globalThis.crypto.randomUUID();
 }
 
 export default function EmployeeWorkOsHome() {
@@ -152,10 +159,18 @@ export default function EmployeeWorkOsHome() {
       await refresh();
     },
   });
+  const sessionAction = useMutation({
+    mutationFn: ({ method, body }: { method: "POST" | "PATCH"; body: AnyRow }) => fetchJson("/api/work-os/me/workday", {
+      method,
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify(body),
+    }),
+    onSuccess: refresh,
+  });
   const checkIn = useMutation({
     mutationFn: (body: AnyRow) => fetchJson("/api/work-os/check-ins", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify({ source: "web", kind: day.data?.prompt.kind || "optional", ...body }),
     }),
     onSuccess: () => {
@@ -166,15 +181,23 @@ export default function EmployeeWorkOsHome() {
   const review = useMutation({
     mutationFn: ({ id, decision }: { id: string; decision: "accept" | "reject" }) => fetchJson(`/api/work-os/proposals/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify({ decision }),
     }),
     onSuccess: () => void refresh(),
   });
+  const proposeRemoval = useMutation({
+    mutationFn: ({ planItemId, reason }: { planItemId: string; reason: string }) => fetchJson("/api/work-os/me/plan/removals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify({ plan_item_id: planItemId, reason }),
+    }),
+    onSuccess: refresh,
+  });
   const draftEod = useMutation({
     mutationFn: () => fetchJson("/api/work-os/reports/eod", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify({ date: day.data?.shiftDate }),
     }),
     onSuccess: () => void refresh(),
@@ -184,7 +207,7 @@ export default function EmployeeWorkOsHome() {
       if (!day.data?.report?.id) throw new Error("Draft the EOD report before submitting it");
       return fetchJson(`/api/work-os/reports/${day.data.report.id}/submit`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
         body: JSON.stringify({ markdown: reportMarkdown }),
       });
     },
@@ -202,7 +225,9 @@ export default function EmployeeWorkOsHome() {
   const proposals = day.data?.proposals ?? [];
   const evidence = day.data?.evidence ?? [];
   const timezone = day.data?.shift?.timezone;
-  const error = onboarding.error || saveOnboarding.error || changeConsent.error || day.error || checkIn.error || review.error || draftEod.error || submitEod.error;
+  const workSession = day.data?.session;
+  const sessionIsActive = !!workSession && !["scheduled", "clocked_out"].includes(String(workSession.state));
+  const error = onboarding.error || saveOnboarding.error || changeConsent.error || day.error || sessionAction.error || checkIn.error || review.error || proposeRemoval.error || draftEod.error || submitEod.error;
 
   return (
     <div className="min-h-[calc(100vh-8rem)] border" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
@@ -280,6 +305,41 @@ export default function EmployeeWorkOsHome() {
           </section>
         </div>
         <div className="space-y-5">
+          <section className="border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold"><Clock3 size={16} style={{ color: "var(--accent)" }} /> Workday session</h2>
+                <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{workSession ? `State: ${operationLabel(workSession.state)}` : "No Work OS session is active."}</p>
+                {day.data?.attendance?.message ? <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">Observed context only: {day.data.attendance.message}</p> : null}
+              </div>
+              <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>{sessionIsActive ? "Employee-owned" : "Clock-in required"}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!sessionIsActive ? (
+                <button disabled={!day.data?.shift || sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "POST", body: { source: "web", late_acknowledged: true } })} className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}><Check size={14} /> Clock in</button>
+              ) : (
+                <>
+                  {workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
+                  <button disabled={sessionAction.isPending} onClick={() => window.confirm("Clock out and close today’s plan?") && sessionAction.mutate({ method: "PATCH", body: { action: "clock_out", extended_acknowledged: true } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Clock out</button>
+                </>
+              )}
+            </div>
+          </section>
+          {day.data?.plan ? <section className="border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> Today&apos;s plan</h2>
+              <span className="text-[10px] font-semibold uppercase text-[var(--text-tertiary)]">{operationLabel(day.data.plan.status)}</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {day.data.plan.items.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-[var(--text-primary)]">{item.title_snapshot}</p><p className="mt-1 text-[10px] uppercase text-[var(--text-tertiary)]">{operationLabel(item.disposition)} · {operationLabel(item.source)}</p></div>
+                  {item.disposition === "selected" || item.disposition === "deferred" ? <button disabled={proposeRemoval.isPending || !sessionIsActive} onClick={() => { const reason = window.prompt(`Why should “${item.title_snapshot}” be removed from today’s plan?`, "Priority changed or no longer relevant."); if (reason?.trim()) proposeRemoval.mutate({ planItemId: item.id, reason: reason.trim() }); }} className="border px-2 py-1 text-[10px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Propose removal</button> : <span className="text-[10px] text-[var(--text-tertiary)]">{item.disposition === "removal_proposed" ? "Pending review" : "Removed"}</span>}
+                </div>
+              ))}
+              {!day.data.plan.items.length ? <p className="p-4 text-[12px] text-[var(--text-tertiary)]">No task-backed items are in today&apos;s plan.</p> : null}
+            </div>
+          </section> : null}
           {day.data?.niftySync?.error ? <div className="border px-3 py-2 text-[12px] text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Nifty sync failed: {day.data.niftySync.error}</div> : null}
           <section className="border p-4" style={{ borderColor: day.data?.prompt.required ? "var(--status-warn)" : "var(--border)", background: "var(--bg-card)" }}>
             <div className="mb-3 flex items-start justify-between gap-3">

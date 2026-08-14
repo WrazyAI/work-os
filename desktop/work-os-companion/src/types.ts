@@ -8,13 +8,17 @@ export interface WorkSession {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   paused_seconds: number;
+  first_follow_up_at?: string | null;
+  next_fallback_at?: string | null;
+  last_prompt_kind?: "follow_up" | "hourly_fallback" | "eod" | null;
+  last_prompt_at?: string | null;
 }
 
 export interface DailyPlanItem {
   id: string;
   task_id: string | null;
   source: "carry_over" | "overdue" | "due_today" | "existing" | "unplanned";
-  disposition: "selected" | "deferred" | "removal_proposed";
+  disposition: "selected" | "deferred" | "removal_proposed" | "removed";
   rank: number;
   title_snapshot: string;
   blocker: string | null;
@@ -136,7 +140,7 @@ export interface OnboardingData {
 }
 
 export type DebugOnboardingDetail = OnboardingRequirement | "roleAssigned" | "teamAssigned" | "managerAssigned" | "officialScheduleConfigured";
-export type DebugDayState = "real" | "no_shift" | "shift_start" | "clocked_in" | "paused" | "catch_up" | "optional" | "final_hour" | "eod" | "clocked_out";
+export type DebugDayState = "real" | "no_shift" | "scheduled" | "shift_start" | "clocked_in" | "paused" | "eod_due" | "catch_up" | "optional" | "final_hour" | "eod" | "clocked_out";
 
 export interface DebugScenario {
   enabled: boolean;

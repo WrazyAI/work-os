@@ -21,6 +21,13 @@ export interface WorkOsAccess {
   featureFlags: Record<string, boolean>;
 }
 
+export class WorkOsConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkOsConflictError";
+  }
+}
+
 type WorkOsAccessResult =
   | { access: WorkOsAccess; response?: never }
   | { response: NextResponse; access?: never };
@@ -219,6 +226,9 @@ export function jsonError(err: unknown, status = 500) {
       error: err instanceof Error ? err.message : "Work OS database migration required.",
       migration: "supabase/migrations/0011_work_os_employee_onboarding.sql",
     }, { status: 503 });
+  }
+  if (err instanceof WorkOsConflictError) {
+    return NextResponse.json({ error: err.message }, { status: 409 });
   }
   const message = err instanceof Error ? err.message : "Request failed";
   if (message.includes("Employee Companion migration required")) {

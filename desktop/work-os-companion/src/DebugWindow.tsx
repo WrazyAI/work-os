@@ -102,7 +102,7 @@ export default function DebugWindow() {
       <section className="debug-section">
         <h2>My Day conditions</h2>
         <label><span>Shift state</span><select value={scenario.dayState} onChange={(event) => update({ dayState: event.target.value as DebugDayState })}>
-          <option value="real">Use server state</option><option value="no_shift">No shift</option><option value="shift_start">Shift start</option><option value="clocked_in">Clocked in</option><option value="paused">Paused</option><option value="catch_up">First-hour follow-up</option><option value="optional">Optional hourly check-in</option><option value="final_hour">Final-hour suppression</option><option value="eod">EOD review</option><option value="clocked_out">Clocked out</option>
+          <option value="real">Use server state</option><option value="no_shift">No shift</option><option value="scheduled">Scheduled — clock-in required</option><option value="shift_start">Shift start</option><option value="clocked_in">Clocked in</option><option value="paused">Paused</option><option value="catch_up">First-hour follow-up</option><option value="optional">Optional hourly check-in</option><option value="final_hour">Final-hour suppression</option><option value="eod_due">EOD due</option><option value="eod">EOD review</option><option value="clocked_out">Clocked out</option>
         </select></label>
         <div className="debug-checks compact">
           <DebugToggle label="Nifty sync failure" checked={scenario.niftyFailure} onChange={(value) => update({ niftyFailure: value })} />

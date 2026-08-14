@@ -33,11 +33,16 @@ assert.match(styles, /prefers-reduced-motion/);
 const app = read("src/App.tsx");
 assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);
-assert.match(app, /<DebugWindow embedded/);
+assert.match(app, /openDebuggerWindow/);
 assert.match(app, /onboardingState: "complete"/);
 assert.match(app, /Couldn’t load Work OS/);
 assert.match(app, />Retry</);
 assert.match(app, /\/api\/work-os\/me\/workday/);
+assert.match(app, /source: "desktop"/);
+assert.match(app, /\/api\/work-os\/me\/plan\/removals/);
+assert.doesNotMatch(app, /Clock in through Worktivity/);
+assert.doesNotMatch(app, /Fallback clock in/);
+assert.doesNotMatch(app, /Attendance managed by Worktivity/);
 assert.match(app, /\/api\/work-os\/me\/plan/);
 assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
@@ -45,16 +50,21 @@ assert.match(app, /secureState\.clearAccount\(\)/);
 assert.match(app, /Account session/);
 
 const debugWindow = read("src/DebugWindow.tsx");
-assert.match(debugWindow, /if \(embedded \|\| !isTauri\(\)\) return;/);
 assert.match(debugWindow, /if \(!isTauri\(\)\)/);
 for (const event of ["work-os://debug-request", "work-os://debug-current", "work-os://debug-scenario"]) {
   assert.match(debugWindow, new RegExp(event.replaceAll("/", "\\/")));
 }
 assert.match(debugWindow, /\.\.\.DEFAULT_DEBUG_SCENARIO, \.\.\.preset/);
+const main = read("src/main.tsx");
+assert.match(main, /import DebugWindow from "\.\/DebugWindow"/);
+assert.match(main, /params\.has\("debug"\)/);
 
 const api = read("src/api.ts");
 assert.match(api, /AbortSignal\.timeout\(20_000\)/);
 assert.match(api, /observed_at: body\.observed_at \?\? createdAt/);
+assert.match(api, /Idempotency-Key/);
+assert.match(api, /flushQueue/);
+assert.match(api, /\/api\/work-os\/me\/day/);
 
 const tauri = read("src-tauri/tauri.conf.json");
 assert.match(tauri, /"frontendDist": "\.\.\/dist"/);

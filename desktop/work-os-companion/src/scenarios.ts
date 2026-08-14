@@ -31,6 +31,7 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; scenario: Partial
   { id: "first_launch", label: "First launch", scenario: { enabled: true, authState: "unauthenticated", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ALL_ONBOARDING_DETAILS.map((item) => item.key), dayState: "no_shift" } },
   { id: "profile_missing", label: "Incomplete onboarding", scenario: { enabled: true, authState: "real", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ["consentProvided", "profileConfirmed", "timezoneProvided", "scheduleProvided", "notificationsConfigured", "privacyAcknowledged", "roleAssigned", "teamAssigned", "managerAssigned", "officialScheduleConfigured"] } },
   { id: "shift_start", label: "Shift start", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "shift_start" } },
+  { id: "explicit_clock_in", label: "Explicit clock-in", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "scheduled" } },
   { id: "provider_failure", label: "Provider outage", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
 ];
@@ -109,7 +110,7 @@ function dayFixture(): DayData {
         { id: "debug-plan-2", task_id: "debug-task-2", source: "due_today", disposition: "selected", rank: 1, title_snapshot: "Review desktop recovery states", blocker: null },
       ],
     },
-    attendance: { source: "worktivity", state: "active", status: "working", observedAt: now.toISOString(), clockedInAt: shift.startsAt, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Clocked in through Worktivity." },
+    attendance: { source: "worktivity", state: "active", status: "working", observedAt: now.toISOString(), clockedInAt: shift.startsAt, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Worktivity activity observed; Work OS clock-in is explicit." },
   };
 }
 
@@ -141,7 +142,7 @@ export function applyOnboardingScenario(data: OnboardingData | null, scenario: D
 function debugShift(kind: Exclude<DebugScenario["dayState"], "real" | "no_shift">) {
   const now = new Date();
   const startsAt = new Date(now.getTime() - 30 * 60_000);
-  const endsAt = new Date(now.getTime() + (kind === "eod" ? 10 : kind === "final_hour" ? 40 : 7 * 60) * 60_000);
+  const endsAt = new Date(now.getTime() + (kind === "eod_due" ? 5 : kind === "eod" ? 10 : kind === "final_hour" ? 40 : 7 * 60) * 60_000);
   return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", breaks: [] };
 }
 
@@ -158,17 +159,19 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
   if (scenario.dayState === "no_shift") result = { ...result, shift: null, prompt: { kind: null, nextPromptAt: null, required: false, reason: "No scheduled shift." } };
   if (scenario.dayState !== "real" && scenario.dayState !== "no_shift") {
     const kind = scenario.dayState;
-    const prompt = kind === "shift_start"
+    const prompt = kind === "scheduled" || kind === "shift_start"
       ? { kind: "plan" as const, required: true, reason: "Shift has started." }
       : kind === "catch_up"
         ? { kind: "catch_up" as const, required: true, reason: "No valid plan was recorded in the first hour." }
-        : kind === "optional" || kind === "clocked_in" || kind === "paused"
+        : kind === "clocked_in"
+          ? { kind: "plan" as const, required: true, reason: "Confirm the plan for this clocked-in session." }
+          : kind === "optional" || kind === "paused"
           ? { kind: "optional" as const, required: false, reason: "Optional hourly check-in." }
           : kind === "final_hour"
             ? { kind: null, required: false, reason: "Final-hour planning suppression." }
             : { kind: "eod" as const, required: true, reason: "Review your end-of-day draft." };
     const shift = debugShift(kind);
-    const sessionState = kind === "paused" ? "paused" : kind === "clocked_out" ? "clocked_out" : kind === "shift_start" ? null : "active";
+    const sessionState = kind === "paused" ? "paused" : kind === "clocked_out" ? "clocked_out" : kind === "scheduled" || kind === "shift_start" ? null : kind === "clocked_in" ? "clocked_in" : kind === "eod_due" || kind === "eod" ? "eod_due" : "active";
     result = {
       ...result,
       shift,
@@ -176,6 +179,7 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
         id: `debug-${kind}`, state: sessionState, scheduled_starts_at: shift.startsAt, scheduled_ends_at: shift.endsAt,
         clocked_in_at: shift.startsAt, clocked_out_at: kind === "clocked_out" ? new Date().toISOString() : null, paused_seconds: kind === "paused" ? 900 : 0,
       } : null,
+      plan: sessionState ? { ...result.plan!, status: sessionState === "clocked_in" ? "draft" : result.plan?.status ?? "draft" } : null,
       prompt: kind === "clocked_out" ? { kind: null, required: false, reason: "Shift ended.", nextPromptAt: null } : { ...prompt, nextPromptAt: null },
     };
   }

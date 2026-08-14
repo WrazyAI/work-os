@@ -15,6 +15,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const evidence = await source("src/app/api/work-os/evidence/route.ts");
   const workday = await source("src/app/api/work-os/me/workday/route.ts");
   const plan = await source("src/app/api/work-os/me/plan/route.ts");
+  const removals = await source("src/app/api/work-os/me/plan/removals/route.ts");
+  const attendance = await source("src/lib/work-os-attendance.ts");
+  const attendanceProjection = await source("src/modules/work-os/attendance.ts");
   assert.match(checkIns, /idempotency-key/);
   assert.match(proposals, /decision_idempotency_key/);
   assert.match(reports, /requireWorkOsPersonAccess/);
@@ -24,6 +27,14 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(workday, /requirePerson: true/);
   assert.match(plan, /Idempotency-Key is required/);
   assert.match(plan, /requirePerson: true/);
+  assert.match(removals, /Idempotency-Key is required/);
+  assert.match(removals, /proposeWorkOsPlanRemoval/);
+  assert.match(workday, /clockIn\(auth\.access/);
+  assert.doesNotMatch(workday, /reconcileWorktivityAttendance|work_os_fallback/);
+  assert.match(attendance, /observeWorktivityAttendance/);
+  assert.doesNotMatch(attendance, /\.from\("work_sessions"\)\.insert/);
+  assert.doesNotMatch(attendance, /state:\s*desiredState/);
+  assert.match(attendanceProjection, /Worktivity activity observed; Work OS clock-in is explicit/);
 });
 
 test("privacy and provider routes retain the pilot safety gates", async () => {

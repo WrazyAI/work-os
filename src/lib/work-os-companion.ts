@@ -30,8 +30,8 @@ import {
   type WorkOsScheduleException,
   type WorkOsScheduleRule,
 } from "@/modules/work-os/companion";
-import { getWorkday } from "@/lib/work-os-workday";
-import { reconcileWorktivityAttendance } from "@/lib/work-os-attendance";
+import { activeSession, getWorkday, saveDailyPlan } from "@/lib/work-os-workday";
+import { observeWorktivityAttendance } from "@/lib/work-os-attendance";
 
 type Json = Record<string, unknown>;
 type ProposalOperation =
@@ -41,7 +41,8 @@ type ProposalOperation =
   | "add_blocker"
   | "resolve_blocker"
   | "link_evidence"
-  | "complete_task";
+  | "complete_task"
+  | "remove_from_plan";
 
 const OPERATIONS = new Set<ProposalOperation>([
   "create_task",
@@ -51,6 +52,7 @@ const OPERATIONS = new Set<ProposalOperation>([
   "resolve_blocker",
   "link_evidence",
   "complete_task",
+  "remove_from_plan",
 ]);
 const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
 const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
@@ -217,7 +219,7 @@ async function loadShiftData(access: WorkOsAccess, personId: string, at: Date) {
 }
 
 export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = new Date()) {
-  const attendance = await reconcileWorktivityAttendance(access, at);
+  const attendance = await observeWorktivityAttendance(access, at);
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, at);
   const shift = resolveShiftWindow(rules, exceptions, at);
   const shiftDate = shift?.shiftDate ?? localDateForTimezone(at, timezone);
@@ -372,6 +374,7 @@ async function parseCheckIn(input: string, tasks: Json[]): Promise<{ model: stri
     if (operation === "complete_task" && !explicitCompletion) operation = "log_progress";
     const change = candidate.change && typeof candidate.change === "object" ? candidate.change as Json : {};
     if (operation === "create_task" && !text(change.name)) continue;
+    if (operation === "remove_from_plan" && !text(change.plan_item_id)) continue;
     const localTaskId = matchedTask ? String(matchedTask.id) : null;
     const signature = JSON.stringify([operation, localTaskId, change]);
     if (seen.has(signature)) continue;
@@ -462,6 +465,21 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     proposals = data ?? [];
   }
   await audit(access, "check_in.created", "check_in", checkIn.id as string, { kind, proposalCount: proposals.length });
+  if (activeSession?.id && confirmedExisting) {
+    const { data: currentPlan, error: currentPlanError } = await db().from("work_daily_plans")
+      .select("id,status,confirmed_at,confirmation_idempotency_key,freeform_intent,items:work_daily_plan_items(id,disposition)")
+      .eq("organization_id", access.organizationId).eq("session_id", activeSession.id).maybeSingle();
+    if (currentPlanError) throw new Error(`load plan confirmation state: ${currentPlanError.message}`);
+    if (currentPlan && currentPlan.status !== "confirmed") {
+      const planItems = Array.isArray(currentPlan.items) ? currentPlan.items as Array<{ id: string; disposition: string }> : [];
+      await saveDailyPlan(access, {
+        confirm: true,
+        item_ids: planItems.filter((item) => item.disposition === "selected").map((item) => item.id),
+        deferred_ids: planItems.filter((item) => item.disposition === "deferred").map((item) => item.id),
+        freeform_intent: currentPlan.freeform_intent,
+      }, `check-in:${checkIn.id}`);
+    }
+  }
   if (activeSession?.id && (input || confirmedExisting)) {
     await db().from("work_sessions").update({ state: "active", last_substantive_update_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", activeSession.id);
   }
@@ -504,9 +522,25 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
 }
 
 async function applyProposal(access: WorkOsAccess, proposal: Json) {
-  const ownerId = await organizationOwnerId(access.organizationId);
   const operation = proposal.operation as ProposalOperation;
   const change = proposal.proposed_change as Json;
+  if (operation === "remove_from_plan") {
+    const planItemId = text(change.plan_item_id) ?? text((proposal.before_state as Json | undefined)?.plan_item_id);
+    if (!planItemId) throw new Error("plan_item_id is required for a removal proposal");
+    const { data, error } = await db().from("work_daily_plan_items").update({
+      disposition: "removed",
+      updated_at: new Date().toISOString(),
+    }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", planItemId)
+      .eq("disposition", "removal_proposed").select("*").maybeSingle();
+    if (error) throw new Error(`remove task from daily plan: ${error.message}`);
+    if (data) return data;
+    const { data: current, error: currentError } = await db().from("work_daily_plan_items").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", planItemId).maybeSingle();
+    if (currentError) throw new Error(`reconcile removed plan item: ${currentError.message}`);
+    if (current?.disposition === "removed") return current;
+    throw new Error("Removal proposal is no longer pending review.");
+  }
+  const ownerId = await organizationOwnerId(access.organizationId);
   const taskId = text(proposal.task_id) ?? text((proposal.before_state as Json | undefined)?.id);
   if (operation === "create_task") {
     if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
@@ -594,6 +628,88 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
   throw new Error("unsupported proposal operation");
 }
 
+async function restorePlanRemoval(access: WorkOsAccess, proposal: Json) {
+  const before = (proposal.before_state ?? {}) as Json;
+  const change = (proposal.proposed_change ?? {}) as Json;
+  const planItemId = text(change.plan_item_id) ?? text(before.plan_item_id);
+  const previousDisposition = text(before.disposition);
+  if (!planItemId || !["selected", "deferred"].includes(previousDisposition ?? "")) return;
+  const { error } = await db().from("work_daily_plan_items").update({
+    disposition: previousDisposition,
+    updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", planItemId)
+    .eq("disposition", "removal_proposed");
+  if (error) throw new Error(`restore rejected plan removal: ${error.message}`);
+}
+
+export async function proposeWorkOsPlanRemoval(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const planItemId = text(body.plan_item_id);
+  const reason = text(body.reason) ?? "No longer part of today's selected work.";
+  if (!planItemId) throw new Error("plan_item_id is required");
+  const { data: existing, error: existingError } = await db().from("work_task_proposals").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+    .eq("idempotency_key", idempotencyKey).maybeSingle();
+  if (existingError) throw new Error(`load idempotent removal proposal: ${existingError.message}`);
+  if (existing) return { proposal: existing };
+  const { data: item, error: itemError } = await db().from("work_daily_plan_items").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", planItemId).single();
+  if (itemError) throw new Error(`load daily plan item for removal: ${itemError.message}`);
+  if (!item.task_id) throw new Error("Only task-backed plan items can be removed through review.");
+  if (!["selected", "deferred"].includes(item.disposition as string)) throw new Error("This plan item is already pending removal or removed.");
+  const { data: plan, error: planError } = await db().from("work_daily_plans").select("id,session_id,shift_date,status")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", item.plan_id).single();
+  if (planError) throw new Error(`load daily plan for removal: ${planError.message}`);
+  if (!["draft", "confirmed"].includes(String(plan.status))) throw new Error("Only an open daily plan can receive a removal proposal.");
+  const session = await activeSession(access);
+  if (!session || session.id !== plan.session_id) throw new Error("Only the current clocked-in plan can receive a removal proposal.");
+  const beforeState = {
+    plan_id: plan.id,
+    plan_item_id: item.id,
+    task_id: item.task_id,
+    title_snapshot: item.title_snapshot,
+    disposition: item.disposition,
+    rank: item.rank,
+  };
+  const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    task_id: item.task_id,
+    operation: "remove_from_plan",
+    input_text: reason,
+    before_state: beforeState,
+    proposed_change: { plan_item_id: item.id, disposition: "removed", reason },
+    model: "employee",
+    prompt_version: "work-os-plan-removal-v1",
+    idempotency_key: idempotencyKey,
+    created_by: access.ctx.user.id,
+  }).select("*").single();
+  if (proposalError) {
+    if (/duplicate|unique/i.test(proposalError.message)) {
+      const reconciled = await db().from("work_task_proposals").select("*")
+        .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+        .eq("idempotency_key", idempotencyKey).single();
+      if (reconciled.error) throw new Error(`reconcile removal proposal: ${reconciled.error.message}`);
+      return { proposal: reconciled.data };
+    }
+    throw new Error(`create plan removal proposal: ${proposalError.message}`);
+  }
+  const { data: updatedItem, error: updateError } = await db().from("work_daily_plan_items").update({
+    disposition: "removal_proposed",
+    updated_at: new Date().toISOString(),
+  }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("id", item.id)
+    .eq("disposition", item.disposition).select("*").maybeSingle();
+  if (updateError) {
+    await db().from("work_task_proposals").update({ status: "failed", failure_reason: `Could not reserve plan item for removal: ${updateError.message}`, updated_at: new Date().toISOString() }).eq("id", proposal.id).eq("status", "pending");
+    throw new Error(`mark plan removal pending: ${updateError.message}`);
+  }
+  if (!updatedItem) {
+    await db().from("work_task_proposals").update({ status: "failed", failure_reason: "The plan item changed before this removal proposal could be reserved.", updated_at: new Date().toISOString() }).eq("id", proposal.id).eq("status", "pending");
+    throw new Error("The plan item changed before this removal proposal could be reserved.");
+  }
+  await audit(access, "proposal.removal_proposed", "task_proposal", proposal.id as string, { planItemId: item.id, taskId: item.task_id, reason });
+  return { proposal, planItem: updatedItem };
+}
+
 export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: string, body: Json) {
   const decision = text(body.decision);
   if (decision !== "accept" && decision !== "reject") throw new Error("decision must be accept or reject");
@@ -619,6 +735,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   }
   if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) return proposal;
   if (decision === "reject" && ["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
+    if (proposal.operation === "remove_from_plan") await restorePlanRemoval(access, proposal as Json);
     const { data, error } = await db().from("work_task_proposals").update({
       status: "rejected",
       decided_by: access.ctx.user.id,
@@ -634,7 +751,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   const proposedChange = body.proposed_change && typeof body.proposed_change === "object"
     ? body.proposed_change as Json
     : proposal.proposed_change as Json;
-  if (proposal.task_id) {
+  if (proposal.task_id && proposal.operation !== "remove_from_plan") {
     try {
       const ownerId = await organizationOwnerId(access.organizationId);
       await syncNifty(ownerId);

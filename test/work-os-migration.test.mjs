@@ -18,6 +18,7 @@ const migrations = [
   "supabase/migrations/0014_work_tasks_milestone_id.sql",
   "supabase/migrations/0015_work_os_workday_foundation.sql",
   "supabase/migrations/0016_work_os_guided_onboarding.sql",
+  "supabase/migrations/0017_work_os_phase1_closure.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -70,6 +71,16 @@ test("Work OS companion migration is complete and idempotent", async () => {
     where table_schema='public' and table_name='work_evidence' and column_name='idempotency_key'
   `);
   assert.equal(evidenceIdempotencyColumn.rows.length, 1);
+  const phase1SessionColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_sessions'
+      and column_name = any($1)
+  `, [["first_follow_up_at", "next_fallback_at", "last_prompt_kind", "last_prompt_at"]]);
+  assert.equal(phase1SessionColumns.rows.length, 4);
+  const phase1Constraints = await db.query(`
+    select conname from pg_constraint where conname = any($1)
+  `, [["work_sessions_last_prompt_kind_check", "work_daily_plan_items_disposition_check", "work_task_proposals_operation_check"]]);
+  assert.equal(phase1Constraints.rows.length, 3);
 
   const users = await db.query(`
     insert into auth.users(email) values ('owner-a@test.invalid'),('employee-a@test.invalid'),('employee-b@test.invalid') returning id,email
@@ -121,6 +132,10 @@ test("Work OS companion migration is complete and idempotent", async () => {
     returning id,organization_id
   `, [orgA, personA, scheduleA, orgB, personB, scheduleB]);
   const workSessionA = workSessions.rows.find((row) => row.organization_id === orgA).id;
+  const priorSession = await db.query(`
+    insert into work_sessions(organization_id,person_id,schedule_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clocked_in_at,clocked_out_at,clock_in_idempotency_key)
+    values ($1,$2,$3,'2026-08-10','clocked_out','UTC','2026-08-10T09:00:00Z','2026-08-10T17:00:00Z','2026-08-10T09:03:00Z','2026-08-10T17:00:00Z','clock-prior') returning id
+  `, [orgA, personA, scheduleA]);
   await assert.rejects(() => db.query(`
     insert into work_sessions(organization_id,person_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at)
     values ($1,$2,'2026-08-11','clocked_in','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z')
@@ -133,6 +148,14 @@ test("Work OS companion migration is complete and idempotent", async () => {
     insert into work_daily_plans(organization_id,person_id,session_id,shift_date,status,confirmation_idempotency_key)
     values ($1,$2,$3,'2026-08-11','confirmed','plan-a') returning id
   `, [orgA, personA, workSessionA]);
+  const priorPlan = await db.query(`
+    insert into work_daily_plans(organization_id,person_id,session_id,shift_date,status)
+    values ($1,$2,$3,'2026-08-10','closed') returning id
+  `, [orgA, personA, priorSession.rows[0].id]);
+  await db.query(`
+    insert into work_daily_plan_items(organization_id,plan_id,person_id,task_id,source,disposition,title_snapshot)
+    values ($1,$2,$3,$4,'existing','deferred','Private A carried over')
+  `, [orgA, priorPlan.rows[0].id, personA, taskA.id]);
   await db.query(`
     insert into work_daily_plan_items(organization_id,plan_id,person_id,task_id,source,title_snapshot)
     values ($1,$2,$3,$4,'due_today','Private A')
@@ -149,6 +172,28 @@ test("Work OS companion migration is complete and idempotent", async () => {
     values ($1,$2,$3,$4,'log_progress','Proposal A',$5,'proposal-a'),($6,$7,$8,$9,'log_progress','Proposal B',$10,'proposal-b')
     returning id,organization_id
   `, [orgA, personA, checkInA, taskA.id, employeeA.id, orgB, personB, checkInB, taskB.id, employeeB.id]);
+  await db.query(`update work_sessions set state='eod_due', first_follow_up_at='2026-08-11T09:30:00Z', next_fallback_at='2026-08-11T10:30:00Z', last_prompt_kind='follow_up', last_prompt_at='2026-08-11T09:30:00Z' where id=$1`, [workSessionA]);
+  await db.query(`
+    insert into work_session_events(organization_id,person_id,session_id,event_type,from_state,to_state,source,observed_at,idempotency_key)
+    values ($1,$2,$3,'eod_due','active','eod_due','system','2026-08-11T16:50:00Z','eod-due-a')
+  `, [orgA, personA, workSessionA]);
+  const persistedEod = await db.query(`select state, to_char(first_follow_up_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as first_follow_up_at, to_char(next_fallback_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as next_fallback_at, last_prompt_kind from work_sessions where id=$1`, [workSessionA]);
+  assert.deepEqual(persistedEod.rows[0], { state: "eod_due", first_follow_up_at: "2026-08-11T09:30:00.000Z", next_fallback_at: "2026-08-11T10:30:00.000Z", last_prompt_kind: "follow_up" });
+  const removalProposal = await db.query(`
+    update work_task_proposals set operation='remove_from_plan', input_text='No longer a priority',
+      before_state=jsonb_build_object('plan_item_id', (select id from work_daily_plan_items where plan_id=$1 and task_id=$2), 'disposition','selected'),
+      proposed_change=jsonb_build_object('plan_item_id', (select id from work_daily_plan_items where plan_id=$1 and task_id=$2), 'disposition','removed')
+    where id=$3 returning id
+  `, [dailyPlan.rows[0].id, taskA.id, proposals.rows.find((row) => row.organization_id === orgA).id]);
+  const currentPlanItem = await db.query(`select id from work_daily_plan_items where plan_id=$1 and task_id=$2`, [dailyPlan.rows[0].id, taskA.id]);
+  assert.equal(removalProposal.rows.length, 1);
+  await db.query(`update work_daily_plan_items set disposition='removal_proposed' where id=$1`, [currentPlanItem.rows[0].id]);
+  assert.equal((await db.query(`select disposition from work_daily_plan_items where id=$1`, [currentPlanItem.rows[0].id])).rows[0].disposition, "removal_proposed");
+  await db.query(`update work_daily_plan_items set disposition='selected' where id=$1`, [currentPlanItem.rows[0].id]);
+  assert.equal((await db.query(`select disposition from work_daily_plan_items where id=$1`, [currentPlanItem.rows[0].id])).rows[0].disposition, "selected");
+  await db.query(`update work_daily_plan_items set disposition='removal_proposed' where id=$1`, [currentPlanItem.rows[0].id]);
+  await db.query(`update work_daily_plan_items set disposition='removed' where id=$1 and disposition='removal_proposed'`, [currentPlanItem.rows[0].id]);
+  assert.equal((await db.query(`select disposition from work_daily_plan_items where id=$1`, [currentPlanItem.rows[0].id])).rows[0].disposition, "removed");
 
   await db.query(`
     insert into work_provider_connections(organization_id,provider,external_workspace_id)
@@ -226,7 +271,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_audit_log where organization_id=$1)::int as audit_rows
   `, [orgA]));
   assert.deepEqual(employeeAVisibility.rows[0], {
-    people: 1, schedules: 1, check_ins: 1, sessions: 1, daily_plans: 1, proposals: 1, evidence_events: 1, screenshots: 1,
+    people: 1, schedules: 1, check_ins: 1, sessions: 2, daily_plans: 2, proposals: 1, evidence_events: 1, screenshots: 1,
     reports: 1, report_versions: 1, provider_connections: 0, provider_credentials: 0,
     source_accounts: 0, audit_rows: 0,
   });
