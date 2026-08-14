@@ -9,6 +9,9 @@ import safeArt from "./assets/onboarding/phase-safe.png";
 import connectedArt from "./assets/onboarding/phase-connected.png";
 import wordmark from "./assets/work-os-mark.png";
 
+type AssetSource = string | { src: string };
+const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
+
 const PHASES = [
   { id: "seen", feeling: "Seen", title: "Start with what we already know.", body: "Your workspace context should save time, not create another form.", art: seenArt },
   { id: "understood", feeling: "Understood", title: "Tell us how you contribute.", body: "Choose a broad work scope. Your official company role stays unchanged.", art: understoodArt },
@@ -101,9 +104,9 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
 
   return <main className="guided-onboarding" aria-busy={busy}>
     <aside className="onboarding-story" aria-live="polite">
-      <div className="story-brand"><img src={wordmark} alt="" /><strong>WORK <b>OS</b></strong></div>
+      <div className="story-brand"><img src={assetUrl(wordmark)} alt="" /><strong>WORK <b>OS</b></strong></div>
       <div className="story-copy"><span>{phase.feeling}</span><h1>{phase.title}</h1><p>{phase.body}</p></div>
-      <img key={phase.id} className="phase-art" src={phase.art} alt="" />
+      <img key={phase.id} className="phase-art" src={assetUrl(phase.art)} alt="" />
       <div className="phase-path" aria-label={`Onboarding progress: ${phase.feeling}`}>
         {PHASES.map((entry, index) => <i key={entry.id} className={index <= phaseIndex ? "active" : ""} />)}
       </div>
