@@ -26,7 +26,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
 }
 
-export async function sendOrQueue(path: string, method: "POST" | "PATCH", body: Record<string, unknown>) {
+export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH", body: Record<string, unknown>) {
   const createdAt = new Date().toISOString();
   const replaySafeBody = { ...body, observed_at: body.observed_at ?? createdAt };
   const action: OfflineAction = { id: crypto.randomUUID(), path, method, body: replaySafeBody, createdAt, attempts: 0 };
@@ -36,7 +36,10 @@ export async function sendOrQueue(path: string, method: "POST" | "PATCH", body: 
     if (navigator.onLine && !(error instanceof TypeError)) throw error;
     diagnostics.warn("offline_queue.enqueued", "Request queued for retry", { path, method }, { source: "sync" });
     const queue = await secureState.queue();
-    await secureState.saveQueue([...queue, action]);
+    const pending = path === "/api/work-os/me/plan" && method === "PUT"
+      ? queue.filter((queued) => queued.path !== path || queued.method !== method)
+      : queue;
+    await secureState.saveQueue([...pending, action]);
     return { queued: true };
   }
 }

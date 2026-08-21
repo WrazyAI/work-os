@@ -118,7 +118,19 @@ export default function WorkOsHome() {
   const [personId, setPersonId] = useState("");
   const [completed, setCompleted] = useState("false");
   const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
   const [taskGroupId, setTaskGroupId] = useState("");
+  const [taskParentId, setTaskParentId] = useState("");
+  const [taskProjectId, setTaskProjectId] = useState("");
+  const [taskMilestoneId, setTaskMilestoneId] = useState("");
+  const [taskStartDate, setTaskStartDate] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState("");
+  const [taskLabels, setTaskLabels] = useState("");
+  const [taskStoryPoints, setTaskStoryPoints] = useState("");
+  const [taskExpectedOutcome, setTaskExpectedOutcome] = useState("");
+  const [taskDefinitionOfDone, setTaskDefinitionOfDone] = useState("");
+  const [taskProviderStatus, setTaskProviderStatus] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
   const [clientName, setClientName] = useState("");
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
@@ -299,13 +311,22 @@ export default function WorkOsHome() {
     onSuccess: refresh,
   });
   const createTaskMutation = useMutation({
-    mutationFn: () => fetchJson("/api/work-os/tasks", {
+    mutationFn: () => fetchJson<{ providerStatus: string; mirrorStatus: string }>("/api/work-os/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: taskTitle, task_group_id: taskGroupId }),
+      body: JSON.stringify({
+        name: taskTitle, description: taskDescription, task_group_id: taskGroupId,
+        task_id: taskParentId || undefined, project_id: taskProjectId || undefined, milestone_id: taskMilestoneId || undefined,
+        start_date: taskStartDate || undefined, due_date: taskDueDate || undefined, priority: taskPriority || undefined,
+        labels: taskLabels.split(",").map((item) => item.trim()).filter(Boolean),
+        story_points: taskStoryPoints ? Number(taskStoryPoints) : undefined,
+        expected_outcome: taskExpectedOutcome || undefined, definition_of_done: taskDefinitionOfDone || undefined,
+      }),
     }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setTaskTitle("");
+      setTaskDescription(""); setTaskParentId(""); setTaskStartDate(""); setTaskDueDate(""); setTaskPriority(""); setTaskLabels(""); setTaskStoryPoints(""); setTaskExpectedOutcome(""); setTaskDefinitionOfDone("");
+      setTaskProviderStatus(`Nifty confirmed · mirror ${result.mirrorStatus}`);
       refresh();
     },
   });
@@ -513,9 +534,20 @@ export default function WorkOsHome() {
 
           {schemaReady && tab === "tasks" && (
             <Card>
-              <div className="mb-4 flex flex-wrap items-end gap-2">
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
                 <Field label="Task title"><input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Create a Nifty task" /></Field>
+                <Field label="Description"><textarea value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Context, links, or acceptance notes" rows={2} /></Field>
                 <Field label="Nifty task group ID"><input value={taskGroupId} onChange={(e) => setTaskGroupId(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Required by Nifty" /></Field>
+                <Field label="Parent task / subtask"><select value={taskParentId} onChange={(e) => setTaskParentId(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }}><option value="">Top-level task</option>{taskRows.filter((task) => !task.parent_task_id).map((task) => <option key={task.provider_task_id || task.id} value={task.provider_task_id || task.id}>{task.title}</option>)}</select></Field>
+                <Field label="Project"><select value={taskProjectId} onChange={(e) => setTaskProjectId(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }}><option value="">Provider default</option>{(projects.data?.projects ?? []).map((project) => <option key={project.id} value={project.provider_project_id || project.id}>{project.name}</option>)}</select></Field>
+                <Field label="Milestone ID"><input value={taskMilestoneId} onChange={(e) => setTaskMilestoneId(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Optional" /></Field>
+                <Field label="Start date"><input type="date" value={taskStartDate} onChange={(e) => setTaskStartDate(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                <Field label="Due date"><input type="date" value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                <Field label="Priority"><input value={taskPriority} onChange={(e) => setTaskPriority(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Optional" /></Field>
+                <Field label="Labels"><input value={taskLabels} onChange={(e) => setTaskLabels(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="comma, separated" /></Field>
+                <Field label="Story points"><input type="number" min="0" value={taskStoryPoints} onChange={(e) => setTaskStoryPoints(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                <Field label="Expected outcome"><input value={taskExpectedOutcome} onChange={(e) => setTaskExpectedOutcome(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                <Field label="Definition of done"><input value={taskDefinitionOfDone} onChange={(e) => setTaskDefinitionOfDone(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
                 <Field label="Status filter">
                   <select value={completed} onChange={(e) => setCompleted(e.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }}>
                     <option value="false">Open</option>
@@ -523,8 +555,9 @@ export default function WorkOsHome() {
                     <option value="">All</option>
                   </select>
                 </Field>
-                <button onClick={() => createTaskMutation.mutate()} disabled={!taskTitle || !taskGroupId} className="rounded-lg px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Create</button>
+                <button onClick={() => createTaskMutation.mutate()} disabled={!taskTitle || !taskGroupId || createTaskMutation.isPending} className="rounded-lg px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>{createTaskMutation.isPending ? "Submitting…" : taskParentId ? "Create subtask" : "Create task"}</button>
               </div>
+              {taskProviderStatus && <Notice tone="info">{taskProviderStatus}</Notice>}
               <TaskList tasks={taskRows} onComplete={(id) => completeTaskMutation.mutate(id)} />
             </Card>
           )}

@@ -19,6 +19,8 @@ const MIGRATIONS = [
   "0015_work_os_workday_foundation.sql",
   "0016_work_os_guided_onboarding.sql",
   "0017_work_os_phase1_closure.sql",
+  "0018_work_os_nifty_history.sql",
+  "0019_work_os_plans_insights.sql",
 ].map((file) => path.join(process.cwd(), "supabase", "migrations", file));
 
 function loadEnvFile(file) {

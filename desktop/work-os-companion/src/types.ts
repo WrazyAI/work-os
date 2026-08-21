@@ -22,13 +22,47 @@ export interface DailyPlanItem {
   rank: number;
   title_snapshot: string;
   blocker: string | null;
+  item_kind: "nifty_task" | "outcome";
+  completion_state: "open" | "completed";
+  completed_at?: string | null;
 }
 
 export interface DailyPlan {
   id: string;
   status: "draft" | "confirmed" | "closed";
   freeform_intent: string | null;
+  shift_date: string;
+  revision: number;
+  confirmed_at?: string | null;
+  updated_at?: string | null;
   items: DailyPlanItem[];
+}
+
+export interface InsightDay {
+  date: string;
+  observedSeconds: number;
+  pausedSeconds: number;
+  planStatus: "none" | "draft" | "confirmed" | "closed";
+  planned: number;
+  plannedCompleted: number;
+  carryOver: number;
+  overdue: number;
+  updates: number;
+  outputEvidence: number;
+  activityContext: number;
+  tasksCompleted: number;
+  tasksOpen: number;
+  references: Array<{ type: "plan" | "task" | "check_in" | "evidence"; id: string; label: string }>;
+}
+
+export interface InsightsData {
+  range: "day" | "7d" | "30d";
+  from: string;
+  through: string;
+  days: InsightDay[];
+  totals: Omit<InsightDay, "date" | "planStatus" | "references">;
+  brief: { generated: boolean; summary: string; wins: string[]; attention: string[]; nextFocus: string[]; referenceIds: string[] };
+  freshness: { niftySyncedAt: string | null; worktivityObservedAt: string | null };
 }
 
 export interface DayData {
@@ -36,14 +70,23 @@ export interface DayData {
   shiftDate: string;
   shift: { startsAt: string; endsAt: string; timezone: string; breaks: Array<{ startsAt: string; endsAt: string }> } | null;
   prompt: { kind: PromptKind; nextPromptAt: string | null; required: boolean; reason: string };
-  niftySync?: { fresh: boolean; syncedAt: string | null; error?: string };
+  niftySync?: { fresh: boolean; syncing?: boolean; syncedAt: string | null; error?: string };
+  signals?: {
+    employeeUpdates: number;
+    outputEvidence: number;
+    activityContext: number;
+    completedTasks: number;
+    openTasks: number;
+  };
   tasks: Array<Record<string, any>>;
+  taskHistory?: Array<Record<string, any>>;
   evidence: Array<Record<string, any>>;
   proposals: Array<Record<string, any>>;
   report: Record<string, any> | null;
   session: WorkSession | null;
   plan: DailyPlan | null;
   attendance?: AttendanceProjection;
+  access?: { organizationId: string; role: string; personId: string };
 }
 
 export interface AttendanceProjection {
@@ -158,7 +201,7 @@ export interface DebugScenario {
 
 export interface OfflineAction {
   id: string;
-  method: "POST" | "PATCH";
+  method: "POST" | "PUT" | "PATCH";
   path: string;
   body: Record<string, unknown>;
   createdAt: string;

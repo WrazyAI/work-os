@@ -19,9 +19,9 @@ describe("companion artwork", () => {
 
   it("composites the companion over dark UI without screen blending", () => {
     const css = readFileSync(resolve(root, "src/styles.css"), "utf8");
-    expect(css).toMatch(/\.companion\{[^}]*position:absolute/);
-    expect(css).not.toMatch(/\.companion\{[^}]*mix-blend-mode:screen/);
-    expect(css).not.toMatch(/\.connect>aside img\{[^}]*mix-blend-mode:screen/);
+    expect(css).toMatch(/\.companion\s*\{[^}]*position:\s*absolute/);
+    expect(css).not.toMatch(/\.companion\s*\{[^}]*mix-blend-mode:\s*screen/);
+    expect(css).not.toMatch(/\.connect\s*>\s*aside img\s*\{[^}]*mix-blend-mode:\s*screen/);
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
     expect(app).toContain('from "./assets/work-os-companion.png"');
     expect(app).not.toContain('src="/work-os-companion.png"');

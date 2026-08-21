@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import type { DesktopSession, OfflineAction } from "./types";
@@ -46,29 +46,33 @@ async function remove(key: string) {
 
 export const secureState = {
   session: async () => {
+    if (!isTauri()) return null;
     const session = await get<DesktopSession>("session");
     if (!session) return null;
     try { return { ...session, apiBase: httpsOrigin(session.apiBase) }; }
     catch { await remove("session"); return null; }
   },
-  saveSession: (session: DesktopSession) => set("session", session),
-  clearSession: () => remove("session"),
+  saveSession: (session: DesktopSession) => isTauri() ? set("session", session) : Promise.resolve(),
+  clearSession: () => isTauri() ? remove("session") : Promise.resolve(),
   clearAccount: async () => {
+    if (!isTauri()) return;
     await remove("session");
     await remove("pending-auth");
     await remove("offline-queue");
   },
-  queue: async () => (await get<OfflineAction[]>("offline-queue")) ?? [],
-  saveQueue: (queue: OfflineAction[]) => set("offline-queue", queue),
+  queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
+  saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),
   pendingAuth: async () => {
+    if (!isTauri()) return null;
     const pending = await get<{ verifier: string; state: string; apiBase: string }>("pending-auth");
     if (!pending) return null;
     try { return { ...pending, apiBase: httpsOrigin(pending.apiBase) }; }
     catch { await remove("pending-auth"); return null; }
   },
-  savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => set("pending-auth", value),
-  clearPendingAuth: () => remove("pending-auth"),
+  savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => isTauri() ? set("pending-auth", value) : Promise.resolve(),
+  clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
   settings: async () => {
+    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase) };
     const settings = await get<{ apiBase: string }>("settings");
     try { return { apiBase: httpsOrigin(settings?.apiBase || defaultApiBase) }; }
     catch {
@@ -77,5 +81,5 @@ export const secureState = {
       return fallback;
     }
   },
-  saveSettings: (settings: { apiBase: string }) => set("settings", { apiBase: httpsOrigin(settings.apiBase) }),
+  saveSettings: (settings: { apiBase: string }) => isTauri() ? set("settings", { apiBase: httpsOrigin(settings.apiBase) }) : Promise.resolve(),
 };

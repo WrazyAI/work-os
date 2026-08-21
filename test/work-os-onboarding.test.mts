@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inferArchetype, normalizeProfileItems, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
 import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } from "../src/modules/work-os/attendance";
+import { deriveWorktivitySessionStart } from "../src/lib/work-os-attendance";
 
 test("catalog exposes eight reviewed employee archetypes", () => {
   assert.equal(WORK_ARCHETYPES.length, 8);
@@ -57,4 +58,18 @@ test("recent employee-scoped activity overrides stale roster attendance", () => 
     at,
   );
   assert.equal(stale.state, "off_shift");
+});
+
+test("Worktivity activity history reconstructs elapsed session start", () => {
+  const observed = "2026-08-20T19:00:00.000Z";
+  assert.equal(deriveWorktivitySessionStart([
+    { Status: 1, CreateDate: "2026-08-20T17:00:00.000Z" },
+    { Status: 3, CreateDate: "2026-08-20T18:00:00.000Z" },
+    { Status: 1, CreateDate: "2026-08-20T18:59:00.000Z" },
+  ], observed), "2026-08-20T17:00:00.000Z");
+  assert.equal(deriveWorktivitySessionStart([
+    { Status: 1, CreateDate: "2026-08-20T15:00:00.000Z" },
+    { Status: 4, CreateDate: "2026-08-20T16:00:00.000Z" },
+    { Status: 1, CreateDate: "2026-08-20T18:00:00.000Z" },
+  ], observed), "2026-08-20T18:00:00.000Z");
 });

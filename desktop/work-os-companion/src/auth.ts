@@ -1,5 +1,5 @@
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { diagnostics } from "./diagnostics";
 import { secureState } from "./vault";
@@ -53,6 +53,10 @@ export function buildDesktopConnectUrl(apiBase: string, challengeValue: string, 
 
 async function openDesktopConnectUrl(url: URL) {
   const href = url.toString();
+  if (!isTauri()) {
+    window.open(href, "_blank", "noopener,noreferrer");
+    return;
+  }
   try {
     await invoke("open_work_os_auth", { url: href });
     return;
@@ -107,6 +111,7 @@ async function acceptCallback(raw: string) {
 }
 
 export async function listenForAuthentication(onSession: (session: DesktopSession) => void, onError: (error: Error) => void) {
+  if (!isTauri()) return () => undefined;
   const handle = async (urls: string[]) => {
     for (const url of urls) {
       try {

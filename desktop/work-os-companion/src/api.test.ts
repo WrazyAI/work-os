@@ -52,6 +52,16 @@ describe("offline action replay", () => {
     expect((onlineFetch.mock.calls[1][1] as RequestInit).headers).toMatchObject({ "Idempotency-Key": expect.any(String) });
   });
 
+  it("collapses offline plan autosaves to the latest draft", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+
+    await sendOrQueue("/api/work-os/me/plan", "PUT", { revision: 1, successful_day_intent: "First draft" });
+    await sendOrQueue("/api/work-os/me/plan", "PUT", { revision: 1, successful_day_intent: "Latest draft" });
+
+    expect(mockState.queue).toHaveLength(1);
+    expect(mockState.queue[0].body).toMatchObject({ revision: 1, successful_day_intent: "Latest draft" });
+  });
+
   it("sends authenticated proposal decisions even when no work session is active", async () => {
     Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
     const onlineFetch = vi.fn(async () => new Response(JSON.stringify({ proposal: { status: "accepted" } }), { status: 200, headers: { "content-type": "application/json" } }));

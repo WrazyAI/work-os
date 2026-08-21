@@ -14,6 +14,7 @@ InstallDir "$LOCALAPPDATA\WrazyOS\Work OS Companion"
 InstallDirRegKey HKCU "Software\WrazyOS\WorkOSCompanion" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+SetOverwrite on
 Icon "src-tauri\icons\icon.ico"
 UninstallIcon "src-tauri\icons\icon.ico"
 VIProductVersion "0.2.3.0"
@@ -27,6 +28,8 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 !define MUI_ICON "src-tauri\icons\icon.ico"
 !define MUI_UNICON "src-tauri\icons\icon.ico"
 !define MUI_ABORTWARNING
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Run Work OS Companion"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -34,6 +37,14 @@ VIAddVersionKey "FileVersion" "${PRODUCT_VERSION}"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
+
+Function .onInit
+  ; Windows locks a running executable. Stop an existing companion before NSIS
+  ; attempts to replace it; taskkill returns a non-zero code when none exists,
+  ; which is intentionally harmless for a first install.
+  nsExec::ExecToLog 'taskkill /IM "Work OS Companion.exe" /T /F'
+  nsExec::ExecToLog 'taskkill /IM "work-os-companion.exe" /T /F'
+FunctionEnd
 
 Section "Install" SEC_MAIN
   SetShellVarContext current

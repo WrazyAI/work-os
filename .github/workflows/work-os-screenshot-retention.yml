@@ -1,0 +1,29 @@
+name: Work OS Screenshot Retention
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: work-os-screenshot-retention
+  cancel-in-progress: false
+
+jobs:
+  delete-expired-screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete encrypted screenshots older than 30 days
+        env:
+          WORK_OS_BASE_URL: ${{ secrets.WORK_OS_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$WORK_OS_BASE_URL"
+          test -n "$CRON_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "${WORK_OS_BASE_URL%/}/api/work-os/evidence/screenshots/retention"

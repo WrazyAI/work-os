@@ -8,7 +8,10 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "Work OS", "width": 1180, "height": 780, "minWidth": 720, "minHeight": 600, "center": true, "resizable": true, "useHttpsScheme": true }],
+    "windows": [
+      { "label": "main", "title": "Work OS", "width": 1180, "height": 780, "minWidth": 720, "minHeight": 600, "center": true, "resizable": true, "useHttpsScheme": true },
+      { "label": "debug", "title": "Work OS Debugger", "url": "debug.html", "width": 760, "height": 860, "minWidth": 520, "minHeight": 560, "center": true, "visible": false, "resizable": true, "useHttpsScheme": true }
+    ],
     "security": { "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; connect-src 'self' https: ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'" }
   },
   "bundle": {

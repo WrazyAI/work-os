@@ -2,13 +2,17 @@ import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   addTaskProgress,
+  archiveTask,
   completeTask,
   createEvidence,
   createEodReport,
   createTask,
   getTaskByLocalOrProviderId,
+  isNiftyTaskAttributableToMember,
   listEvidence,
+  listPersonTasks,
   listTasks,
+  moveTaskToParent,
   reviewReport,
   syncNifty,
   updateTask,
@@ -56,6 +60,10 @@ const OPERATIONS = new Set<ProposalOperation>([
 ]);
 const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
 const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
+const NIFTY_FRESH_MS = 5 * 60_000;
+const DEFAULT_NIFTY_TASK_PROJECT_ID = "czFZk9928z";
+const DEFAULT_NIFTY_TASK_GROUP_ID = "PDp!eGkwR5";
+const niftyRefreshes = new Map<string, Promise<void>>();
 
 function db() {
   return createAdminClient();
@@ -70,6 +78,12 @@ function dateOnly(value: unknown) {
   return match?.[0] ?? null;
 }
 
+function addDays(value: string, amount: number) {
+  const result = new Date(`${value}T12:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + amount);
+  return result.toISOString().slice(0, 10);
+}
+
 async function organizationOwnerId(organizationId: string) {
   const { data, error } = await db()
     .from("work_organizations")
@@ -80,6 +94,152 @@ async function organizationOwnerId(organizationId: string) {
   const ownerId = data.legacy_owner_id || data.created_by;
   if (!ownerId) throw new Error("Work OS organization has no Nifty provider owner");
   return ownerId as string;
+}
+
+function refreshNiftyMirror(organizationId: string, ownerId: string) {
+  if (niftyRefreshes.has(organizationId)) return;
+  const refresh = (async () => {
+    try {
+      await syncNifty(ownerId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nifty sync failed";
+      console.error("[work-os] background Nifty refresh failed", { organizationId, message });
+      await db().from("work_organizations").update({
+        nifty_sync_error: message,
+        updated_at: new Date().toISOString(),
+      }).eq("id", organizationId);
+    } finally {
+      niftyRefreshes.delete(organizationId);
+    }
+  })();
+  niftyRefreshes.set(organizationId, refresh);
+}
+
+export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
+  const [peopleResult, adminResult] = await Promise.all([
+    db().from("work_people").select("id,display_name,email,nifty_member_id").eq("organization_id", access.organizationId).eq("active", true).not("nifty_member_id", "is", null).order("display_name"),
+    db().from("work_org_members").select("person_id").eq("organization_id", access.organizationId).eq("role", "admin").eq("active", true).not("person_id", "is", null),
+  ]);
+  if (peopleResult.error) throw new Error(`load assignable task people: ${peopleResult.error.message}`);
+  if (adminResult.error) throw new Error(`load task administrators: ${adminResult.error.message}`);
+  const adminPersonIds = new Set((adminResult.data ?? []).map((item) => String(item.person_id)));
+  return {
+    people: (peopleResult.data ?? []).filter((person) => !adminPersonIds.has(String(person.id))).map((person) => ({
+      id: person.id as string,
+      displayName: person.display_name as string,
+      email: person.email as string | null,
+    })),
+  };
+}
+
+async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
+  const ownerId = await organizationOwnerId(access.organizationId);
+  const task = await getTaskByLocalOrProviderId(ownerId, taskId);
+  if (task.status === "archived") throw new Error("Task not found");
+  const { data: person, error } = await db().from("work_people").select("nifty_member_id").eq("organization_id", access.organizationId).eq("id", access.personId as string).single();
+  if (error) throw new Error(`load task employee mapping: ${error.message}`);
+  const assignedToPerson = Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId as string);
+  if (!assignedToPerson && !isNiftyTaskAttributableToMember(task, person.nifty_member_id as string | null)) throw new Error("Task is not available to this employee");
+  return { ownerId, task };
+}
+
+export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { data: subtasks, error } = await db().from("work_tasks")
+    .select("*, project:work_projects(id,name,provider_project_id)")
+    .eq("organization_id", access.organizationId)
+    .eq("parent_provider_task_id", task.provider_task_id as string)
+    .neq("status", "archived")
+    .order("completed", { ascending: true })
+    .order("provider_created_at", { ascending: true });
+  if (error) throw new Error(`load task subtasks: ${error.message}`);
+  const available = await listPersonTasks(ownerId, access.personId as string, { includeLedgerHistory: true, limit: 500 });
+  const moveTargets = (available ?? []).filter((candidate) =>
+    candidate.completed !== true
+    && candidate.status !== "archived"
+    && !candidate.parent_provider_task_id
+    && candidate.provider_project_id === task.provider_project_id
+    && candidate.provider_task_id !== task.provider_task_id
+  ).map((candidate) => ({
+    id: candidate.id,
+    provider_task_id: candidate.provider_task_id,
+    title: candidate.title,
+  }));
+  return { task, subtasks: subtasks ?? [], moveTargets };
+}
+
+export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: string, body: Json) {
+  const targetId = text(body.parent_task_id);
+  if (!targetId) throw new Error("parent_task_id is required");
+  const [{ ownerId, task }, { task: parent }] = await Promise.all([
+    employeeTaskContext(access, taskId),
+    employeeTaskContext(access, targetId),
+  ]);
+  if (!task.parent_provider_task_id) throw new Error("Only subtasks can be moved");
+  const moved = await moveTaskToParent(ownerId, task.provider_task_id as string, parent.provider_task_id as string);
+  await audit(access, "task.subtask_moved", "nifty_task", task.provider_task_id as string, {
+    fromParentProviderTaskId: task.parent_provider_task_id,
+    toParentProviderTaskId: parent.provider_task_id,
+  });
+  return { task: moved, providerStatus: "nifty_confirmed" };
+}
+
+export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
+    .eq("organization_id", access.organizationId)
+    .eq("parent_provider_task_id", task.provider_task_id as string)
+    .neq("status", "archived");
+  if (error) throw new Error(`load task children for removal: ${error.message}`);
+  for (const child of children ?? []) await archiveTask(ownerId, child.provider_task_id as string);
+  const archived = await archiveTask(ownerId, task.provider_task_id as string);
+  await audit(access, "task.archived", "nifty_task", task.provider_task_id as string, { archivedSubtasks: children?.length ?? 0 });
+  return { task: archived, archivedSubtasks: children?.length ?? 0, providerStatus: "nifty_confirmed" };
+}
+
+export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json) {
+  const title = text(body.name);
+  const description = text(body.description);
+  if (!title) throw new Error("Task title is required");
+  if (title.length > 240) throw new Error("Task title must be 240 characters or fewer");
+  if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
+
+  const requestedPersonIds = Array.isArray(body.assignee_person_ids)
+    ? [...new Set(body.assignee_person_ids.filter((value): value is string => typeof value === "string" && !!value.trim()))]
+    : [];
+  const options = await getWorkOsTaskCreationOptions(access);
+  const allowedPeople = new Map(options.people.map((person) => [person.id, person]));
+  const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
+  if (invalidPersonId) throw new Error("Assignees must be active, Nifty-mapped non-admin organization members");
+  let assignees: string[] = [];
+  if (requestedPersonIds.length) {
+    const { data, error } = await db().from("work_people").select("id,nifty_member_id").eq("organization_id", access.organizationId).in("id", requestedPersonIds);
+    if (error) throw new Error(`resolve Nifty task assignees: ${error.message}`);
+    assignees = (data ?? []).map((person) => String(person.nifty_member_id)).filter(Boolean);
+    if (assignees.length !== requestedPersonIds.length) throw new Error("Every assignee must have a Nifty member mapping");
+  }
+
+  const ownerId = await organizationOwnerId(access.organizationId);
+  const projectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_TASK_PROJECT_ID;
+  const defaultTaskGroupId = process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || DEFAULT_NIFTY_TASK_GROUP_ID;
+  const parentId = text(body.parent_task_id);
+  let parent: Json | null = null;
+  if (parentId) {
+    parent = (await employeeTaskContext(access, parentId)).task;
+  }
+  const task = await createTask(ownerId, {
+    name: title,
+    description: description ?? undefined,
+    project_id: text(parent?.provider_project_id) ?? projectId,
+    task_group_id: text(parent?.task_group_id) ?? defaultTaskGroupId,
+    task_id: text(parent?.provider_task_id) ?? undefined,
+    assignees,
+  });
+  await audit(access, parent ? "task.subtask_created" : "task.created", "nifty_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
+    parentProviderTaskId: text(parent?.provider_task_id),
+    assigneePersonIds: requestedPersonIds,
+  });
+  return task;
 }
 
 async function audit(access: WorkOsAccess, action: string, targetType: string, targetId?: string | null, metadata: Json = {}) {
@@ -244,19 +404,17 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
   const latestTask = latestTaskResult.data;
   const latestProject = latestProjectResult.data;
   const lastSyncedAt = [latestTask?.synced_at, latestProject?.synced_at, organizationSyncResult.data.nifty_synced_at].filter(Boolean).sort().at(-1) as string | undefined;
-  let niftySync: Json = { fresh: !!lastSyncedAt && Date.now() - new Date(lastSyncedAt).getTime() < 5 * 60_000, syncedAt: lastSyncedAt ?? null };
-  if (!niftySync.fresh) {
-    try {
-      const result = await syncNifty(ownerId);
-      niftySync = { fresh: true, syncedAt: result.syncedAt };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Nifty sync failed";
-      await db().from("work_organizations").update({ nifty_sync_error: message, updated_at: new Date().toISOString() }).eq("id", access.organizationId);
-      niftySync = { fresh: false, syncedAt: lastSyncedAt ?? null, error: message };
-    }
-  }
-  const [tasks, evidence] = await Promise.all([
-    listTasks(ownerId, { personId, todayOnly: true, todayDate: shiftDate }),
+  const niftyFresh = !!lastSyncedAt && Date.now() - new Date(lastSyncedAt).getTime() < NIFTY_FRESH_MS;
+  if (!niftyFresh) refreshNiftyMirror(access.organizationId, ownerId);
+  const niftySync: Json = {
+    fresh: niftyFresh,
+    syncing: !niftyFresh,
+    syncedAt: lastSyncedAt ?? null,
+    ...(organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
+  };
+  const [tasks, taskHistory, evidence] = await Promise.all([
+    listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate }),
+    listPersonTasks(ownerId, personId, { fromDate: addDays(shiftDate, -1), toDate: addDays(shiftDate, 1), includeCompleted: true, limit: 100 }),
     listEvidence(ownerId, { personId, date: shiftDate }),
   ]);
   const { data: proposals, error: proposalError } = await db()
@@ -278,7 +436,17 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
     .maybeSingle();
   if (reportError) throw new Error(`load current EOD report: ${reportError.message}`);
   const workday = await getWorkday(access, at);
-  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, tasks, evidence, proposals: proposals ?? [], report };
+  const taskRows = tasks ?? [];
+  const historyRows = taskHistory ?? [];
+  const evidenceRows = evidence ?? [];
+  const signals = {
+    employeeUpdates: (checkIns ?? []).filter((item) => item.substantive === true).length,
+    outputEvidence: evidenceRows.filter((item) => item.source !== "worktivity").length,
+    activityContext: evidenceRows.filter((item) => item.source === "worktivity").length || (attendance.attendance.state === "active" || attendance.attendance.state === "paused" ? 1 : 0),
+    completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
+    openTasks: taskRows.filter((item) => item.completed !== true).length,
+  };
+  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, signals, tasks: taskRows, taskHistory: taskHistory ?? [], evidence: evidenceRows, proposals: proposals ?? [], report };
 }
 
 interface ParsedProposal {
@@ -422,7 +590,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
       return { checkIn: existing, proposals: existingProposals ?? [] };
     }
   }
-  const tasks = await listTasks(ownerId, { personId, todayOnly: true }) as Json[];
+  const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
   if (confirmedExisting && !tasks.length) throw new Error("there are no existing Nifty tasks to confirm as the current plan");
   const parsed = input ? await parseCheckIn(input, tasks) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
   const { data: checkIn, error: checkInError } = await db().from("work_check_ins").insert({

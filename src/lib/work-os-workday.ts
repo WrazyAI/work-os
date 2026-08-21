@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
+import { getWorkOsOrganizationOwnerId, listPersonTasks } from "@/lib/work-os";
 import { localDateForTimezone, resolveShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, HOURLY_FALLBACK_DELAY_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 
@@ -68,6 +69,21 @@ async function loadPlan(access: WorkOsAccess, sessionId?: string | null) {
   return data;
 }
 
+async function loadPlanByDate(access: WorkOsAccess, shiftDate: string) {
+  const { data, error } = await db().from("work_daily_plans").select("*, items:work_daily_plan_items(*)")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+    .eq("shift_date", shiftDate).maybeSingle();
+  if (error) throw new Error(`load daily plan by date: ${error.message}`);
+  return data;
+}
+
+async function localWorkDate(access: WorkOsAccess, at = new Date()) {
+  const shift = await shiftFor(access, at);
+  if (shift) return { shiftDate: shift.shiftDate, shift };
+  const context = await unscheduledSessionContext(access, at);
+  return { shiftDate: context.shiftDate, shift: null };
+}
+
 async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string, any>, at: Date) {
   if (!["clocked_in", "active", "paused"].includes(String(session.state)) || !session.scheduled_ends_at) return session;
   const dueAt = eodDueAt(session.scheduled_ends_at as string);
@@ -121,31 +137,70 @@ async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
 export async function ensureDailyPlan(access: WorkOsAccess, session: Record<string, any>) {
   const existing = await loadPlan(access, session.id as string);
   if (existing) return existing;
-  const carryOver = await loadCarryOverItems(access, String(session.shift_date));
-  const { data: tasks, error: taskError } = await db().from("work_tasks").select("id,provider_task_id,title,due_date,completed,blocked,blocked_reason,updated_at")
-    .eq("organization_id", access.organizationId).contains("assignee_person_ids", [access.personId as string]).eq("completed", false).order("due_date", { ascending: true, nullsFirst: false }).limit(100);
-  if (taskError) throw new Error(`load plan candidates: ${taskError.message}`);
-  const candidates = prioritizePlanCandidates(tasks ?? [], String(session.shift_date), carryOver).map((task) => ({
+  const shiftDate = String(session.shift_date);
+  const dated = await loadPlanByDate(access, shiftDate);
+  if (dated) {
+    if (!dated.session_id) {
+      const { data, error } = await db().from("work_daily_plans").update({
+        session_id: session.id,
+        revision: Number(dated.revision ?? 1) + 1,
+        updated_at: new Date().toISOString(),
+      }).eq("organization_id", access.organizationId).eq("id", dated.id).is("session_id", null)
+        .select("*, items:work_daily_plan_items(*)").single();
+      if (error) throw new Error(`attach daily plan to session: ${error.message}`);
+      await auditPlan(access, "plan.session_attached", String(dated.id), { sessionId: session.id, shiftDate });
+      return data;
+    }
+    return dated;
+  }
+  return ensureDailyPlanForDate(access, shiftDate, session);
+}
+
+export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: string, session: Record<string, any> | null = null) {
+  const existing = await loadPlanByDate(access, shiftDate);
+  if (existing) return existing;
+  const carryOver = await loadCarryOverItems(access, shiftDate);
+  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const currentTasks = await listPersonTasks(ownerId, access.personId as string, {
+    completed: "false", todayOnly: true, todayDate: shiftDate, limit: 100,
+  });
+  const missingCarryIds = [...carryOver.keys()].filter((id) => !(currentTasks ?? []).some((task) => String(task.id) === id));
+  let carryTasks: Json[] = [];
+  if (missingCarryIds.length) {
+    const result = await db().from("work_tasks").select("*").eq("user_id", ownerId).in("id", missingCarryIds).eq("completed", false);
+    if (result.error) throw new Error(`load carry-over tasks: ${result.error.message}`);
+    carryTasks = result.data ?? [];
+  }
+  const tasks = [...(currentTasks ?? []), ...carryTasks];
+  const candidates = prioritizePlanCandidates(tasks, shiftDate, carryOver).map((task) => ({
       organization_id: access.organizationId, person_id: access.personId, task_id: task.id,
-      source: task.source, disposition: task.disposition, rank: task.rank, title_snapshot: task.title, blocker: task.blocked_reason,
+      source: task.source, disposition: task.disposition, rank: task.rank, title_snapshot: task.title,
+      blocker: task.blocked_reason, item_kind: "nifty_task", completion_state: task.completed ? "completed" : "open",
     }));
   const { data: plan, error: planError } = await db().from("work_daily_plans").insert({
-    organization_id: access.organizationId, person_id: access.personId, session_id: session.id,
-    shift_date: session.shift_date, created_by: access.ctx.user.id,
+    organization_id: access.organizationId, person_id: access.personId, session_id: session?.id ?? null,
+    shift_date: shiftDate, created_by: access.ctx.user.id,
   }).select("*").single();
-  if (planError) throw new Error(`create daily plan: ${planError.message}`);
+  if (planError) {
+    if (/duplicate|unique/i.test(planError.message)) return loadPlanByDate(access, shiftDate);
+    throw new Error(`create daily plan: ${planError.message}`);
+  }
   if (candidates.length) {
     const { error: itemError } = await db().from("work_daily_plan_items").insert(candidates.map((entry) => ({ ...entry, plan_id: plan.id })));
     if (itemError) throw new Error(`create daily plan items: ${itemError.message}`);
   }
-  return loadPlan(access, session.id as string);
+  await auditPlan(access, "plan.draft_created", String(plan.id), { shiftDate, candidateCount: candidates.length });
+  return loadPlanByDate(access, shiftDate);
 }
 
 export async function getWorkday(access: WorkOsAccess, at = new Date()) {
   const loadedSession = await activeSession(access);
   const session = loadedSession ? await transitionToEodIfDue(access, loadedSession, at) : null;
-  const shift = await shiftFor(access, at);
-  const plan = await loadPlan(access, session?.id as string | undefined);
+  const context = await localWorkDate(access, at);
+  const shift = context.shift;
+  const plan = session
+    ? await ensureDailyPlan(access, session)
+    : await ensureDailyPlanForDate(access, context.shiftDate);
   const promptDecision = decideWorkdayPrompt({
     session: session ? {
       state: session.state as WorkSessionState,
@@ -247,9 +302,161 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   return { session: data, plan: await loadPlan(access, session.id as string) };
 }
 
+function planDate(input: unknown) {
+  const result = value(input);
+  if (result && !/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new Error("shift_date must be YYYY-MM-DD");
+  return result;
+}
+
+export async function getDailyPlan(access: WorkOsAccess, requestedDate?: string | null, at = new Date()) {
+  const { shiftDate: currentDate } = await localWorkDate(access, at);
+  const shiftDate = planDate(requestedDate) ?? currentDate;
+  const plan = shiftDate === currentDate
+    ? await ensureDailyPlanForDate(access, shiftDate, await activeSession(access))
+    : await loadPlanByDate(access, shiftDate);
+  return { plan, currentDate, editable: shiftDate === currentDate && plan?.status !== "closed" };
+}
+
+type DraftItem = {
+  id?: string;
+  task_id?: string | null;
+  title_snapshot?: string;
+  disposition?: string;
+  rank?: number;
+  item_kind?: string;
+  completion_state?: string;
+};
+
+export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const { shiftDate: currentDate } = await localWorkDate(access);
+  const shiftDate = planDate(body.shift_date) ?? currentDate;
+  if (shiftDate !== currentDate) throw new Error("Only today's plan can be edited.");
+  const session = await activeSession(access);
+  const plan = session ? await ensureDailyPlan(access, session) : await ensureDailyPlanForDate(access, shiftDate);
+  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  const expectedRevision = Number(body.revision ?? plan.revision ?? 1);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("A valid plan revision is required.");
+  const submitted = Array.isArray(body.items) ? body.items as DraftItem[] : null;
+  if (submitted && submitted.length > 100) throw new Error("A daily plan can contain at most 100 items.");
+  const freeformIntent = value(body.freeform_intent);
+  if (freeformIntent && freeformIntent.length > 4000) throw new Error("Plan intent must be 4000 characters or fewer.");
+  const now = new Date().toISOString();
+  const { data: claimed, error: claimError } = await db().from("work_daily_plans").update({
+    freeform_intent: freeformIntent,
+    revision: expectedRevision + 1,
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision)
+    .neq("status", "closed").select("id").maybeSingle();
+  if (claimError) throw new Error(`save daily plan draft: ${claimError.message}`);
+  if (!claimed) throw new WorkOsConflictError("This plan changed on another device. Refresh before saving again.");
+
+  if (submitted) {
+    const existingItems = Array.isArray(plan.items) ? plan.items as Json[] : [];
+    const existingById = new Map(existingItems.map((item) => [String(item.id), item]));
+    const retainedOutcomes = new Set<string>();
+    for (let index = 0; index < submitted.length; index += 1) {
+      const item = submitted[index];
+      const disposition = item.disposition === "deferred" ? "deferred" : "selected";
+      const completionState = item.completion_state === "completed" ? "completed" : "open";
+      const existing = item.id ? existingById.get(String(item.id)) : null;
+      if (existing) {
+        const outcome = existing.item_kind === "outcome" || !existing.task_id;
+        const title = outcome ? value(item.title_snapshot) : value(existing.title_snapshot);
+        if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
+        const { error } = await db().from("work_daily_plan_items").update({
+          rank: index,
+          disposition,
+          title_snapshot: title,
+          completion_state: outcome ? completionState : existing.completion_state,
+          completed_at: outcome && completionState === "completed" ? existing.completed_at ?? now : null,
+          updated_at: now,
+        }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("id", existing.id);
+        if (error) throw new Error(`update daily plan item: ${error.message}`);
+        if (outcome) retainedOutcomes.add(String(existing.id));
+        continue;
+      }
+      if (item.item_kind !== "outcome" && item.task_id) throw new Error("New Nifty plan items must come from the server-provided task list.");
+      const title = value(item.title_snapshot);
+      if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
+      const { data: created, error } = await db().from("work_daily_plan_items").insert({
+        organization_id: access.organizationId,
+        plan_id: plan.id,
+        person_id: access.personId,
+        task_id: null,
+        source: "unplanned",
+        disposition,
+        rank: index,
+        title_snapshot: title,
+        item_kind: "outcome",
+        completion_state: completionState,
+        completed_at: completionState === "completed" ? now : null,
+      }).select("id").single();
+      if (error) throw new Error(`create daily plan outcome: ${error.message}`);
+      retainedOutcomes.add(String(created.id));
+    }
+    const removable = existingItems.filter((item) => (item.item_kind === "outcome" || !item.task_id) && !retainedOutcomes.has(String(item.id)));
+    if (removable.length) {
+      const { error } = await db().from("work_daily_plan_items").delete().eq("organization_id", access.organizationId)
+        .eq("plan_id", plan.id).in("id", removable.map((item) => String(item.id)));
+      if (error) throw new Error(`remove daily plan outcomes: ${error.message}`);
+    }
+  }
+  await auditPlan(access, "plan.draft_saved", String(plan.id), { shiftDate, revision: expectedRevision + 1, idempotencyKey });
+  return loadPlanByDate(access, shiftDate);
+}
+
+export async function updateDailyPlanOutcome(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const outcomeId = value(body.outcome_id);
+  if (!outcomeId) throw new Error("outcome_id is required");
+  const completionState = body.completion_state === "completed" ? "completed" : body.completion_state === "open" ? "open" : null;
+  if (!completionState) throw new Error("completion_state must be open or completed");
+  const { shiftDate } = await localWorkDate(access);
+  const plan = await loadPlanByDate(access, shiftDate);
+  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  const now = new Date().toISOString();
+  const { data, error } = await db().from("work_daily_plan_items").update({
+    completion_state: completionState,
+    completed_at: completionState === "completed" ? now : null,
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("id", outcomeId)
+    .eq("item_kind", "outcome").select("id").maybeSingle();
+  if (error) throw new Error(`update plan outcome: ${error.message}`);
+  if (!data) throw new Error("Plan outcome not found.");
+  await auditPlan(access, "plan.outcome_updated", String(plan.id), { outcomeId, completionState, idempotencyKey });
+  return loadPlanByDate(access, shiftDate);
+}
+
+export async function convertDailyPlanOutcome(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const outcomeId = value(body.convert_outcome_id);
+  const taskId = value(body.task_id);
+  if (!outcomeId || !taskId) throw new Error("convert_outcome_id and task_id are required");
+  const { shiftDate } = await localWorkDate(access);
+  const plan = await loadPlanByDate(access, shiftDate);
+  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const taskResult = await db().from("work_tasks").select("id,title,completed,completed_at").eq("user_id", ownerId)
+    .eq("id", taskId).contains("assignee_person_ids", [access.personId as string]).maybeSingle();
+  if (taskResult.error) throw new Error(`validate converted Nifty task: ${taskResult.error.message}`);
+  if (!taskResult.data) throw new Error("The confirmed Nifty task is not assigned to this employee.");
+  const now = new Date().toISOString();
+  const { data, error } = await db().from("work_daily_plan_items").update({
+    task_id: taskResult.data.id,
+    item_kind: "nifty_task",
+    title_snapshot: taskResult.data.title,
+    completion_state: taskResult.data.completed ? "completed" : "open",
+    completed_at: taskResult.data.completed_at,
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("id", outcomeId)
+    .eq("item_kind", "outcome").select("id").maybeSingle();
+  if (error) throw new Error(`link converted plan outcome: ${error.message}`);
+  if (!data) throw new Error("Plan outcome not found.");
+  await auditPlan(access, "plan.outcome_converted", String(plan.id), { outcomeId, taskId, idempotencyKey });
+  return loadPlanByDate(access, shiftDate);
+}
+
 export async function saveDailyPlan(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const session = await activeSession(access); if (!session) throw new Error("Clock in before confirming a plan.");
-  const plan = await loadPlan(access, session.id as string); if (!plan) throw new Error("Daily plan not found.");
+  const plan = await ensureDailyPlan(access, session); if (!plan) throw new Error("Daily plan not found.");
   if (body.confirm === true && plan.status === "confirmed" && plan.confirmation_idempotency_key === idempotencyKey) return plan;
   const itemIds = Array.isArray(body.item_ids) ? body.item_ids.map(String) : [];
   const deferredIds = Array.isArray(body.deferred_ids) ? body.deferred_ids.map(String) : [];
@@ -275,7 +482,9 @@ export async function saveDailyPlan(access: WorkOsAccess, body: Json, idempotenc
   const { data, error } = await db().from("work_daily_plans").update({
     freeform_intent: value(body.freeform_intent), status: confirmed ? "confirmed" : plan.status,
     confirmation_idempotency_key: confirmed ? idempotencyKey : plan.confirmation_idempotency_key,
-    confirmed_at: confirmed ? confirmedAt.toISOString() : plan.confirmed_at, updated_at: now.toISOString(),
+    confirmed_at: confirmed ? confirmedAt.toISOString() : plan.confirmed_at,
+    revision: Number(plan.revision ?? 1) + 1,
+    updated_at: now.toISOString(),
   }).eq("id", plan.id).eq("organization_id", access.organizationId).select("*, items:work_daily_plan_items(*)").single();
   if (error) throw new Error(`save daily plan: ${error.message}`);
   if (confirmed && !session.first_follow_up_at) {

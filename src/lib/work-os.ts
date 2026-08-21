@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  archiveNiftyTask,
   completeNiftyTask,
   createNiftyTask,
   getNiftyTask,
@@ -485,6 +486,7 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
       labels: task.labels,
       story_points: task.storyPoints,
       dependency_provider_ids: task.dependencyIds,
+      parent_provider_task_id: task.parentTaskId ?? null,
       expected_outcome: section(task.description, "Expected outcome"),
       definition_of_done: section(task.description, "Definition of done"),
       status: task.status ?? (task.completed ? "completed" : "open"),
@@ -494,6 +496,8 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
       due_date: dateOnly(task.dueDate),
       start_date: dateOnly(task.startDate),
       completed_at: task.completedAt,
+      provider_created_at: task.createdAt,
+      provider_updated_at: task.updatedAt,
       raw: task.raw,
       synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -501,6 +505,16 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
     "upsert Nifty task",
   );
   await mirrorMappedTaskFields(userId, (saved as Json).id as string, task.raw);
+  if (task.parentTaskId) {
+    const parent = await ensureNoError(
+      supabase.from("work_tasks").select("id").eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.parentTaskId).maybeSingle(),
+      "load Nifty parent task",
+    );
+    if (parent) await ensureNoError(
+      supabase.from("work_tasks").update({ parent_task_id: parent.id, updated_at: new Date().toISOString() }).eq("id", (saved as Json).id as string).select("id"),
+      "mirror Nifty parent task",
+    );
+  }
   return saved;
 }
 
@@ -531,6 +545,14 @@ export async function syncNifty(userId: string) {
     if (page.hasMore === false || (page.hasMore !== true && page.tasks.length < pageSize) || !fresh.length) break;
   }
   for (const task of tasks) await upsertNiftyTask(userId, task);
+  for (const task of tasks.filter((item) => item.parentTaskId)) {
+    const parent = await db().from("work_tasks").select("id").eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.parentTaskId as string).maybeSingle();
+    if (parent.error) throw new Error(`map Nifty parent task: ${parent.error.message}`);
+    if (parent.data) {
+      const { error } = await db().from("work_tasks").update({ parent_task_id: parent.data.id, parent_provider_task_id: task.parentTaskId, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("provider_task_id", task.id);
+      if (error) throw new Error(`mirror Nifty parent relationship: ${error.message}`);
+    }
+  }
   for (const task of tasks.filter((item) => item.dependencyIds.length)) {
     const { data: dependencies, error: dependencyError } = await db().from("work_tasks").select("id")
       .eq("user_id", userId).eq("provider", "nifty").in("provider_task_id", task.dependencyIds);
@@ -663,23 +685,105 @@ export async function listProjects(userId: string) {
   );
 }
 
-export async function listTasks(userId: string, opts: { completed?: string | null; personId?: string | null; projectId?: string | null; todayOnly?: boolean; todayDate?: string | null } = {}) {
+export interface TaskListOptions {
+  completed?: string | null;
+  personId?: string | null;
+  projectId?: string | null;
+  providerProjectId?: string | null;
+  todayOnly?: boolean;
+  todayDate?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  offset?: number;
+  limit?: number;
+  includeCompleted?: boolean;
+  includeLedgerHistory?: boolean;
+}
+
+const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
+
+function stringValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export function isNiftyTaskAttributableToMember(task: Record<string, any>, niftyMemberId: string | null | undefined) {
+  if (!niftyMemberId) return false;
+  const raw = task.raw && typeof task.raw === "object" ? task.raw as Record<string, unknown> : {};
+  return stringValues(task.assignee_provider_ids).includes(niftyMemberId)
+    || raw.created_by === niftyMemberId
+    || stringValues(raw.subscribers).includes(niftyMemberId);
+}
+
+export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   let query = db()
     .from("work_tasks")
     .select("*, project:work_projects(*), evidence:work_evidence(id, source, title, evidence_date)")
     .eq("user_id", userId)
+    .neq("status", "archived")
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(200);
+    .range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
   if (opts.completed === "true") query = query.eq("completed", true);
   if (opts.completed === "false") query = query.eq("completed", false);
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
+  if (opts.providerProjectId) query = query.eq("provider_project_id", opts.providerProjectId);
   if (opts.personId) query = query.contains("assignee_person_ids", [opts.personId]);
   if (opts.todayOnly) {
     const d = opts.todayDate ?? today();
-    query = query.or(`due_date.is.null,due_date.lte.${d}`).eq("completed", false);
+    const previous = new Date(`${d}T12:00:00Z`);
+    previous.setUTCDate(previous.getUTCDate() - 1);
+    const prior = previous.toISOString().slice(0, 10);
+    query = query.or(`due_date.lte.${d},provider_created_at.gte.${prior}T00:00:00Z`);
+    if (opts.includeCompleted !== true) query = query.eq("completed", false);
   }
+  if (opts.fromDate) query = query.gte("provider_created_at", `${opts.fromDate}T00:00:00Z`);
+  if (opts.toDate) query = query.lt("provider_created_at", `${opts.toDate}T00:00:00Z`);
   return ensureNoError(query, "load tasks");
+}
+
+/**
+ * Loads work attributable to a person. Nifty's API permits creator-owned ledger
+ * tasks without assignees, so strict assignee filtering alone hides the agent's
+ * daily status updates. Include only ledger rows attributable through Nifty's
+ * creator/subscriber metadata; unrelated unassigned project work stays hidden.
+ */
+export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}) {
+  const offset = opts.offset ?? 0;
+  const limit = opts.limit ?? 100;
+  const candidateLimit = Math.min(1000, offset + limit);
+  const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
+  const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
+  if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
+  const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
+  const ledgerProjectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_LEDGER_PROJECT_ID;
+  const ledgerOptions: TaskListOptions = { ...baseOptions, providerProjectId: ledgerProjectId };
+  if (opts.todayOnly || (!opts.includeLedgerHistory && !opts.fromDate && !opts.toDate)) {
+    const date = opts.todayDate ?? today();
+    const previous = new Date(`${date}T12:00:00Z`);
+    previous.setUTCDate(previous.getUTCDate() - 1);
+    const next = new Date(`${date}T12:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    ledgerOptions.todayOnly = false;
+    ledgerOptions.fromDate = previous.toISOString().slice(0, 10);
+    ledgerOptions.toDate = next.toISOString().slice(0, 10);
+    if (opts.includeCompleted !== true && !opts.completed) ledgerOptions.completed = "false";
+  }
+  const [assigned, ledger] = await Promise.all([
+    listTasks(userId, { ...baseOptions, personId }),
+    niftyMemberId ? listTasks(userId, ledgerOptions) : Promise.resolve([]),
+  ]);
+  const rows = new Map<string, Record<string, any>>();
+  for (const task of assigned ?? []) rows.set(String(task.id), task);
+  for (const task of ledger ?? []) {
+    if (isNiftyTaskAttributableToMember(task, niftyMemberId)) rows.set(String(task.id), task);
+  }
+  return [...rows.values()]
+    .sort((left, right) => {
+      const leftDue = String(left.due_date ?? "9999-12-31");
+      const rightDue = String(right.due_date ?? "9999-12-31");
+      return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
+    })
+    .slice(offset, offset + limit);
 }
 
 export async function createTask(userId: string, body: Json) {
@@ -688,7 +792,7 @@ export async function createTask(userId: string, body: Json) {
   if (!name) throw new Error("name is required");
   if (!taskGroupId) throw new Error("task_group_id is required for Nifty tasks");
   const payload: Json = { name, task_group_id: taskGroupId };
-  for (const key of ["milestone_id", "due_date", "start_date", "assignees", "labels", "story_points", "priority", "dependencies"]) if (key in body) payload[key] = body[key];
+  for (const key of ["task_id", "project_id", "milestone_id", "due_date", "start_date", "assignees", "labels", "story_points", "priority", "dependencies"]) if (key in body) payload[key] = body[key];
   const structuredMappings = await mappedSemanticFields(userId, ["expected_outcome", "definition_of_done"]);
   payload.description = structuredDescription(
     nonEmptyString(body.description),
@@ -751,6 +855,62 @@ export async function completeTask(userId: string, taskId: string, completed = t
   );
 }
 
+export async function archiveTask(userId: string, taskId: string) {
+  const task = await getTaskByLocalOrProviderId(userId, taskId);
+  const providerTaskId = task.provider_task_id as string;
+  await niftyForOwner(userId, () => archiveNiftyTask(providerTaskId, true));
+  const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
+  return selectFirst(
+    db().from("work_tasks").update({
+      status: "archived",
+      raw: { ...raw, archived: true },
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
+    "archive task mirror",
+  );
+}
+
+export async function moveTaskToParent(userId: string, taskId: string, parentTaskId: string) {
+  const [task, parent] = await Promise.all([
+    getTaskByLocalOrProviderId(userId, taskId),
+    getTaskByLocalOrProviderId(userId, parentTaskId),
+  ]);
+  if (task.id === parent.id) throw new Error("A task cannot be its own parent");
+  if (!task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
+  if (parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
+  if (task.organization_id !== parent.organization_id || task.provider_project_id !== parent.provider_project_id) {
+    throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+  }
+  const providerTaskId = task.provider_task_id as string;
+  const providerParentId = parent.provider_task_id as string;
+  if (task.parent_provider_task_id === providerParentId) return task;
+  await niftyForOwner(userId, () => updateNiftyTask(providerTaskId, { task_id: providerParentId }));
+  let providerConfirmed = false;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const children = await niftyForOwner(userId, () => listNiftyTasks({ task_id: providerParentId, include_subtasks: "true", limit: "100", offset: "0" }));
+    if (children.tasks.some((candidate) => candidate.id === providerTaskId && candidate.parentTaskId === providerParentId)) {
+      providerConfirmed = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (!providerConfirmed) throw new Error("Nifty did not confirm the subtask move");
+  return selectFirst(
+    db().from("work_tasks").update({
+      parent_task_id: parent.id,
+      parent_provider_task_id: providerParentId,
+      provider_project_id: parent.provider_project_id,
+      project_id: parent.project_id,
+      milestone_id: parent.milestone_id,
+      task_group_id: parent.task_group_id,
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
+    "move task beneath parent",
+  );
+}
+
 export async function addTaskProgress(userId: string, taskId: string, body: Json) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
   const idempotencyKey = nonEmptyString(body.idempotency_key) ?? nonEmptyString(body.client_request_id);
@@ -800,8 +960,9 @@ export async function addTaskProgress(userId: string, taskId: string, body: Json
 }
 
 export async function getTaskByLocalOrProviderId(userId: string, taskId: string) {
+  const localId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(taskId);
   const row = await ensureNoError(
-    db().from("work_tasks").select("*").eq("user_id", userId).or(`id.eq.${taskId},provider_task_id.eq.${taskId}`).maybeSingle(),
+    db().from("work_tasks").select("*").eq("user_id", userId).eq(localId ? "id" : "provider_task_id", taskId).maybeSingle(),
     "load task",
   );
   if (!row) throw new Error("Task not found");

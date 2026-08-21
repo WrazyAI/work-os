@@ -104,10 +104,10 @@ function dayFixture(): DayData {
       clocked_in_at: shift.startsAt, clocked_out_at: null, paused_seconds: 0,
     },
     plan: {
-      id: "debug-plan", status: "confirmed", freeform_intent: "Ship a dependable Phase 1 workday loop.",
+      id: "debug-plan", shift_date: now.toISOString().slice(0, 10), revision: 1, status: "confirmed", freeform_intent: "Ship a dependable Phase 1 workday loop.",
       items: [
-        { id: "debug-plan-1", task_id: "debug-task-1", source: "carry_over", disposition: "selected", rank: 0, title_snapshot: "Complete the Work OS Phase 1 runtime", blocker: null },
-        { id: "debug-plan-2", task_id: "debug-task-2", source: "due_today", disposition: "selected", rank: 1, title_snapshot: "Review desktop recovery states", blocker: null },
+        { id: "debug-plan-1", task_id: "debug-task-1", source: "carry_over", disposition: "selected", rank: 0, title_snapshot: "Complete the Work OS Phase 1 runtime", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+        { id: "debug-plan-2", task_id: "debug-task-2", source: "due_today", disposition: "selected", rank: 1, title_snapshot: "Review desktop recovery states", blocker: null, item_kind: "nifty_task", completion_state: "open" },
       ],
     },
     attendance: { source: "worktivity", state: "active", status: "working", observedAt: now.toISOString(), clockedInAt: shift.startsAt, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Worktivity activity observed; Work OS clock-in is explicit." },
