@@ -24,7 +24,7 @@
   "plugins": {
     "deep-link": { "desktop": { "schemes": ["wrazy-workos"] } },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyRDUyNjAyQzBBQUFCNTcKUldSWHE2ckFBaWJWVWtYUy9nQ05yemRUejlkaGZpQkFjZzc4eEVka2N4NkkyUmVlVmZWRitGMW0K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREMkE0MzdGRDczMTcyQjAKUldTd2NqSFhmME1xVGExMkh0ZHZQMHRvVmVmeEkwT053R2l3cURxc3FQeWI0TWF0VDBlT0pPcW8K",
       "endpoints": ["https://app.wrazyos.com/api/work-os/desktop/updates/{{target}}/{{arch}}/{{current_version}}"]
     }
   }
