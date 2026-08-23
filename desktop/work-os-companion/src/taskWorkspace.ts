@@ -40,6 +40,13 @@ export function suggestDailyGoal(tasks: TaskRow[], shiftDate: string, planItems:
 }
 
 export function taskDateAttribution(task: TaskRow, currentDate: string, surfacedDate?: string | null) {
+  if (task.dayAttribution?.date) {
+    const reason = task.dayAttribution.reason === "due_date" ? "due"
+      : task.dayAttribution.reason === "creation_observed" ? "created"
+      : task.dayAttribution.reason === "carried" ? "carried"
+      : "surfaced";
+    return { date: String(task.dayAttribution.date), reason: reason as TaskDateReason };
+  }
   const due = dateOnly(task.due_date);
   if (due && due <= currentDate) return { date: due, reason: "due" as const };
   if (surfacedDate && surfacedDate <= currentDate) return { date: surfacedDate, reason: "surfaced" as const };
@@ -75,8 +82,8 @@ export function tasksForDate(tasks: TaskRow[], date: string, surfacedTaskIds: st
 }
 
 export function subtaskProgress(task: TaskRow) {
-  const total = Number(task.subtask_total ?? 0);
-  const completed = Number(task.subtask_completed ?? 0);
+  const total = Number(task.subtaskProgress?.total ?? task.subtask_total ?? 0);
+  const completed = Number(task.subtaskProgress?.completed ?? task.subtask_completed ?? 0);
   return {
     total: Number.isFinite(total) ? Math.max(0, total) : 0,
     completed: Number.isFinite(completed) ? Math.max(0, Math.min(completed, total)) : 0,

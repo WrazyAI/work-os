@@ -495,7 +495,7 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
       assignee_person_ids: assigneePersonIds,
       due_date: dateOnly(task.dueDate),
       start_date: dateOnly(task.startDate),
-      completed_at: task.completedAt,
+      ...(task.completedAt ? { completed_at: task.completedAt } : {}),
       provider_created_at: task.createdAt,
       provider_updated_at: task.updatedAt,
       raw: task.raw,
@@ -865,7 +865,17 @@ export async function completeTask(userId: string, taskId: string, completed = t
   const providerTaskId = task.provider_task_id as string;
   const result = await niftyForOwner(userId, () => completeNiftyTask(providerTaskId, completed));
   const normalized = normalizeNiftyTaskPayload(result) ?? normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
-  if (normalized) return upsertNiftyTask(userId, normalized);
+  if (normalized) {
+    const mirrored = await upsertNiftyTask(userId, normalized) as Json;
+    if (!completed) {
+      return selectFirst(
+        db().from("work_tasks").update({ completed_at: null, updated_at: new Date().toISOString() })
+          .eq("user_id", userId).eq("id", mirrored.id as string).select("*"),
+        "clear reopened task completion timestamp",
+      );
+    }
+    return mirrored;
+  }
   return selectFirst(
     db().from("work_tasks").update({
       completed,

@@ -51,7 +51,8 @@ assert.match(app, /Couldn’t load Work OS/);
 assert.match(app, />Retry</);
 assert.match(app, /\/api\/work-os\/me\/workday/);
 assert.match(app, /source: "desktop"/);
-assert.match(app, /unscheduled_acknowledged: true/);
+assert.match(app, /exception_acknowledged: true/);
+assert.match(app, /late_acknowledged: true/);
 assert.doesNotMatch(app, /Clock in through Worktivity/);
 assert.doesNotMatch(app, /Fallback clock in/);
 assert.doesNotMatch(app, /Attendance managed by Worktivity/);
@@ -91,8 +92,9 @@ assert.match(app, /role="dialog"/);
 assert.match(app, /assignee_person_ids/);
 assert.match(app, /openTaskDetails/);
 assert.match(app, /Add a subtask/);
-assert.match(app, /Edit task/);
-assert.match(app, /Delete task/);
+assert.match(app, /Update the Nifty record/);
+assert.match(app, /Archive this/);
+assert.doesNotMatch(app, /Delete task/);
 assert.match(app, /method: "DELETE"/);
 assert.match(app, /role="alertdialog"/);
 assert.match(app, /requestTaskRemoval/);
@@ -148,7 +150,8 @@ assert.match(api, /AbortSignal\.timeout\(20_000\)/);
 assert.match(api, /observed_at: body\.observed_at \?\? createdAt/);
 assert.match(api, /Idempotency-Key/);
 assert.match(api, /flushQueue/);
-assert.match(api, /\/api\/work-os\/me\/day/);
+assert.match(api, /\/api\/work-os\/desktop\/session/);
+assert.doesNotMatch(api, /\/api\/work-os\/me\/day/);
 
 const tauri = read("src-tauri/tauri.conf.json");
 assert.match(tauri, /"frontendDist": "\.\.\/dist"/);
@@ -172,8 +175,14 @@ assert.match(nsis, /MUI_FINISHPAGE_RUN_TEXT "Run Work OS Companion"/);
 assert.doesNotMatch(nsis, /MUI_FINISHPAGE_RUN_NOTCHECKED/);
 
 const workflow = readFileSync(resolve(import.meta.dirname, "../.github/workflows/work-os-companion-windows.yml"), "utf8");
-assert.match(workflow, /Missing release signing secrets/);
 assert.match(workflow, /TAURI_SIGNING_PRIVATE_KEY/);
-assert.match(workflow, /WINDOWS_CERTIFICATE_BASE64/);
+if (/unsigned-windows-release/.test(workflow)) {
+  assert.match(workflow, /Missing GitHub environment secrets/);
+  assert.doesNotMatch(workflow, /WINDOWS_CERTIFICATE_BASE64/);
+  assert.match(workflow, /UNSIGNED INTERNAL/);
+} else {
+  assert.match(workflow, /Missing release signing secrets/);
+  assert.match(workflow, /WINDOWS_CERTIFICATE_BASE64/);
+}
 
 console.log("Work OS desktop static checks passed.");

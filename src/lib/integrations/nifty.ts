@@ -335,7 +335,7 @@ export function normalizeNiftyTask(item: Record<string, unknown>): NiftyTaskSumm
     assignees: stringArray(item.assignees ?? item.assignee_ids ?? item.assigneeIds),
     dueDate: str(item, ["due_date", "dueDate"]) ?? null,
     startDate: str(item, ["start_date", "startDate"]) ?? null,
-    completedAt: str(item, ["completed_at", "completedAt", "completion_date", "completionDate"]) ?? null,
+    completedAt: str(item, ["completed_on", "completed_at", "completedAt", "completion_date", "completionDate"]) ?? null,
     description: str(item, ["description", "body"]) ?? null,
     priority: namedValue(item.priority ?? item.priority_name ?? item.priorityName),
     labels: labelArray(item.labels ?? item.label_ids ?? item.labelIds),

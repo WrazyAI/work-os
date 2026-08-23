@@ -1,4 +1,4 @@
-export type WorkOsPromptKind = "plan" | "catch_up" | "optional" | "eod";
+export type WorkOsPromptKind = "follow_up" | "hourly_fallback" | "optional" | "eod";
 
 export interface WorkOsScheduleRule {
   id: string;
@@ -150,11 +150,12 @@ function buildWindow(
   };
 }
 
-export function resolveShiftWindow(
+function candidateShiftWindows(
   rules: WorkOsScheduleRule[],
   exceptions: WorkOsScheduleException[],
   at = new Date(),
 ) {
+  const candidates: WorkOsShiftWindow[] = [];
   for (const offset of [-1, 0, 1]) {
     for (const rule of rules) {
       const local = localParts(at, rule.timezone);
@@ -165,14 +166,42 @@ export function resolveShiftWindow(
       if (exception && exception.kind !== "leave" && !ruleApplies(rule, date, weekday) && exception.kind !== "working_day") continue;
       const window = buildWindow(rule, date, exception);
       if (!window) continue;
-      const starts = new Date(window.startsAt).getTime();
-      const ends = new Date(window.endsAt).getTime();
-      if (at.getTime() >= starts && at.getTime() < ends) return window;
-      if (offset >= 0 && at.getTime() < starts) return window;
+      candidates.push(window);
     }
   }
-  return null;
+  return candidates.sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
 }
+
+/** Current shift when active, otherwise the next schedule window for display. */
+export function resolveUpcomingShiftWindow(
+  rules: WorkOsScheduleRule[],
+  exceptions: WorkOsScheduleException[],
+  at = new Date(),
+) {
+  const now = at.getTime();
+  const candidates = candidateShiftWindows(rules, exceptions, at);
+  return candidates.find((window) => now >= Date.parse(window.startsAt) && now < Date.parse(window.endsAt))
+    ?? candidates.find((window) => now < Date.parse(window.startsAt))
+    ?? null;
+}
+
+/** A schedule may own a clock-in only inside the explicit startable window. */
+export function resolveStartableShiftWindow(
+  rules: WorkOsScheduleRule[],
+  exceptions: WorkOsScheduleException[],
+  at = new Date(),
+  earlyGraceMinutes = 30,
+) {
+  const now = at.getTime();
+  const grace = Math.max(0, earlyGraceMinutes) * 60_000;
+  return candidateShiftWindows(rules, exceptions, at).find((window) =>
+    now >= Date.parse(window.startsAt) - grace && now < Date.parse(window.endsAt)
+  ) ?? null;
+}
+
+// Compatibility for existing display/check-in callers. New lifecycle code must
+// explicitly choose upcoming or startable semantics.
+export const resolveShiftWindow = resolveUpcomingShiftWindow;
 
 function inBreak(window: WorkOsShiftWindow, at: Date) {
   const value = at.getTime();
@@ -188,7 +217,7 @@ export function decideWorkOsPrompt(
   const now = at.getTime();
   const starts = new Date(window.startsAt).getTime();
   const ends = new Date(window.endsAt).getTime();
-  if (now < starts) return { kind: "plan", nextPromptAt: window.startsAt, required: true, reason: "Shift has not started." };
+  if (now < starts) return { kind: null, nextPromptAt: null, required: false, reason: "Clock in to begin the workday." };
   if (now >= ends) return { kind: null, nextPromptAt: null, required: false, reason: "Shift ended." };
   if (inBreak(window, at)) {
     const activeBreak = window.breaks.find((item) => now >= new Date(item.startsAt).getTime() && now < new Date(item.endsAt).getTime());
@@ -203,12 +232,10 @@ export function decideWorkOsPrompt(
   if (now >= eodAt) return { kind: "eod", nextPromptAt: new Date(eodAt).toISOString(), required: false, reason: "EOD review window." };
   if (ends - now <= 60 * 60_000) return { kind: null, nextPromptAt: new Date(eodAt).toISOString(), required: false, reason: "Final-hour planning suppression." };
 
-  const valid = checkIns.some((item) => item.substantive || item.confirmed_existing_tasks);
+  const valid = checkIns.some((item) => item.substantive);
   if (!valid) {
-    const catchUpAt = starts + 60 * 60_000;
-    return now >= catchUpAt
-      ? { kind: "catch_up", nextPromptAt: new Date(catchUpAt).toISOString(), required: true, reason: "No valid shift plan after 60 minutes." }
-      : { kind: "plan", nextPromptAt: window.startsAt, required: true, reason: "Shift plan required." };
+    const followUpAt = starts + 30 * 60_000;
+    return { kind: "follow_up", nextPromptAt: new Date(followUpAt).toISOString(), required: false, reason: "The first follow-up is independent of goal entry." };
   }
 
   const elapsedHours = Math.floor((now - starts) / 3_600_000) + 1;

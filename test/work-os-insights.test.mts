@@ -10,8 +10,8 @@ test("personal insight ranges are inclusive and deterministic", () => {
 
 test("deterministic insight brief keeps activity separate from outcomes", () => {
   const brief = deterministicInsightBrief([{ tasksCompleted: 0, plannedCompleted: 0, carryOver: 1, outputEvidence: 0, planned: 2 }], [{ id: "plan-1" }]);
-  assert.match(brief.summary, /record is still forming/i);
-  assert.match(brief.attention.join(" "), /activity context alone does not prove an outcome/i);
+  assert.match(brief.summary, /separates goals, task outcomes, employee updates, evidence, and activity context/i);
+  assert.match(brief.attention.join(" "), /carried or overdue item remained visible/i);
   assert.doesNotMatch(JSON.stringify(brief), /productivity score/i);
   assert.deepEqual(brief.referenceIds, ["plan-1"]);
 });

@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { activeSession, clockIn, transitionSession } from "@/lib/work-os-workday";
+import { activeSession } from "@/lib/work-os-workday";
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -146,73 +146,9 @@ async function persistProviderBreaks(access: WorkOsAccess, session: Record<strin
   return data;
 }
 
-async function recordReconciliation(access: WorkOsAccess, action: string, metadata: Record<string, unknown>) {
-  const { error } = await db().from("work_audit_log").insert({
-    organization_id: access.organizationId,
-    actor_user_id: access.ctx.user.id,
-    action,
-    target_type: "work_session",
-    target_id: access.personId,
-    metadata,
-  });
-  if (error) throw new Error(`record Worktivity reconciliation: ${error.message}`);
-}
-
-async function reconcileSession(
-  access: WorkOsAccess,
-  session: Record<string, any> | null,
-  projection: AttendanceProjection,
-  employeeId: string,
-  clockInAt: string | null,
-) {
-  const status = projection.status;
-  const idempotencyKey = clockInAt ? `worktivity:${employeeId}:${clockInAt}` : null;
-  if (["clock_in", "working", "idle"].includes(status)) {
-    if (session && clockInAt && (!session.clocked_in_at || Date.parse(clockInAt) < Date.parse(String(session.clocked_in_at)))) {
-      const { data, error } = await db().from("work_sessions").update({
-        clocked_in_at: clockInAt,
-        updated_at: new Date().toISOString(),
-      }).eq("organization_id", access.organizationId).eq("id", session.id).select("*").single();
-      if (error) throw new Error(`backfill Worktivity session start: ${error.message}`);
-      await recordReconciliation(access, "attendance.worktivity_start_backfilled", { employeeId, clockInAt, sessionId: session.id });
-      session = data;
-    }
-    if (!session && idempotencyKey) {
-      const result = await clockIn(access, {
-        source: "system",
-        observed_at: clockInAt,
-        late_acknowledged: true,
-        unscheduled_acknowledged: true,
-      }, idempotencyKey);
-      await recordReconciliation(access, "attendance.worktivity_clock_in_reconciled", { employeeId, clockInAt, sessionId: result.session?.id });
-      return result.session;
-    }
-    if (session && ["paused", "clocked_in"].includes(String(session.state))) {
-      const action = session.state === "paused" ? "resume" : "mark_active";
-      const result = await transitionSession(access, { action, observed_at: projection.observedAt }, `worktivity:${action}:${employeeId}:${projection.observedAt}`, "system", true);
-      await recordReconciliation(access, "attendance.worktivity_resume_reconciled", { employeeId, sessionId: result.session?.id });
-      return result.session;
-    }
-    return session;
-  }
-  if (status === "break" && session && ["clocked_in", "active", "eod_due"].includes(String(session.state))) {
-    const result = await transitionSession(access, { action: "pause", observed_at: projection.observedAt }, `worktivity:break:${employeeId}:${projection.observedAt}`, "system", true);
-    await recordReconciliation(access, "attendance.worktivity_break_reconciled", { employeeId, sessionId: result.session?.id });
-    return result.session;
-  }
-  if (status === "clock_out" && session && String(session.state) !== "clocked_out") {
-    const result = await transitionSession(access, { action: "clock_out", observed_at: projection.observedAt, extended_acknowledged: true }, `worktivity:clock_out:${employeeId}:${projection.observedAt}`, "system", true);
-    await recordReconciliation(access, "attendance.worktivity_clock_out_reconciled", { employeeId, sessionId: result.session?.id });
-    return result.session;
-  }
-  return session;
-}
-
-/**
- * Worktivity is an observational provider. Its explicit attendance states
- * reconcile the matching Work OS session idempotently, but never judge an
- * employee productive or unproductive.
- */
+/** Worktivity is observational. It may update neutral attendance context and
+ * explicit OnBreak duration, but it never creates or transitions a Work OS
+ * session. Attendance remains controlled by employee clock actions. */
 export async function observeWorktivityAttendance(access: WorkOsAccess, at = new Date()) {
   if (!access.personId) throw new Error("Work OS person mapping required");
   if (!worktivityConfigured()) return { attendance: unknownAttendance("Worktivity is not configured.", at.toISOString()), session: await activeSession(access) };
@@ -227,12 +163,11 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
   const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
   const { projection, employee, latestActivity, activityLogs, sessionStartAt } = await employeeAttendance(employeeId, timezone, at.toISOString());
   const existing = await activeSession(access);
-  const clockInAt = projection.clockedInAt ?? employee?.Statistics?.ClockIn ?? latestActivity?.ClockIn ?? sessionStartAt;
-  // Reconcile only explicit provider attendance states. Idle stays neutral and
-  // is never converted into a break or productivity judgment.
+  void employee;
+  void latestActivity;
+  void sessionStartAt;
   let session = existing;
   if (projection.source === "worktivity" && !projection.stale) {
-    session = await reconcileSession(access, session, projection, employeeId, clockInAt);
     session = await persistProviderBreaks(access, session, activityLogs, projection.observedAt, false);
     if (projection.status === "break") projection.message = "Worktivity OnBreak observed; provider-derived break time is refreshed.";
   }

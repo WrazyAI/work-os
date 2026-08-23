@@ -54,7 +54,15 @@ export interface InsightDay {
   activityContext: number;
   tasksCompleted: number;
   tasksOpen: number;
-  references: Array<{ type: "plan" | "task" | "check_in" | "evidence"; id: string; label: string }>;
+  goal?: { text: string | null; provenance: string | null };
+  completed?: number;
+  progressed?: number;
+  deferred?: number;
+  carried?: number;
+  unplanned?: number;
+  breakFreshness?: "manual" | "observed" | "stale" | "unknown";
+  sessionQuality?: { status: string; message: string | null; sessionId?: string | null; clockedInAt?: string | null };
+  references: Array<{ type: "plan" | "task" | "check_in" | "evidence"; id: string; date: string; label: string; target: string }>;
 }
 
 export interface InsightsData {
@@ -64,7 +72,7 @@ export interface InsightsData {
   days: InsightDay[];
   totals: Omit<InsightDay, "date" | "planStatus" | "references">;
   brief: { generated: boolean; summary: string; wins: string[]; attention: string[]; nextFocus: string[]; referenceIds: string[] };
-  freshness: { niftySyncedAt: string | null; worktivityObservedAt: string | null };
+  freshness: { niftySyncedAt: string | null; worktivityObservedAt: string | null; stale?: boolean; staleAt?: string | null; error?: string | null };
 }
 
 export interface DayData {
@@ -79,6 +87,18 @@ export interface DayData {
     activityContext: number;
     completedTasks: number;
     openTasks: number;
+  };
+  workspaceSummary?: {
+    date: string;
+    currentDate: string;
+    readOnly: boolean;
+    goal: { text: string | null; provenance: string | null; suggestionTaskIds: string[]; revision: number | null };
+    completed: number;
+    total: number;
+    overdueCount: number;
+    carryOverGroups: Array<{ key: string; label: string; tasks: Array<Record<string, any>> }>;
+    sessionQuality: { status: string; message: string | null; sessionId?: string | null; clockedInAt?: string | null };
+    cursor: { next: string | null };
   };
   tasks: Array<Record<string, any>>;
   taskHistory?: Array<Record<string, any>>;
@@ -213,4 +233,8 @@ export interface OfflineAction {
   createdAt: string;
   attempts: number;
   lastError?: string;
+  nextAttemptAt?: string;
+  status?: "pending" | "needs_attention";
+  failureKind?: "conflict" | "permanent" | "retry_exhausted";
+  statusCode?: number;
 }
