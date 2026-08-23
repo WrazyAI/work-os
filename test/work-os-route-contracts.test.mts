@@ -104,3 +104,12 @@ test("manager review route resolves the report inside the requested organization
   assert.match(review, /organization_id[\s\S]*auth\.access\.organizationId/);
   assert.match(review, /requireWorkOsPersonAccess/);
 });
+
+test("mapped administrators default to their unified employee workspace", async () => {
+  const workOsHome = await source("src/modules/work-os/WorkOsHome.tsx");
+  assert.match(workOsHome, /const adminSurface = searchParams\.get\("surface"\) === "admin"/);
+  assert.match(workOsHome, /session\.data\?\.role === "admin" && session\.data\.personId && !adminSurface/);
+  assert.match(workOsHome, /<EmployeeWorkOsHome \/>/);
+  assert.match(workOsHome, /router\.push\("\/work-os\?surface=admin"\)/);
+  assert.match(workOsHome, /router\.push\("\/work-os"\)/);
+});
