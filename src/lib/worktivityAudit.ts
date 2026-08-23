@@ -263,7 +263,14 @@ export async function fetchAllLogs(
     all.push(...(pg.Items ?? []));
     onProgress?.(all.length, first.TotalCount ?? all.length);
   }
-  return all;
+  // The provider has historically returned cross-employee duplicates at page
+  // boundaries. Never let those affect attendance or screenshot processing.
+  const deduped = new Map<string, WtActivityLog>();
+  for (const log of all) {
+    if (log.EmployeeId !== win.employeeId || !log.ID) continue;
+    deduped.set(log.ID, log);
+  }
+  return [...deduped.values()].sort((left, right) => left.CreateDate.localeCompare(right.CreateDate));
 }
 
 // Real app/site usage with names, icons and AI categories — Insights/AppsSummary

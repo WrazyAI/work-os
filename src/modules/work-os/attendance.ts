@@ -33,9 +33,9 @@ export function projectWorktivityAttendance(statistics: { Status?: number; Clock
     clockedOutAt: statistics?.ClockOut ?? null,
     stale: false,
   };
-  if (["clock_in", "working", "idle"].includes(status)) return { ...base, state: "active", fallbackAllowed: false, message: "Worktivity activity observed; Work OS clock-in is explicit." };
-  if (status === "break") return { ...base, state: "paused", fallbackAllowed: false, message: "Worktivity break observed; Work OS pause remains explicit." };
-  if (["clock_out", "yet_to_start"].includes(status)) return { ...base, state: "off_shift", fallbackAllowed: false, message: status === "clock_out" ? "Worktivity reports clock-out; Work OS session remains employee-owned." : "Worktivity reports no active attendance; clock in explicitly when you begin." };
+  if (["clock_in", "working", "idle"].includes(status)) return { ...base, state: "active", fallbackAllowed: false, message: "Worktivity activity observed; Work OS attendance is reconciled idempotently." };
+  if (status === "break") return { ...base, state: "paused", fallbackAllowed: false, message: "Worktivity OnBreak observed; Work OS attendance is reconciled idempotently." };
+  if (["clock_out", "yet_to_start"].includes(status)) return { ...base, state: "off_shift", fallbackAllowed: false, message: status === "clock_out" ? "Worktivity reports clock-out; Work OS attendance is reconciled idempotently." : "Worktivity reports no active attendance; reconciliation is waiting for a provider clock-in." };
   return { ...base, state: "unknown", fallbackAllowed: true, message: "Worktivity attendance is currently unavailable." };
 }
 
