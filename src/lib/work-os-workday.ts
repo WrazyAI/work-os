@@ -69,7 +69,8 @@ export async function shiftFor(access: WorkOsAccess, at: Date, mode: "upcoming" 
 
 export async function activeSession(access: WorkOsAccess) {
   const { data, error } = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId)
-    .eq("person_id", access.personId as string).in("state", ["clocked_in", "active", "paused", "eod_due"]).maybeSingle();
+    .eq("person_id", access.personId as string).in("state", ["clocked_in", "active", "paused", "eod_due"])
+    .neq("correction_status", "needs_correction").maybeSingle();
   if (error) throw new Error(`load active work session: ${error.message}`);
   return data;
 }
