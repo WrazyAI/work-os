@@ -154,12 +154,15 @@ assert.match(api, /\/api\/work-os\/desktop\/session/);
 assert.doesNotMatch(api, /\/api\/work-os\/me\/day/);
 
 const tauri = read("src-tauri/tauri.conf.json");
+const tauriConfig = JSON.parse(tauri);
+const updaterPublicKey = Buffer.from(tauriConfig.plugins.updater.pubkey, "base64").toString("utf8");
 assert.match(tauri, /"frontendDist": "\.\.\/dist"/);
 assert.match(tauri, /"useHttpsScheme": true/);
 assert.match(tauri, /"label": "debug"[\s\S]*"url": "debug\.html"[\s\S]*"visible": false/);
 assert.doesNotMatch(tauri, /localhost:1420/);
 assert.match(tauri, /com\.wrazy\.workos\.pilot/);
 assert.match(tauri, /\/home\/zahemen\/\.nvm\/versions\/node\/v22\.14\.0\/bin\/npm/);
+assert.match(updaterPublicKey, /minisign public key: 4D2A437FD73172B0/);
 
 const msi = read("installer/windows-pilot.wxs");
 assert.match(msi, /WebView2Loader\.dll/);
