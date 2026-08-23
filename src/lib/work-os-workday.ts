@@ -1,7 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId, listPersonTasks } from "@/lib/work-os";
-import { localDateForTimezone, resolveShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
+import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
+import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
+import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, HOURLY_FALLBACK_DELAY_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 
 type Json = Record<string, unknown>;
@@ -29,7 +31,23 @@ async function auditPlan(access: WorkOsAccess, action: string, planId: string, m
   if (error) throw new Error(`record daily plan audit: ${error.message}`);
 }
 
-export async function shiftFor(access: WorkOsAccess, at: Date) {
+async function withGoalMetadata(access: WorkOsAccess, plan: Record<string, any> | null) {
+  if (!plan || plan.goal_provenance) return plan;
+  const auditResult = await db().from("work_audit_log").select("metadata").eq("organization_id", access.organizationId)
+    .eq("target_type", "daily_plan").eq("target_id", String(plan.id)).eq("action", "plan.draft_saved")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (auditResult.error) throw new Error(`load daily goal provenance: ${auditResult.error.message}`);
+  const metadata = auditResult.data?.metadata && typeof auditResult.data.metadata === "object" ? auditResult.data.metadata as Json : {};
+  const provenance = value(metadata.goalProvenance);
+  const suggestionTaskIds = Array.isArray(metadata.suggestionTaskIds) ? metadata.suggestionTaskIds.filter((item): item is string => typeof item === "string") : [];
+  return {
+    ...plan,
+    goal_provenance: provenance ?? (value(plan.freeform_intent) ? "employee" : null),
+    suggestion_task_ids: suggestionTaskIds,
+  };
+}
+
+export async function shiftFor(access: WorkOsAccess, at: Date, mode: "upcoming" | "startable" = "upcoming") {
   const personId = access.personId as string;
   const { data: schedules, error: scheduleError } = await db().from("work_schedules").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("active", true).order("effective_from", { ascending: false });
@@ -43,7 +61,10 @@ export async function shiftFor(access: WorkOsAccess, at: Date) {
     .eq("organization_id", access.organizationId).eq("person_id", personId)
     .gte("exception_date", from.toISOString().slice(0, 10)).lte("exception_date", to.toISOString().slice(0, 10));
   if (exceptionError) throw new Error(`load work schedule exceptions: ${exceptionError.message}`);
-  return resolveShiftWindow(rules, (exceptions ?? []) as WorkOsScheduleException[], at);
+  const window = mode === "startable"
+    ? resolveStartableShiftWindow(rules, (exceptions ?? []) as WorkOsScheduleException[], at, 30)
+    : resolveUpcomingShiftWindow(rules, (exceptions ?? []) as WorkOsScheduleException[], at);
+  return await worktivityAuthoritativeBreaks(access.organizationId) && window ? { ...window, breaks: [] } : window;
 }
 
 export async function activeSession(access: WorkOsAccess) {
@@ -66,7 +87,7 @@ async function loadPlan(access: WorkOsAccess, sessionId?: string | null) {
   const { data, error } = await db().from("work_daily_plans").select("*, items:work_daily_plan_items(*)")
     .eq("organization_id", access.organizationId).eq("session_id", sessionId).maybeSingle();
   if (error) throw new Error(`load daily plan: ${error.message}`);
-  return data;
+  return withGoalMetadata(access, data);
 }
 
 async function loadPlanByDate(access: WorkOsAccess, shiftDate: string) {
@@ -74,14 +95,13 @@ async function loadPlanByDate(access: WorkOsAccess, shiftDate: string) {
     .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
     .eq("shift_date", shiftDate).maybeSingle();
   if (error) throw new Error(`load daily plan by date: ${error.message}`);
-  return data;
+  return withGoalMetadata(access, data);
 }
 
 async function localWorkDate(access: WorkOsAccess, at = new Date()) {
-  const shift = await shiftFor(access, at);
-  if (shift) return { shiftDate: shift.shiftDate, shift };
   const context = await unscheduledSessionContext(access, at);
-  return { shiftDate: context.shiftDate, shift: null };
+  const shift = await shiftFor(access, at, "upcoming");
+  return { shiftDate: context.shiftDate, shift };
 }
 
 async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string, any>, at: Date) {
@@ -230,22 +250,53 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
     .eq("person_id", access.personId as string).eq("clock_in_idempotency_key", idempotencyKey).maybeSingle();
   if (existingByKey.error) throw new Error(`load idempotent clock-in: ${existingByKey.error.message}`);
   if (existingByKey.data) return { session: existingByKey.data, plan: await loadPlan(access, existingByKey.data.id as string) };
-  if (await activeSession(access)) throw new Error("Only one active work session is allowed.");
+  const existingActive = await activeSession(access);
+  if (existingActive) {
+    if (existingActive.correction_status === "needs_correction") {
+      throw new WorkOsConflictError("The previous workday needs a clock-out correction before another session can begin.");
+    }
+    return { session: existingActive, plan: await ensureDailyPlan(access, existingActive) };
+  }
   const observedAt = value(body.observed_at) ?? new Date().toISOString();
   const observed = new Date(observedAt); if (Number.isNaN(observed.getTime())) throw new Error("observed_at must be a valid timestamp");
-  const shift = await shiftFor(access, observed);
+  const shift = await shiftFor(access, observed, "startable");
   const unscheduled = !shift;
-  if (unscheduled && body.unscheduled_acknowledged !== true) throw new Error("Unscheduled clock-in acknowledgement is required.");
+  const exceptionAcknowledged = body.exception_acknowledged === true || body.unscheduled_acknowledged === true;
+  const exceptionReason = value(body.exception_reason);
+  if (unscheduled && !exceptionAcknowledged) throw new Error("Exception clock-in acknowledgement is required.");
+  if (unscheduled && body.exception_acknowledged === true && !exceptionReason) throw new Error("An exception clock-in reason is required.");
   const context = shift ?? await unscheduledSessionContext(access, observed);
   const late = !!shift && observed.getTime() > Date.parse(shift.startsAt) + 15 * 60_000;
   if (late && body.late_acknowledged !== true) throw new Error("Late clock-in acknowledgement is required.");
-  const { data: session, error } = await db().from("work_sessions").insert({
+  const firstFollowUpAt = new Date(observed.getTime() + 30 * 60_000).toISOString();
+  const payload = {
     organization_id: access.organizationId, person_id: access.personId, schedule_id: shift?.scheduleId ?? null,
     shift_date: context.shiftDate, state: "clocked_in", timezone: context.timezone,
     scheduled_starts_at: shift?.startsAt ?? null, scheduled_ends_at: shift?.endsAt ?? null, clocked_in_at: observed.toISOString(),
     source: value(body.source) ?? "desktop", clock_in_idempotency_key: idempotencyKey,
     late_acknowledged_at: late ? observed.toISOString() : null, created_by: access.ctx.user.id,
-  }).select("*").single();
+    first_follow_up_at: firstFollowUpAt,
+    exception_acknowledged_at: unscheduled ? observed.toISOString() : null,
+    exception_reason: unscheduled ? exceptionReason ?? "Legacy client exception acknowledgement" : null,
+    correction_status: "valid",
+    updated_at: observed.toISOString(),
+  };
+  const sameDay = await db().from("work_sessions").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+    .eq("shift_date", context.shiftDate).maybeSingle();
+  if (sameDay.error) throw new Error(`load existing workday session: ${sameDay.error.message}`);
+  if (sameDay.data && sameDay.data.state !== "scheduled") {
+    if (["clocked_in", "active", "paused", "eod_due"].includes(String(sameDay.data.state))) {
+      return { session: sameDay.data, plan: await ensureDailyPlan(access, sameDay.data) };
+    }
+    throw new WorkOsConflictError(sameDay.data.correction_status === "needs_correction"
+      ? "This workday needs a clock-out correction before it can be restarted."
+      : "This workday is already closed.");
+  }
+  const write = sameDay.data
+    ? db().from("work_sessions").update(payload).eq("organization_id", access.organizationId).eq("id", sameDay.data.id)
+    : db().from("work_sessions").insert(payload);
+  const { data: session, error } = await write.select("*").single();
   if (error) {
     if (/duplicate|unique|work_sessions_active_person_uidx/i.test(error.message)) {
       const reconciled = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId)
@@ -257,11 +308,13 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
     throw new Error(`clock in: ${error.message}`);
   }
   const source = value(body.source);
-  await audit(access, session.id as string, "clock_in", shift ? "scheduled" : null, "clocked_in", idempotencyKey, observed.toISOString(), { late, unscheduled }, source === "web" || source === "agent" || source === "system" ? source : "desktop");
+  await audit(access, session.id as string, "clock_in", shift ? "scheduled" : null, "clocked_in", idempotencyKey, observed.toISOString(), {
+    late, unscheduled, exceptionAcknowledged: unscheduled, exceptionReason: unscheduled ? payload.exception_reason : null,
+  }, source === "web" || source === "agent" || source === "system" ? source : "desktop");
   return { session, plan: await ensureDailyPlan(access, session) };
 }
 
-export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" = "desktop", allowProviderBreakTransitions = false) {
   const existingEvent = await db().from("work_session_events").select("session_id")
     .eq("organization_id", access.organizationId).eq("idempotency_key", idempotencyKey).maybeSingle();
   if (existingEvent.error) throw new Error(`load idempotent session transition: ${existingEvent.error.message}`);
@@ -277,6 +330,9 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   const session = await activeSession(access); if (!session) throw new Error("No active work session.");
   const action = value(body.action) as WorkSessionAction | null;
   if (!action || !["pause", "resume", "mark_active", "mark_eod_due", "clock_out"].includes(action)) throw new Error("A valid session action is required.");
+  if (["pause", "resume"].includes(action) && !allowProviderBreakTransitions && await worktivityAuthoritativeBreaks(access.organizationId)) {
+    throw new Error("Manual pause and resume are disabled: Worktivity OnBreak is the organization break source.");
+  }
   if (action === "clock_out" && session.clock_out_idempotency_key === idempotencyKey) return { session, plan: await loadPlan(access, session.id as string) };
   const observedAt = value(body.observed_at) ?? new Date().toISOString();
   const observed = new Date(observedAt); if (Number.isNaN(observed.getTime())) throw new Error("observed_at must be a valid timestamp");
@@ -297,9 +353,55 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   if (body.snoozed_until) patch.snoozed_until = body.snoozed_until;
   const { data, error } = await db().from("work_sessions").update(patch).eq("id", session.id).eq("organization_id", access.organizationId).select("*").single();
   if (error) throw new Error(`update work session: ${error.message}`);
-  await audit(access, session.id as string, action, session.state as string, next, idempotencyKey, observed.toISOString(), { overtime });
+  await audit(access, session.id as string, action, session.state as string, next, idempotencyKey, observed.toISOString(), { overtime }, source);
   if (next === "clocked_out") await db().from("work_daily_plans").update({ status: "closed", updated_at: observed.toISOString() }).eq("session_id", session.id);
   return { session: data, plan: await loadPlan(access, session.id as string) };
+}
+
+export async function resolveMissedClockOut(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const sessionId = value(body.session_id);
+  const timestamp = value(body.clocked_out_at);
+  const provenance = value(body.provenance);
+  if (!sessionId || !timestamp) throw new Error("session_id and clocked_out_at are required");
+  if (!provenance || !["employee_entered", "provider_observed"].includes(provenance)) {
+    throw new Error("provenance must be employee_entered or provider_observed");
+  }
+  const corrected = new Date(timestamp);
+  if (Number.isNaN(corrected.getTime()) || corrected.getTime() > Date.now()) throw new Error("clocked_out_at must be a valid past timestamp");
+  const existingEvent = await db().from("work_session_events").select("session_id")
+    .eq("organization_id", access.organizationId).eq("idempotency_key", idempotencyKey).maybeSingle();
+  if (existingEvent.error) throw new Error(`load idempotent correction: ${existingEvent.error.message}`);
+  const current = await db().from("work_sessions").select("*").eq("organization_id", access.organizationId)
+    .eq("person_id", access.personId as string).eq("id", existingEvent.data?.session_id ?? sessionId).single();
+  if (current.error) throw new Error(`load session correction target: ${current.error.message}`);
+  if (existingEvent.data || current.data.correction_status === "corrected") {
+    return { session: current.data, plan: await loadPlan(access, current.data.id as string) };
+  }
+  if (current.data.clocked_out_at) throw new WorkOsConflictError("This session already has a clock-out timestamp.");
+  if (current.data.correction_status !== "needs_correction") throw new WorkOsConflictError("This session does not require a missed clock-out correction.");
+  const clockedInAt = Date.parse(String(current.data.clocked_in_at ?? ""));
+  if (!Number.isFinite(clockedInAt) || corrected.getTime() <= clockedInAt) throw new Error("clocked_out_at must be after clocked_in_at");
+  const now = new Date().toISOString();
+  const { data, error } = await db().from("work_sessions").update({
+    state: "clocked_out",
+    clocked_out_at: corrected.toISOString(),
+    clock_out_idempotency_key: idempotencyKey,
+    correction_status: "corrected",
+    correction_reason: value(body.reason) ?? current.data.correction_reason,
+    correction_timestamp: corrected.toISOString(),
+    correction_provenance: provenance,
+    corrected_at: now,
+    corrected_by: access.ctx.user.id,
+    paused_at: null,
+    updated_at: now,
+  }).eq("organization_id", access.organizationId).eq("id", sessionId)
+    .eq("correction_status", "needs_correction").is("clocked_out_at", null).select("*").single();
+  if (error) throw new Error(`resolve missed clock-out: ${error.message}`);
+  await audit(access, sessionId, "resolve_missed_clock_out", current.data.state as string, "clocked_out", idempotencyKey, corrected.toISOString(), {
+    provenance, reason: value(body.reason), correctedAt: now,
+  }, provenance === "provider_observed" ? "system" : "desktop");
+  await db().from("work_daily_plans").update({ status: "closed", updated_at: now }).eq("organization_id", access.organizationId).eq("session_id", sessionId);
+  return { session: data, plan: await loadPlan(access, sessionId) };
 }
 
 function planDate(input: unknown) {
@@ -340,13 +442,28 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   if (submitted && submitted.length > 100) throw new Error("A daily plan can contain at most 100 items.");
   const freeformIntent = value(body.freeform_intent);
   if (freeformIntent && freeformIntent.length > 4000) throw new Error("Plan intent must be 4000 characters or fewer.");
+  const requestedProvenance = value(body.goal_provenance);
+  if (requestedProvenance && !["employee", "accepted_suggestion"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal or an accepted suggestion");
+  const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
+    ? [...new Set(body.suggestion_task_ids.filter((item): item is string => typeof item === "string" && !!item.trim()).map((item) => item.trim()))]
+    : [];
+  if (suggestionTaskIds.length > 20) throw new Error("A goal suggestion can reference at most 20 tasks.");
   const now = new Date().toISOString();
-  const { data: claimed, error: claimError } = await db().from("work_daily_plans").update({
+  const goalPatch = {
     freeform_intent: freeformIntent,
+    goal_provenance: freeformIntent ? requestedProvenance ?? "employee" : null,
+    suggestion_task_ids: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
     revision: expectedRevision + 1,
     updated_at: now,
-  }).eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision)
-    .neq("status", "closed").select("id").maybeSingle();
+  };
+  let { data: claimed, error: claimError } = await db().from("work_daily_plans").update(goalPatch)
+    .eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision).neq("status", "closed").select("id").maybeSingle();
+  if (claimError && /goal_provenance|suggestion_task_ids|schema cache|does not exist/i.test(claimError.message)) {
+    const fallback = await db().from("work_daily_plans").update({ freeform_intent: freeformIntent, revision: expectedRevision + 1, updated_at: now })
+      .eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision).neq("status", "closed").select("id").maybeSingle();
+    claimed = fallback.data;
+    claimError = fallback.error;
+  }
   if (claimError) throw new Error(`save daily plan draft: ${claimError.message}`);
   if (!claimed) throw new WorkOsConflictError("This plan changed on another device. Refresh before saving again.");
 
@@ -401,7 +518,50 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
       if (error) throw new Error(`remove daily plan outcomes: ${error.message}`);
     }
   }
-  await auditPlan(access, "plan.draft_saved", String(plan.id), { shiftDate, revision: expectedRevision + 1, idempotencyKey });
+  await auditPlan(access, "plan.draft_saved", String(plan.id), {
+    shiftDate, revision: expectedRevision + 1, idempotencyKey,
+    goalProvenance: freeformIntent ? requestedProvenance ?? "employee" : null,
+    suggestionTaskIds: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
+  });
+  return loadPlanByDate(access, shiftDate);
+}
+
+export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const taskId = value(body.surface_task_id) ?? value(body.defer_task_id);
+  if (!taskId) throw new Error("surface_task_id or defer_task_id is required");
+  const disposition = body.defer_task_id ? "deferred" : "selected";
+  const { shiftDate } = await localWorkDate(access);
+  const plan = await ensureDailyPlanForDate(access, shiftDate, await activeSession(access));
+  if (!plan || plan.status === "closed") throw new Error("Today's task workspace is read-only.");
+  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const attributableTasks = await listPersonTasks(ownerId, access.personId as string, { completed: "false", includeLedgerHistory: true, limit: 1000 });
+  const task = attributableTasks.find((item) => String(item.id) === taskId || String(item.provider_task_id) === taskId);
+  if (!task) throw new Error("The Nifty task is not attributable to this employee.");
+  const existing = await db().from("work_daily_plan_items").select("id,disposition")
+    .eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("task_id", task.id).maybeSingle();
+  if (existing.error) throw new Error(`load surfaced task: ${existing.error.message}`);
+  const now = new Date().toISOString();
+  if (existing.data) {
+    const updated = await db().from("work_daily_plan_items").update({ disposition, updated_at: now })
+      .eq("organization_id", access.organizationId).eq("id", existing.data.id).select("id").single();
+    if (updated.error) throw new Error(`update surfaced task: ${updated.error.message}`);
+  } else {
+    const rank = Array.isArray(plan.items) ? plan.items.length : 0;
+    const inserted = await db().from("work_daily_plan_items").insert({
+      organization_id: access.organizationId, plan_id: plan.id, person_id: access.personId, task_id: task.id,
+      source: "carry_over", disposition, rank, title_snapshot: task.title,
+      blocker: task.blocked_reason, item_kind: "nifty_task",
+      completion_state: task.completed ? "completed" : "open", completed_at: task.completed_at,
+    });
+    if (inserted.error) throw new Error(`surface task in today's workspace: ${inserted.error.message}`);
+  }
+  await auditPlan(access, disposition === "selected" ? "workspace.task_surfaced" : "workspace.task_deferred", String(plan.id), { taskId, shiftDate, idempotencyKey });
+  await recordTaskDayEvent(access, task, disposition === "selected" ? "surfaced" : "deferred", {
+    idempotencyKey: `workspace:${disposition}:${idempotencyKey}`,
+    localDate: shiftDate,
+    provenance: "employee_explicit",
+    metadata: { planId: plan.id },
+  });
   return loadPlanByDate(access, shiftDate);
 }
 

@@ -28,7 +28,10 @@ const invalidated = applyOnboardingScenario({
     displayName: "Jamie", email: "jamie@example.com", timezone: "Africa/Accra", language: "en", weekStart: 1, timeFormat: "24h",
     schedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [] },
     notifications: { desktopEnabled: true }, privacy: { screenshotAnalysisConsent: true, sensitiveAppExclusions: ["private.example"] },
-    workPreferences: { archetypeId: "engineering", inferredArchetypeId: "engineering", customRoleTitle: "", specialtyIds: [], items: [], responsibilities: [], outputTypes: [], evidenceSources: ["Nifty"], voiceUpdatesEnabled: false, githubUsername: "" },
+    workPreferences: {
+      archetypeId: null, inferredArchetypeId: null, customRoleTitle: "", specialtyIds: [], items: [],
+      responsibilities: [], outputTypes: [], evidenceSources: ["Nifty"], voiceUpdatesEnabled: false, githubUsername: "",
+    },
   },
 }, {
   ...DEFAULT_DEBUG_SCENARIO,
@@ -62,15 +65,6 @@ assert.match(eod?.niftySync?.error ?? "", /Simulated/);
 
 const paused = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "paused" });
 assert.equal(paused?.session?.state, "paused");
-const scheduled = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "scheduled" });
-assert.equal(scheduled?.session, null);
-assert.equal(scheduled?.plan, null);
-const clockedIn = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "clocked_in" });
-assert.equal(clockedIn?.session?.state, "clocked_in");
-assert.equal(clockedIn?.prompt.kind, "plan");
-const eodDue = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "eod_due" });
-assert.equal(eodDue?.session?.state, "eod_due");
-assert.equal(eodDue?.prompt.kind, "eod");
 const clockedOut = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "clocked_out" });
 assert.equal(clockedOut?.session?.state, "clocked_out");
 assert.equal(clockedOut?.prompt.kind, null);

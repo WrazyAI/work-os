@@ -495,7 +495,7 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
       assignee_person_ids: assigneePersonIds,
       due_date: dateOnly(task.dueDate),
       start_date: dateOnly(task.startDate),
-      completed_at: task.completedAt,
+      ...(task.completedAt ? { completed_at: task.completedAt } : {}),
       provider_created_at: task.createdAt,
       provider_updated_at: task.updatedAt,
       raw: task.raw,
@@ -747,7 +747,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
  * daily status updates. Include only ledger rows attributable through Nifty's
  * creator/subscriber metadata; unrelated unassigned project work stays hidden.
  */
-export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}) {
+export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
   const candidateLimit = Math.min(1000, offset + limit);
@@ -777,13 +777,35 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   for (const task of ledger ?? []) {
     if (isNiftyTaskAttributableToMember(task, niftyMemberId)) rows.set(String(task.id), task);
   }
-  return [...rows.values()]
+  const selected = [...rows.values()]
     .sort((left, right) => {
       const leftDue = String(left.due_date ?? "9999-12-31");
       const rightDue = String(right.due_date ?? "9999-12-31");
       return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
     })
     .slice(offset, offset + limit);
+  const parentProviderIds = selected
+    .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
+    .map((task) => String(task.provider_task_id));
+  if (!parentProviderIds.length) return selected;
+  const childrenResult = await db().from("work_tasks")
+    .select("parent_provider_task_id,completed")
+    .eq("user_id", userId)
+    .neq("status", "archived")
+    .in("parent_provider_task_id", parentProviderIds);
+  if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
+  const progress = new Map<string, { total: number; completed: number }>();
+  for (const child of childrenResult.data ?? []) {
+    const parentId = String(child.parent_provider_task_id);
+    const current = progress.get(parentId) ?? { total: 0, completed: 0 };
+    current.total += 1;
+    if (child.completed === true) current.completed += 1;
+    progress.set(parentId, current);
+  }
+  return selected.map((task): Record<string, any> => {
+    const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
+    return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
+  });
 }
 
 export async function createTask(userId: string, body: Json) {
@@ -843,7 +865,17 @@ export async function completeTask(userId: string, taskId: string, completed = t
   const providerTaskId = task.provider_task_id as string;
   const result = await niftyForOwner(userId, () => completeNiftyTask(providerTaskId, completed));
   const normalized = normalizeNiftyTaskPayload(result) ?? normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
-  if (normalized) return upsertNiftyTask(userId, normalized);
+  if (normalized) {
+    const mirrored = await upsertNiftyTask(userId, normalized) as Json;
+    if (!completed) {
+      return selectFirst(
+        db().from("work_tasks").update({ completed_at: null, updated_at: new Date().toISOString() })
+          .eq("user_id", userId).eq("id", mirrored.id as string).select("*"),
+        "clear reopened task completion timestamp",
+      );
+    }
+    return mirrored;
+  }
   return selectFirst(
     db().from("work_tasks").update({
       completed,

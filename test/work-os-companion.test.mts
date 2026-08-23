@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   decideWorkOsPrompt,
   isTaskOutcomeEvidence,
+  resolveStartableShiftWindow,
   resolveShiftWindow,
   zonedDateTimeToUtc,
   type WorkOsScheduleRule,
@@ -27,16 +28,18 @@ const beforeShift = new Date("2026-07-10T15:30:00Z");
 const upcoming = resolveShiftWindow([baseRule], [], beforeShift);
 assert.equal(upcoming?.startsAt, "2026-07-10T16:00:00.000Z");
 assert.deepEqual(decideWorkOsPrompt(upcoming, [], beforeShift), {
-  kind: "plan",
-  nextPromptAt: "2026-07-10T16:00:00.000Z",
-  required: true,
-  reason: "Shift has not started.",
+  kind: null,
+  nextPromptAt: null,
+  required: false,
+  reason: "Clock in to begin the workday.",
 });
+assert.equal(resolveStartableShiftWindow([baseRule], [], beforeShift)?.shiftDate, "2026-07-10", "30-minute grace is startable");
+assert.equal(resolveStartableShiftWindow([baseRule], [], new Date("2026-07-10T15:29:59Z")), null, "earlier starts require an exception");
 
 const firstHour = new Date("2026-07-10T16:30:00Z");
 const active = resolveShiftWindow([baseRule], [], firstHour);
-assert.equal(decideWorkOsPrompt(active, [], firstHour).kind, "plan");
-assert.equal(decideWorkOsPrompt(active, [], new Date("2026-07-10T17:05:00Z")).kind, "catch_up");
+assert.equal(decideWorkOsPrompt(active, [], firstHour).kind, "follow_up");
+assert.equal(decideWorkOsPrompt(active, [], new Date("2026-07-10T17:05:00Z")).kind, "follow_up");
 assert.equal(decideWorkOsPrompt(active, [], new Date("2026-07-10T17:35:00Z")).reason, "Scheduled break.");
 
 const validCheckIn = [{

@@ -5,6 +5,7 @@ import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import type { WtActivityLog } from "@/lib/worktivity";
+import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
 
@@ -45,7 +46,32 @@ export function decryptScreenshot(bytes: Uint8Array) {
   return Buffer.concat([decipher.update(input.subarray(28)), decipher.final()]);
 }
 
-async function mirrorSummary(access: WorkOsAccess, personId: string, eventId: string, occurredAt: string, summary: string, model: string) {
+type ScreenshotScope = Pick<WorkOsAccess, "organizationId">;
+type ScreenshotExecution = "feature" | "readiness_smoke";
+
+/** A normal execution is available only when the real organization flag is
+ * enabled.  A readiness smoke is deliberately the inverse: it can exercise
+ * one real, consented image before activation, but is unavailable after the
+ * feature is live.  Neither mode accepts a caller-supplied feature flag. */
+export function allowsScreenshotExecution(featureEnabled: boolean, execution: ScreenshotExecution) {
+  return execution === "feature" ? featureEnabled : !featureEnabled;
+}
+
+async function assertScreenshotExecutionAllowed(organizationId: string, execution: ScreenshotExecution) {
+  const { data: organization, error } = await db().from("work_organizations")
+    .select("feature_flags")
+    .eq("id", organizationId)
+    .single();
+  if (error) throw new Error(`load screenshot feature policy: ${error.message}`);
+  const featureEnabled = (organization.feature_flags as Json | null)?.screenshot_summaries === true;
+  if (!allowsScreenshotExecution(featureEnabled, execution)) {
+    throw new Error(execution === "feature"
+      ? "screenshot summaries are disabled for this organization"
+      : "screenshot readiness smoke is only allowed before feature activation");
+  }
+}
+
+async function mirrorSummary(access: ScreenshotScope, personId: string, eventId: string, occurredAt: string, summary: string, model: string) {
   const { data: organization, error: organizationError } = await db().from("work_organizations").select("legacy_owner_id,created_by").eq("id", access.organizationId).single();
   if (organizationError) throw new Error(`load screenshot organization: ${organizationError.message}`);
   const ownerId = organization.legacy_owner_id || organization.created_by;
@@ -192,7 +218,7 @@ async function neutralSummary(url: string, log: WtActivityLog) {
   };
 }
 
-async function createEvidenceEvent(access: WorkOsAccess, personId: string, log: WtActivityLog) {
+async function createEvidenceEvent(access: ScreenshotScope, personId: string, log: WtActivityLog) {
   const { data, error } = await db().from("work_evidence_events").upsert({
     organization_id: access.organizationId,
     provider: "worktivity",
@@ -212,7 +238,14 @@ async function createEvidenceEvent(access: WorkOsAccess, personId: string, log: 
   return data;
 }
 
-export async function summarizeWorktivityScreenshots(access: WorkOsAccess, personId: string, date: string) {
+export async function summarizeWorktivityScreenshots(
+  access: ScreenshotScope,
+  personId: string,
+  date: string,
+  options: { execution?: ScreenshotExecution; maxScreenshots?: number } = {},
+) {
+  const execution = options.execution ?? "feature";
+  await assertScreenshotExecutionAllowed(access.organizationId, execution);
   const consent = await employeeTrackingConsent(access.organizationId, personId);
   if (!consent.tracking) throw new Error("current work-tracking consent is required before Worktivity evidence can be processed");
   if (!consent.screenshotAnalysis) throw new Error("employee screenshot-analysis consent is required");
@@ -229,7 +262,8 @@ export async function summarizeWorktivityScreenshots(access: WorkOsAccess, perso
   ]);
   await ensureBucket();
   const results = [];
-  for (const log of sampleLogs(logs)) {
+  const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_DAY, Math.floor(options.maxScreenshots ?? MAX_SCREENSHOTS_PER_DAY)));
+  for (const log of sampleLogs(logs).slice(0, maxScreenshots)) {
     const event = await createEvidenceEvent(access, personId, log);
     const sourceReference = `worktivity:activity-log:${log.ID}`;
     if (isExcludedScreenshot(log, config)) {
@@ -338,6 +372,122 @@ export async function summarizeWorktivityScreenshots(access: WorkOsAccess, perso
     }
   }
   return { date, logs: logs.length, sampled: results.length, summaries: results };
+}
+
+/**
+ * Create at most one genuine encrypted summary before feature activation.
+ * This is intentionally server-only (there is no route for it), uses the
+ * real organization/person identifiers supplied by the operator, requires a
+ * completed workday, and records system—not user—for audit attribution.
+ */
+export async function runWorkOsScreenshotReadinessSmoke(input: { organizationId: string; personId: string; date: string }) {
+  if (!process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY || !process.env.CRON_SECRET) {
+    throw new Error("screenshot readiness smoke is not ready: encryption key and cron secret are required");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error("readiness smoke date must be YYYY-MM-DD");
+  const supabase = db();
+  const [{ data: closedSession, error: sessionError }, { data: closedPlan, error: planError }] = await Promise.all([
+    supabase.from("work_sessions").select("id").eq("organization_id", input.organizationId).eq("person_id", input.personId)
+      .eq("shift_date", input.date).not("clocked_out_at", "is", null).limit(1).maybeSingle(),
+    supabase.from("work_daily_plans").select("id").eq("organization_id", input.organizationId).eq("person_id", input.personId)
+      .eq("shift_date", input.date).eq("status", "closed").limit(1).maybeSingle(),
+  ]);
+  if (sessionError) throw new Error(`load readiness-smoke session: ${sessionError.message}`);
+  if (planError) throw new Error(`load readiness-smoke workday: ${planError.message}`);
+  if (!closedSession && !closedPlan) throw new Error("readiness smoke requires a clocked-out session or closed workday");
+  const result = await summarizeWorktivityScreenshots(
+    { organizationId: input.organizationId }, input.personId, input.date,
+    { execution: "readiness_smoke", maxScreenshots: 1 },
+  );
+  const targetId = `${input.organizationId}:${input.personId}:${input.date}`;
+  const { error: auditError } = await supabase.from("work_audit_log").insert({
+    organization_id: input.organizationId,
+    actor_user_id: null,
+    action: "screenshot.readiness_smoke_completed",
+    target_type: "workday",
+    target_id: targetId,
+    metadata: { source: "server_readiness_smoke", personId: input.personId, shiftDate: input.date, sampled: result.sampled },
+  });
+  if (auditError) throw new Error(`audit screenshot readiness smoke: ${auditError.message}`);
+  return result;
+}
+
+/** Bounded cron work: only mapped people with a completed session (or a prior
+ * local workday) are candidates. The consent check inside summarization is the
+ * final fail-closed gate. */
+export async function syncDueWorkOsScreenshots(limit = 12) {
+  if (!process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY || !process.env.CRON_SECRET) {
+    throw new Error("screenshot due sync is not ready: encryption key and cron secret are required");
+  }
+  const supabase = db();
+  const [{ data: clockedOut, error: clockedOutError }, { data: completedDays, error: completedDaysError }] = await Promise.all([
+    supabase.from("work_sessions")
+    .select("organization_id,person_id,shift_date,timezone,clocked_out_at, person:work_people!inner(worktivity_employee_id)")
+      .not("clocked_out_at", "is", null).order("clocked_out_at", { ascending: false }).limit(limit * 3),
+    supabase.from("work_daily_plans")
+      .select("organization_id,person_id,shift_date, person:work_people!inner(worktivity_employee_id)")
+      .eq("status", "closed").order("shift_date", { ascending: false }).limit(limit * 3),
+  ]);
+  if (clockedOutError) throw new Error(`load clocked-out screenshot candidates: ${clockedOutError.message}`);
+  if (completedDaysError) throw new Error(`load completed-workday screenshot candidates: ${completedDaysError.message}`);
+  const completedPersonIds = [...new Set((completedDays ?? []).map((row) => String(row.person_id)))];
+  const completedOrganizationIds = [...new Set((completedDays ?? []).map((row) => String(row.organization_id)))];
+  const { data: onboardingRows, error: onboardingError } = completedPersonIds.length
+    ? await supabase.from("work_employee_onboarding").select("organization_id,person_id,timezone")
+      .in("person_id", completedPersonIds).in("organization_id", completedOrganizationIds)
+    : { data: [], error: null };
+  if (onboardingError) throw new Error(`load completed-workday timezones: ${onboardingError.message}`);
+  const timezoneByPerson = new Map((onboardingRows ?? []).map((row) => [`${row.organization_id}:${row.person_id}`, row.timezone]));
+  const candidates = [
+    ...(clockedOut ?? []).map((row) => ({ ...row, candidateSource: "clocked_out" })),
+    ...(completedDays ?? []).map((row) => ({ ...row, timezone: timezoneByPerson.get(`${row.organization_id}:${row.person_id}`) ?? "UTC", candidateSource: "completed_workday" })),
+  ].sort((left, right) => String(right.shift_date).localeCompare(String(left.shift_date)));
+  const results: Array<{ organizationId: string; personId: string; date: string; status: string }> = [];
+  const seenCandidates = new Set<string>();
+  for (const row of candidates) {
+    if (results.length >= limit) break;
+    const shiftDate = String(row.shift_date);
+    const candidateKey = `${row.organization_id}:${row.person_id}:${shiftDate}`;
+    if (seenCandidates.has(candidateKey)) continue;
+    seenCandidates.add(candidateKey);
+    const { data: organization, error: organizationError } = await supabase.from("work_organizations").select("feature_flags")
+      .eq("id", row.organization_id).maybeSingle();
+    if (organizationError || (organization?.feature_flags as Json | null)?.screenshot_summaries !== true) continue;
+    const person = Array.isArray(row.person) ? row.person[0] : row.person as Json | null;
+    if (!person?.worktivity_employee_id) continue;
+    const consent = await employeeTrackingConsent(row.organization_id as string, row.person_id as string);
+    if (!consent.tracking || !consent.screenshotAnalysis) continue;
+    const timezone = typeof row.timezone === "string" && row.timezone ? row.timezone : "UTC";
+    if (row.candidateSource === "completed_workday" && shiftDate >= localDateForTimezone(new Date(), timezone)) continue;
+    const nextDate = new Date(`${shiftDate}T12:00:00Z`); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const startAt = zonedDateTimeToUtc(shiftDate, "00:00", timezone).toISOString();
+    const endAt = zonedDateTimeToUtc(nextDate.toISOString().slice(0, 10), "00:00", timezone).toISOString();
+    const { data: existing, error: existingError } = await supabase.from("work_evidence_events").select("id")
+      .eq("organization_id", row.organization_id).eq("person_id", row.person_id).eq("provider", "worktivity")
+      .like("external_event_id", "screenshot:%").gte("occurred_at", startAt).lt("occurred_at", endAt).limit(1);
+    if (existingError || existing?.length) continue;
+    const { data: completed, error: completedError } = await supabase.from("work_audit_log").select("id")
+      .eq("organization_id", row.organization_id).eq("action", "screenshot.due_sync_completed")
+      .eq("target_type", "workday").eq("target_id", candidateKey).limit(1);
+    if (completedError || completed?.length) continue;
+    const access: ScreenshotScope = { organizationId: row.organization_id as string };
+    try {
+      await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate);
+      const { error: auditError } = await supabase.from("work_audit_log").insert({
+        organization_id: row.organization_id,
+        actor_user_id: null,
+        action: "screenshot.due_sync_completed",
+        target_type: "workday",
+        target_id: candidateKey,
+        metadata: { source: "scheduled_due_sync", shiftDate, personId: row.person_id },
+      });
+      if (auditError) throw new Error(`audit screenshot due sync: ${auditError.message}`);
+      results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: "processed" });
+    } catch (cause) {
+      results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: cause instanceof Error ? cause.message : "failed" });
+    }
+  }
+  return { attempted: results.length, results };
 }
 
 export async function accessWorkOsScreenshot(access: WorkOsAccess, summaryId: string, reason: string) {

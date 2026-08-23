@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getWorkOsOrganizationOwnerId, listPersonTasks } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,9 +33,23 @@ export async function GET(req: Request) {
     const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
     const limit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
     const offset = integer(params.get("offset"), 0, 100000);
-    const requestedDate = date(params.get("date")) ?? new Date().toISOString().slice(0, 10);
+    const requestedDate = date(params.get("date"));
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
+    if (view === "today" || view === "day" || params.has("cursor")) {
+      const workspace = await resolveDailyWorkspace(auth.access, requestedDate, {
+        cursor: params.get("cursor"),
+        limit,
+      });
+      return NextResponse.json({
+        tasks: workspace.tasks,
+        view,
+        date: workspace.date,
+        workspace,
+        cursor: workspace.cursor,
+        nextOffset: null,
+      });
+    }
     const tasks = (await listPersonTasks(ownerId, auth.access.personId as string, {
       completed: params.get("completed"),
       projectId: params.get("projectId"),
@@ -47,7 +62,7 @@ export async function GET(req: Request) {
       includeCompleted: params.get("includeCompleted") === "true" || view === "history",
       includeLedgerHistory: view === "history" && !params.get("from") && !params.get("to"),
     })) ?? [];
-    return NextResponse.json({ tasks, view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null });
+    return NextResponse.json({ tasks, view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null, cursor: { next: null } });
   } catch (error) {
     return jsonError(error);
   }

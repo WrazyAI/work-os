@@ -1,21 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  Archive,
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleDot,
   Clock3,
   FileCheck2,
   ListTodo,
   MessageSquareText,
+  MoreHorizontal,
+  Pencil,
   RefreshCw,
+  RotateCcw,
   Send,
   TimerReset,
   X,
 } from "lucide-react";
+import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
 
 type AnyRow = Record<string, any>;
 
@@ -36,7 +43,29 @@ interface DayResponse {
   report: AnyRow | null;
   session: AnyRow | null;
   plan: { id: string; status: "draft" | "confirmed" | "closed"; freeform_intent: string | null; items: AnyRow[] } | null;
+  workspaceSummary?: {
+    date: string; readOnly: boolean; completed: number; total: number; overdueCount: number;
+    goal: { text: string | null; provenance: string | null; revision: number | null };
+    carryOverGroups: Array<{ key: string; label: string; tasks: AnyRow[] }>;
+    sessionQuality: { status: string; message: string | null; sessionId?: string | null; clockedInAt?: string | null };
+  };
   attendance?: AnyRow;
+  breakPolicy?: { worktivityAuthoritative: boolean };
+}
+
+interface TaskDayResponse {
+  tasks: AnyRow[];
+  workspace: NonNullable<DayResponse["workspaceSummary"]> & { goal: { text: string | null; provenance: string | null; revision: number | null } };
+  cursor: { next: string | null };
+}
+
+interface InsightsResponse {
+  range: "day" | "7d" | "30d";
+  from: string;
+  through: string;
+  days: Array<{ date: string; goal: { text: string | null; provenance: string | null }; completed: number; progressed: number; deferred: number; carried: number; unplanned: number; breakFreshness: string; sessionQuality: { status: string; message: string | null }; references: Array<{ id: string; label: string; target: string }> }>;
+  brief: { summary: string; wins: string[]; attention: string[]; nextFocus: string[] };
+  freshness: { stale: boolean; staleAt: string | null; error: string | null };
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -71,6 +100,20 @@ function requestId() {
 export default function EmployeeWorkOsHome() {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
+  const [goal, setGoal] = useState("");
+  const [selectedTaskDate, setSelectedTaskDate] = useState("");
+  const [insightRange, setInsightRange] = useState<"day" | "7d" | "30d">("7d");
+  const [taskMenuId, setTaskMenuId] = useState<string | null>(null);
+  const [subtaskMenuId, setSubtaskMenuId] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [taskEdit, setTaskEdit] = useState<AnyRow | null>(null);
+  const [taskEditTitle, setTaskEditTitle] = useState("");
+  const [taskEditDescription, setTaskEditDescription] = useState("");
+  const [taskCreateOpen, setTaskCreateOpen] = useState(false);
+  const [taskCreateTitle, setTaskCreateTitle] = useState("");
+  const [taskCreateDescription, setTaskCreateDescription] = useState("");
+  const [clockExceptionReason, setClockExceptionReason] = useState<string | null>(null);
+  const [clockConfirmKind, setClockConfirmKind] = useState<"late" | "exception" | null>(null);
   const [expandedEvidence, setExpandedEvidence] = useState(false);
   const [reportMarkdown, setReportMarkdown] = useState("");
   const [onboardingName, setOnboardingName] = useState("");
@@ -82,8 +125,9 @@ export default function EmployeeWorkOsHome() {
   const [onboardingBreakStart, setOnboardingBreakStart] = useState("");
   const [onboardingBreakEnd, setOnboardingBreakEnd] = useState("");
   const [onboardingDesktop, setOnboardingDesktop] = useState(true);
-  const [onboardingScreenshot, setOnboardingScreenshot] = useState(false);
+  const [onboardingConsent, setOnboardingConsent] = useState(false);
   const [onboardingExclusions, setOnboardingExclusions] = useState("");
+  const onboardingHydrationKey = useRef<string | null>(null);
   const onboarding = useQuery<AnyRow>({
     queryKey: ["work-os", "employee-onboarding"],
     queryFn: () => fetchJson("/api/work-os/me/onboarding"),
@@ -94,30 +138,59 @@ export default function EmployeeWorkOsHome() {
     queryFn: () => fetchJson("/api/work-os/me/day"),
     refetchInterval: 60_000,
   });
+  const historicalWorkspace = useQuery<TaskDayResponse>({
+    queryKey: ["work-os", "task-day", selectedTaskDate],
+    queryFn: () => fetchJson(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(selectedTaskDate)}&limit=100`),
+    enabled: !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate,
+  });
+  const insights = useQuery<InsightsResponse>({
+    queryKey: ["work-os", "employee-insights", insightRange, day.data?.shiftDate],
+    queryFn: () => fetchJson(`/api/work-os/me/insights?range=${insightRange}&through=${encodeURIComponent(day.data?.shiftDate ?? "")}`),
+    enabled: !!day.data?.shiftDate,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (day.data?.shiftDate) setSelectedTaskDate((current) => current || day.data!.shiftDate);
+  }, [day.data?.shiftDate]);
 
   useEffect(() => {
     setReportMarkdown(day.data?.report?.markdown ?? "");
   }, [day.data?.report?.id, day.data?.report?.markdown]);
 
   useEffect(() => {
+    const historicalGoal = historicalWorkspace.data?.workspace.goal.text;
+    setGoal(selectedTaskDate && selectedTaskDate !== day.data?.shiftDate ? historicalGoal ?? "" : day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "");
+  }, [selectedTaskDate, historicalWorkspace.data?.workspace.goal.text, day.data?.shiftDate, day.data?.workspaceSummary?.goal.text, day.data?.plan?.freeform_intent]);
+
+  useEffect(() => {
     const profile = onboarding.data?.profile;
     if (!profile) return;
-    setOnboardingName((value) => value || profile.displayName || "");
-    setOnboardingEmail((value) => value || profile.email || "");
-    setOnboardingTimezone((value) => value || profile.timezone || "UTC");
-    setOnboardingLanguage((value) => value || profile.language || "en");
+    const resetKey = `${String(profile.email ?? "").trim().toLowerCase()}:${onboarding.data?.status ?? "not_started"}`;
+    if (onboardingHydrationKey.current === resetKey) return;
+    onboardingHydrationKey.current = resetKey;
+    setOnboardingName(profile.displayName || "");
+    setOnboardingEmail(profile.email || "");
+    setOnboardingTimezone(profile.timezone || "UTC");
+    setOnboardingLanguage(profile.language || "en");
     const schedule = profile.schedule || {};
-    setOnboardingStart((value) => value === "09:00" && schedule.shiftStart ? schedule.shiftStart : value);
-    setOnboardingEnd((value) => value === "17:00" && schedule.shiftEnd ? schedule.shiftEnd : value);
+    setOnboardingStart(schedule.shiftStart || "09:00");
+    setOnboardingEnd(schedule.shiftEnd || "17:00");
     const firstBreak = Array.isArray(schedule.breaks) ? schedule.breaks[0] : null;
-    setOnboardingBreakStart((value) => value || firstBreak?.start || "");
-    setOnboardingBreakEnd((value) => value || firstBreak?.end || "");
+    setOnboardingBreakStart(firstBreak?.start || "");
+    setOnboardingBreakEnd(firstBreak?.end || "");
     setOnboardingDesktop(typeof profile.notifications?.desktopEnabled === "boolean" ? profile.notifications.desktopEnabled : true);
-    setOnboardingScreenshot(profile.privacy?.screenshotAnalysisConsent === true);
-    setOnboardingExclusions((value) => value || (profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
-  }, [onboarding.data]);
+    setOnboardingConsent(onboarding.data?.employeeRequirements?.consentProvided === true && onboarding.data?.employeeRequirements?.screenshotConsentProvided === true && onboarding.data?.employeeRequirements?.privacyAcknowledged === true);
+    setOnboardingExclusions((profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
+  }, [onboarding.data?.profile?.email, onboarding.data?.status]);
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] }),
+      queryClient.invalidateQueries({ queryKey: ["work-os", "task-day"] }),
+      queryClient.invalidateQueries({ queryKey: ["work-os", "employee-insights"] }),
+    ]);
+  };
   const saveOnboarding = useMutation({
     mutationFn: () => fetchJson("/api/work-os/me/onboarding", {
       method: "POST",
@@ -135,11 +208,13 @@ export default function EmployeeWorkOsHome() {
         },
         notifications: { desktopEnabled: onboardingDesktop },
         privacy: {
-          screenshotAnalysisConsent: onboardingScreenshot,
+          screenshotAnalysisConsent: true,
           sensitiveAppExclusions: onboardingExclusions.split(",").map((value) => value.trim()).filter(Boolean),
         },
         acceptTrackingConsent: true,
         privacyNoticeAcknowledged: true,
+        revision: onboarding.data?.draft?.revision ?? 0,
+        clientMutationKey: requestId(),
         source: "web",
       }),
     }),
@@ -149,7 +224,7 @@ export default function EmployeeWorkOsHome() {
     },
   });
   const changeConsent = useMutation({
-    mutationFn: (action: "withdraw_tracking" | "withdraw_screenshot_analysis" | "accept_screenshot_analysis") => fetchJson("/api/work-os/me/onboarding", {
+    mutationFn: (action: "withdraw_tracking" | "withdraw_screenshot_analysis") => fetchJson("/api/work-os/me/onboarding", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, source: "web" }),
@@ -186,13 +261,26 @@ export default function EmployeeWorkOsHome() {
     }),
     onSuccess: () => void refresh(),
   });
-  const proposeRemoval = useMutation({
-    mutationFn: ({ planItemId, reason }: { planItemId: string; reason: string }) => fetchJson("/api/work-os/me/plan/removals", {
-      method: "POST",
+  const saveGoal = useMutation({
+    mutationFn: () => fetchJson("/api/work-os/me/plan", {
+      method: "PUT",
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify({ plan_item_id: planItemId, reason }),
+      body: JSON.stringify({ shift_date: day.data?.shiftDate, revision: day.data?.workspaceSummary?.goal.revision ?? 0, freeform_intent: goal, goal_provenance: goal.trim() ? "employee" : null, suggestion_task_ids: [] }),
     }),
     onSuccess: refresh,
+  });
+  const changeTask = useMutation({
+    mutationFn: ({ task, body, method = "PATCH" }: { task: AnyRow; body?: AnyRow; method?: "PATCH" | "DELETE" }) => fetchJson(`/api/work-os/me/tasks/${encodeURIComponent(String(task.provider_task_id || task.id))}`, {
+      method, headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() }, ...(body ? { body: JSON.stringify(body) } : {}),
+    }),
+    onSuccess: () => { setTaskMenuId(null); setTaskEdit(null); void refresh(); },
+  });
+  const createTask = useMutation({
+    mutationFn: () => fetchJson("/api/work-os/me/tasks", {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify({ name: taskCreateTitle.trim(), description: taskCreateDescription.trim() || undefined }),
+    }),
+    onSuccess: () => { setTaskCreateOpen(false); setTaskCreateTitle(""); setTaskCreateDescription(""); void refresh(); },
   });
   const draftEod = useMutation({
     mutationFn: () => fetchJson("/api/work-os/reports/eod", {
@@ -221,13 +309,23 @@ export default function EmployeeWorkOsHome() {
     onSuccess: refresh,
   });
 
-  const tasks = day.data?.tasks ?? [];
+  const historical = !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate;
+  const displayedWorkspace = historical ? historicalWorkspace.data?.workspace : day.data?.workspaceSummary;
+  const tasks = historical ? historicalWorkspace.data?.tasks ?? [] : day.data?.tasks ?? [];
   const proposals = day.data?.proposals ?? [];
   const evidence = day.data?.evidence ?? [];
   const timezone = day.data?.shift?.timezone;
   const workSession = day.data?.session;
   const sessionIsActive = !!workSession && !["scheduled", "clocked_out"].includes(String(workSession.state));
-  const error = onboarding.error || saveOnboarding.error || changeConsent.error || day.error || sessionAction.error || checkIn.error || review.error || proposeRemoval.error || draftEod.error || submitEod.error;
+  const shiftStartsAt = day.data?.shift ? Date.parse(day.data.shift.startsAt) : Number.NaN;
+  const shiftEndsAt = day.data?.shift ? Date.parse(day.data.shift.endsAt) : Number.NaN;
+  const shiftStartable = Number.isFinite(shiftStartsAt) && Date.now() >= shiftStartsAt - 30 * 60_000 && Date.now() < shiftEndsAt;
+  const beginClockIn = () => {
+    if (!shiftStartable) { setClockExceptionReason(""); setClockConfirmKind("exception"); return; }
+    if (Date.now() > shiftStartsAt + 15 * 60_000) { setClockExceptionReason(""); setClockConfirmKind("late"); return; }
+    sessionAction.mutate({ method: "POST", body: { source: "web" } });
+  };
+  const error = onboarding.error || saveOnboarding.error || changeConsent.error || day.error || sessionAction.error || checkIn.error || review.error || saveGoal.error || changeTask.error || createTask.error || draftEod.error || submitEod.error;
 
   return (
     <div className="min-h-[calc(100vh-8rem)] border" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
@@ -235,11 +333,12 @@ export default function EmployeeWorkOsHome() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-[12px] font-semibold uppercase text-[var(--text-tertiary)]">
-              <CalendarClock size={15} /> {day.data?.shiftDate || "My day"}
+              <CalendarClock size={15} /> {selectedTaskDate || day.data?.shiftDate || "My day"}
             </div>
             <h1 className="mt-1 text-xl font-semibold text-[var(--text-primary)]">My Day</h1>
           </div>
           <div className="flex items-center gap-3">
+            <label className="grid gap-1 text-[9px] font-semibold uppercase text-[var(--text-tertiary)]">Task date<input type="date" value={selectedTaskDate || day.data?.shiftDate || ""} max={day.data?.shiftDate} onChange={(event) => setSelectedTaskDate(event.target.value)} className="border bg-transparent px-2 py-1 text-[11px] font-normal normal-case text-[var(--text-primary)]" style={{ borderColor: "var(--border)" }} /></label>
             {day.data?.shift ? (
               <div className="text-right text-[12px]">
                 <p className="font-semibold text-[var(--text-primary)]">
@@ -268,7 +367,7 @@ export default function EmployeeWorkOsHome() {
               <div>
                 <h2 className="text-sm font-semibold">{onboarding.data?.onboardingRequired ? "Complete your Work OS setup" : "Work OS privacy and setup"}</h2>
                 <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--text-secondary)]">
-                  Confirm your profile, working hours, notification preference, and purpose-limited tracking consent. Screenshots are optional, excluded by app/domain policy, encrypted, and retained for 30 days when enabled.
+                  Confirm your profile, working hours, notification preference, and purpose-limited tracking consent. Sampled Worktivity screenshot analysis is mandatory for this onboarding policy, excluded by app/domain policy, encrypted, retained for 30 days, and never proves productivity or task completion.
                 </p>
               </div>
               <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>
@@ -279,26 +378,22 @@ export default function EmployeeWorkOsHome() {
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Preferred name<input value={onboardingName} onChange={(event) => setOnboardingName(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Work email<input type="email" value={onboardingEmail} onChange={(event) => setOnboardingEmail(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Timezone<input value={onboardingTimezone} onChange={(event) => setOnboardingTimezone(event.target.value)} placeholder="America/New_York" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Timezone<input role="combobox" aria-autocomplete="list" list="employee-work-os-timezones" value={onboardingTimezone} onChange={(event) => setOnboardingTimezone(event.target.value)} placeholder="Search IANA timezone" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /><datalist id="employee-work-os-timezones">{supportedTimezones().map((zone) => <option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}</datalist></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Language<input value={onboardingLanguage} onChange={(event) => setOnboardingLanguage(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Shift start<input type="time" value={onboardingStart} onChange={(event) => setOnboardingStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Shift end<input type="time" value={onboardingEnd} onChange={(event) => setOnboardingEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break start<input type="time" value={onboardingBreakStart} onChange={(event) => setOnboardingBreakStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break end<input type="time" value={onboardingBreakEnd} onChange={(event) => setOnboardingBreakEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                {!onboarding.data?.breakPolicy?.worktivityAuthoritative && <><label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break start<input type="time" value={onboardingBreakStart} onChange={(event) => setOnboardingBreakStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break end<input type="time" value={onboardingBreakEnd} onChange={(event) => setOnboardingBreakEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label></>}
                 <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingDesktop} onChange={(event) => setOnboardingDesktop(event.target.checked)} /> Desktop notifications</label>
-                <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingScreenshot} onChange={(event) => setOnboardingScreenshot(event.target.checked)} /> Allow neutral screenshot summaries</label>
+                <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingConsent} onChange={(event) => setOnboardingConsent(event.target.checked)} /> I accept Work OS tracking and sampled screenshot analysis, including encrypted 30-day raw retention, sensitive-capture deletion, and that screenshots do not prove productivity or task completion.</label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)] md:col-span-2">Sensitive apps/domains to exclude<input value={onboardingExclusions} onChange={(event) => setOnboardingExclusions(event.target.value)} placeholder="password manager, bank.example" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <div className="flex items-end md:col-span-2 xl:col-span-1"><button disabled={!onboardingName.trim() || !onboardingEmail.trim() || saveOnboarding.isPending} onClick={() => saveOnboarding.mutate()} className="w-full px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>{saveOnboarding.isPending ? "Saving..." : "Save setup and consent"}</button></div>
+                <div className="flex items-end md:col-span-2 xl:col-span-1"><button disabled={!onboardingName.trim() || !onboardingEmail.trim() || !onboardingConsent || saveOnboarding.isPending} onClick={() => saveOnboarding.mutate()} className="w-full px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>{saveOnboarding.isPending ? "Saving..." : "Save required consent"}</button></div>
               </div>
             ) : (
               <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
                 <span>Tracking consent is active.</span>
-                <span>Screenshot analysis: {onboarding.data?.profile?.privacy?.screenshotAnalysisConsent ? "enabled" : "disabled"}.</span>
-                {onboarding.data?.profile?.privacy?.screenshotAnalysisConsent ? (
-                  <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Disable screenshots</button>
-                ) : (
-                  <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("accept_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "var(--border)" }}>Enable screenshots</button>
-                )}
+                <span>Required Work OS and screenshot-analysis consent is active.</span>
+                <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Withdraw required screenshot consent</button>
                 <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_tracking")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-err)]" style={{ borderColor: "var(--status-err)" }}>Withdraw tracking consent</button>
               </div>
             )}
@@ -316,30 +411,24 @@ export default function EmployeeWorkOsHome() {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {!sessionIsActive ? (
-                <button disabled={!day.data?.shift || sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "POST", body: { source: "web", late_acknowledged: true } })} className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}><Check size={14} /> Clock in</button>
+                <button disabled={sessionAction.isPending} onClick={beginClockIn} className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}><Check size={14} /> Clock in</button>
               ) : (
                 <>
-                  {workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
-                  <button disabled={sessionAction.isPending} onClick={() => window.confirm("Clock out and close today’s plan?") && sessionAction.mutate({ method: "PATCH", body: { action: "clock_out", extended_acknowledged: true } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Clock out</button>
+                  {!day.data?.breakPolicy?.worktivityAuthoritative && workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
+                  <button disabled={sessionAction.isPending} onClick={() => window.confirm("Clock out and close today’s workspace?") && sessionAction.mutate({ method: "PATCH", body: { action: "clock_out", extended_acknowledged: true } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Clock out</button>
                 </>
               )}
             </div>
           </section>
-          {day.data?.plan ? <section className="border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-              <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> Today&apos;s plan</h2>
-              <span className="text-[10px] font-semibold uppercase text-[var(--text-tertiary)]">{operationLabel(day.data.plan.status)}</span>
+          <section className="border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1"><h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> {historical ? `Workspace for ${selectedTaskDate}` : "Today’s workspace"}</h2><p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Goal · {displayedWorkspace?.goal.provenance === "accepted_suggestion" ? "accepted suggestion" : goal.trim() ? "written by you" : "optional"}</p></div>
+              <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full text-center text-[10px] font-semibold" style={{ background: `radial-gradient(circle at center, var(--bg-card) 56%, transparent 58%), conic-gradient(var(--accent) ${displayedWorkspace?.total ? displayedWorkspace.completed / displayedWorkspace.total * 360 : 0}deg, var(--border) 0deg)` }}><span>{displayedWorkspace?.completed ?? 0}<small className="block font-normal">of {displayedWorkspace?.total ?? tasks.length}</small></span></div>
             </div>
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-              {day.data.plan.items.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1"><p className="text-[12px] font-medium text-[var(--text-primary)]">{item.title_snapshot}</p><p className="mt-1 text-[10px] uppercase text-[var(--text-tertiary)]">{operationLabel(item.disposition)} · {operationLabel(item.source)}</p></div>
-                  {item.disposition === "selected" || item.disposition === "deferred" ? <button disabled={proposeRemoval.isPending || !sessionIsActive} onClick={() => { const reason = window.prompt(`Why should “${item.title_snapshot}” be removed from today’s plan?`, "Priority changed or no longer relevant."); if (reason?.trim()) proposeRemoval.mutate({ planItemId: item.id, reason: reason.trim() }); }} className="border px-2 py-1 text-[10px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Propose removal</button> : <span className="text-[10px] text-[var(--text-tertiary)]">{item.disposition === "removal_proposed" ? "Pending review" : "Removed"}</span>}
-                </div>
-              ))}
-              {!day.data.plan.items.length ? <p className="p-4 text-[12px] text-[var(--text-tertiary)]">No task-backed items are in today&apos;s plan.</p> : null}
-            </div>
-          </section> : null}
+            <textarea value={goal} onChange={(event) => setGoal(event.target.value)} readOnly={historical} rows={2} maxLength={4000} placeholder="What will you do today?" className="mt-3 w-full resize-y border bg-transparent px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none" style={{ borderColor: "var(--border)" }} />
+            <div className="mt-2 flex items-center justify-between gap-3"><span className="text-[11px] text-[var(--text-tertiary)]">{historical ? "Historical workspaces are read-only." : "Goal setting is independent of attendance."}</span>{!historical ? <button disabled={saveGoal.isPending || goal === (day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "")} onClick={() => saveGoal.mutate()} className="border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>{saveGoal.isPending ? "Saving…" : "Update goal"}</button> : null}</div>
+            {(displayedWorkspace?.overdueCount ?? 0) > 0 ? <p className="mt-3 text-[11px] text-[var(--status-warn)]">{displayedWorkspace?.overdueCount} overdue task{displayedWorkspace?.overdueCount === 1 ? "" : "s"} require review.</p> : null}
+          </section>
           {day.data?.niftySync?.error ? <div className="border px-3 py-2 text-[12px] text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Nifty sync failed: {day.data.niftySync.error}</div> : null}
           <section className="border p-4" style={{ borderColor: day.data?.prompt.required ? "var(--status-warn)" : "var(--border)", background: "var(--bg-card)" }}>
             <div className="mb-3 flex items-start justify-between gap-3">
@@ -370,14 +459,6 @@ export default function EmployeeWorkOsHome() {
                 style={{ background: "var(--accent)", color: "var(--text-inverse)" }}
               >
                 <Send size={14} /> Send update
-              </button>
-              <button
-                disabled={checkIn.isPending}
-                onClick={() => checkIn.mutate({ confirmed_existing_tasks: true })}
-                className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] disabled:opacity-50"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <Check size={14} /> Current tasks are my plan
               </button>
               <button
                 disabled={checkIn.isPending}
@@ -450,28 +531,22 @@ export default function EmployeeWorkOsHome() {
 
           <section className="border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
             <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-              <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> Today&apos;s tasks</h2>
-              <span className="text-[12px] text-[var(--text-tertiary)]">{tasks.length}</span>
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> {historical ? `Tasks for ${selectedTaskDate}` : "Today’s tasks"}</h2>
+              <div className="flex items-center gap-2"><span className="text-[12px] text-[var(--text-tertiary)]">{tasks.length}</span>{!historical ? <button onClick={() => setTaskCreateOpen(true)} className="border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>Add task</button> : null}</div>
             </div>
-            {tasks.length ? tasks.map((task) => (
-              <article key={task.id} className="border-b px-4 py-3 last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                <div className="flex items-start gap-3">
-                  <CircleDot size={16} className="mt-0.5 shrink-0" style={{ color: task.blocked ? "var(--status-warn)" : "var(--text-tertiary)" }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-medium text-[var(--text-primary)]">{task.title}</p>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-                      {task.project?.name ? <span>{task.project.name}</span> : null}
-                      {task.priority ? <span>{operationLabel(task.priority)}</span> : null}
-                      {task.due_date ? <span>Due {task.due_date}</span> : null}
-                      {task.estimated_effort_minutes ? <span>{task.estimated_effort_minutes} min</span> : null}
-                    </div>
-                    {task.expected_outcome ? <p className="mt-2 text-[12px] text-[var(--text-secondary)]">Outcome: {task.expected_outcome}</p> : null}
-                    {task.definition_of_done ? <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Done when: {task.definition_of_done}</p> : null}
-                    {task.blocked_reason ? <p className="mt-2 text-[12px] text-[var(--status-warn)]">Blocked: {task.blocked_reason}</p> : null}
-                  </div>
+            {tasks.length ? tasks.map((task) => {
+              const taskId = String(task.provider_task_id || task.id);
+              const subtasks = historical ? [] : Array.isArray(task.subtasks) ? task.subtasks : [];
+              const progress = task.subtaskProgress ?? { completed: subtasks.filter((item: AnyRow) => item.completed).length, total: subtasks.length };
+              return <article key={task.id} className="relative border-b px-4 py-3 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-start gap-3"><button aria-label={`${expandedTaskId === taskId ? "Collapse" : "Expand"} ${task.title}`} onClick={() => setExpandedTaskId(expandedTaskId === taskId ? null : taskId)} className="mt-0.5 text-[var(--text-tertiary)]">{expandedTaskId === taskId ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button><div className="min-w-0 flex-1"><p className={`text-[13px] font-medium ${task.completed ? "line-through text-[var(--text-tertiary)]" : "text-[var(--text-primary)]"}`}>{task.title}</p><div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">{task.project?.name ? <span>{task.project.name}</span> : null}{task.milestone?.name ? <span>{task.milestone.name}</span> : null}{task.priority ? <span>{operationLabel(task.priority)}</span> : null}{task.due_date ? <span>Due {task.due_date}</span> : null}<span>{task.synced_at ? "Nifty synced" : "Sync pending"}</span></div></div>
+                  {progress.total > 0 ? <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[9px] font-semibold" style={{ background: `radial-gradient(circle at center, var(--bg-card) 55%, transparent 57%), conic-gradient(var(--accent) ${progress.completed / progress.total * 360}deg, var(--border) 0deg)` }}>{progress.completed}/{progress.total}</div> : null}
+                  {!historical ? <button aria-label={`Actions for ${task.title}`} onClick={() => setTaskMenuId(taskMenuId === taskId ? null : taskId)} className="border p-1.5" style={{ borderColor: "var(--border)" }}><MoreHorizontal size={15} /></button> : <a href={String(task.url || task.provider_url || task.raw?.url || "#")} target="_blank" rel="noreferrer" className="text-[10px] font-semibold text-[var(--accent)]">Open Nifty</a>}
+                  {!historical && taskMenuId === taskId ? <div className="absolute right-4 top-11 z-10 grid min-w-40 border p-1 text-[11px] shadow-lg" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><button className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => changeTask.mutate({ task, body: { completed: !task.completed } })}>{task.completed ? <RotateCcw size={13} /> : <Check size={13} />}{task.completed ? "Reopen" : "Mark done"}</button><button className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => { setTaskEdit(task); setTaskEditTitle(task.title || ""); setTaskEditDescription(task.description || ""); setTaskMenuId(null); }}><Pencil size={13} /> Edit</button><button className="flex items-center gap-2 px-2 py-1.5 text-left text-[var(--status-warn)]" onClick={() => changeTask.mutate({ task, method: "DELETE" })}><Archive size={13} /> Archive</button></div> : null}
                 </div>
-              </article>
-            )) : <p className="p-4 text-[12px] text-[var(--text-tertiary)]">No open or due Nifty tasks.</p>}
+{expandedTaskId === taskId ? <div className="ml-7 mt-3 border-t pt-2" style={{ borderColor: "var(--border)" }}>{subtasks.length ? subtasks.map((subtask: AnyRow) => { const subtaskId = String(subtask.provider_task_id || subtask.id); return <div key={subtask.id} className="relative flex items-center gap-2 py-1.5 text-[11px]"><CircleDot size={12} /><span className={`min-w-0 flex-1 ${subtask.completed ? "line-through text-[var(--text-tertiary)]" : ""}`}>{subtask.title}</span><button aria-label={`Actions for ${subtask.title}`} onClick={() => setSubtaskMenuId(subtaskMenuId === subtaskId ? null : subtaskId)} className="border p-1.5" style={{ borderColor: "var(--border)" }}><MoreHorizontal size={13} /></button>{subtaskMenuId === subtaskId ? <div className="absolute right-0 top-8 z-20 grid min-w-44 border p-1 shadow-lg" role="menu" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><button role="menuitem" className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => changeTask.mutate({ task: subtask, body: { completed: !subtask.completed } })}>{subtask.completed ? <RotateCcw size={13} /> : <Check size={13} />}{subtask.completed ? "Reopen" : "Mark done"}</button><button role="menuitem" className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => { setTaskEdit(subtask); setTaskEditTitle(subtask.title || ""); setTaskEditDescription(subtask.description || ""); setSubtaskMenuId(null); }}><Pencil size={13} /> Edit</button><label className="grid gap-1 border-t px-2 py-1.5 text-[10px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>Move to parent<select aria-label={`Move ${subtask.title}`} value="" onChange={(event) => event.target.value && changeTask.mutate({ task: subtask, body: { parent_task_id: event.target.value } })}><option value="">Choose…</option>{tasks.filter((target) => target.id !== task.id && !target.completed).map((target) => <option key={target.id} value={target.provider_task_id || target.id}>{target.title}</option>)}</select></label><button role="menuitem" className="flex items-center gap-2 px-2 py-1.5 text-left text-[var(--status-warn)]" onClick={() => changeTask.mutate({ task: subtask, method: "DELETE" })}><Archive size={13} /> Archive</button></div> : null}</div>; }) : <p className="py-2 text-[11px] text-[var(--text-tertiary)]">No subtasks.</p>}</div> : null}
+              </article>;
+            }) : <p className="p-4 text-[12px] text-[var(--text-tertiary)]">No tasks are attributed to today.</p>}
           </section>
         </div>
 
@@ -497,6 +572,13 @@ export default function EmployeeWorkOsHome() {
             </div>
           </section>
 
+          <section className="border p-4" style={{ borderColor: insights.data?.freshness.stale ? "var(--status-warn)" : "var(--border)", background: "var(--bg-card)" }}>
+            <div className="flex items-start justify-between gap-3"><div><h2 className="flex items-center gap-2 text-sm font-semibold"><FileCheck2 size={16} style={{ color: "var(--accent)" }} /> Insights</h2><p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Shared daily-workspace record · no productivity score</p></div><select aria-label="Insights range" value={insightRange} onChange={(event) => setInsightRange(event.target.value as typeof insightRange)} className="border bg-transparent px-2 py-1 text-[10px]" style={{ borderColor: "var(--border)" }}><option value="day">Day</option><option value="7d">7 days</option><option value="30d">30 days</option></select></div>
+            {insights.data?.freshness.stale ? <p className="mt-3 border px-2 py-1.5 text-[10px] text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Retained data is stale{insights.data.freshness.staleAt ? ` since ${new Date(insights.data.freshness.staleAt).toLocaleString()}` : ""}. {insights.data.freshness.error || "Refresh is pending."}</p> : null}
+            <p className="mt-3 text-[12px] leading-5 text-[var(--text-secondary)]">{insights.isLoading ? "Loading insights…" : insights.data?.brief.summary || "No insight record is available."}</p>
+            <div className="mt-3 grid gap-2">{insights.data?.days.slice(-7).reverse().map((item) => <article key={item.date} className="border p-2 text-[10px]" style={{ borderColor: "var(--border)" }}><button className="font-semibold text-[var(--accent)]" onClick={() => setSelectedTaskDate(item.date)}>{item.date}</button><p className="mt-1 text-[var(--text-secondary)]">{item.completed} completed · {item.progressed} progressed · {item.deferred} deferred · {item.carried} carried · {item.unplanned} unplanned</p>{item.goal.text ? <p className="mt-1">Goal: {item.goal.text}</p> : null}{item.sessionQuality.message ? <p className="mt-1 text-[var(--status-warn)]">{item.sessionQuality.message}</p> : null}<div className="mt-1 flex flex-wrap gap-2">{item.references.slice(0, 3).map((reference) => <a key={reference.id} href={reference.target} className="text-[var(--accent)]">{reference.label}</a>)}</div></article>)}</div>
+          </section>
+
           <section className="border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
             <h2 className="flex items-center gap-2 text-sm font-semibold"><Clock3 size={16} style={{ color: "var(--accent)" }} /> Next check-in</h2>
             <p className="mt-3 text-lg font-semibold text-[var(--text-primary)]">{formatTime(day.data?.prompt.nextPromptAt, timezone)}</p>
@@ -504,6 +586,10 @@ export default function EmployeeWorkOsHome() {
           </section>
         </aside>
       </main>
+
+      {taskEdit ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-lg border p-4 shadow-xl" role="dialog" aria-modal="true" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Edit Nifty task</h2><button aria-label="Close" onClick={() => setTaskEdit(null)}><X size={16} /></button></div><label className="mt-4 block text-[11px] text-[var(--text-secondary)]">Title<input autoFocus value={taskEditTitle} onChange={(event) => setTaskEditTitle(event.target.value)} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><label className="mt-3 block text-[11px] text-[var(--text-secondary)]">Description<textarea value={taskEditDescription} onChange={(event) => setTaskEditDescription(event.target.value)} rows={5} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><div className="mt-4 flex justify-end gap-2"><button onClick={() => setTaskEdit(null)} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={!taskEditTitle.trim() || changeTask.isPending} onClick={() => changeTask.mutate({ task: taskEdit, body: { name: taskEditTitle.trim(), description: taskEditDescription } })} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Save changes</button></div></section></div> : null}
+      {taskCreateOpen ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-lg border p-4 shadow-xl" role="dialog" aria-modal="true" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Create Nifty task</h2><button aria-label="Close" onClick={() => setTaskCreateOpen(false)}><X size={16} /></button></div><label className="mt-4 block text-[11px] text-[var(--text-secondary)]">Title<input autoFocus value={taskCreateTitle} onChange={(event) => setTaskCreateTitle(event.target.value)} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><label className="mt-3 block text-[11px] text-[var(--text-secondary)]">Description<textarea value={taskCreateDescription} onChange={(event) => setTaskCreateDescription(event.target.value)} rows={5} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><div className="mt-4 flex justify-end gap-2"><button onClick={() => setTaskCreateOpen(false)} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={!taskCreateTitle.trim() || createTask.isPending} onClick={() => createTask.mutate()} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Create task</button></div></section></div> : null}
+      {clockConfirmKind ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-md border p-4 shadow-xl" role="alertdialog" aria-modal="true" style={{ borderColor: "var(--status-warn)", background: "var(--bg-card)" }}><h2 className="text-sm font-semibold">{clockConfirmKind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">{clockConfirmKind === "late" ? "This start is after the scheduled time. Your acknowledgement will be audited." : "No shift is startable now. Explain why you are starting an exception workday."}</p>{clockConfirmKind === "exception" ? <textarea autoFocus value={clockExceptionReason ?? ""} onChange={(event) => setClockExceptionReason(event.target.value)} rows={3} className="mt-3 w-full border bg-transparent px-3 py-2 text-[12px]" style={{ borderColor: "var(--border)" }} placeholder="Exception reason" /> : null}<div className="mt-4 flex justify-end gap-2"><button onClick={() => { setClockConfirmKind(null); setClockExceptionReason(null); }} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={sessionAction.isPending || (clockConfirmKind === "exception" && !clockExceptionReason?.trim())} onClick={() => { sessionAction.mutate({ method: "POST", body: clockConfirmKind === "late" ? { source: "web", late_acknowledged: true } : { source: "web", exception_acknowledged: true, exception_reason: clockExceptionReason?.trim() } }); setClockConfirmKind(null); setClockExceptionReason(null); }} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Confirm clock-in</button></div></section></div> : null}
 
       {error ? (
         <div className="fixed bottom-5 right-5 flex max-w-md items-start gap-2 border px-4 py-3 text-[12px] text-[var(--status-err)] shadow-lg" style={{ borderColor: "var(--status-err)", background: "var(--bg-card)" }}>

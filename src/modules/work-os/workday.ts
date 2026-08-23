@@ -27,7 +27,7 @@ export interface SessionShape {
 export interface PromptContext {
   session: SessionShape | null;
   breaks: Array<{ startsAt: string; endsAt: string }>;
-  hasConfirmedPlan: boolean;
+  hasConfirmedPlan?: boolean;
   planConfirmedAt?: string | null;
   firstFollowUpAt?: string | null;
   nextFallbackAt?: string | null;
@@ -59,10 +59,6 @@ export const EOD_LEAD_TIME_MS = 10 * 60_000;
 
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "session" | "at">) {
   if (context.firstFollowUpAt) return context.firstFollowUpAt;
-  if (context.planConfirmedAt) {
-    const planConfirmedAt = Date.parse(context.planConfirmedAt);
-    if (Number.isFinite(planConfirmedAt)) return new Date(planConfirmedAt + FIRST_FOLLOW_UP_DELAY_MS).toISOString();
-  }
   const baseline = context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
@@ -107,14 +103,12 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
   if (session.snoozedUntil && Date.parse(session.snoozedUntil) > now) {
     return { kind: null, nextPromptAt: session.snoozedUntil, required: false, reason: "Check-in snoozed." };
   }
-  if (!context.hasConfirmedPlan) return { kind: "plan", nextPromptAt: context.at, required: true, reason: "Confirm what you are taking on today." };
-
   const firstAt = Date.parse(firstFollowUpAt(context));
   if (!Number.isFinite(firstAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
   if (context.lastPromptKind !== "follow_up" && context.lastPromptKind !== "hourly_fallback") {
     return now >= firstAt
-      ? { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up is due after the plan has had time to start." }
-      : { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up follows the confirmed plan." };
+      ? { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up is due after the workday has had time to start." }
+      : { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up follows clock-in." };
   }
 
   const lastPromptAt = context.lastPromptAt ? Date.parse(context.lastPromptAt) : null;

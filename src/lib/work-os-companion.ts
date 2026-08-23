@@ -5,7 +5,6 @@ import {
   archiveTask,
   completeTask,
   createEvidence,
-  createEodReport,
   createTask,
   getTaskByLocalOrProviderId,
   isNiftyTaskAttributableToMember,
@@ -36,6 +35,8 @@ import {
 } from "@/modules/work-os/companion";
 import { activeSession, getWorkday, saveDailyPlan } from "@/lib/work-os-workday";
 import { observeWorktivityAttendance } from "@/lib/work-os-attendance";
+import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
+import { recordTaskDayEvent, resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 
 type Json = Record<string, unknown>;
 type ProposalOperation =
@@ -184,6 +185,33 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
   return { task: moved, providerStatus: "nifty_confirmed" };
 }
 
+export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: string, body: Json) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const name = text(body.name);
+  const description = typeof body.description === "string" ? body.description.trim() : undefined;
+  if (!name) throw new Error("Task title is required");
+  if (name.length > 240) throw new Error("Task title must be 240 characters or fewer");
+  if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
+  const updated = await updateTask(ownerId, task.provider_task_id as string, { name, ...(description !== undefined ? { description } : {}) });
+  await audit(access, "task.updated", "nifty_task", task.provider_task_id as string, { fields: description === undefined ? ["name"] : ["name", "description"] });
+  return { task: updated, providerStatus: "nifty_confirmed" };
+}
+
+export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const updated = await completeTask(ownerId, task.provider_task_id as string, completed);
+  const exactAt = completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at) ?? new Date().toISOString();
+  await recordTaskDayEvent(access, updated as Json, completed ? "completed" : "reopened", {
+    idempotencyKey: `employee:${completed ? "completed" : "reopened"}:${task.provider_task_id}:${exactAt}`,
+    exactAt,
+    provenance: "employee_explicit",
+  });
+  await audit(access, completed ? "task.completed" : "task.reopened", "nifty_task", task.provider_task_id as string, {
+    source: "employee_explicit",
+  });
+  return { task: updated, providerStatus: "nifty_confirmed" };
+}
+
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
@@ -234,6 +262,13 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
     task_group_id: text(parent?.task_group_id) ?? defaultTaskGroupId,
     task_id: text(parent?.provider_task_id) ?? undefined,
     assignees,
+  });
+  const taskRecord = task as Json;
+  const createdAt = text(taskRecord.provider_created_at) ?? text(taskRecord.created_at) ?? new Date().toISOString();
+  await recordTaskDayEvent(access, taskRecord, "creation_observed", {
+    idempotencyKey: `nifty:created:${taskRecord.provider_task_id ?? taskRecord.id}:${createdAt}`,
+    exactAt: createdAt,
+    provenance: "provider_observed",
   });
   await audit(access, parent ? "task.subtask_created" : "task.created", "nifty_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
     parentProviderTaskId: text(parent?.provider_task_id),
@@ -295,6 +330,10 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
   const effectiveFrom = body.effective_from ? validateWorkOsDate(body.effective_from, "effective_from") : new Date().toISOString().slice(0, 10);
   const effectiveTo = body.effective_to ? validateWorkOsDate(body.effective_to, "effective_to") : null;
   validateWorkOsDateRange(effectiveFrom, effectiveTo);
+  const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
+  if (authoritativeBreaks && Array.isArray(body.break_windows) && body.break_windows.length) {
+    throw new Error("Scheduled break windows are disabled because Worktivity is the break source for this organization.");
+  }
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
@@ -302,7 +341,7 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
     days_of_week: days,
     shift_start: shiftStart,
     shift_end: shiftEnd,
-    break_windows: validateWorkOsBreakWindows(body.break_windows, shiftStart, shiftEnd),
+    break_windows: authoritativeBreaks ? [] : validateWorkOsBreakWindows(body.break_windows, shiftStart, shiftEnd),
     effective_from: effectiveFrom,
     effective_to: effectiveTo,
     active: body.active !== false,
@@ -329,6 +368,10 @@ export async function saveWorkOsScheduleException(access: WorkOsAccess, body: Js
   const shiftEnd = body.shift_end ? validateWorkOsTime(body.shift_end, "shift_end") : null;
   if (!!shiftStart !== !!shiftEnd) throw new Error("shift_start and shift_end must be provided together");
   if (shiftStart === shiftEnd && shiftStart) throw new Error("shift_start and shift_end must be different");
+  const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
+  if (authoritativeBreaks && Array.isArray(body.break_windows) && body.break_windows.length) {
+    throw new Error("Scheduled breaks are disabled: Worktivity OnBreak is the organization break source.");
+  }
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
@@ -336,7 +379,7 @@ export async function saveWorkOsScheduleException(access: WorkOsAccess, body: Js
     kind,
     shift_start: shiftStart,
     shift_end: shiftEnd,
-    break_windows: validateWorkOsBreakWindows(body.break_windows, shiftStart ?? undefined, shiftEnd ?? undefined),
+    break_windows: authoritativeBreaks ? [] : validateWorkOsBreakWindows(body.break_windows, shiftStart ?? undefined, shiftEnd ?? undefined),
     note: text(body.note),
     created_by: access.ctx.user.id,
     updated_at: new Date().toISOString(),
@@ -414,7 +457,7 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
   };
   const [tasks, taskHistory, evidence] = await Promise.all([
     listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate }),
-    listPersonTasks(ownerId, personId, { fromDate: addDays(shiftDate, -1), toDate: addDays(shiftDate, 1), includeCompleted: true, limit: 100 }),
+    listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
     listEvidence(ownerId, { personId, date: shiftDate }),
   ]);
   const { data: proposals, error: proposalError } = await db()
@@ -436,6 +479,7 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
     .maybeSingle();
   if (reportError) throw new Error(`load current EOD report: ${reportError.message}`);
   const workday = await getWorkday(access, at);
+  const workspace = await resolveDailyWorkspace(access, shiftDate, { limit: 100, now: at });
   const taskRows = tasks ?? [];
   const historyRows = taskHistory ?? [];
   const evidenceRows = evidence ?? [];
@@ -446,7 +490,7 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
     completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
-  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, signals, tasks: taskRows, taskHistory: taskHistory ?? [], evidence: evidenceRows, proposals: proposals ?? [], report };
+  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
 }
 
 interface ParsedProposal {
@@ -1004,8 +1048,85 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
 }
 
-export async function draftWorkOsEod(access: WorkOsAccess, personId: string, body: Json) {
+async function createDailyWorkspaceEod(access: WorkOsAccess, personId: string, body: Json) {
+  const reportDate = dateOnly(body.date) ?? new Date().toISOString().slice(0, 10);
   const ownerId = await organizationOwnerId(access.organizationId);
+  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult] = await Promise.all([
+    resolveDailyWorkspace(access, reportDate, { limit: 100 }),
+    db().from("work_people").select("display_name,role_profile:work_role_profiles(name)")
+      .eq("organization_id", access.organizationId).eq("id", personId).single(),
+    listEvidence(ownerId, { personId, date: reportDate }),
+    db().from("work_check_ins").select("id,input_text,update_kind,substantive").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).eq("shift_date", reportDate).eq("substantive", true),
+    db().from("work_task_day_events").select("id,event_type,task_snapshot").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).eq("local_date", reportDate),
+  ]);
+  if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
+  if (checkInsResult.error) throw new Error(`load EOD updates: ${checkInsResult.error.message}`);
+  if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
+  const evidence = (evidenceRows ?? []) as Json[];
+  const updates = (checkInsResult.data ?? []) as Json[];
+  const events = (eventsResult.data ?? []) as Json[];
+  const completed = workspace.tasks.filter((task) => task.completed);
+  const progressed = updates.filter((item) => ["continuing", "material_progress"].includes(String(item.update_kind)));
+  const deferred = events.filter((item) => item.event_type === "deferred");
+  const carried = workspace.carryOverGroups.flatMap((group) => group.tasks);
+  const unplanned = workspace.tasks.filter((task) => task.dayAttribution.reason === "creation_observed" && !task.due_date);
+  const outputEvidence = evidence.filter((item) => item.source !== "worktivity");
+  const activityEvidence = evidence.filter((item) => item.source === "worktivity");
+  const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
+  const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
+  const title = `EOD Report: ${personResult.data.display_name} - ${reportDate}`;
+  const lineItems = (items: Json[], empty: string) => items.length ? items.map((item) => `- ${item.title ?? (item.task_snapshot as Json | undefined)?.title ?? item.input_text}`) : [`- ${empty}`];
+  const markdown = [
+    `# ${title}`,
+    "",
+    `Role profile: ${roleName ?? "Unmapped"}`,
+    `Goal: ${workspace.goal.text ?? "No goal was recorded."}`,
+    `Goal provenance: ${workspace.goal.provenance ?? "none"}`,
+    workspace.sessionQuality.status === "needs_correction" ? `Session quality: ${workspace.sessionQuality.message}` : "Session quality: valid or not applicable",
+    "",
+    "## Completed Work",
+    ...lineItems(completed, "No completed Nifty tasks were attributed to this date."),
+    "",
+    "## Progressed Work",
+    ...lineItems(progressed, "No substantive progress updates were recorded."),
+    "",
+    "## Deferred Work",
+    ...lineItems(deferred, "No work was explicitly deferred."),
+    "",
+    "## Carried Work",
+    ...lineItems(carried, "No overdue carry-over remained."),
+    "",
+    "## Unplanned Work",
+    ...lineItems(unplanned, "No unplanned task creation was observed."),
+    "",
+    "## Output Evidence",
+    ...lineItems(outputEvidence, "No output evidence was recorded."),
+    "",
+    "## Activity Context",
+    ...lineItems(activityEvidence, "No Worktivity activity context was recorded."),
+    "",
+    "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
+  ].join("\n");
+  const { data, error } = await db().from("work_reports").insert({
+    user_id: ownerId,
+    organization_id: access.organizationId,
+    person_id: personId,
+    report_date: reportDate,
+    kind: "eod",
+    status: "draft",
+    title,
+    markdown,
+    metrics: { completed: completed.length, progressed: progressed.length, deferred: deferred.length, carried: carried.length, unplanned: unplanned.length },
+    missing_evidence: [],
+    draft_idempotency_key: text(body.draft_idempotency_key),
+  }).select("*").single();
+  if (error) throw new Error(`create daily workspace EOD: ${error.message}`);
+  return data as Json;
+}
+
+export async function draftWorkOsEod(access: WorkOsAccess, personId: string, body: Json) {
   const draftKey = text(body.draft_idempotency_key);
   if (draftKey) {
     const { data: existing, error: existingError } = await db().from("work_reports").select("*")
@@ -1018,7 +1139,7 @@ export async function draftWorkOsEod(access: WorkOsAccess, personId: string, bod
   }
   let report: Json;
   try {
-    report = await createEodReport(ownerId, { ...body, person_id: personId }) as Json;
+    report = await createDailyWorkspaceEod(access, personId, body);
   } catch (error) {
     if (!draftKey) throw error;
     const { data: reconciled } = await db().from("work_reports").select("*")

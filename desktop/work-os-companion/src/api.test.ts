@@ -45,7 +45,7 @@ describe("offline action replay", () => {
     Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
     const onlineFetch = vi.fn(async (..._args: [RequestInfo | URL, RequestInit?]) => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", onlineFetch);
-    expect(await flushQueue()).toEqual({ sent: 1, remaining: 0 });
+    expect(await flushQueue()).toEqual({ sent: 1, remaining: 0, needsAttention: 0 });
     expect(mockState.queue).toEqual([]);
     expect(onlineFetch).toHaveBeenCalledTimes(2);
     expect(String(onlineFetch.mock.calls[1][0])).toContain("/api/work-os/me/workday");
@@ -87,5 +87,32 @@ describe("offline action replay", () => {
 
     await expect(apiRequest("/api/work-os/me/plan", { method: "PATCH", body: "{}" })).rejects.toThrow("Clock in before confirming a plan.");
     expect(mockState.queue).toEqual([]);
+  });
+
+  it("moves a permanently rejected replay to Needs Attention", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    mockState.queue = [{
+      id: "action-permanent", path: "/api/work-os/me/onboarding", method: "PUT", body: {},
+      createdAt: new Date().toISOString(), attempts: 1, status: "pending",
+    }];
+    const onlineFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Revision conflict" }), { status: 409, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", onlineFetch);
+
+    expect(await flushQueue()).toEqual({ sent: 0, remaining: 1, needsAttention: 1 });
+    expect(mockState.queue[0]).toMatchObject({ status: "needs_attention", failureKind: "conflict", statusCode: 409, attempts: 2 });
+  });
+
+  it("stops retrying after the configured ceiling", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    mockState.queue = [{
+      id: "action-exhausted", path: "/api/work-os/me/plan", method: "PUT", body: {},
+      createdAt: new Date().toISOString(), attempts: 5, status: "pending",
+    }];
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+
+    expect(await flushQueue()).toEqual({ sent: 0, remaining: 1, needsAttention: 1 });
+    expect(mockState.queue[0]).toMatchObject({ status: "needs_attention", failureKind: "retry_exhausted", attempts: 6 });
   });
 });

@@ -21,6 +21,9 @@ const migrations = [
   "supabase/migrations/0017_work_os_phase1_closure.sql",
   "supabase/migrations/0018_work_os_nifty_history.sql",
   "supabase/migrations/0019_work_os_plans_insights.sql",
+  "supabase/migrations/0020_work_os_unified_tasks_workspace.sql",
+  "supabase/migrations/0021_work_os_onboarding_telemetry_hardening.sql",
+  "supabase/migrations/0022_work_os_phase1_reliability.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -94,6 +97,20 @@ test("Work OS companion migration is complete and idempotent", async () => {
     where table_schema='public' and table_name='work_daily_plans' and column_name='session_id'
   `);
   assert.equal(planSession.rows[0].is_nullable, "YES");
+  const goalColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_daily_plans'
+      and column_name = any($1)
+  `, [["goal_provenance", "suggestion_task_ids"]]);
+  assert.equal(goalColumns.rows.length, 2);
+  const hardeningColumns = await db.query(`
+    select table_name, column_name from information_schema.columns
+    where table_schema='public' and (table_name='work_employee_onboarding' and column_name = any($1)
+      or table_name='work_sessions' and column_name = any($2))
+  `, [["draft_revision", "draft_client_mutation_key"], ["provider_break_seconds", "provider_break_observed_at", "provider_break_provenance"]]);
+  assert.equal(hardeningColumns.rows.length, 5);
+  const onboardingRpc = await db.query(`select proname from pg_proc where proname='work_submit_employee_onboarding'`);
+  assert.equal(onboardingRpc.rows.length, 1);
 
   const users = await db.query(`
     insert into auth.users(email) values ('owner-a@test.invalid'),('employee-a@test.invalid'),('employee-b@test.invalid') returning id,email

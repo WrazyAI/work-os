@@ -7,6 +7,7 @@ const {
   decryptScreenshot,
   isExcludedScreenshot,
   isRetainedScreenshotAvailable,
+  allowsScreenshotExecution,
 } = await import("../src/lib/work-os-screenshots");
 
 const source = Buffer.from("private screenshot bytes");
@@ -29,5 +30,12 @@ assert.equal(canAccessRawScreenshot({ ownScreenshot: false, reviewable: false })
 assert.equal(isRetainedScreenshotAvailable({ storage_path: "org/person/image.enc", expires_at: "2026-08-12T00:00:00.000Z" }, Date.parse("2026-08-11T00:00:00.000Z")), true);
 assert.equal(isRetainedScreenshotAvailable({ storage_path: "org/person/image.enc", expires_at: "2026-08-10T00:00:00.000Z" }, Date.parse("2026-08-11T00:00:00.000Z")), false);
 assert.equal(isRetainedScreenshotAvailable({ storage_path: "org/person/image.enc", deleted_at: "2026-08-10T00:00:00.000Z", expires_at: "2026-08-12T00:00:00.000Z" }, Date.parse("2026-08-11T00:00:00.000Z")), false);
+
+// The normal worker reads the actual organization feature flag. A one-image
+// server-only readiness smoke is the sole pre-activation execution path.
+assert.equal(allowsScreenshotExecution(true, "feature"), true);
+assert.equal(allowsScreenshotExecution(false, "feature"), false);
+assert.equal(allowsScreenshotExecution(false, "readiness_smoke"), true);
+assert.equal(allowsScreenshotExecution(true, "readiness_smoke"), false);
 
 console.log("Work OS screenshot encryption tests passed.");

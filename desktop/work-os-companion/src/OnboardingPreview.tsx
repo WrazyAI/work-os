@@ -31,6 +31,7 @@ const PREVIEW_DATA: OnboardingData = {
     timezoneProvided: false,
     scheduleProvided: false,
     notificationsConfigured: false,
+    screenshotConsentProvided: false,
     privacyAcknowledged: false,
   },
   managerRequirements: {
@@ -48,7 +49,9 @@ const PREVIEW_DATA: OnboardingData = {
   employeeComplete: false,
   status: "not_started",
   submittedAt: null,
-  draft: { step: "seen", updatedAt: null },
+  draft: { step: "seen", updatedAt: null, revision: 1 },
+  breakPolicy: { worktivityAuthoritative: true },
+  screenshotPolicy: { retention: "30 day encrypted retention", limitation: "Not a productivity signal", sensitiveCapture: "Sensitive captures are deleted" },
   catalog: { version: "preview", archetypes: [{ id: "engineering", name: "Engineering", description: "Build reliable software.", keywords: [], specialties: [{ id: "engineering:frontend", name: "Frontend" }], items: [{ id: "engineering:responsibility:product-engineering", kind: "responsibility", label: "Product engineering", source: "suggested" }] }, { id: "custom", name: "Something else", description: "Describe your work.", keywords: [], specialties: [], items: [] }] },
 };
 
