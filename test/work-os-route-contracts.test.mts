@@ -67,6 +67,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(onboardingService, /Consent can only be recorded during final onboarding submission/);
   assert.match(onboardingService, /work_submit_employee_onboarding/);
   assert.match(onboardingService, /work_consent_records/);
+  assert.match(onboardingService, /timezone: String\(schedule\.timezone \?\? "UTC"\)/);
   assert.match(onboardingService, /reacceptance requires the Safe-phase final submission/);
   assert.doesNotMatch(onboardingService, /accept_screenshot_analysis/);
 });

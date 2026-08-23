@@ -85,6 +85,7 @@ function currentScheduleShape(schedule: Json | null) {
   if (!schedule) return null;
   const breaks = Array.isArray(schedule.break_windows) ? schedule.break_windows : [];
   return {
+    timezone: String(schedule.timezone ?? "UTC"),
     daysOfWeek: Array.isArray(schedule.days_of_week) ? schedule.days_of_week : [1, 2, 3, 4, 5],
     shiftStart: String(schedule.shift_start ?? "").slice(0, 5),
     shiftEnd: String(schedule.shift_end ?? "").slice(0, 5),
