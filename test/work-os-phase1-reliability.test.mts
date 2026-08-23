@@ -29,6 +29,11 @@ test("past unclosed sessions contribute no duration", () => {
   assert.equal(reliableElapsedSeconds({ shift_date: "2026-08-21", clocked_in_at: "2026-08-21T09:00:00Z", clocked_out_at: null, correction_status: "needs_correction" }, now, "2026-08-23", false), 0);
 });
 
+test("correction-required sessions cannot become the active daily workspace", async () => {
+  const source = await readFile(new URL("../src/lib/work-os-workday.ts", import.meta.url), "utf8");
+  assert.match(source, /\.in\("state", \["clocked_in", "active", "paused", "eod_due"\]\)[\s\S]*?\.neq\("correction_status", "needs_correction"\)\.maybeSingle\(\)/);
+});
+
 test("Nifty sync never overwrites a known completion with null", async () => {
   const source = await readFile(new URL("../src/lib/work-os.ts", import.meta.url), "utf8");
   assert.match(source, /\.\.\.\(task\.completedAt \? \{ completed_at: task\.completedAt \} : \{\}\)/);
