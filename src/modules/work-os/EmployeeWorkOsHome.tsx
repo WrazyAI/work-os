@@ -143,10 +143,11 @@ export default function EmployeeWorkOsHome() {
     queryFn: () => fetchJson(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(selectedTaskDate)}&limit=100`),
     enabled: !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate,
   });
+  const insightsThrough = selectedTaskDate || day.data?.shiftDate;
   const insights = useQuery<InsightsResponse>({
-    queryKey: ["work-os", "employee-insights", insightRange, day.data?.shiftDate],
-    queryFn: () => fetchJson(`/api/work-os/me/insights?range=${insightRange}&through=${encodeURIComponent(day.data?.shiftDate ?? "")}`),
-    enabled: !!day.data?.shiftDate,
+    queryKey: ["work-os", "employee-insights", insightRange, insightsThrough],
+    queryFn: () => fetchJson(`/api/work-os/me/insights?range=${insightRange}&through=${encodeURIComponent(insightsThrough ?? "")}`),
+    enabled: !!insightsThrough,
     staleTime: 60_000,
   });
 
