@@ -123,3 +123,10 @@ test("web onboarding reads back authoritative organization context", async () =>
   assert.match(employeeHome, /Official role/);
   assert.match(employeeHome, /Official schedule/);
 });
+
+test("web Insights follows the selected historical workspace date", async () => {
+  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  assert.match(employeeHome, /const insightsThrough = selectedTaskDate \|\| day\.data\?\.shiftDate/);
+  assert.match(employeeHome, /employee-insights", insightRange, insightsThrough/);
+  assert.match(employeeHome, /through=\$\{encodeURIComponent\(insightsThrough \?\? ""\)\}/);
+});
