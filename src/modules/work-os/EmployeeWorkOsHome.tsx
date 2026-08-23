@@ -320,6 +320,11 @@ export default function EmployeeWorkOsHome() {
   const shiftStartsAt = day.data?.shift ? Date.parse(day.data.shift.startsAt) : Number.NaN;
   const shiftEndsAt = day.data?.shift ? Date.parse(day.data.shift.endsAt) : Number.NaN;
   const shiftStartable = Number.isFinite(shiftStartsAt) && Date.now() >= shiftStartsAt - 30 * 60_000 && Date.now() < shiftEndsAt;
+  const organizationSetup = onboarding.data?.organizationSetup;
+  const officialSchedule = organizationSetup?.officialSchedule;
+  const officialScheduleLabel = officialSchedule
+    ? `${officialSchedule.shiftStart}–${officialSchedule.shiftEnd} · ${officialSchedule.timezone}`
+    : "Pending manager setup";
   const beginClockIn = () => {
     if (!shiftStartable) { setClockExceptionReason(""); setClockConfirmKind("exception"); return; }
     if (Date.now() > shiftStartsAt + 15 * 60_000) { setClockExceptionReason(""); setClockConfirmKind("late"); return; }
@@ -373,6 +378,12 @@ export default function EmployeeWorkOsHome() {
               <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>
                 {onboarding.data?.onboardingRequired ? "Action required" : "Configured"}
               </span>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="border px-3 py-2" style={{ borderColor: "var(--border)" }}><span className="block text-[9px] font-semibold uppercase text-[var(--text-tertiary)]">Official role</span><strong className="mt-1 block text-[12px] font-medium">{organizationSetup?.roleProfile?.name || "Pending manager setup"}</strong></div>
+              <div className="border px-3 py-2" style={{ borderColor: "var(--border)" }}><span className="block text-[9px] font-semibold uppercase text-[var(--text-tertiary)]">Team</span><strong className="mt-1 block text-[12px] font-medium">{organizationSetup?.teams?.map((team: AnyRow) => team.name).filter(Boolean).join(", ") || "Pending manager setup"}</strong></div>
+              <div className="border px-3 py-2" style={{ borderColor: "var(--border)" }}><span className="block text-[9px] font-semibold uppercase text-[var(--text-tertiary)]">Manager</span><strong className="mt-1 block text-[12px] font-medium">{organizationSetup?.managers?.map((manager: AnyRow) => manager.display_name).filter(Boolean).join(", ") || "Pending manager setup"}</strong></div>
+              <div className="border px-3 py-2" style={{ borderColor: "var(--border)" }}><span className="block text-[9px] font-semibold uppercase text-[var(--text-tertiary)]">Official schedule</span><strong className="mt-1 block text-[12px] font-medium">{officialScheduleLabel}</strong></div>
             </div>
             {onboarding.data?.onboardingRequired ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

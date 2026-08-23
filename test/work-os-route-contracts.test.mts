@@ -113,3 +113,13 @@ test("mapped administrators default to their unified employee workspace", async 
   assert.match(workOsHome, /router\.push\("\/work-os\?surface=admin"\)/);
   assert.match(workOsHome, /router\.push\("\/work-os"\)/);
 });
+
+test("web onboarding reads back authoritative organization context", async () => {
+  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  assert.match(employeeHome, /organizationSetup\?\.roleProfile\?\.name/);
+  assert.match(employeeHome, /organizationSetup\?\.teams\?\.map/);
+  assert.match(employeeHome, /organizationSetup\?\.managers\?\.map/);
+  assert.match(employeeHome, /organizationSetup\?\.officialSchedule/);
+  assert.match(employeeHome, /Official role/);
+  assert.match(employeeHome, /Official schedule/);
+});
