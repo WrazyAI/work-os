@@ -101,6 +101,7 @@ export default function App() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [clockInConfirmation, setClockInConfirmation] = useState<ClockInConfirmation | null>(null);
+  const [clockOutConfirmation, setClockOutConfirmation] = useState(false);
   const [missedClockOut, setMissedClockOut] = useState<MissedClockOutCorrection | null>(null);
   const [missedClockOutAt, setMissedClockOutAt] = useState("");
   const [missedClockOutReason, setMissedClockOutReason] = useState("");
@@ -308,6 +309,7 @@ export default function App() {
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
     : unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? ""), [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
   const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow);
+  const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
 
   function editPlan(mutator: () => void) {
     planEditVersion.current += 1;
@@ -500,6 +502,14 @@ export default function App() {
       : { source: "desktop", exception_acknowledged: true, exception_reason: confirmation.reason.trim() }));
   }
 
+  function confirmClockOut() {
+    setClockOutConfirmation(false);
+    void act("shift.clock_out", () => sendOrQueue("/api/work-os/me/workday", "PATCH", {
+      action: "clock_out",
+      ...(extendedClockOut ? { extended_acknowledged: true } : {}),
+    }));
+  }
+
   function correctMissedClockOut() {
     if (!missedClockOut || !missedClockOutAt) return;
     const timestamp = new Date(missedClockOutAt);
@@ -540,7 +550,7 @@ export default function App() {
       {view === "day" && <main className="day-grid">
         <section className="hero-card">
           <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : "Ready when you are"}</span><h2>{active ? paused ? "Take the pause." : "Make today count." : "Your workday, in focus."}</h2><p>{active ? visibleDay?.prompt.reason : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}. Clock in when you begin.` : "No scheduled shift is active. An explicit clock-in starts an exception session without an inferred EOD time."}</p>
-            <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <>{!visibleDay?.breakPolicy?.worktivityAuthoritative && <button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button>}<button disabled={busy} onClick={() => window.confirm("Clock out and close today’s workspace?") && void act("shift.clock_out", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: "clock_out", extended_acknowledged: true }))}>Clock out</button></>}</div>
+            <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <>{!visibleDay?.breakPolicy?.worktivityAuthoritative && <button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button>}<button disabled={busy} onClick={() => setClockOutConfirmation(true)}>Clock out</button></>}</div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
           </div><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" />
         </section>
@@ -577,6 +587,7 @@ export default function App() {
     {editRequest && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title"><header><div><span>Edit {editRequest.closeParent ? "task" : "subtask"}</span><h2 id="edit-task-title">Update the Nifty record</h2></div><button aria-label="Close editor" disabled={busy} onClick={() => setEditRequest(null)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Title</span><input autoFocus maxLength={240} value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label><span>Description</span><textarea maxLength={20000} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} /></label></div><footer><button disabled={busy} onClick={() => setEditRequest(null)}>Cancel</button><button className="primary" disabled={busy || !editTitle.trim()} onClick={submitTaskEdit}>Save changes</button></footer></section></div>}
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
+    {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
   </div>;
 }
 
