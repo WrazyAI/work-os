@@ -13,7 +13,7 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } fro
 import { schedulePrompt } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { subtaskProgress, suggestDailyGoal, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
+import { parentTasks, subtaskProgress, suggestDailyGoal, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState } from "./vault";
 import companionArt from "./assets/work-os-companion.png";
@@ -26,7 +26,12 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "completed" | "all";
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
-type TaskDetails = { task: Record<string, any>; subtasks: Array<Record<string, any>>; moveTargets: Array<Record<string, any>> };
+type TaskDetails = {
+  task: Record<string, any>;
+  subtasks: Array<Record<string, any>>;
+  moveTargets: Array<Record<string, any>>;
+  subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null };
+};
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean };
 type TaskEditRequest = { task: Record<string, any>; closeParent: boolean };
 type ClockInConfirmation = { kind: "late" | "exception"; reason: string };
@@ -293,13 +298,14 @@ export default function App() {
   const gate = sessionGate(visibleDay);
   const active = gate.active;
   const paused = workSession?.state === "paused";
-  const openTasks = visibleDay?.tasks.filter((task) => !task.completed) ?? [];
+  const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
+  const openTasks = todayParentTasks.filter((task) => !task.completed);
   const completedTodayTasks = visibleDay?.workspaceSummary?.completed ?? visibleDay?.tasks.filter((task) => task.completed).length ?? 0;
   const totalTodayTasks = visibleDay?.workspaceSummary?.total ?? visibleDay?.tasks.length ?? 0;
-  const goalSuggestion = useMemo(() => suggestDailyGoal(visibleDay?.tasks ?? [], visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
+  const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
-    : unfinishedBefore(taskHistory, visibleDay?.shiftDate ?? ""), [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
+    : unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? ""), [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
   const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow);
 
   function editPlan(mutator: () => void) {
@@ -553,7 +559,8 @@ export default function App() {
         <header><div><span>{taskDetails.task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{taskDetails.task.title}</h2></div><button aria-label="Close task details" disabled={busy} onClick={() => setTaskDetails(null)}><X size={18} /></button></header>
         <div className="task-modal-body">{taskDetailsLoading ? <p className="task-loading">Loading task details…</p> : <>
           <section className="task-description"><span>Description</span><p>{taskDetails.task.description || "No description has been added."}</p><div><small>{taskDetails.task.project?.name || "Nifty"}</small>{taskDetails.task.due_date && <small>Due {taskDetails.task.due_date}</small>}<small>{taskDetails.task.completed ? "Complete" : "Open"}</small></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{taskDetails.subtasks.length}</strong></div></header>
+          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{taskDetails.subtasks.length}</strong></div>{taskDetails.subtasks.length > 0 && <CompletionRing compact completed={taskDetails.subtasks.filter((subtask) => subtask.completed === true).length} total={taskDetails.subtasks.length} label="complete" />}</header>
+            {taskDetails.subtaskSync?.error && <div className="subtask-sync-warning" role="status"><AlertTriangle size={14} /><span>Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</span></div>}
             <div className="subtask-list">{taskDetails.subtasks.length ? taskDetails.subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const menuOpen = subtaskMenuId === subtaskId;
@@ -610,15 +617,16 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const surfaced = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => historyById.get(String(item.task_id)) ?? {
     id: item.task_id, title: item.title_snapshot, completed: item.completion_state === "completed", workspace_source: item.source,
   });
-  const current = uniqueTasks([...todayTasks, ...surfaced]);
+  const current = parentTasks(uniqueTasks([...todayTasks, ...surfaced]));
   const surfacedIds = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => String(item.task_id));
-  const datedTasks = tasksForDate([...historicalTasks, ...surfaced], selectedDate, surfacedIds);
-  const displayed = historical
+  const datedTasks = parentTasks(tasksForDate([...historicalTasks, ...surfaced], selectedDate, surfacedIds));
+  const displayedCandidates = historical
     ? datedTasks
     : taskView === "today" ? current
       : taskView === "unfinished" ? taskHistory.filter((task) => task.completed !== true)
         : taskView === "completed" ? taskHistory.filter((task) => task.completed === true)
           : taskHistory;
+  const displayed = parentTasks(uniqueTasks(displayedCandidates));
   const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
   const groups = new Map<string, typeof carryOver>();
   for (const item of carryOver) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { suggestDailyGoal, subtaskProgress, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { parentTasks, suggestDailyGoal, subtaskProgress, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 
 describe("unified Tasks workspace", () => {
   it("suggests a deterministic goal without persisting authorship", () => {
@@ -12,6 +12,14 @@ describe("unified Tasks workspace", () => {
       text: "Focus on completing Repair the pipeline, while progressing Document the release.",
       taskIds: ["due", "created"],
     });
+  });
+
+  it("keeps subtasks nested beneath parent cards", () => {
+    expect(parentTasks([
+      { id: "parent", title: "Parent" },
+      { id: "child-provider", title: "Child", parent_provider_task_id: "parent" },
+      { id: "child-local", title: "Child local", parent_task_id: "local-parent" },
+    ])).toEqual([{ id: "parent", title: "Parent" }]);
   });
 
   it("attributes old work to due date before provider creation date", () => {
