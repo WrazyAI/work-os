@@ -38,3 +38,10 @@ test("Nifty sync never overwrites a known completion with null", async () => {
   const source = await readFile(new URL("../src/lib/work-os.ts", import.meta.url), "utf8");
   assert.match(source, /\.\.\.\(task\.completedAt \? \{ completed_at: task\.completedAt \} : \{\}\)/);
 });
+
+test("Nifty sync records idempotent exact completion and observed reopen events", async () => {
+  const source = await readFile(new URL("../src/lib/work-os.ts", import.meta.url), "utf8");
+  assert.match(source, /mirrorNiftyTaskDayEvents/);
+  assert.match(source, /event_type: "completed", provenance: "nifty_exact"/);
+  assert.match(source, /event_type: "reopened", provenance: "provider_observed"/);
+});

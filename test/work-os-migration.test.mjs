@@ -24,6 +24,7 @@ const migrations = [
   "supabase/migrations/0020_work_os_unified_tasks_workspace.sql",
   "supabase/migrations/0021_work_os_onboarding_telemetry_hardening.sql",
   "supabase/migrations/0022_work_os_phase1_reliability.sql",
+  "supabase/migrations/0023_work_os_task_event_sync_repair.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
