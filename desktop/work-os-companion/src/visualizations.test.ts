@@ -18,6 +18,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("Observed active time");
     expect(app).toContain("Clocked in");
     expect(app).toContain("Clocked out");
+    expect(app).toContain("Last activity");
+    expect(app).toContain("Not observed");
     expect(app).toContain('pulse.schedulePhase === "upcoming" ? "Next shift"');
     expect(app).toContain('pulse.schedulePhase === "upcoming" ? "Starts in"');
     expect(styles).toContain("repeat(auto-fit, minmax(88px, 1fr))");

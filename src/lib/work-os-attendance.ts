@@ -50,6 +50,15 @@ export function deriveWorktivitySessionWindow(logs: Pick<WtActivityLog, "Status"
   return { clockedInAt, clockedOutAt };
 }
 
+/** Last provider sample that represents an observed active session. Status 5
+ * means no attendance and must never extend an earlier session's duration. */
+export function deriveWorktivityLastActivityAt(logs: Pick<WtActivityLog, "Status" | "CreateDate">[], observedAt: string) {
+  const observationAt = Date.parse(observedAt);
+  return logs
+    .filter((log) => [0, 1, 2, 3].includes(log.Status) && Number.isFinite(Date.parse(log.CreateDate)) && Date.parse(log.CreateDate) <= observationAt + 60_000)
+    .sort((left, right) => Date.parse(right.CreateDate) - Date.parse(left.CreateDate))[0]?.CreateDate ?? null;
+}
+
 async function loadActivityHistory(employeeId: string, startDate: string, endDate: string) {
   const first = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page: 1, pageSize: 200 });
   const items = [...(first.Items ?? [])];
@@ -137,10 +146,12 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
       .sort((left, right) => Date.parse(right.CreateDate) - Date.parse(left.CreateDate))[0] ?? null;
     const sessionStartAt = deriveWorktivitySessionStart(activityLogs, observedAt);
     const sessionWindow = deriveWorktivitySessionWindow(activityLogs, observedAt);
+    const activityObservedAt = deriveWorktivityLastActivityAt(activityLogs, observedAt);
     const projection = employee
       ? projectWorktivityAttendanceWithActivity(employee.Statistics, latestActivity, observedAt)
       : unknownAttendance("The mapped employee was not returned by Worktivity.", observedAt);
     if (projection.source === "worktivity") {
+      projection.activityObservedAt = activityObservedAt;
       projection.clockedInAt ??= sessionWindow.clockedInAt;
       if (projection.state === "off_shift") {
         projection.clockedOutAt ??= sessionWindow.clockedOutAt ?? (projection.status === "clock_out" ? latestActivity?.CreateDate ?? null : null);

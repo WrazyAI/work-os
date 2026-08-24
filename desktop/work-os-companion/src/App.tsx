@@ -791,6 +791,8 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
     ? "Stale"
     : observationEnded
       ? "Observed session ended"
+      : attendance?.clockedInAt && attendance?.state === "off_shift"
+        ? "Last activity observed"
       : attendance?.status
         ? sentence(attendance.status)
         : "Unavailable";
@@ -800,6 +802,8 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
       ? "Activity observed"
       : observationEnded
         ? "Observation complete"
+        : attendance?.clockedInAt && attendance?.state === "off_shift"
+          ? "No current activity"
         : "Waiting";
   const observationClass = attendance?.stale
     ? "stale"
@@ -811,7 +815,7 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
   const workOsState = active ? `Active · ${pulse.elapsedLabel}` : "Not clocked in";
   const providerClockOut = attendance?.clockedOutAt
     ? formatTime(attendance.clockedOutAt, timezone)
-    : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : "—";
+    : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : attendance?.clockedInAt ? "Not observed" : "—";
   const scheduleLabel = pulse.schedulePhase === "upcoming" ? "Next shift" : "Scheduled shift";
   const scheduleStatus = pulse.schedulePhase === "upcoming" ? "upcoming" : pulse.schedulePhase === "complete" ? "complete" : "elapsed";
   const middleLabel = pulse.schedulePhase === "upcoming" ? "Starts in" : pulse.schedulePhase === "complete" ? "Shift status" : "Time remaining";
@@ -841,6 +845,7 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
       <div className="pulse-provider-facts">
         <span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span>
         <span><small>Clocked out</small><strong>{providerClockOut}</strong></span>
+        <span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span>
         <span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span>
         <span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span>
         <span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span>
