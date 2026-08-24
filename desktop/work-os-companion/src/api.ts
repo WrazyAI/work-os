@@ -94,6 +94,45 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
 }
 
+type TaskCompletionResponse = {
+  task: { completed?: boolean };
+  providerStatus?: string;
+  reconciled?: boolean;
+};
+
+/**
+ * Applies an idempotent task completion state and reconciles an ambiguous
+ * response against Nifty-backed task detail before surfacing a failure.
+ *
+ * A transport can disappear after Nifty has committed the mutation. Retrying
+ * the write would be misleading and can duplicate downstream events, while
+ * reporting the request as failed contradicts the provider. The detail route
+ * refreshes the single task from Nifty, so a matching readback is definitive.
+ */
+export async function updateTaskCompletion(taskId: string, completed: boolean): Promise<TaskCompletionResponse> {
+  const path = `/api/work-os/me/tasks/${encodeURIComponent(taskId)}`;
+  try {
+    return await apiRequest<TaskCompletionResponse>(path, {
+      method: "PATCH",
+      body: JSON.stringify({ completed }),
+    });
+  } catch (mutationError) {
+    try {
+      const readback = await apiRequest<TaskCompletionResponse>(path);
+      if (readback.task?.completed === completed) {
+        diagnostics.warn("task.completion_reconciled", "Recovered task completion after an ambiguous mutation response", {
+          taskId,
+          completed,
+        });
+        return { ...readback, providerStatus: "nifty_confirmed", reconciled: true };
+      }
+    } catch {
+      // Preserve the mutation failure; it is the actionable error for the user.
+    }
+    throw mutationError;
+  }
+}
+
 export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH", body: Record<string, unknown>) {
   const createdAt = new Date().toISOString();
   const replaySafeBody = { ...body, observed_at: body.observed_at ?? createdAt };
