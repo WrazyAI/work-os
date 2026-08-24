@@ -15,7 +15,9 @@ Before changing code:
 
 ## Objective
 
-Deliver an authoritative, recoverable workday lifecycle covering onboarding, explicit clock-in, plan confirmation, task carry-over, progress updates, and clock-out. Nifty remains the task source of truth. Employee statements produce reviewable proposals and must not silently mutate Nifty.
+Deliver one authoritative, recoverable daily workspace covering onboarding, explicit clock-in, Nifty tasks and subtasks, task-day history, carry-over, progress updates, Insights/EOD, and clock-out. Nifty is the sole task source of truth; Work OS stores a synchronized mirror and an auditable day-attribution ledger. Employee statements produce reviewable proposals and must not silently mutate Nifty.
+
+There is no user-facing Plan product in Phase 1. Tasks drive the workday. A daily goal is optional context stored through the legacy plan-compatible API; it never gates clock-in, prompts, Tasks, Insights, or EOD. Full AI goal inference and role-adaptive hourly orchestration belong to Phase 2.
 
 ## Deliverables
 
@@ -47,17 +49,18 @@ The model must record the scheduled shift, actual clock-in/out timestamps, timez
 
 Schedule time determines when a shift is expected; it must never falsely claim the employee clocked in.
 
-### 3. Clock-in planning flow
+### 3. Task-driven daily workspace
 
-When David clocks in, assemble a My Day plan from:
+Resolve My Day and Tasks from one typed daily-workspace query using:
 
 - Incomplete or overdue Nifty tasks assigned to him.
 - Tasks carried over from the previous workday.
 - Tasks due today.
 - Existing blockers and dependencies.
-- A free-form employee plan for new or changed priorities.
+- Tasks created or completed on the selected employee-local date when provider chronology proves that attribution.
+- An optional accepted daily goal, without requiring duplicate goal entry.
 
-Allow David to select, reorder, defer, or propose removal of items from today's plan without deleting the underlying Nifty task. New work and task changes must enter the existing proposal/review flow. Deduplicate against existing Nifty tasks before proposing creation.
+Today is editable; historical dates are read-only except for opening the underlying Nifty task. Show parent tasks with expandable subtasks, assignee identity tags, circular completion, overdue/carry reasons, and provider freshness. Creating, editing, assigning, completing, reopening, moving, archiving, and permanent deletion must write through to Nifty and confirm provider readback. New work and AI-suggested changes enter the proposal/review flow and are deduplicated against existing Nifty tasks.
 
 ### 4. Progress and blocker capture
 
@@ -77,8 +80,8 @@ Each update must preserve the employee's original statement and create structure
 
 Define and test the server-owned prompt schedule contract:
 
-- One plan prompt at clock-in.
-- A first follow-up after a meaningful interval when a plan exists.
+- Workspace initialization at explicit clock-in; no confirmed-plan prerequisite.
+- A first follow-up after a meaningful interval whether or not an optional goal exists.
 - Optional hourly fallback prompts when there has been no substantive response.
 - Snooze support.
 - Suppression during breaks and the final hour.
@@ -92,7 +95,7 @@ The server must remain authoritative for the next prompt. Desktop notifications 
 Update the desktop UI to clearly show:
 
 - Current clock state and actual session time.
-- Today's agreed plan.
+- Today's Nifty-backed tasks and optional accepted goal.
 - Carry-over and overdue tasks.
 - Current task and blockers.
 - Pending Nifty proposals.
@@ -104,7 +107,7 @@ The UI must work offline using the existing queue and reconcile idempotently whe
 
 ### 7. API, database, and audit contracts
 
-Add additive migrations and typed APIs for sessions and daily plans. Preserve organization/person RLS boundaries. Every state transition and external proposal must be auditable. Do not place service-role credentials in the desktop client.
+Add additive migrations and typed APIs for sessions, the daily workspace, task-day events, optional goal compatibility storage, Insights, and EOD. Preserve organization/person RLS boundaries. Every state transition, task lifecycle event, and external proposal must be auditable and idempotent. Do not place service-role or provider credentials in the desktop client.
 
 Document observed state separately from inferred state. For example, `clocked_in_at` is observed; “actively working” is inferred unless backed by an employee update or approved evidence.
 
@@ -118,7 +121,9 @@ Add or extend tests for:
 - Duplicate active-session prevention.
 - Timezones and overnight shifts.
 - Breaks, leave, changed shifts, and extended sessions.
-- Carry-over task selection and deduplication.
+- Task-day attribution, carry-over, stable cursor pagination, and subtask nesting.
+- Nifty completion timestamp preservation and semantically unique lifecycle events.
+- Nifty-created assignments and subtasks appearing after provider refresh.
 - Prompt suppression in the final hour.
 - Offline update replay.
 - No direct Nifty mutation before employee approval.
@@ -133,12 +138,13 @@ Phase 1 is complete only when all of the following are demonstrated end-to-end f
 1. His role, schedule, team, manager, and privacy preferences are represented and readable from onboarding.
 2. He can explicitly clock in exactly once and recover the session after restarting the app.
 3. My Day shows current and carried-over Nifty tasks with provider freshness.
-4. He can confirm a plan and submit progress/blocker updates offline or online.
+4. He can work without confirming a plan, optionally accept or update a goal, and submit progress/blocker updates offline or online.
 5. Proposed Nifty changes are reviewable and no provider write occurs before approval.
 6. Normal check-ins stop in the final hour and the session transitions to EOD mode.
 7. He can clock out, and a second device or process cannot create a conflicting active session.
 8. Automated tests cover the state machine, access controls, scheduling boundaries, and task proposal safety.
-9. A Windows runtime smoke test confirms the installed app performs the full flow without a terminal window.
+9. An installed Windows build performs the authenticated full flow without a terminal window: onboarding, clock-in/restart recovery, Nifty-created task/subtask/assignee readback, task lifecycle operations, offline replay, Worktivity observation, Insights/EOD, missed-clock-out correction, clock-out, and update from the preceding internal release.
+10. The VPS build input has SHA-256 parity with the merged Agent OS revision, the database migration has production readback, and the unsigned internal release assets and checksums are verified.
 
 Do not report completion from a successful build alone. Include exact runtime evidence, what remains open, and any external dependency.
 
@@ -146,14 +152,15 @@ Do not report completion from a successful build alone. Include exact runtime ev
 
 No additional secret is required to implement and locally test the Phase 1 core. The current `.env.local` already contains Supabase, Nifty, OpenAI, Worktivity, and provider-encryption credentials.
 
-The following non-secret product/configuration inputs are still required:
+The following pilot inputs must be configured and read back before acceptance:
 
 - David's authoritative working days, timezone, shift start/end, and break policy.
 - David's manager/reviewer identity and team assignment.
 - The initial software-engineer responsibility statement and definition-of-done examples.
 - The Nifty projects, milestone/status groups, and member ID that belong in the pilot.
-- A decision on whether clock-in is manual only or may also be suggested by schedule/activity. It must remain explicit unless policy says otherwise.
-- A decision on late clock-in, overtime, missed clock-out, and leave behavior.
+- Clock-in remains explicit. Today's schedule is startable from 30 minutes before its start through shift end; earlier/out-of-window starts require an audited employee acknowledgement.
+- Worktivity never creates or transitions a session. Only explicit `OnBreak` duration is authoritative when the organization policy enables it.
+- Missed clock-out corrections require an exact employee-entered or provider-observed timestamp; unresolved past sessions contribute zero duration.
 - A Windows user session for final native acceptance.
 
-Production signing is not required to complete functional Phase 1 development. If Phase 1 must be distributed as a trusted signed installer, the GitHub/release secret store—not `.env.local`—must provide `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `TAURI_UPDATER_PUBLIC_KEY`, `WINDOWS_CERTIFICATE_BASE64`, and `WINDOWS_CERTIFICATE_PASSWORD`.
+Phase 1 is distributed as an explicitly Authenticode-unsigned internal prerelease. Preserve the installer and SmartScreen warnings. Tauri updater signatures are still mandatory and their private key remains in the GitHub release secret store; GitHub release tokens and private asset URLs must never reach the client.

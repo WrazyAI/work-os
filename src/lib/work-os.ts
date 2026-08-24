@@ -535,6 +535,16 @@ function niftyIdentity(value: unknown) {
   return null;
 }
 
+export function canonicalNiftyEventTimestamp(value: string) {
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) throw new Error("Nifty event timestamp must be a valid instant");
+  return instant.toISOString();
+}
+
+export function niftyTaskEventIdempotencyKey(eventType: "created" | "completed" | "reopened", providerTaskId: string, timestamp: string) {
+  return `nifty:${eventType}:${providerTaskId}:${canonicalNiftyEventTimestamp(timestamp)}`;
+}
+
 async function mirrorNiftyTaskDayEvents(supabase: Db, saved: Json, task: NiftyTaskSummary, assigneePersonIds: string[], wasCompleted: boolean) {
   const organizationId = typeof saved.organization_id === "string" ? saved.organization_id : null;
   if (!organizationId) return;
@@ -556,9 +566,9 @@ async function mirrorNiftyTaskDayEvents(supabase: Db, saved: Json, task: NiftyTa
   const timezone = onboarding?.timezone || "UTC";
   const snapshot = { title: task.name, completed: task.completed, status: task.status, dueDate: dateOnly(task.dueDate) };
   const events: Json[] = [];
-  if (task.createdAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.createdAt), timezone), event_type: "creation_observed", provenance: "provider_observed", exact_at: task.createdAt, observed_at: task.createdAt, task_snapshot: snapshot, metadata: { sourceField: "provider_created_at" }, idempotency_key: `nifty:created:${task.id}:${task.createdAt}` });
-  if (task.completed && task.completedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.completedAt), timezone), event_type: "completed", provenance: "nifty_exact", exact_at: task.completedAt, observed_at: task.completedAt, task_snapshot: { ...snapshot, completed: true }, metadata: { sourceField: "raw.completed_on" }, idempotency_key: `nifty:completed:${task.id}:${task.completedAt}` });
-  if (wasCompleted && !task.completed && task.updatedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.updatedAt), timezone), event_type: "reopened", provenance: "provider_observed", exact_at: null, observed_at: task.updatedAt, task_snapshot: { ...snapshot, completed: false }, metadata: { sourceField: "provider_updated_at" }, idempotency_key: `nifty:reopened:${task.id}:${task.updatedAt}` });
+  if (task.createdAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.createdAt), timezone), event_type: "creation_observed", provenance: "provider_observed", exact_at: task.createdAt, observed_at: task.createdAt, task_snapshot: snapshot, metadata: { sourceField: "provider_created_at" }, idempotency_key: niftyTaskEventIdempotencyKey("created", task.id, task.createdAt) });
+  if (task.completed && task.completedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.completedAt), timezone), event_type: "completed", provenance: "nifty_exact", exact_at: task.completedAt, observed_at: task.completedAt, task_snapshot: { ...snapshot, completed: true }, metadata: { sourceField: "raw.completed_on" }, idempotency_key: niftyTaskEventIdempotencyKey("completed", task.id, task.completedAt) });
+  if (wasCompleted && !task.completed && task.updatedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.updatedAt), timezone), event_type: "reopened", provenance: "provider_observed", exact_at: null, observed_at: task.updatedAt, task_snapshot: { ...snapshot, completed: false }, metadata: { sourceField: "provider_updated_at" }, idempotency_key: niftyTaskEventIdempotencyKey("reopened", task.id, task.updatedAt) });
   if (!events.length) return;
   const { error } = await supabase.from("work_task_day_events").upsert(events, { onConflict: "organization_id,idempotency_key", ignoreDuplicates: true });
   if (error) throw new Error(`mirror Nifty task day events: ${error.message}`);
