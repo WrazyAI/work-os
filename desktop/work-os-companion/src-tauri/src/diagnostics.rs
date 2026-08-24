@@ -125,7 +125,7 @@ fn civil_from_days(days: i64) -> (i32, u32, u32) {
     let doe = z.rem_euclid(146_097) as u32;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let y = yoe as i32 + era as i32 * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 24);
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
@@ -346,4 +346,15 @@ fn write_zip_events(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod timestamp_tests {
+    use super::civil_from_days;
+
+    #[test]
+    fn converts_unix_days_to_exact_utc_calendar_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(20_689), (2026, 8, 24));
+    }
 }

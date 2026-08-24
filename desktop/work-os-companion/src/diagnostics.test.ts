@@ -66,6 +66,13 @@ describe("event schema", () => {
     expect(Object.keys(event)).toEqual(expect.arrayContaining(["id", "timestamp", "level", "source", "category", "message", "sessionId"]));
     expect((event.metadata as Record<string, unknown>).token).toBe("[redacted]");
   });
+
+  it("keeps native UTC date conversion on the Gregorian century divisor", () => {
+    const diagnostics = readFileSync(resolve(root, "src-tauri/src/diagnostics.rs"), "utf8");
+    expect(diagnostics).toContain("yoe / 100");
+    expect(diagnostics).not.toContain("yoe / 24");
+    expect(diagnostics).toContain("civil_from_days(20_689)");
+  });
 });
 
 describe("debug window contract", () => {
