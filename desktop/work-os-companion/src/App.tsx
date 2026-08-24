@@ -15,7 +15,7 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } fro
 import { schedulePrompt } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { parentTasks, subtaskProgress, suggestDailyGoal, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
+import { parentTasks, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState } from "./vault";
 import companionArt from "./assets/workday-focus.webp";
@@ -35,7 +35,7 @@ type TaskDetails = {
   subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null };
 };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
-type TaskEditRequest = { task: Record<string, any>; closeParent: boolean };
+type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
 type ClockInConfirmation = { kind: "late" | "exception"; reason: string };
 type MissedClockOutCorrection = { sessionId: string; date: string; clockedInAt: string | null };
 const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
@@ -573,7 +573,7 @@ export default function App() {
   }
 
   function editTask(task: TaskRow) {
-    setEditRequest({ task, closeParent: taskDetails?.task.id === task.id });
+    setEditRequest({ task, kind: taskKind(task) });
     setEditTitle(String(task.title ?? ""));
     setEditDescription(String(task.description ?? ""));
     setSubtaskMenuId(null);
@@ -584,10 +584,9 @@ export default function App() {
     const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
     void act("task.update", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ name: editTitle.trim(), description: editDescription }) });
-      const closeParent = editRequest.closeParent;
       setEditRequest(null);
       if (taskDetails) {
-        const parentId = closeParent ? taskId : String(taskDetails.task.provider_task_id || taskDetails.task.id);
+        const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
         setTaskDetails(await loadTaskDetails(parentId));
       }
     });
@@ -749,7 +748,7 @@ export default function App() {
       </section>
     </div>}
     {deleteRequest && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description"><span>{deleteRequest.mode === "delete" ? <Trash2 size={18} /> : <Archive size={18} />}</span><h2 id="delete-confirmation-title">{deleteRequest.mode === "delete" ? "Permanently delete" : "Archive"} this {deleteRequest.closeParent ? "task" : "subtask"}?</h2><p id="delete-confirmation-description">{deleteRequest.mode === "delete" ? <>“{deleteRequest.task.title}” will be permanently removed from Nifty and cannot be restored.</> : <>“{deleteRequest.task.title}” will be hidden from active work but retained in Nifty. It can be restored from Nifty’s archived tasks.</>}{deleteRequest.closeParent && taskDetails?.subtasks.length ? ` Its ${taskDetails.subtasks.length} remaining subtask${taskDetails.subtasks.length === 1 ? "" : "s"} will also be ${deleteRequest.mode === "delete" ? "permanently deleted" : "archived"}.` : ""}</p><div><button disabled={busy} onClick={() => setDeleteRequest(null)}>Cancel</button><button className="confirm-delete" disabled={busy} onClick={confirmTaskRemoval}>{busy ? deleteRequest.mode === "delete" ? "Deleting…" : "Archiving…" : deleteRequest.mode === "delete" ? "Delete permanently" : "Archive"}</button></div></section></div>}
-    {editRequest && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title"><header><div><span>Edit {editRequest.closeParent ? "task" : "subtask"}</span><h2 id="edit-task-title">Update the Nifty record</h2></div><button aria-label="Close editor" disabled={busy} onClick={() => setEditRequest(null)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Title</span><input autoFocus maxLength={240} value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label><span>Description</span><textarea maxLength={20000} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} /></label></div><footer><button disabled={busy} onClick={() => setEditRequest(null)}>Cancel</button><button className="primary" disabled={busy || !editTitle.trim()} onClick={submitTaskEdit}>Save changes</button></footer></section></div>}
+    {editRequest && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title"><header><div><span>Edit {editRequest.kind}</span><h2 id="edit-task-title">Update the Nifty record</h2></div><button aria-label="Close editor" disabled={busy} onClick={() => setEditRequest(null)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Title</span><input autoFocus maxLength={240} value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label><span>Description</span><textarea maxLength={20000} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} /></label></div><footer><button disabled={busy} onClick={() => setEditRequest(null)}>Cancel</button><button className="primary" disabled={busy || !editTitle.trim()} onClick={submitTaskEdit}>Save changes</button></footer></section></div>}
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}

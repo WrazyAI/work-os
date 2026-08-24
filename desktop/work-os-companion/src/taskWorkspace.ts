@@ -76,6 +76,10 @@ export function parentTasks(tasks: TaskRow[]) {
   return tasks.filter((task) => !task.parent_provider_task_id && !task.parent_task_id);
 }
 
+export function taskKind(task: TaskRow): "task" | "subtask" {
+  return task.parent_provider_task_id || task.parent_task_id ? "subtask" : "task";
+}
+
 export function tasksForDate(tasks: TaskRow[], date: string, surfacedTaskIds: string[] = []) {
   const surfaced = new Set(surfacedTaskIds.map(String));
   return uniqueTasks(tasks).filter((task) => {
