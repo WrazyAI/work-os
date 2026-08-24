@@ -25,4 +25,14 @@ describe("operational visualizations", () => {
   it("retains reduced-motion support for chart transitions", () => {
     expect(styles).toContain("prefers-reduced-motion");
   });
+
+  it("keeps the application hierarchy and sidebar footer intentional", () => {
+    expect(app).toContain("nav-group nav-core");
+    expect(app).toContain("nav-group nav-context");
+    expect(app).toContain("nav-group nav-settings");
+    expect(app).toContain("Plan and complete Nifty work without losing the history behind it.");
+    expect(styles).toContain("Settings and shift state form one full-width footer cluster");
+    expect(styles).toContain("--ease-product");
+    expect(styles).toContain("animation: pageEnter");
+  });
 });
