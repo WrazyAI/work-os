@@ -3,6 +3,8 @@ import { LayoutDashboard, ListChecks, MessageSquareText, Gauge, ShieldCheck, Set
 import { TasksWorkspace } from "./App";
 import { suggestDailyGoal, unfinishedBefore, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan } from "./types";
+import { formatWorkOsDate } from "./dateFormat";
+import wordmark from "./assets/work-os-mark.png";
 
 const CURRENT_DATE = "2026-08-21";
 const tasks: TaskRow[] = [
@@ -29,8 +31,8 @@ export default function TasksPreview() {
   const [goal, setGoal] = useState(currentPlan.freeform_intent ?? "");
   const suggestion = suggestDailyGoal(tasks, CURRENT_DATE, currentPlan.items);
   return <div className="workspace preview-workspace">
-    <aside className="rail"><div className="wordmark"><span>WORK <b>OS</b></span></div><nav>{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"], [Gauge, "Insights"], [ShieldCheck, "Evidence"], [Settings, "Settings"]].map(([Icon, label]) => <button className={label === "Tasks" ? "active" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</nav><div className="rail-foot"><span className="presence live" /><div><strong>On shift</strong><small>Synced</small></div></div></aside>
-    <section className="stage"><header className="masthead"><div><p>{history ? "2026-08-20" : CURRENT_DATE}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Nifty live · 3 open</span><button className="avatar">DZ</button></div></header>
+    <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav>{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"], [Gauge, "Insights"], [ShieldCheck, "Evidence"], [Settings, "Settings"]].map(([Icon, label]) => <button className={label === "Tasks" ? "active" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</nav><div className="rail-foot"><span className="presence live" /><div><strong>On shift</strong><small>Synced</small></div></div></aside>
+    <section className="stage"><header className="masthead"><div><p>{formatWorkOsDate(history ? "2026-08-20" : CURRENT_DATE)}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Nifty live · 3 open</span><button className="avatar">DZ</button></div></header>
       <TasksWorkspace currentDate={CURRENT_DATE} historyDate={history ? "2026-08-20" : CURRENT_DATE} currentPlan={currentPlan} historicalPlan={history ? historicalPlan : null} historicalTasks={history ? tasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView="today" todayTasks={tasks.filter((task) => task.due_date === CURRENT_DATE)} taskHistory={tasks} carryOver={unfinishedBefore(tasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} taskStatus="" onTaskView={() => undefined} onDate={async () => undefined} onGoal={setGoal} onAcceptSuggestion={() => suggestion && setGoal(suggestion.text)} onAddTask={() => undefined} onOpenTask={() => undefined} onEditTask={() => undefined} onArchiveTask={() => undefined} onSurfaceTask={() => undefined} onTaskCompletion={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined} />
     </section>
   </div>;
