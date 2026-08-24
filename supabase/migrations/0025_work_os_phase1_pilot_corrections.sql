@@ -8,7 +8,7 @@ declare
   duplicate_person uuid := '7da461ce-83a5-40d5-8bf3-27e358f04351';
   target_session work_sessions%rowtype;
   actor uuid;
-  corrected_at timestamptz := '2026-08-21T20:06:00.000Z';
+  approved_clock_out_at timestamptz := '2026-08-21T20:06:00.000Z';
 begin
   if exists(select 1 from work_organizations where id=pilot_org and name='David Yeboah Workspace') then
     select * into target_session from work_sessions
@@ -17,17 +17,17 @@ begin
     if not found then raise exception 'Expected August 21 pilot session was not found'; end if;
 
     if target_session.clocked_out_at is null and target_session.correction_status='needs_correction' then
-      if corrected_at <= target_session.clocked_in_at then raise exception 'Approved correction must be after clock-in'; end if;
+      if approved_clock_out_at <= target_session.clocked_in_at then raise exception 'Approved correction must be after clock-in'; end if;
       select user_id into actor from work_org_members
       where organization_id=pilot_org and person_id=pilot_person and active=true
       order by case role when 'admin' then 0 else 1 end limit 1;
 
       update work_sessions set
-        state='clocked_out', clocked_out_at=corrected_at,
+        state='clocked_out', clocked_out_at=approved_clock_out_at,
         clock_out_idempotency_key='phase1:missed-clockout:2026-08-21:20:06',
         correction_status='corrected',
         correction_reason='Employee confirmed the missed clock-out time as 8:06 PM Atlantic/Reykjavik',
-        correction_timestamp=corrected_at, correction_provenance='employee_entered',
+        correction_timestamp=approved_clock_out_at, correction_provenance='employee_entered',
         corrected_at=now(), corrected_by=actor, paused_at=null, updated_at=now()
       where id=target_session.id;
 
@@ -36,13 +36,13 @@ begin
         observed_at,actor_user_id,idempotency_key,metadata
       ) values (
         pilot_org,pilot_person,target_session.id,'resolve_missed_clock_out',target_session.state,'clocked_out','desktop',
-        corrected_at,actor,'phase1:missed-clockout:2026-08-21:20:06',
+        approved_clock_out_at,actor,'phase1:missed-clockout:2026-08-21:20:06',
         jsonb_build_object('provenance','employee_entered','approvedOn','2026-08-24','timezone','Atlantic/Reykjavik')
       ) on conflict (organization_id,idempotency_key) do nothing;
 
       update work_daily_plans set status='closed',updated_at=now()
       where organization_id=pilot_org and session_id=target_session.id;
-    elsif target_session.clocked_out_at is distinct from corrected_at or target_session.correction_status <> 'corrected' then
+    elsif target_session.clocked_out_at is distinct from approved_clock_out_at or target_session.correction_status <> 'corrected' then
       raise exception 'August 21 pilot session is in an unexpected correction state';
     end if;
   end if;
