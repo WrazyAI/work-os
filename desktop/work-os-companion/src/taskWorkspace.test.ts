@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parentTasks, suggestDailyGoal, subtaskProgress, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { parentTasks, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 
 describe("unified Tasks workspace", () => {
   it("suggests a deterministic goal without persisting authorship", () => {
@@ -20,6 +20,11 @@ describe("unified Tasks workspace", () => {
       { id: "child-provider", title: "Child", parent_provider_task_id: "parent" },
       { id: "child-local", title: "Child local", parent_task_id: "local-parent" },
     ])).toEqual([{ id: "parent", title: "Parent" }]);
+  });
+
+  it("labels task editing from provider parentage rather than modal context", () => {
+    expect(taskKind({ id: "parent", parent_provider_task_id: null, parent_task_id: null })).toBe("task");
+    expect(taskKind({ id: "child", parent_provider_task_id: "parent" })).toBe("subtask");
   });
 
   it("attributes old work to due date before provider creation date", () => {
