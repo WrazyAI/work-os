@@ -18,12 +18,14 @@ describe("shift pulse", () => {
       progressPercent: 50,
       observedElapsedLabel: "00:00",
       observedBreakLabel: "00:00",
+      schedulePhase: "in_progress",
     });
   });
 
   it("keeps schedule progress truthful before explicit clock-in and clamps overtime", () => {
-    expect(shiftPulse({ ...session, clocked_in_at: null }, shift, new Date("2026-08-14T13:00:00Z"))).toEqual({ elapsedLabel: "00:00", breakLabel: "00:00", breakSeconds: 0, progressPercent: 50, observedElapsedLabel: "00:00", observedBreakLabel: "00:00" });
-    expect(shiftPulse(session, shift, new Date("2026-08-14T19:00:00Z")).progressPercent).toBe(100);
+    expect(shiftPulse({ ...session, clocked_in_at: null }, shift, new Date("2026-08-14T13:00:00Z"))).toEqual({ elapsedLabel: "00:00", breakLabel: "00:00", breakSeconds: 0, progressPercent: 50, observedElapsedLabel: "00:00", observedBreakLabel: "00:00", schedulePhase: "in_progress" });
+    expect(shiftPulse(session, shift, new Date("2026-08-14T08:00:00Z"))).toMatchObject({ progressPercent: 0, schedulePhase: "upcoming" });
+    expect(shiftPulse(session, shift, new Date("2026-08-14T19:00:00Z"))).toMatchObject({ progressPercent: 100, schedulePhase: "complete" });
   });
 
   it("renders provider-observed attendance separately from an explicit Work OS session", () => {
