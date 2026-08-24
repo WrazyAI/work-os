@@ -16,6 +16,7 @@ import {
 import { employeeName, wtPost, worktivityConfigured, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { fetchAppsSummary } from "@/lib/worktivityAudit";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
 type Db = ReturnType<typeof createAdminClient>;
@@ -461,6 +462,10 @@ export async function upsertWorktivityEmployee(userId: string, employee: WtEmplo
 
 export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
   const supabase = db();
+  const previous = await ensureNoError(
+    supabase.from("work_tasks").select("id,completed").eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.id).maybeSingle(),
+    "load previous Nifty task state",
+  );
   let projectId: string | null = null;
   if (task.projectId) {
     const project = await ensureNoError(
@@ -505,6 +510,7 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
     "upsert Nifty task",
   );
   await mirrorMappedTaskFields(userId, (saved as Json).id as string, task.raw);
+  await mirrorNiftyTaskDayEvents(supabase, saved as Json, task, assigneePersonIds, previous?.completed === true);
   if (task.parentTaskId) {
     const parent = await ensureNoError(
       supabase.from("work_tasks").select("id").eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.parentTaskId).maybeSingle(),
@@ -516,6 +522,43 @@ export async function upsertNiftyTask(userId: string, task: NiftyTaskSummary) {
     );
   }
   return saved;
+}
+
+function niftyIdentity(value: unknown) {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  for (const key of ["id", "_id", "user_id", "member_id"]) if (typeof row[key] === "string" && row[key]) return row[key] as string;
+  return null;
+}
+
+async function mirrorNiftyTaskDayEvents(supabase: Db, saved: Json, task: NiftyTaskSummary, assigneePersonIds: string[], wasCompleted: boolean) {
+  const organizationId = typeof saved.organization_id === "string" ? saved.organization_id : null;
+  if (!organizationId) return;
+  let personId = assigneePersonIds[0] ?? null;
+  if (!personId) {
+    const raw = task.raw as Record<string, unknown>;
+    const identities = [niftyIdentity(raw.created_by), niftyIdentity(raw.creator), ...(Array.isArray(raw.subscribers) ? raw.subscribers.map(niftyIdentity) : [])].filter((value): value is string => !!value);
+    if (identities.length) {
+      const people = await ensureNoError(supabase.from("work_people").select("id").eq("organization_id", organizationId).in("nifty_member_id", [...new Set(identities)]).limit(1), "resolve Nifty task event person");
+      personId = people?.[0]?.id ?? null;
+    }
+  }
+  if (!personId) {
+    const existingEvent = await ensureNoError(supabase.from("work_task_day_events").select("person_id").eq("organization_id", organizationId).eq("task_id", saved.id).order("observed_at", { ascending: true }).limit(1).maybeSingle(), "resolve existing Nifty task event person");
+    personId = existingEvent?.person_id ?? null;
+  }
+  if (!personId) return;
+  const onboarding = await ensureNoError(supabase.from("work_employee_onboarding").select("timezone").eq("organization_id", organizationId).eq("person_id", personId).maybeSingle(), "load Nifty task event timezone");
+  const timezone = onboarding?.timezone || "UTC";
+  const snapshot = { title: task.name, completed: task.completed, status: task.status, dueDate: dateOnly(task.dueDate) };
+  const events: Json[] = [];
+  if (task.createdAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.createdAt), timezone), event_type: "creation_observed", provenance: "provider_observed", exact_at: task.createdAt, observed_at: task.createdAt, task_snapshot: snapshot, metadata: { sourceField: "provider_created_at" }, idempotency_key: `nifty:created:${task.id}:${task.createdAt}` });
+  if (task.completed && task.completedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.completedAt), timezone), event_type: "completed", provenance: "nifty_exact", exact_at: task.completedAt, observed_at: task.completedAt, task_snapshot: { ...snapshot, completed: true }, metadata: { sourceField: "raw.completed_on" }, idempotency_key: `nifty:completed:${task.id}:${task.completedAt}` });
+  if (wasCompleted && !task.completed && task.updatedAt) events.push({ organization_id: organizationId, person_id: personId, task_id: saved.id, provider: "nifty", provider_task_id: task.id, local_date: localDateForTimezone(new Date(task.updatedAt), timezone), event_type: "reopened", provenance: "provider_observed", exact_at: null, observed_at: task.updatedAt, task_snapshot: { ...snapshot, completed: false }, metadata: { sourceField: "provider_updated_at" }, idempotency_key: `nifty:reopened:${task.id}:${task.updatedAt}` });
+  if (!events.length) return;
+  const { error } = await supabase.from("work_task_day_events").upsert(events, { onConflict: "organization_id,idempotency_key", ignoreDuplicates: true });
+  if (error) throw new Error(`mirror Nifty task day events: ${error.message}`);
 }
 
 export async function syncNifty(userId: string) {
