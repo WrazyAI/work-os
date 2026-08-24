@@ -1414,6 +1414,12 @@ button:disabled {
   display: grid;
   gap: 12px;
 }
+.subtask-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .subtask-section > header > div {
   display: flex;
   align-items: center;
@@ -1435,6 +1441,18 @@ button:disabled {
 .subtask-list {
   display: grid;
   gap: 7px;
+}
+.subtask-sync-warning {
+  border: 1px solid #e2ca95;
+  border-radius: 10px;
+  background: #fff8e5;
+  color: #725723;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.4;
 }
 .subtask-list article {
   border: 1px solid var(--line);
@@ -1693,6 +1711,14 @@ button:disabled {
     border-top: 1px solid var(--line);
     padding: 20px 0 0;
   }
+}
+@media (max-width: 900px), (max-height: 720px) {
+  .masthead { height: 78px; }
+  .tasks-workspace .page-intro { margin: 8px 0 18px; }
+  .tasks-workspace .page-intro h2 { font-size: clamp(32px, 5vw, 44px); }
+  .tasks-workspace .date-navigator { margin-bottom: 18px; }
+  .tasks-workspace .panel { padding: 18px 20px; }
+  .daily-goal-card > textarea { min-height: 62px; }
 }
 @media (max-width: 620px) {
   .task-modal-backdrop {
