@@ -124,6 +124,7 @@ export interface AttendanceProjection {
   observedAt: string;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  providerBreakSeconds?: number;
   stale: boolean;
   fallbackAllowed: boolean;
   message: string;
