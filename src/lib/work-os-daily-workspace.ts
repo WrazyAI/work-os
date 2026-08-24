@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getWorkOsOrganizationOwnerId, isNiftyTaskAttributableToMember } from "@/lib/work-os";
+import { getWorkOsOrganizationOwnerId, hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 
@@ -146,7 +146,7 @@ export async function resolveDailyWorkspace(
       .select("*,project:work_projects(id,name,provider_project_id)")
       .eq("user_id", ownerId)
       .eq("organization_id", access.organizationId)
-      .neq("status", "archived")
+      .not("status", "in", "(archived,deleted)")
       .order("provider_created_at", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })
       .limit(2500),
@@ -164,7 +164,7 @@ export async function resolveDailyWorkspace(
     if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
   }
 
-  const allTasks = (tasksResult.data ?? []) as Json[];
+  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
   const attributable = allTasks.filter((task) =>
     (Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId))
     || isNiftyTaskAttributableToMember(task, context.niftyMemberId)

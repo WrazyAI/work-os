@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { archiveWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, moveWorkOsEmployeeSubtask, setWorkOsEmployeeTaskCompletion, updateWorkOsEmployeeTask } from "@/lib/work-os-companion";
+import { archiveWorkOsEmployeeTask, deleteWorkOsEmployeeTask, getWorkOsEmployeeTaskDetails, moveWorkOsEmployeeSubtask, setWorkOsEmployeeTaskCompletion, updateWorkOsEmployeeTask } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -30,7 +30,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ taskId: 
     const auth = await access(req);
     if (auth.response) return auth.response;
     const { taskId } = await context.params;
-    return NextResponse.json(await archiveWorkOsEmployeeTask(auth.access, taskId));
+    const mode = new URL(req.url).searchParams.get("mode") ?? "archive";
+    if (mode !== "archive" && mode !== "delete") return NextResponse.json({ error: "mode must be archive or delete" }, { status: 400 });
+    return NextResponse.json(mode === "delete"
+      ? await deleteWorkOsEmployeeTask(auth.access, taskId)
+      : await archiveWorkOsEmployeeTask(auth.access, taskId));
   } catch (error) {
     return jsonError(error, 502);
   }

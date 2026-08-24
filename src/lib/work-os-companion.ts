@@ -6,7 +6,9 @@ import {
   completeTask,
   createEvidence,
   createTask,
+  deleteTask,
   getTaskByLocalOrProviderId,
+  hydrateTaskAssignees,
   isNiftyTaskAttributableToMember,
   listEvidence,
   listPersonTasks,
@@ -141,7 +143,7 @@ export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
 async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
   const ownerId = await organizationOwnerId(access.organizationId);
   const task = await getTaskByLocalOrProviderId(ownerId, taskId);
-  if (task.status === "archived") throw new Error("Task not found");
+  if (task.status === "archived" || task.status === "deleted") throw new Error("Task not found");
   const { data: person, error } = await db().from("work_people").select("nifty_member_id").eq("organization_id", access.organizationId).eq("id", access.personId as string).single();
   if (error) throw new Error(`load task employee mapping: ${error.message}`);
   const assignedToPerson = Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId as string);
@@ -155,7 +157,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     .select("*, project:work_projects(id,name,provider_project_id)")
     .eq("organization_id", access.organizationId)
     .eq("parent_provider_task_id", task.provider_task_id as string)
-    .neq("status", "archived")
+    .not("status", "in", "(archived,deleted)")
     .order("completed", { ascending: true })
     .order("provider_created_at", { ascending: true });
   if (error) throw new Error(`load task subtasks: ${error.message}`);
@@ -163,6 +165,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
   const moveTargets = (available ?? []).filter((candidate) =>
     candidate.completed !== true
     && candidate.status !== "archived"
+    && candidate.status !== "deleted"
     && !candidate.parent_provider_task_id
     && candidate.provider_project_id === task.provider_project_id
     && candidate.provider_task_id !== task.provider_task_id
@@ -171,7 +174,8 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     provider_task_id: candidate.provider_task_id,
     title: candidate.title,
   }));
-  return { task, subtasks: subtasks ?? [], moveTargets };
+  const hydrated = await hydrateTaskAssignees(ownerId, [task, ...(subtasks ?? [])] as Json[]);
+  return { task: hydrated[0], subtasks: hydrated.slice(1), moveTargets };
 }
 
 export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: string, body: Json) {
@@ -222,12 +226,25 @@ export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: st
   const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
     .eq("organization_id", access.organizationId)
     .eq("parent_provider_task_id", task.provider_task_id as string)
-    .neq("status", "archived");
+    .not("status", "in", "(archived,deleted)");
   if (error) throw new Error(`load task children for removal: ${error.message}`);
   for (const child of children ?? []) await archiveTask(ownerId, child.provider_task_id as string);
   const archived = await archiveTask(ownerId, task.provider_task_id as string);
   await audit(access, "task.archived", "nifty_task", task.provider_task_id as string, { archivedSubtasks: children?.length ?? 0 });
   return { task: archived, archivedSubtasks: children?.length ?? 0, providerStatus: "nifty_confirmed" };
+}
+
+export async function deleteWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
+    .eq("organization_id", access.organizationId)
+    .eq("parent_provider_task_id", task.provider_task_id as string)
+    .not("status", "in", "(archived,deleted)");
+  if (error) throw new Error(`load task children for permanent deletion: ${error.message}`);
+  for (const child of children ?? []) await deleteTask(ownerId, child.provider_task_id as string);
+  const deleted = await deleteTask(ownerId, task.provider_task_id as string);
+  await audit(access, "task.deleted", "nifty_task", task.provider_task_id as string, { deletedSubtasks: children?.length ?? 0 });
+  return { task: deleted, deletedSubtasks: children?.length ?? 0, providerStatus: "nifty_confirmed" };
 }
 
 export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json) {
