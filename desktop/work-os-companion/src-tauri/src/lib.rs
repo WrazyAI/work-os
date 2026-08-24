@@ -134,10 +134,11 @@ pub fn run() {
             diagnostics::open_logs_dir
         ])
         .setup(|app| {
-            diagnostics::init(app.handle()).map_err(|error| Box::<dyn std::error::Error>::from(error))?;
             let salt_path = app.path().app_local_data_dir()?.join("stronghold-salt");
             app.handle()
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
+            diagnostics::init(app.handle())
+                .map_err(|error| Box::<dyn std::error::Error>::from(error))?;
             #[cfg(any(target_os = "linux", windows))]
             app.deep_link().register_all()?;
 
