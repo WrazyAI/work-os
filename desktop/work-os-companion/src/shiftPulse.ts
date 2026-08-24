@@ -36,8 +36,10 @@ export function shiftPulse(
     : 0;
   const observedClockedInAt = validTime(attendance?.clockedInAt);
   const observedClockedOutAt = validTime(attendance?.clockedOutAt);
+  const activityObservedAt = validTime(attendance?.activityObservedAt);
   const observedBreakSeconds = Math.max(0, worktivityAuthoritativeBreaks ? attendance?.providerBreakSeconds || 0 : 0);
-  const observedEnd = observedClockedOutAt ?? now.getTime();
+  const providerCurrentlyActive = !attendance?.stale && (attendance?.state === "active" || attendance?.state === "paused");
+  const observedEnd = observedClockedOutAt ?? (providerCurrentlyActive ? now.getTime() : activityObservedAt ?? observedClockedInAt ?? now.getTime());
   const observedElapsedMs = observedClockedInAt === null ? 0 : Math.max(0, observedEnd - observedClockedInAt - observedBreakSeconds * 1000);
   const observedMinutes = Math.floor(observedElapsedMs / 60_000);
   const observedBreakMinutes = Math.floor(observedBreakSeconds / 60);

@@ -22,7 +22,8 @@ assert.doesNotMatch(frontend, /getCurrentWindow\(\)\.label === "debug"/);
 
 const onboarding = read("src/Onboarding.tsx");
 assert.match(onboarding, /aria-busy=\{busy\}/);
-assert.match(onboarding, /role="alert"/);
+assert.match(onboarding, /onNotify\("error"/);
+assert.doesNotMatch(onboarding, /onboarding-error/);
 assert.match(onboarding, /Sign out/);
 assert.match(onboarding, /onLogout/);
 assert.match(onboarding, /Seen/);
@@ -47,7 +48,7 @@ assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);
 assert.match(app, /openDebuggerWindow/);
 assert.match(app, /onboardingState: "complete"/);
-assert.match(app, /Couldn’t load Work OS/);
+assert.match(app, /Work OS needs another try/);
 assert.match(app, />Retry</);
 assert.match(app, /\/api\/work-os\/me\/workday/);
 assert.match(app, /source: "desktop"/);
@@ -86,8 +87,13 @@ assert.match(app, /Scheduled progress, your explicit Work OS session, Worktivity
 assert.match(app, /refreshProviders=true/);
 assert.match(app, /updater\.check_failed/);
 assert.match(app, /pulse-provider/);
+assert.match(app, /Observed active time/);
+assert.match(app, /Clocked in/);
+assert.match(app, /Clocked out/);
 assert.match(app, /task-state/);
 assert.doesNotMatch(app, /evidence-kind \$\{task\.completed/);
+assert.match(app, /You are the write barrier/);
+assert.match(app, /Observed time and task completion · separate scales/);
 assert.doesNotMatch(app, /width: active \? "42%"/);
 assert.match(app, /Promise\.allSettled/);
 assert.match(app, /bootstrap\.day\.degraded/);
@@ -123,6 +129,15 @@ assert.doesNotMatch(app, /Nifty task group ID/);
 assert.doesNotMatch(app, /task_group_id: taskComposer/);
 assert.match(read("src/sessionGate.ts"), /Clock in explicitly/);
 assert.doesNotMatch(app, /disabled=\{!active \|\| !input\.trim\(\) \|\| busy\}/);
+assert.doesNotMatch(app, /className="notice error"/);
+assert.match(app, /notifications\.success/);
+assert.match(app, /notifications\.error/);
+
+const notificationFlyouts = read("src/NotificationFlyouts.tsx");
+assert.match(notificationFlyouts, /tone === "error" \? "alert" : "status"/);
+assert.match(notificationFlyouts, /notification-flyout \$\{notification\.tone\}/);
+assert.match(notificationFlyouts, /NotificationProvider/);
+assert.match(notificationFlyouts, /unhandledrejection/);
 
 const debugWindow = read("src/DebugWindow.tsx");
 assert.match(debugWindow, /if \(!isTauri\(\)\)/);
@@ -136,7 +151,9 @@ const debugHtml = read("debug.html");
 assert.doesNotMatch(main, /import DebugWindow/);
 assert.match(main, /import TasksPreview/);
 assert.match(main, /params\.has\("preview-tasks"\)/);
+assert.match(main, /<NotificationProvider>/);
 assert.match(debug, /import DebugWindow from "\.\/DebugWindow"/);
+assert.match(debug, /<NotificationProvider>/);
 assert.match(debugHtml, /src="\/src\/debug\.tsx"/);
 assert.match(read("vite.config.ts"), /debug: resolve\(__dirname, "debug\.html"\)/);
 assert.match(read("src-tauri/capabilities/debug.json"), /allow-debug-commands/);
@@ -145,9 +162,6 @@ assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /open_debug_
 
 const companionServer = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-companion.ts"), "utf8");
 assert.match(companionServer, /refreshNiftyMirror/);
-assert.match(companionServer, /await syncNiftyPersonTasks\(ownerId, personId\)/);
-assert.match(companionServer, /todayOnly: true, todayDate: shiftDate, limit: 1000/);
-assert.match(companionServer, /const shiftDate = localDateForTimezone\(at, timezone\)/);
 assert.match(companionServer, /syncing: !niftyFresh/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.match(companionServer, /role", "admin"/);

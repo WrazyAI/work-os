@@ -47,4 +47,20 @@ describe("shift pulse", () => {
       breakSeconds: 600,
     });
   });
+
+  it("stops observational time at the last provider activity without inventing clock-out", () => {
+    expect(shiftPulse(null, shift, new Date("2026-08-14T19:00:00Z"), true, {
+      source: "worktivity", state: "off_shift", status: "yet_to_start", observedAt: "2026-08-14T19:00:00Z",
+      clockedInAt: "2026-08-14T15:00:00Z", clockedOutAt: null, activityObservedAt: "2026-08-14T16:00:00Z",
+      stale: false, fallbackAllowed: false, message: "No current attendance",
+    }).observedElapsedLabel).toBe("01:00");
+  });
+
+  it("does not advance a cached active observation after refresh becomes stale", () => {
+    expect(shiftPulse(null, shift, new Date("2026-08-14T19:00:00Z"), true, {
+      source: "worktivity", state: "active", status: "working", observedAt: "2026-08-14T18:00:00Z",
+      clockedInAt: "2026-08-14T15:00:00Z", clockedOutAt: null, activityObservedAt: "2026-08-14T16:00:00Z",
+      stale: true, fallbackAllowed: true, message: "Showing retained attendance",
+    }).observedElapsedLabel).toBe("01:00");
+  });
 });

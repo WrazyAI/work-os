@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inferArchetype, normalizeProfileItems, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
 import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } from "../src/modules/work-os/attendance";
-import { deriveWorktivityBreakSeconds, deriveWorktivitySessionStart, deriveWorktivitySessionWindow, normalizeWorktivityActivityLogs, worktivityLocalDayBounds } from "../src/lib/work-os-attendance";
+import { deriveWorktivityBreakSeconds, deriveWorktivityLastActivityAt, deriveWorktivitySessionStart, deriveWorktivitySessionWindow, normalizeWorktivityActivityLogs, worktivityLocalDayBounds } from "../src/lib/work-os-attendance";
 import { FALLBACK_TIMEZONES, supportedTimezones, timezoneLabel } from "../src/modules/work-os/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm } from "../desktop/work-os-companion/src/onboardingDraftState";
 
@@ -96,6 +96,15 @@ test("Worktivity activity history reconstructs the latest observed session windo
     clockedInAt: "2026-08-20T18:00:00.000Z",
     clockedOutAt: null,
   });
+});
+
+test("Worktivity duration ends at actual activity rather than no-attendance samples", () => {
+  const observed = "2026-08-20T19:00:00.000Z";
+  assert.equal(deriveWorktivityLastActivityAt([
+    { Status: 1, CreateDate: "2026-08-20T15:00:00.000Z" },
+    { Status: 3, CreateDate: "2026-08-20T16:00:00.000Z" },
+    { Status: 5, CreateDate: "2026-08-20T18:59:00.000Z" },
+  ], observed), "2026-08-20T16:00:00.000Z");
 });
 
 test("timezone picker keeps canonical IANA IDs and has a bundled fallback", () => {
