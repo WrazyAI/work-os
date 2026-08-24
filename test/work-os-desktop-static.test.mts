@@ -146,6 +146,7 @@ assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /open_debug_
 const companionServer = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-companion.ts"), "utf8");
 assert.match(companionServer, /refreshNiftyMirror/);
 assert.match(companionServer, /await syncNiftyPersonTasks\(ownerId, personId\)/);
+assert.match(companionServer, /todayOnly: true, todayDate: shiftDate, limit: 1000/);
 assert.match(companionServer, /syncing: !niftyFresh/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.match(companionServer, /role", "admin"/);
