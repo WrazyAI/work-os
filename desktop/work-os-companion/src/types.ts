@@ -8,6 +8,11 @@ export interface WorkSession {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   paused_seconds: number;
+  provider_break_seconds?: number;
+  provider_break_observed_at?: string | null;
+  provider_break_provenance?: Record<string, unknown> | null;
+  attendance_status?: string | null;
+  attendance_observed_at?: string | null;
   first_follow_up_at?: string | null;
   next_fallback_at?: string | null;
   last_prompt_kind?: "follow_up" | "hourly_fallback" | "eod" | null;

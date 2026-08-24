@@ -617,6 +617,15 @@ export async function syncNifty(userId: string) {
   return { projects: projects.length, members: members.length, tasks: tasks.length, syncedAt };
 }
 
+/** Refresh one provider task before an employee reads or changes it. Nifty is
+ * authoritative for assignment and task state; the local row is only a mirror. */
+export async function syncNiftyTask(userId: string, providerTaskId: string) {
+  const payload = await niftyForOwner(userId, () => getNiftyTask(providerTaskId));
+  const task = normalizeNiftyTaskPayload(payload);
+  if (!task || task.id === "unknown") throw new Error("Nifty task not found");
+  return upsertNiftyTask(userId, task);
+}
+
 export async function syncWorktivityRoster(userId: string) {
   if (!worktivityConfigured()) return { employees: 0, skipped: true };
   const data = await wtPost<WtPaged<WtEmployee>>("/Employee/List", { page: 1, pageSize: 200 });

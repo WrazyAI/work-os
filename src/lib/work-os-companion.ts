@@ -16,6 +16,7 @@ import {
   moveTaskToParent,
   reviewReport,
   syncNifty,
+  syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
 import { canAccessWorkOsPerson, type WorkOsAccess } from "@/lib/work-os-api";
@@ -101,7 +102,8 @@ async function organizationOwnerId(organizationId: string) {
 }
 
 function refreshNiftyMirror(organizationId: string, ownerId: string) {
-  if (niftyRefreshes.has(organizationId)) return;
+  const existing = niftyRefreshes.get(organizationId);
+  if (existing) return existing;
   const refresh = (async () => {
     try {
       await syncNifty(ownerId);
@@ -112,11 +114,13 @@ function refreshNiftyMirror(organizationId: string, ownerId: string) {
         nifty_sync_error: message,
         updated_at: new Date().toISOString(),
       }).eq("id", organizationId);
+      throw error;
     } finally {
       niftyRefreshes.delete(organizationId);
     }
   })();
   niftyRefreshes.set(organizationId, refresh);
+  return refresh;
 }
 
 export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
@@ -152,6 +156,8 @@ async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
 }
 
 export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
+  const initial = await employeeTaskContext(access, taskId);
+  await syncNiftyTask(initial.ownerId, initial.task.provider_task_id as string);
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const { data: subtasks, error } = await db().from("work_tasks")
     .select("*, project:work_projects(id,name,provider_project_id)")
@@ -443,8 +449,16 @@ async function loadShiftData(access: WorkOsAccess, personId: string, at: Date) {
   return { rules, exceptions: (exceptions ?? []) as WorkOsScheduleException[], timezone };
 }
 
-export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = new Date()) {
-  const attendance = await observeWorktivityAttendance(access, at);
+export async function getWorkOsDay(
+  access: WorkOsAccess,
+  personId: string,
+  at = new Date(),
+  options: { refreshNifty?: boolean } = {},
+) {
+  const [attendance, authoritativeBreaks] = await Promise.all([
+    observeWorktivityAttendance(access, at),
+    worktivityAuthoritativeBreaks(access.organizationId),
+  ]);
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, at);
   const shift = resolveShiftWindow(rules, exceptions, at);
   const shiftDate = shift?.shiftDate ?? localDateForTimezone(at, timezone);
@@ -469,13 +483,23 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
   const latestTask = latestTaskResult.data;
   const latestProject = latestProjectResult.data;
   const lastSyncedAt = [latestTask?.synced_at, latestProject?.synced_at, organizationSyncResult.data.nifty_synced_at].filter(Boolean).sort().at(-1) as string | undefined;
-  const niftyFresh = !!lastSyncedAt && Date.now() - new Date(lastSyncedAt).getTime() < NIFTY_FRESH_MS;
-  if (!niftyFresh) refreshNiftyMirror(access.organizationId, ownerId);
+  let effectiveLastSyncedAt = lastSyncedAt;
+  let niftyFresh = !!effectiveLastSyncedAt && Date.now() - new Date(effectiveLastSyncedAt).getTime() < NIFTY_FRESH_MS;
+  if (options.refreshNifty) {
+    await refreshNiftyMirror(access.organizationId, ownerId);
+    const refreshed = await db().from("work_organizations").select("nifty_synced_at").eq("id", access.organizationId).single();
+    if (refreshed.error) throw new Error(`load refreshed Nifty state: ${refreshed.error.message}`);
+    effectiveLastSyncedAt = refreshed.data.nifty_synced_at as string | undefined;
+    niftyFresh = !!effectiveLastSyncedAt;
+  } else if (!niftyFresh) {
+    void refreshNiftyMirror(access.organizationId, ownerId).catch(() => undefined);
+  }
   const niftySync: Json = {
     fresh: niftyFresh,
-    syncing: !niftyFresh,
-    syncedAt: lastSyncedAt ?? null,
-    ...(organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
+    syncing: !niftyFresh && !options.refreshNifty,
+    syncedAt: effectiveLastSyncedAt ?? null,
+    authority: "nifty",
+    ...(!options.refreshNifty && organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
   };
   const [tasks, taskHistory, evidence] = await Promise.all([
     listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate }),
@@ -512,7 +536,7 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
     completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
-  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
+  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
 }
 
 interface ParsedProposal {

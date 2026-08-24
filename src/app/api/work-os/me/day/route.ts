@@ -18,7 +18,9 @@ export async function GET(req: Request) {
     const atValue = url.searchParams.get("at");
     const at = atValue ? new Date(atValue) : new Date();
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "at must be a valid timestamp" }, { status: 400 });
-    const day = await getWorkOsDay(auth.access, auth.access.personId as string, at) as Record<string, unknown>;
+    const day = await getWorkOsDay(auth.access, auth.access.personId as string, at, {
+      refreshNifty: url.searchParams.get("refreshProviders") === "true",
+    }) as Record<string, unknown>;
     const prompt = day.prompt as { kind?: string } | undefined;
     if (prompt?.kind === "eod" && !day.report) {
       day.report = await draftWorkOsEod(auth.access, auth.access.personId as string, {
