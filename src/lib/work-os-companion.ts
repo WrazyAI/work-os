@@ -17,6 +17,7 @@ import {
   updateTask,
 } from "@/lib/work-os";
 import { canAccessWorkOsPerson, type WorkOsAccess } from "@/lib/work-os-api";
+import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import {
   validateWorkOsBreakWindows,
   validateWorkOsDate,
@@ -125,7 +126,11 @@ export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
   if (adminResult.error) throw new Error(`load task administrators: ${adminResult.error.message}`);
   const adminPersonIds = new Set((adminResult.data ?? []).map((item) => String(item.person_id)));
   return {
-    people: (peopleResult.data ?? []).filter((person) => !adminPersonIds.has(String(person.id))).map((person) => ({
+    people: filterAssignableTaskPeople(
+      (peopleResult.data ?? []).map((person) => ({ ...person, id: String(person.id) })),
+      adminPersonIds,
+      access.personId,
+    ).map((person) => ({
       id: person.id as string,
       displayName: person.display_name as string,
       email: person.email as string | null,
@@ -238,7 +243,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   const options = await getWorkOsTaskCreationOptions(access);
   const allowedPeople = new Map(options.people.map((person) => [person.id, person]));
   const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
-  if (invalidPersonId) throw new Error("Assignees must be active, Nifty-mapped non-admin organization members");
+  if (invalidPersonId) throw new Error("Assignees must be active, Nifty-mapped organization members; administrators may assign only their own worker profile");
   let assignees: string[] = [];
   if (requestedPersonIds.length) {
     const { data, error } = await db().from("work_people").select("id,nifty_member_id").eq("organization_id", access.organizationId).in("id", requestedPersonIds);
