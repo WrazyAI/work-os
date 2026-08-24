@@ -46,11 +46,12 @@ function initial(data: OnboardingData): FormState {
   };
 }
 
-export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraft, onComplete, onOpenDebug, onLogout, appError }: {
+export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraft, onComplete, onOpenDebug, onLogout, onNotify }: {
   data: OnboardingData; simulated: boolean; busy: boolean;
   onSubmit: (body: Record<string, unknown>) => Promise<AttendanceProjection | undefined>;
   onSaveDraft: (body: Record<string, unknown>) => Promise<OnboardingData | { queued: true } | void>;
-  onComplete: () => void; onOpenDebug: () => void; onLogout: () => void; appError?: string;
+  onComplete: () => void; onOpenDebug: () => void; onLogout: () => void;
+  onNotify: (tone: "success" | "error" | "info", message: string, title?: string) => void;
 }) {
   const restored = Math.max(0, PHASES.findIndex((phase) => phase.id === data.draft.step));
   const [phaseIndex, setPhaseIndex] = useState(restored >= PHASES.length - 1 ? 0 : restored);
@@ -58,7 +59,6 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
   const [removed, setRemoved] = useState<WorkProfileItem[]>([]);
   const [newItem, setNewItem] = useState("");
   const [newKind, setNewKind] = useState<ProfileItemKind>("responsibility");
-  const [formError, setFormError] = useState("");
   const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>("saved");
   const [attendance, setAttendance] = useState<AttendanceProjection | undefined>();
   const hydrated = useRef(false);
@@ -102,6 +102,7 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
       setDraftSaveState("saved");
     } catch (error) {
       setDraftSaveState(/changed on another device/i.test(error instanceof Error ? error.message : "") ? "conflict" : "offline");
+      onNotify("error", error instanceof Error ? error.message : "Your onboarding draft could not be saved.", "Onboarding draft not saved");
       throw error;
     }
   };
@@ -126,12 +127,20 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
     return "";
   }
   async function next() {
-    const problem = validateCurrent(); setFormError(problem); if (problem) return;
+    const problem = validateCurrent();
+    if (problem) { onNotify("error", problem, "Check this step"); return; }
     if (phase.id === "safe") {
-      const result = await onSubmit({ ...draftBody("safe"), privacy: { screenshotAnalysisConsent: true, sensitiveAppExclusions: form.sensitiveAppExclusions.split(",").map((entry) => entry.trim()).filter(Boolean) }, acceptTrackingConsent: true, privacyNoticeAcknowledged: true });
-      setAttendance(result); setPhaseIndex(PHASES.length - 1); return;
+      try {
+        const result = await onSubmit({ ...draftBody("safe"), privacy: { screenshotAnalysisConsent: true, sensitiveAppExclusions: form.sensitiveAppExclusions.split(",").map((entry) => entry.trim()).filter(Boolean) }, acceptTrackingConsent: true, privacyNoticeAcknowledged: true });
+        setAttendance(result); setPhaseIndex(PHASES.length - 1);
+        onNotify("success", "Your preferences and consent were saved.", "Workspace connected");
+      } catch (error) {
+        onNotify("error", error instanceof Error ? error.message : "Work OS could not finish onboarding.", "Onboarding not completed");
+      }
+      return;
     }
-    await saveDraft(PHASES[Math.min(phaseIndex + 1, PHASES.length - 2)].id);
+    try { await saveDraft(PHASES[Math.min(phaseIndex + 1, PHASES.length - 2)].id); }
+    catch { return; }
     setPhaseIndex((current) => Math.min(current + 1, PHASES.length - 1));
   }
 
@@ -155,7 +164,6 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
         {phase.id === "safe" && <Safe data={data} form={form} setForm={setForm} />}
         {phase.id === "connected" && <Connected attendance={attendance} onComplete={onComplete} />}
       </div>
-      {(appError || formError) && <div className="onboarding-error" role="alert" aria-live="assertive"><CircleAlert size={16} />{formError || appError}</div>}
       {phase.id !== "connected" && <footer className="phase-actions"><button className="back" disabled={busy || phaseIndex === 0} onClick={() => setPhaseIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={16} /> Back</button><span className={`save-state ${draftSaveState}`}>{draftSaveState === "saving" ? "Saving…" : draftSaveState === "offline" ? "Offline · queued for replay" : draftSaveState === "conflict" ? "Conflict · refresh required" : `Saved · revision ${draftRevision.current}`}</span><button className="primary" disabled={busy || draftSaveState === "conflict"} onClick={() => void next()}>{busy ? "Saving…" : phase.id === "safe" ? "Connect Work OS" : "Continue"}<ArrowRight size={16} /></button></footer>}
     </section>
   </main>;

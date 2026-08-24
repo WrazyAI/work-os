@@ -9,6 +9,7 @@ import { apiRequest, flushQueue, sendOrQueue } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { formatWorkOsDate, formatWorkOsDateTime } from "./dateFormat";
+import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
 import { schedulePrompt } from "./scheduler";
@@ -46,6 +47,30 @@ const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
 const formatTime = (value?: string | null, zone?: string) => value ? new Intl.DateTimeFormat(undefined, { timeZone: zone, hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "—";
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const initials = (value?: string | null) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
+const taskState = (task: Record<string, any>, currentDate: string) => task.completed
+  ? "complete" as const
+  : typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate
+    ? "overdue" as const
+    : "open" as const;
+const actionSuccessMessages: Record<string, string> = {
+  "check_in.create": "Your update was saved.",
+  "proposal.reject": "The proposal was rejected.",
+  "proposal.accept": "The proposal was approved.",
+  "shift.clock_in": "You are clocked in.",
+  "shift.clock_out": "Your workday was closed.",
+  "shift.pause_toggle": "Your session status was updated.",
+  "shift.resolve_missed_clock_out": "The missed clock-out was corrected.",
+  "task.create": "The task was created.",
+  "task.complete": "The task was marked complete.",
+  "task.reopen": "The task was reopened.",
+  "task.update": "The task was updated in Nifty.",
+  "task.subtask_create": "The subtask was created in Nifty.",
+  "task.subtask_move": "The subtask was moved.",
+  "task.archive": "The task was archived. You can restore it from Nifty.",
+  "task.delete": "The task was permanently deleted.",
+  "workspace.task_surface": "The task was added to today.",
+  "workspace.task_defer": "The task was deferred.",
+};
 
 function moveMenuFocus(event: KeyboardEvent) {
   if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return false;
@@ -62,6 +87,7 @@ function moveMenuFocus(event: KeyboardEvent) {
 }
 
 export default function App() {
+  const notifications = useNotifications();
   const [session, setSession] = useState<DesktopSession | null>(null);
   const [day, setDay] = useState<DayData | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
@@ -91,8 +117,6 @@ export default function App() {
   const [autoStart, setAutoStart] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const [connectHint, setConnectHint] = useState("");
-  const [debugError, setDebugError] = useState<React.ReactNode>(null);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskHistoryCursor, setTaskHistoryCursor] = useState<string | null>(null);
   const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
@@ -102,7 +126,6 @@ export default function App() {
   const [taskComposerAssignees, setTaskComposerAssignees] = useState<string[]>([]);
   const [taskAssigneeOptions, setTaskAssigneeOptions] = useState<TaskAssigneeOption[]>([]);
   const [taskOptionsLoading, setTaskOptionsLoading] = useState(false);
-  const [taskComposerStatus, setTaskComposerStatus] = useState("");
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
   const [taskDetailsReadOnly, setTaskDetailsReadOnly] = useState(false);
   const [taskDetailsLoading, setTaskDetailsLoading] = useState(false);
@@ -124,6 +147,13 @@ export default function App() {
   const debugRef = useRef(debugScenario);
   const planEditVersion = useRef(0);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen;
+
+  const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
+    const message = errorMessage(value, fallback);
+    setError(message);
+    notifications.error(message, title);
+    return message;
+  }, [notifications]);
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
@@ -193,7 +223,7 @@ export default function App() {
     if (dayResult.status === "rejected") {
       const message = errorMessage(dayResult.reason, "Your profile loaded, but the workday could not be refreshed.");
       diagnostics.warn("bootstrap.day.degraded", message);
-      setError(message);
+      showError(message, message, "Workday refresh failed");
       return null;
     }
     const nextDay = dayResult.value;
@@ -206,17 +236,17 @@ export default function App() {
     setPlanDirty(false); setPlanSaveState("saved"); setPlanHistoryDate((current) => current || nextDay.shiftDate);
     await schedulePrompt(nextDay, () => apiRequest<DayData>("/api/work-os/me/day"));
     return nextDay;
-  }, []);
+  }, [showError]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
-      if (current) void refresh().catch((value) => setError(errorMessage(value, "Could not load your workday.")));
-    }).catch((value) => setError(errorMessage(value, "Could not open the local vault.")));
-    void listenForAuthentication((saved) => { setSession(saved); setConnectHint(""); void refresh(); }, (value) => setError(errorMessage(value, "Desktop authorization failed."))).then((fn) => { cleanup = fn; }).catch((value) => setError(errorMessage(value, "Could not listen for desktop sign-in.")));
+      if (current) void refresh().catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
+    }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
+    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void refresh(); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
-  }, [refresh]);
+  }, [notifications, refresh, showError]);
 
   useEffect(() => {
     if (!session) return;
@@ -246,6 +276,7 @@ export default function App() {
         if (response.queued) {
           if (planEditVersion.current === version) setPlanDirty(false);
           setPlanSaveState("offline");
+          notifications.info("Your goal is queued and will sync when the connection recovers.", "Saved offline");
           return;
         }
         setDay((current) => current ? { ...current, plan: response } : current);
@@ -253,26 +284,31 @@ export default function App() {
           setPlanItems([...response.items].sort((a, b) => a.rank - b.rank));
           setPlanDirty(false);
           setPlanSaveState("saved");
+          notifications.success("Your daily goal was saved.", "Goal updated");
         }
       }).catch((value) => {
         const message = errorMessage(value, "Your daily goal could not be saved.");
         setPlanSaveState(/changed on another device/i.test(message) ? "conflict" : "offline");
-        setError(message);
+        showError(message, message, "Goal not saved");
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, planDirty, planIntent, suggestionTaskIds]);
+  }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, showError, suggestionTaskIds]);
 
   useEffect(() => {
     if (view !== "insights" || !session || debugRef.current.enabled) return;
     let cancelled = false;
     setInsightsLoading(true);
     void apiRequest<InsightsData>(`/api/work-os/me/insights?range=${insightRange}${day?.shiftDate ? `&through=${encodeURIComponent(day.shiftDate)}` : ""}`)
-      .then((result) => { if (!cancelled) setInsights(result); })
-      .catch((value) => { if (!cancelled) setError(errorMessage(value, "Insights could not be refreshed.")); })
+      .then((result) => {
+        if (cancelled) return;
+        setInsights(result);
+        if (result.freshness.stale) notifications.info(`Showing retained insight data${result.freshness.staleAt ? ` from ${formatWorkOsDateTime(result.freshness.staleAt)}` : ""}.`, "Insights refresh delayed");
+      })
+      .catch((value) => { if (!cancelled) showError(value, "Insights could not be refreshed.", "Insights unavailable"); })
       .finally(() => { if (!cancelled) setInsightsLoading(false); });
     return () => { cancelled = true; };
-  }, [view, insightRange, session, day?.shiftDate]);
+  }, [view, insightRange, session, day?.shiftDate, notifications, showError]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -306,11 +342,12 @@ export default function App() {
       if (debugRef.current.enabled) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
       await action(); const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); await refresh();
       diagnostics.info("ui.action.completed", label, { activeView: view });
+      notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
     }
     catch (value) {
       const message = value instanceof Error ? value.message : "Action failed";
       diagnostics.error("ui.action.failed", message, { action: label, activeView: view });
-      setError(message);
+      showError(message, message);
     }
     finally { setBusy(false); }
   }
@@ -319,11 +356,61 @@ export default function App() {
   async function openDebugger() {
     try {
       await openDebuggerWindow();
-      setDebugError(null);
       diagnostics.info("debug.window.open", "Opened Work OS Debugger");
     } catch (value) {
-      diagnostics.error("debug.window.open_failed", value instanceof Error ? value.message : "open failed");
-      setDebugError(<DebugFailedNotice onDismiss={() => setDebugError(null)} />);
+      const message = errorMessage(value, "Debugger window could not open.");
+      diagnostics.error("debug.window.open_failed", message);
+      setError(message);
+      notifications.error(message, "Debugger unavailable", { label: "Open logs folder", onClick: () => void openLogsDir() });
+    }
+  }
+
+  async function toggleAutoStart(enabled: boolean) {
+    try {
+      if (enabled) await enable(); else await disable();
+      setAutoStart(enabled);
+      notifications.success(enabled ? "Work OS will start with Windows." : "Work OS will no longer start with Windows.", "Launch setting updated");
+    } catch (value) {
+      showError(value, "The Windows launch setting could not be changed.", "Launch setting not saved");
+    }
+  }
+
+  async function exportAppDiagnostics() {
+    try {
+      const queue = await secureState.queue();
+      const path = await exportDiagnostics({ runtimeHealth: { online: navigator.onLine, queueCount }, queueSummary: { count: queue.length, paths: queue.map((item) => item.path), attempts: queue.map((item) => item.attempts) }, sanitizedConfig: { apiBase: visibleSession?.apiBase ?? apiBase, autoStart } });
+      notifications.success(`Saved to ${path}`, "Diagnostics exported");
+    } catch (value) {
+      showError(value, "Diagnostics could not be exported.", "Export failed");
+    }
+  }
+
+  async function checkForUpdates() {
+    setUpdateStatus("Checking securely…");
+    try {
+      const saved = await secureState.session();
+      const updateOrigin = import.meta.env.VITE_WORK_OS_UPDATE_ORIGIN || "https://app.wrazyos.com";
+      if (!saved || new URL(saved.apiBase).origin !== new URL(updateOrigin).origin) {
+        setUpdateStatus("");
+        notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
+        return;
+      }
+      const headers = { Authorization: `Bearer ${saved.token}`, "X-Work-OS-Organization-Id": saved.organizationId };
+      const update = await check({ headers });
+      if (!update) {
+        setUpdateStatus("");
+        notifications.success("You already have the latest internal build.", "Work OS is up to date");
+        return;
+      }
+      setUpdateStatus(`Installing ${update.version}…`);
+      notifications.info(`Downloading and installing ${update.version}.`, "Update available");
+      await update.downloadAndInstall(undefined, { headers });
+      await relaunch();
+    } catch (value) {
+      const message = errorMessage(value, "The update catalog could not be checked.");
+      diagnostics.warn("updater.check_failed", message);
+      setUpdateStatus("");
+      showError(message, message, "Update failed");
     }
   }
 
@@ -351,8 +438,9 @@ export default function App() {
     try {
       const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "DELETE" });
       setOnboarding(next); setView("day");
+      notifications.success("Your personal setup answers were cleared.", "Onboarding restarted");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Onboarding could not be reset.");
+      showError(value, "Onboarding could not be reset.", "Reset failed");
     } finally { setBusy(false); }
   }
 
@@ -381,7 +469,7 @@ export default function App() {
   const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
     : unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? ""), [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
-  const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true);
+  const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
   const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
 
   function editPlan(mutator: () => void) {
@@ -401,7 +489,7 @@ export default function App() {
       setHistoricalPlan(planResult.plan);
       setHistoricalTasks(taskResult.tasks);
     } catch (value) {
-      setError(errorMessage(value, "Daily workspace history could not be loaded."));
+      showError(value, "Daily workspace history could not be loaded.", "History unavailable");
     }
   }
 
@@ -422,20 +510,22 @@ export default function App() {
       const result = await apiRequest<{ tasks: Array<Record<string, any>>; cursor: { next: string | null } }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(visibleDay.shiftDate)}&cursor=${encodeURIComponent(taskHistoryCursor)}&limit=100`);
       setTaskHistory((current) => [...current, ...result.tasks.filter((item) => !current.some((existing) => existing.id === item.id))]);
       setTaskHistoryCursor(result.cursor.next);
+    } catch (value) {
+      showError(value, "More tasks could not be loaded.", "Task history unavailable");
     } finally { setTaskHistoryLoading(false); }
   }
 
   async function openTaskComposer() {
     setTaskComposerTitle(""); setTaskComposerDescription("");
     setTaskComposerAssignees(visibleDay?.access?.personId ? [visibleDay.access.personId] : []);
-    setTaskComposerStatus(""); setTaskComposerOpen(true);
+    setTaskComposerOpen(true);
     if (taskAssigneeOptions.length || taskOptionsLoading) return;
     setTaskOptionsLoading(true);
     try {
       const result = await apiRequest<{ people: TaskAssigneeOption[] }>("/api/work-os/me/tasks?view=options");
       setTaskAssigneeOptions(result.people);
     } catch (value) {
-      setError(errorMessage(value, "Could not load organization assignees."));
+      showError(value, "Could not load organization assignees.", "Assignees unavailable");
     } finally { setTaskOptionsLoading(false); }
   }
 
@@ -446,8 +536,12 @@ export default function App() {
   async function openTaskDetails(task: Record<string, any>, readOnly = false) {
     const taskId = String(task.provider_task_id || task.id);
     setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(true); setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
-    try { setTaskDetails(await loadTaskDetails(taskId)); }
-    catch (value) { setTaskDetails(null); setError(errorMessage(value, "Could not open this task.")); }
+    try {
+      const details = await loadTaskDetails(taskId);
+      setTaskDetails(details);
+      if (details.subtaskSync?.error) notifications.error("Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.", "Subtasks may be stale");
+    }
+    catch (value) { setTaskDetails(null); showError(value, "Could not open this task.", "Task unavailable"); }
     finally { setTaskDetailsLoading(false); }
   }
 
@@ -456,7 +550,7 @@ export default function App() {
     void act("task.create", async () => {
       const result = await apiRequest<{ task: Record<string, any>; providerStatus: string; mirrorStatus: string }>("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskComposerTitle.trim(), description: taskComposerDescription.trim() || undefined, assignee_person_ids: taskComposerAssignees }) });
       setTaskComposerTitle(""); setTaskComposerDescription(""); setTaskComposerAssignees([]);
-      setTaskComposerStatus(`${result.providerStatus === "nifty_confirmed" ? "Nifty confirmed" : "Submitted"} · ${result.mirrorStatus}`);
+      if (result.providerStatus !== "nifty_confirmed") notifications.info(`Task submitted · ${result.mirrorStatus}`, "Provider confirmation pending");
       setTaskComposerOpen(false);
     });
   }
@@ -537,12 +631,12 @@ export default function App() {
   }
 
   async function connectWorkspace() {
-    setConnecting(true); setError(""); setConnectHint("");
+    setConnecting(true); setError("");
     try {
       await beginAuthentication(apiBase);
-      setConnectHint("Browser opened. Sign in to WrazyOS if asked, then authorize this device.");
+      notifications.info("Sign in to WrazyOS if asked, then authorize this device.", "Browser opened");
     } catch (value) {
-      setError(errorMessage(value, "Could not open workspace sign-in."));
+      showError(value, "Could not open workspace sign-in.", "Sign-in could not open");
     } finally {
       setConnecting(false);
     }
@@ -586,7 +680,7 @@ export default function App() {
   function correctMissedClockOut() {
     if (!missedClockOut || !missedClockOutAt) return;
     const timestamp = new Date(missedClockOutAt);
-    if (Number.isNaN(timestamp.getTime())) return setError("Enter a valid clock-out timestamp.");
+    if (Number.isNaN(timestamp.getTime())) return void showError("Enter a valid clock-out timestamp.", "Enter a valid clock-out timestamp.", "Invalid clock-out time");
     const correction = missedClockOut;
     setMissedClockOut(null);
     void act("shift.resolve_missed_clock_out", () => sendOrQueue("/api/work-os/me/workday", "PATCH", {
@@ -598,15 +692,15 @@ export default function App() {
   function requireActive(label: string, action: () => Promise<unknown>) {
     if (!active) {
       diagnostics.warn("ui.action.blocked", gate.message, { action: label, activeView: view });
-      setError(gate.message);
+      showError(gate.message, gate.message, "Action unavailable");
       return;
     }
     void act(label, action);
   }
 
-  if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} error={error} hint={connectHint} connecting={connecting} debugError={debugError} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => secureState.saveSettings({ apiBase })} />;
-  if (!visibleOnboarding) return <LoadingScreen error={error} retry={() => void refresh()} />;
-  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} appError={error} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => void refresh()} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+  if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  if (!visibleOnboarding) return <LoadingScreen failed={!!error} retry={() => void refresh()} />;
+  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   return <div className="workspace">
     <aside className="rail">
@@ -616,8 +710,6 @@ export default function App() {
     </aside>
     <section className="stage">
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><span className="provider" title={visibleDay?.niftySync?.error || `Nifty is authoritative · last synced ${visibleDay?.niftySync?.syncedAt ? formatWorkOsDateTime(visibleDay.niftySync.syncedAt, visibleDay.shift?.timezone) : "never"}`}><PlugZap size={14} /> Nifty {visibleDay?.niftySync?.fresh ? `source · ${openTasks.length} open` : visibleDay?.niftySync?.syncing ? "refreshing" : "delayed"}</span><button className="icon" title="Refresh Nifty, Worktivity, and the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
-      {error && <div className="notice error" role="alert"><AlertTriangle size={16} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
-      {debugError}
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> Scenario mode is active. Writes are disabled.<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {!active && <div className="notice session-gate" role="status"><Clock3 size={15} /><span>{gate.message}</span>{gate.canClockIn && <button className="primary" disabled={busy} onClick={clockIn}><CirclePlay size={15} /> Clock in</button>}</div>}
       {view === "day" && <main className="day-grid">
@@ -629,26 +721,26 @@ export default function App() {
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} prompt={visibleDay?.prompt ?? null} active={active} attendance={visibleDay?.attendance ?? null} openTasks={openTasks.length} reviews={visibleDay?.proposals.length ?? 0} />
         <section className="capture-card"><div className="card-title"><span><Sparkles size={17} /> {visibleDay?.prompt.kind === "eod" ? "Close the loop" : "Update your companion"}</span><small>{visibleDay?.prompt.required ? "Due now" : "Natural language"}</small></div><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="What changed? Mention progress, blockers, priorities, or work you completed…" /><div className="capture-actions"><select value={updateKind} onChange={(event) => setUpdateKind(event.target.value)}><option value="starting">Starting</option><option value="continuing">Continuing</option><option value="material_progress">Material progress</option><option value="completion_claim">Completion claim</option><option value="blocked">Blocked</option><option value="priority_change">Priority changed</option><option value="unplanned_work">Unplanned work</option></select><button className="primary" disabled={!input.trim() || busy} onClick={() => requireActive("check_in.create", async () => { await sendOrQueue("/api/work-os/check-ins", "POST", { source: "desktop", kind: visibleDay?.prompt.kind || "optional", update_kind: updateKind, input_text: input }); setInput(""); })}><Send size={16} /> Send update</button></div></section>
-        <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Today</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Goal</small><strong>{planIntent || goalSuggestion?.text || "No goal yet."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Accepted from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Add a goal in Tasks"}</span></div><div className="today-progress"><CompletionRing completed={completedTodayTasks} total={totalTodayTasks} label="tasks complete" />{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>{visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length} overdue task{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) === 1 ? "" : "s"}</button>}</div>{openTasks.slice(0, 3).map((task, index) => <div className="focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></div><span>open</span></div>)}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Add Task</button><button onClick={() => setView("tasks")}>Update Goal</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
+        <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Today</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Goal</small><strong>{planIntent || goalSuggestion?.text || "No goal yet."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Accepted from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Add a goal in Tasks"}</span></div><div className="today-progress"><CompletionRing completed={completedTodayTasks} total={totalTodayTasks} label="tasks complete" />{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>{visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length} overdue task{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) === 1 ? "" : "s"}</button>}</div>{openTasks.slice(0, 3).map((task, index) => { const state = taskState(task, visibleDay?.shiftDate ?? ""); return <div className="focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></div><span className={`task-state ${state}`}>{sentence(state)}</span></div>; })}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Add Task</button><button onClick={() => setView("tasks")}>Update Goal</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
       </main>}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} taskStatus={taskComposerStatus} onTaskView={setTaskView} onDate={loadPlanHistory} onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })} onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })} onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
       {view === "review" && <ReviewWorkspace proposals={visibleDay?.proposals ?? []} busy={busy} onReject={(id) => void act("proposal.reject", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "reject" }))} onApprove={(id) => void act("proposal.accept", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "accept" }))} />}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
-      {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={async (event) => { event.target.checked ? await enable() : await disable(); setAutoStart(event.target.checked); }} /></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={async () => { const queue = await secureState.queue(); const path = await exportDiagnostics({ runtimeHealth: { online: navigator.onLine, queueCount }, queueSummary: { count: queue.length, paths: queue.map((item) => item.path), attempts: queue.map((item) => item.attempts) }, sanitizedConfig: { apiBase: visibleSession.apiBase, autoStart } }); setUpdateStatus(`Exported ${path}`); }}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={async () => { setUpdateStatus("Checking securely…"); try { const saved = await secureState.session(); const updateOrigin = import.meta.env.VITE_WORK_OS_UPDATE_ORIGIN || "https://app.wrazyos.com"; if (!saved || new URL(saved.apiBase).origin !== new URL(updateOrigin).origin) return setUpdateStatus("Managed by your WrazyOS server"); const headers = { Authorization: `Bearer ${saved.token}`, "X-Work-OS-Organization-Id": saved.organizationId }; const update = await check({ headers }); if (!update) return setUpdateStatus("Up to date"); setUpdateStatus(`Installing ${update.version}`); await update.downloadAndInstall(undefined, { headers }); await relaunch(); } catch (value) { const message = errorMessage(value, "The update catalog could not be checked."); diagnostics.warn("updater.check_failed", message); setUpdateStatus(`Check failed · ${message}`); } }}>Check</button></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
+      {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
     </section>
     {taskComposerOpen && <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setTaskComposerOpen(false); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><header><div><span>New task</span><h2 id="task-modal-title">What needs to get done?</h2></div><button aria-label="Close task composer" disabled={busy} onClick={() => setTaskComposerOpen(false)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Task title</span><input autoFocus maxLength={240} value={taskComposerTitle} onChange={(event) => setTaskComposerTitle(event.target.value)} placeholder="Give the task a clear outcome" /></label><label><span>Description <em>optional</em></span><textarea maxLength={20000} value={taskComposerDescription} onChange={(event) => setTaskComposerDescription(event.target.value)} placeholder="Add context, expectations, links, or a definition of done…" /></label><fieldset><legend><UserRound size={14} /> Assignees <em>optional</em></legend>{taskOptionsLoading ? <p>Loading your organization…</p> : taskAssigneeOptions.length ? <div className="assignee-grid">{taskAssigneeOptions.map((person) => { const selected = taskComposerAssignees.includes(person.id); return <label className={selected ? "selected" : ""} key={person.id}><input type="checkbox" checked={selected} onChange={() => setTaskComposerAssignees((current) => selected ? current.filter((id) => id !== person.id) : [...current, person.id])} /><span><strong>{person.displayName}</strong><small>{person.email || "Nifty member"}</small></span><Check size={14} /></label>; })}</div> : <p>No assignable Nifty-mapped members were found. You can still create this task unassigned.</p>}</fieldset></div><footer><button disabled={busy} onClick={() => setTaskComposerOpen(false)}>Cancel</button><button className="primary" disabled={busy || !taskComposerTitle.trim()} onClick={submitTaskFromDesktop}>{busy ? "Creating…" : "Create task"}</button></footer></section></div>}
     {taskDetails && <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setTaskDetails(null); }}>
       <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
         <header><div><span>{taskDetails.task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{taskDetails.task.title}</h2></div><button aria-label="Close task details" disabled={busy} onClick={() => setTaskDetails(null)}><X size={18} /></button></header>
         <div className="task-modal-body">{taskDetailsLoading ? <p className="task-loading">Loading task details…</p> : <>
-          <section className="task-description"><span>Description</span><p>{taskDetails.task.description || "No description has been added."}</p><AssigneeTags task={taskDetails.task} /><div><small>{taskDetails.task.project?.name || "Nifty"}</small>{taskDetails.task.due_date && <small>Due {formatWorkOsDate(taskDetails.task.due_date)}</small>}<small>{taskDetails.task.completed ? "Complete" : "Open"}</small></div></section>
+          <section className="task-description"><span>Description</span><p>{taskDetails.task.description || "No description has been added."}</p><AssigneeTags task={taskDetails.task} /><div><small>{taskDetails.task.project?.name || "Nifty"}</small>{taskDetails.task.due_date && <small>Due {formatWorkOsDate(taskDetails.task.due_date)}</small>}<span className={`task-state ${taskState(taskDetails.task, visibleDay?.shiftDate ?? "")}`}>{sentence(taskState(taskDetails.task, visibleDay?.shiftDate ?? ""))}</span></div></section>
           <section className="subtask-section"><header><div><span>Subtasks</span><strong>{taskDetails.subtasks.length}</strong></div>{taskDetails.subtasks.length > 0 && <CompletionRing compact completed={taskDetails.subtasks.filter((subtask) => subtask.completed === true).length} total={taskDetails.subtasks.length} label="complete" />}</header>
-            {taskDetails.subtaskSync?.error && <div className="subtask-sync-warning" role="status"><AlertTriangle size={14} /><span>Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</span></div>}
             <div className="subtask-list">{taskDetails.subtasks.length ? taskDetails.subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const menuOpen = subtaskMenuId === subtaskId;
-              return <article key={subtask.id}><div><strong>{subtask.title}</strong><p>{subtask.description || "No description"}</p><AssigneeTags task={subtask} /></div><span>{subtask.completed ? "Complete" : "Open"}</span>{!taskDetailsReadOnly && <div className="subtask-actions"><button className="ellipsis-button" aria-label={`Actions for ${subtask.title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => { setSubtaskMenuId(menuOpen ? null : subtaskId); setMoveMenuId(null); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu"><button role="menuitem" onClick={() => { setSubtaskMenuId(null); setTaskCompletion(subtask, !subtask.completed, true); }}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button><button role="menuitem" onClick={() => editTask(subtask)}><Pencil size={14} /> Edit</button><button role="menuitem" onClick={() => setMoveMenuId(moveMenuId === subtaskId ? null : subtaskId)}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>{moveMenuId === subtaskId && <div className="move-target-menu" role="menu" aria-label="Move subtask to"><span>Move to task</span>{taskDetails.moveTargets.length ? taskDetails.moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => moveSubtask(subtask, target)}>{target.title}</button>) : <p>No other open tasks available.</p>}</div>}<button role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "archive")}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "delete")}><Trash2 size={14} /> Delete permanently</button></div>}</div>}</article>;
+              const state = taskState(subtask, visibleDay?.shiftDate ?? "");
+              return <article key={subtask.id}><div><strong>{subtask.title}</strong><p>{subtask.description || "No description"}</p><AssigneeTags task={subtask} /></div><span className={`task-state ${state}`}>{sentence(state)}</span>{!taskDetailsReadOnly && <div className="subtask-actions"><button className="ellipsis-button" aria-label={`Actions for ${subtask.title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => { setSubtaskMenuId(menuOpen ? null : subtaskId); setMoveMenuId(null); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu"><button role="menuitem" onClick={() => { setSubtaskMenuId(null); setTaskCompletion(subtask, !subtask.completed, true); }}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button><button role="menuitem" onClick={() => editTask(subtask)}><Pencil size={14} /> Edit</button><button role="menuitem" onClick={() => setMoveMenuId(moveMenuId === subtaskId ? null : subtaskId)}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>{moveMenuId === subtaskId && <div className="move-target-menu" role="menu" aria-label="Move subtask to"><span>Move to task</span>{taskDetails.moveTargets.length ? taskDetails.moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => moveSubtask(subtask, target)}>{target.title}</button>) : <p>No other open tasks available.</p>}</div>}<button role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "archive")}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "delete")}><Trash2 size={14} /> Delete permanently</button></div>}</div>}</article>;
             }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
             {!taskDetailsReadOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => setSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => setSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={submitInlineSubtask}><Plus size={14} /> Add subtask</button></div>}
           </section>
@@ -664,8 +756,8 @@ export default function App() {
   </div>;
 }
 
-function ConnectScreen({ apiBase, setApiBase, error, hint, connecting, debugError, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; error: string; hint: string; connecting: boolean; debugError: React.ReactNode; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p>{error && <div className="notice error"><AlertTriangle size={16} />{error}</div>}{hint && <div className="notice">{hint}</div>}{debugError}<button className="primary connect-button" disabled={connecting} onClick={onConnect}><LogIn size={17} /> {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
-function LoadingScreen({ error, retry }: { error: string; retry: () => void }) { return <main className="loading"><img src={assetUrl(wordmark)} alt="" /><h1>{error ? "Couldn’t load Work OS" : "Preparing your workday"}</h1><p>{error || "Syncing your schedule, tasks, and provider context…"}</p>{error && <button className="primary" onClick={retry}>Retry</button>}</main>; }
+function ConnectScreen({ apiBase, setApiBase, connecting, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}><LogIn size={17} /> {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
+function LoadingScreen({ failed, retry }: { failed: boolean; retry: () => void }) { return <main className="loading"><img src={assetUrl(wordmark)} alt="" /><h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1><p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>{failed && <button className="primary" onClick={retry}>Retry</button>}</main>; }
 function Empty({ title, body }: { title: string; body: string }) { return <div className="empty"><Sparkles size={20} /><strong>{title}</strong><p>{body}</p></div>; }
 function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) { return <header className="page-intro"><span>{eyebrow}</span><h2>{title}</h2><p>{body}</p></header>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
@@ -703,11 +795,15 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
       : attendance?.state === "active"
         ? "active"
         : "idle";
+  const workOsState = active ? `Active · ${pulse.elapsedLabel}` : "Not clocked in";
+  const providerClockOut = attendance?.clockedOutAt
+    ? formatTime(attendance.clockedOutAt, timezone)
+    : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : "—";
   return <section className="pulse-card">
     <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small></div>
     <div className="pulse-visual">
-      <div className="pulse-orbit" style={{ "--pulse-progress": `${pulse.progressPercent * 3.6}deg` } as CSSProperties} role="img" aria-label={`${progress}% of the scheduled shift has passed; ${pulse.elapsedLabel} explicit Work OS session time`}>
-        <div><small>Session time</small><strong>{pulse.elapsedLabel}</strong><span>{progress}% of schedule</span></div>
+      <div className="pulse-orbit" style={{ "--pulse-progress": `${pulse.progressPercent * 3.6}deg` } as CSSProperties} role="img" aria-label={`${progress}% of the scheduled shift has passed`}>
+        <div><small>Scheduled shift</small><strong>{progress}%</strong><span>elapsed</span></div>
       </div>
       <div className="pulse-timeline">
         <div className="pulse-schedule"><span><small>Shift start</small><strong>{formatTime(shift?.startsAt, timezone)}</strong></span><span><small>Time remaining</small><strong>{remainingShiftLabel(shift?.endsAt, now)}</strong></span><span><small>Shift end</small><strong>{formatTime(shift?.endsAt, timezone)}</strong></span></div>
@@ -718,11 +814,17 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
     <div className={`pulse-provider ${observationClass}`}>
       <Activity size={15} />
       <div><small>Worktivity observation</small><strong>{providerState}</strong></div>
-      <span>{attendance?.observedAt ? `Observed ${formatTime(attendance.observedAt, timezone)}` : "No observation"}</span>
-      <span>{pulse.breakSeconds > 0 ? `${pulse.breakLabel} OnBreak deducted` : "No OnBreak recorded"}</span>
+      <div className="pulse-provider-facts">
+        <span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span>
+        <span><small>Clocked out</small><strong>{providerClockOut}</strong></span>
+        <span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span>
+        <span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span>
+        <span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span>
+      </div>
     </div>
     <div className="pulse-stats">
-      <span><Clock3 size={14} /><small>Next check-in</small><strong>{formatTime(prompt?.nextPromptAt, timezone)}</strong></span>
+      <span><Clock3 size={14} /><small>Work OS session</small><strong>{workOsState}</strong></span>
+      <span><MessageSquareText size={14} /><small>Next check-in</small><strong>{formatTime(prompt?.nextPromptAt, timezone)}</strong></span>
       <span><ListChecks size={14} /><small>Open tasks</small><strong>{openTasks}</strong></span>
       <span><ShieldCheck size={14} /><small>Awaiting review</small><strong>{reviews}</strong></span>
     </div>
@@ -776,11 +878,11 @@ function AssigneeTags({ task }: { task: Record<string, any> }) {
   </div>;
 }
 
-export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, taskStatus, onTaskView, onDate, onGoal, onAcceptSuggestion, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
+export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, onTaskView, onDate, onGoal, onAcceptSuggestion, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
-  loadingMore: boolean; hasMore: boolean; busy: boolean; taskStatus: string; onTaskView: (view: TaskView) => void; onDate: (date: string) => Promise<void>;
+  loadingMore: boolean; hasMore: boolean; busy: boolean; onTaskView: (view: TaskView) => void; onDate: (date: string) => Promise<void>;
   onGoal: (value: string) => void; onAcceptSuggestion: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
@@ -840,13 +942,14 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
     <section className="panel daily-goal-card"><div className="goal-card-head"><div><span>Goal for {historical ? formatWorkOsDate(selectedDate) : "today"}</span><small>{provenance}</small></div>{!historical && <span className={`save-state ${saveState}`}>{saveState === "saving" ? "Saving…" : saveState === "offline" ? "Offline" : saveState === "conflict" ? "Conflict" : "Saved"}</span>}</div>{historical ? <p>{shownPlan?.freeform_intent || "No goal was recorded."}</p> : <><textarea maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="What will you do today?" />{!goal && suggestion && <div className="goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from your tasks</strong><p>{suggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}<small className="goal-independence">You can organize your day before clock-in. Attendance remains independent.</small></>}</section>
     {!historical && carryOver.length > 0 && <button className="carry-alert" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={17} /><span><strong>{carryOver.length} unfinished task{carryOver.length === 1 ? "" : "s"} carried over from {previousDays} previous workday{previousDays === 1 ? "" : "s"}.</strong><small>{carryOver.slice(0, 3).map((item) => item.task.title).join(" · ")}</small></span><em>Review unfinished work</em><ChevronRight size={16} /></button>}
     {!historical && <div className="task-view-tabs" role="tablist">{(["today", "unfinished", "completed", "all"] as TaskView[]).map((item) => <button role="tab" aria-selected={taskView === item} className={taskView === item ? "active" : ""} key={item} onClick={() => onTaskView(item)}>{sentence(item === "all" ? "all tasks" : item)}</button>)}</div>}
-    <section className="panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : sentence(taskView)}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div>{taskStatus && <p className="notice">{taskStatus}</p>}<div className="evidence-list task-records">{displayed.length ? displayed.map((task) => {
+    <section className="panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : sentence(taskView)}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{displayed.length ? displayed.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = String(task.provider_task_id || task.id);
       const menuOpen = taskMenuId === taskId;
       const progress = subtaskProgress(task);
       const isSelected = selectedIds.has(String(task.id)) || selectedIds.has(String(task.provider_task_id));
-      return <article className="task-record workspace-task" role="button" tabIndex={0} key={task.id} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state ${task.completed ? "complete" : "open"}`}>{task.completed ? "Complete" : "Open"}</span><div><h3>{task.title}</h3><p>{task.description || "No description"}</p><AssigneeTags task={task} /><small>{task.project?.name || "Nifty"}{task.milestone?.name ? ` · ${task.milestone.name}` : ""}{task.priority ? ` · ${sentence(String(task.priority))} priority` : ""}{task.due_date ? ` · due ${formatWorkOsDate(task.due_date)}` : ""}{task.provider_created_at ? ` · created ${formatWorkOsDate(task.provider_created_at)}` : ""}{task.parent_provider_task_id ? " · subtask" : ""}{task.synced_at ? " · Nifty synced" : " · Nifty sync pending"}</small></div>{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{!historical && <div className="workspace-task-menu" onClick={(event) => event.stopPropagation()}><button className="ellipsis-button" aria-label={`Actions for ${task.title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => setTaskMenuId(menuOpen ? null : taskId)}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu">{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</div>}</div>}<ChevronRight size={17} /></article>;
+      const state = taskState(task, currentDate);
+      return <article className="task-record workspace-task" role="button" tabIndex={0} key={task.id} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state ${state}`}>{sentence(state)}</span><div><h3>{task.title}</h3><p>{task.description || "No description"}</p><AssigneeTags task={task} /><small>{task.project?.name || "Nifty"}{task.milestone?.name ? ` · ${task.milestone.name}` : ""}{task.priority ? ` · ${sentence(String(task.priority))} priority` : ""}{task.due_date ? ` · due ${formatWorkOsDate(task.due_date)}` : ""}{task.provider_created_at ? ` · created ${formatWorkOsDate(task.provider_created_at)}` : ""}{task.parent_provider_task_id ? " · subtask" : ""}{task.synced_at ? " · Nifty synced" : " · Nifty sync pending"}</small></div>{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{!historical && <div className="workspace-task-menu" onClick={(event) => event.stopPropagation()}><button className="ellipsis-button" aria-label={`Actions for ${task.title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => setTaskMenuId(menuOpen ? null : taskId)}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu">{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</div>}</div>}<ChevronRight size={17} /></article>;
     }) : <Empty title={historical ? "No tasks surfaced" : "No tasks in this view"} body={historical ? "This day has no recorded Nifty task workspace." : "Refresh to load the provider-backed task record."} />}</div>{!historical && hasMore && <button disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading…" : "Load more"}</button>}</section>
     {carryOverOpen && <div className="carry-flyout-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onCarryOverOpen(false); }}><aside className="carry-flyout" aria-label="Unfinished work" role="dialog" aria-modal="true"><header><div><span>Unfinished work</span><h2>Review before carrying forward.</h2></div><button aria-label="Close unfinished work" onClick={() => onCarryOverOpen(false)}><X size={18} /></button></header><div>{[...groups.entries()].map(([date, items]) => <section key={date}><h3>{date === moveDate(currentDate, -1) ? `Yesterday · ${formatWorkOsDate(date)}` : formatWorkOsDate(date)}</h3>{items.map(({ task, attribution }) => <article key={task.id}><div><strong>{task.title}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div><div><button disabled={busy} onClick={() => onSurfaceTask(task)}>Add to today</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button disabled={busy} onClick={() => onTaskCompletion(task, true)}>Complete</button><button onClick={() => void onDate(attribution.date!)}>Open day</button></div></article>)}</section>)}</div></aside></div>}
   </main>;
@@ -858,8 +961,8 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   const latest = data?.days.at(-1);
   return <main className="page insights-page"><div className="insights-heading"><PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." /><div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div></div>
     {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
-      {data.freshness.stale && <div className="notice error"><AlertTriangle size={16} /> Retained insight data is stale{data.freshness.staleAt ? ` as of ${formatWorkOsDateTime(data.freshness.staleAt)}` : ""}. {data.freshness.error}</div>}
-      {latest?.sessionQuality?.status === "needs_correction" && <div className="notice error"><AlertTriangle size={16} /> {latest.sessionQuality.message || "This session needs correction before duration can be reported."}</div>}
+      {data.freshness.stale && <div className="notice session-gate"><AlertTriangle size={16} /> Retained insight data is stale{data.freshness.staleAt ? ` as of ${formatWorkOsDateTime(data.freshness.staleAt)}` : ""}. Refresh is pending.</div>}
+      {latest?.sessionQuality?.status === "needs_correction" && <div className="notice session-gate"><AlertTriangle size={16} /> {latest.sessionQuality.message || "This session needs correction before duration can be reported."}</div>}
       <div className="metric-grid"><Metric icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} /><article className="metric"><ListChecks size={18} /><small>Daily tasks</small><CompletionRing compact completed={data.totals.plannedCompleted} total={data.totals.planned} label="complete" /></article><Metric icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} /><Metric icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} /></div>
       <section className="panel insight-brief"><header><div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div><small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small></header><div><section><strong>Wins</strong>{data.brief.wins.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Needs attention</strong>{data.brief.attention.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Next focus</strong>{data.brief.nextFocus.map((item) => <p key={item}>{item}</p>)}</section></div></section>
       <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>
@@ -871,6 +974,3 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   </main>;
 }
 function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
-function DebugFailedNotice({ onDismiss }: { onDismiss: () => void }) {
-  return <div className="notice error" role="alert"><AlertTriangle size={16} />Debugger window could not open.<button onClick={() => void openLogsDir()}>Open logs folder</button><button onClick={onDismiss}><X size={14} /></button></div>;
-}

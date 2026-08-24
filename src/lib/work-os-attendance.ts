@@ -25,6 +25,31 @@ export function deriveWorktivitySessionStart(logs: Pick<WtActivityLog, "Status" 
   return start;
 }
 
+/** Reconstruct the latest provider-observed session window without creating or
+ * transitioning a Work OS attendance session. */
+export function deriveWorktivitySessionWindow(logs: Pick<WtActivityLog, "Status" | "CreateDate">[], observedAt: string) {
+  const ordered = logs
+    .filter((log) => Number.isFinite(Date.parse(log.CreateDate)) && Date.parse(log.CreateDate) <= Date.parse(observedAt) + 60_000)
+    .sort((left, right) => Date.parse(left.CreateDate) - Date.parse(right.CreateDate));
+  let activeStart: string | null = null;
+  let clockedInAt: string | null = null;
+  let clockedOutAt: string | null = null;
+  for (const log of ordered) {
+    if ([0, 1, 2, 3].includes(log.Status)) {
+      if (!activeStart) activeStart = log.CreateDate;
+      clockedInAt = activeStart;
+      clockedOutAt = null;
+    } else if (log.Status === 4) {
+      if (activeStart) clockedInAt = activeStart;
+      if (clockedInAt) clockedOutAt = log.CreateDate;
+      activeStart = null;
+    } else if (log.Status === 5) {
+      activeStart = null;
+    }
+  }
+  return { clockedInAt, clockedOutAt };
+}
+
 async function loadActivityHistory(employeeId: string, startDate: string, endDate: string) {
   const first = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page: 1, pageSize: 200 });
   const items = [...(first.Items ?? [])];
@@ -111,9 +136,17 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
     const latestActivity = activityLogs
       .sort((left, right) => Date.parse(right.CreateDate) - Date.parse(left.CreateDate))[0] ?? null;
     const sessionStartAt = deriveWorktivitySessionStart(activityLogs, observedAt);
+    const sessionWindow = deriveWorktivitySessionWindow(activityLogs, observedAt);
     const projection = employee
       ? projectWorktivityAttendanceWithActivity(employee.Statistics, latestActivity, observedAt)
       : unknownAttendance("The mapped employee was not returned by Worktivity.", observedAt);
+    if (projection.source === "worktivity") {
+      projection.clockedInAt ??= sessionWindow.clockedInAt;
+      if (projection.state === "off_shift") {
+        projection.clockedOutAt ??= sessionWindow.clockedOutAt ?? (projection.status === "clock_out" ? latestActivity?.CreateDate ?? null : null);
+      }
+      projection.providerBreakSeconds = deriveWorktivityBreakSeconds(activityLogs);
+    }
     const result = { fetchedAt: Date.now(), projection, employee, latestActivity, activityLogs, sessionStartAt };
     cache.set(cacheKey, result);
     return result;

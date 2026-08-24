@@ -15,6 +15,16 @@ describe("operational visualizations", () => {
     expect(styles).toContain(".pulse-provider.active");
     expect(app).toContain("Observed time and task completion · separate scales");
     expect(insightStyles).toContain("truth-preserving trend visualization");
+    expect(app).toContain("Observed active time");
+    expect(app).toContain("Clocked in");
+    expect(app).toContain("Clocked out");
+  });
+
+  it("uses unmistakable task-state semantics", () => {
+    expect(styles).toMatch(/\.task-state\.open[\s\S]*#fff3c4/);
+    expect(styles).toMatch(/\.task-state\.complete[\s\S]*#eaf5df/);
+    expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fde5e1/);
+    expect(app).toContain('className={`task-state ${state}`}');
   });
 
   it("shows the human review barrier before provider write-back", () => {
