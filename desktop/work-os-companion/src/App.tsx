@@ -17,7 +17,7 @@ import { shiftPulse } from "./shiftPulse";
 import { parentTasks, subtaskProgress, suggestDailyGoal, taskDateAttribution, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState } from "./vault";
-import companionArt from "./assets/workday-focus.png";
+import companionArt from "./assets/workday-focus.webp";
 import wordmark from "./assets/work-os-mark.png";
 import "./plan-insights.css";
 
@@ -46,6 +46,20 @@ const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
 const formatTime = (value?: string | null, zone?: string) => value ? new Intl.DateTimeFormat(undefined, { timeZone: zone, hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "—";
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const initials = (value?: string | null) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
+
+function moveMenuFocus(event: KeyboardEvent) {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return false;
+  const active = document.activeElement as HTMLElement | null;
+  const menu = active?.closest<HTMLElement>('[role="menu"]');
+  if (!menu) return false;
+  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+  if (!items.length) return false;
+  event.preventDefault();
+  const current = Math.max(0, items.indexOf(active!));
+  const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+  items[next]?.focus();
+  return true;
+}
 
 export default function App() {
   const [session, setSession] = useState<DesktopSession | null>(null);
@@ -109,6 +123,65 @@ export default function App() {
   const [pulseNow, setPulseNow] = useState(() => new Date());
   const debugRef = useRef(debugScenario);
   const planEditVersion = useRef(0);
+  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen;
+
+  const dismissTopLayer = useCallback(() => {
+    if (busy) return;
+    if (moveMenuId) { setMoveMenuId(null); return; }
+    if (subtaskMenuId) { setSubtaskMenuId(null); return; }
+    if (deleteRequest) { setDeleteRequest(null); return; }
+    if (editRequest) { setEditRequest(null); return; }
+    if (clockInConfirmation) { setClockInConfirmation(null); return; }
+    if (missedClockOut) { setMissedClockOut(null); return; }
+    if (taskDetails) { setTaskDetails(null); return; }
+    if (taskComposerOpen) { setTaskComposerOpen(false); return; }
+    if (carryOverOpen) setCarryOverOpen(false);
+  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, subtaskMenuId, taskComposerOpen, taskDetails]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.classList.add("modal-open");
+    const frame = window.requestAnimationFrame(() => {
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const dialog = dialogs.item(dialogs.length - 1);
+      if (!dialog || dialog.contains(document.activeElement)) return;
+      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])')?.focus();
+    });
+    const onKey = (event: KeyboardEvent) => {
+      if (moveMenuFocus(event)) return;
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const dialog = dialogs.item(dialogs.length - 1);
+      if (!dialog) return;
+      if (event.key === "Escape") { event.preventDefault(); dismissTopLayer(); return; }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((item) => item.offsetParent !== null);
+      if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKey);
+      document.body.classList.remove("modal-open");
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [dismissTopLayer, modalOpen]);
+
+  useEffect(() => {
+    if (!subtaskMenuId) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const selector = moveMenuId ? '.subtask-actions .move-target-menu [role="menuitem"]' : '.subtask-actions .subtask-menu > [role="menuitem"]';
+    const frame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>(selector)?.focus());
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".subtask-actions")) { setSubtaskMenuId(null); setMoveMenuId(null); }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [moveMenuId, subtaskMenuId]);
 
   const refresh = useCallback(async () => {
     const [onboardingResult, dayResult] = await Promise.allSettled([
@@ -224,7 +297,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   async function act(label: string, action: () => Promise<unknown>) {
     setBusy(true); setError("");
@@ -538,7 +611,7 @@ export default function App() {
   return <div className="workspace">
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
-      <nav>{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</nav>
+      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
       <div className="rail-foot"><span className={`presence ${active && !paused ? "live" : ""}`} /> <div><strong>{active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
@@ -690,6 +763,26 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
 }) {
   const [taskMenuId, setTaskMenuId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!taskMenuId) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>('.workspace-task-menu .subtask-menu [role="menuitem"]')?.focus());
+    const onKey = (event: KeyboardEvent) => {
+      if (moveMenuFocus(event)) return;
+      if (event.key === "Escape") { event.preventDefault(); setTaskMenuId(null); }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".workspace-task-menu")) setTaskMenuId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [taskMenuId]);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
@@ -720,7 +813,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const previousDays = new Set(carryOver.map((item) => item.attribution.date).filter(Boolean)).size;
   const provenance = !shownPlan?.freeform_intent ? "No goal yet" : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from your tasks" : "Written by you";
   return <main className="page tasks-workspace">
-    <div className="tasks-heading"><PageIntro eyebrow="Daily workspace" title={historical ? "Workday history" : "Today’s tasks"} body="Your goal is Work OS context. Every actionable item remains an authoritative Nifty task." /><div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div></div>
+    <div className="tasks-heading"><PageIntro eyebrow="Daily workspace" title={historical ? "Workday history" : "Today’s tasks"} body="Plan and complete Nifty work without losing the history behind it." /><div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div></div>
     <section className="panel daily-goal-card"><div className="goal-card-head"><div><span>Goal for {historical ? formatWorkOsDate(selectedDate) : "today"}</span><small>{provenance}</small></div>{!historical && <span className={`save-state ${saveState}`}>{saveState === "saving" ? "Saving…" : saveState === "offline" ? "Offline" : saveState === "conflict" ? "Conflict" : "Saved"}</span>}</div>{historical ? <p>{shownPlan?.freeform_intent || "No goal was recorded."}</p> : <><textarea maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="What will you do today?" />{!goal && suggestion && <div className="goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from your tasks</strong><p>{suggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}<small className="goal-independence">You can organize your day before clock-in. Attendance remains independent.</small></>}</section>
     {!historical && carryOver.length > 0 && <button className="carry-alert" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={17} /><span><strong>{carryOver.length} unfinished task{carryOver.length === 1 ? "" : "s"} carried over from {previousDays} previous workday{previousDays === 1 ? "" : "s"}.</strong><small>{carryOver.slice(0, 3).map((item) => item.task.title).join(" · ")}</small></span><em>Review unfinished work</em><ChevronRight size={16} /></button>}
     {!historical && <div className="task-view-tabs" role="tablist">{(["today", "unfinished", "completed", "all"] as TaskView[]).map((item) => <button role="tab" aria-selected={taskView === item} className={taskView === item ? "active" : ""} key={item} onClick={() => onTaskView(item)}>{sentence(item === "all" ? "all tasks" : item)}</button>)}</div>}

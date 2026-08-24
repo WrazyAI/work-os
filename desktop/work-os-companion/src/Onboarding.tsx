@@ -1,12 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, BriefcaseBusiness, Check, CircleAlert, Clock3, LogOut, Plus, ShieldCheck, Sparkles, Trash2, UserRound, Wifi } from "lucide-react";
 import type { AttendanceProjection, OnboardingData, OnboardingSchedule, ProfileItemKind, WorkProfileItem } from "./types";
-import seenArt from "./assets/onboarding/phase-seen.png";
-import understoodArt from "./assets/onboarding/phase-understood.png";
-import controlArt from "./assets/onboarding/phase-control.png";
-import preparedArt from "./assets/onboarding/phase-prepared.png";
-import safeArt from "./assets/onboarding/phase-safe.png";
-import connectedArt from "./assets/onboarding/phase-connected.png";
+import seenArt from "./assets/onboarding/phase-seen.webp";
+import understoodArt from "./assets/onboarding/phase-understood.webp";
+import controlArt from "./assets/onboarding/phase-control.webp";
+import preparedArt from "./assets/onboarding/phase-prepared.webp";
+import safeArt from "./assets/onboarding/phase-safe.webp";
+import connectedArt from "./assets/onboarding/phase-connected.webp";
 import wordmark from "./assets/work-os-mark.png";
 import { supportedTimezones, timezoneLabel } from "../../../src/modules/work-os/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm, type DraftSaveState } from "./onboardingDraftState";

@@ -370,7 +370,7 @@
   justify-content: space-between;
   padding: 5px 0 25px;
   color: var(--muted);
-  font-size: 7px;
+  font-size: 8px;
   text-align: right;
 }
 .trend-chart {
@@ -448,7 +448,7 @@
   align-self: end;
   overflow: visible;
   color: var(--muted);
-  font-size: 7px;
+  font-size: 8px;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -459,7 +459,7 @@
   margin: 13px 0 20px;
   padding-left: 36px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
 }
 .trend-legend > span {
   display: grid;
@@ -480,7 +480,7 @@
 }
 .trend-legend small {
   color: #969990;
-  font-size: 7px;
+  font-size: 8px;
 }
 @media (max-width: 620px) {
   .trend-day {
@@ -491,3 +491,11 @@
     flex-wrap: wrap;
   }
 }
+
+/* Chart labels must remain readable at native Windows scaling. */
+.trend-axis,
+.trend-day > span,
+.trend-legend,
+.trend-legend small { font-size: 10px; line-height: 1.35; }
+.trend-bars > i > span,
+.trend-bars > b > span { font-size: 9px; }

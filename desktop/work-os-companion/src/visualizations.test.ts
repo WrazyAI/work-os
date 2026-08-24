@@ -25,4 +25,24 @@ describe("operational visualizations", () => {
   it("retains reduced-motion support for chart transitions", () => {
     expect(styles).toContain("prefers-reduced-motion");
   });
+
+  it("keeps the application hierarchy and sidebar footer intentional", () => {
+    expect(app).toContain("nav-group nav-core");
+    expect(app).toContain("nav-group nav-context");
+    expect(app).toContain("nav-group nav-settings");
+    expect(app).toContain("Plan and complete Nifty work without losing the history behind it.");
+    expect(styles).toContain("Settings and shift state form one full-width footer cluster");
+    expect(styles).toContain("--ease-product");
+    expect(styles).toContain("animation: pageEnter");
+  });
+
+  it("treats keyboard and readable secondary text as part of the polish", () => {
+    expect(app).toContain("function moveMenuFocus");
+    expect(app).toContain('document.body.classList.add("modal-open")');
+    expect(app).toContain('event.key === "Escape"');
+    expect(app).toContain('event.key !== "Tab"');
+    expect(styles).toContain("Finishing-quality accessibility and legibility floor");
+    expect(styles).toContain('[role="menuitem"]):focus-visible');
+    expect(insightStyles).toContain("Chart labels must remain readable at native Windows scaling");
+  });
 });
