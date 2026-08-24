@@ -173,6 +173,7 @@ assert.match(companionServer, /moveWorkOsEmployeeSubtask/);
 assert.match(companionServer, /task\.subtask_moved/);
 assert.match(companionServer, /task\.archived/);
 assert.match(companionServer, /setWorkOsEmployeeTaskCompletion/);
+assert.match(companionServer, /niftyTaskEventIdempotencyKey\(completed \? "completed" : "reopened"/);
 assert.match(companionServer, /source: "employee_explicit"/);
 
 const api = read("src/api.ts");

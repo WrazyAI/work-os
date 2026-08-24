@@ -13,6 +13,7 @@ import {
   listEvidence,
   listPersonTasks,
   listTasks,
+  niftyTaskEventIdempotencyKey,
   moveTaskToParent,
   reviewReport,
   syncNifty,
@@ -216,9 +217,9 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const updated = await completeTask(ownerId, task.provider_task_id as string, completed);
-  const exactAt = completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at) ?? new Date().toISOString();
+  const exactAt = (completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at)) ?? new Date().toISOString();
   await recordTaskDayEvent(access, updated as Json, completed ? "completed" : "reopened", {
-    idempotencyKey: `employee:${completed ? "completed" : "reopened"}:${task.provider_task_id}:${exactAt}`,
+    idempotencyKey: niftyTaskEventIdempotencyKey(completed ? "completed" : "reopened", task.provider_task_id as string, exactAt),
     exactAt,
     provenance: "employee_explicit",
   });
