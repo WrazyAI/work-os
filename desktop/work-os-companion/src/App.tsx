@@ -5,7 +5,7 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, BriefcaseBusiness, Bug, Check, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Send, Settings, ShieldCheck, Sparkles, Trash2, UserRound, X } from "lucide-react";
-import { apiRequest, flushQueue, sendOrQueue } from "./api";
+import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { formatWorkOsDate, formatWorkOsDateTime } from "./dateFormat";
@@ -564,7 +564,7 @@ export default function App() {
   function setTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const taskId = String(task.provider_task_id || task.id);
     void act(completed ? "task.complete" : "task.reopen", async () => {
-      await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ completed }) });
+      await updateTaskCompletion(taskId, completed);
       if (refreshDetails && taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
         setTaskDetails(await loadTaskDetails(parentId));

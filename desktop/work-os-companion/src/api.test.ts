@@ -23,7 +23,7 @@ vi.mock("./diagnostics", () => ({
   diagnostics: { withSpan: vi.fn(async (_category: string, action: () => Promise<unknown>) => action()), warn: vi.fn() },
 }));
 
-import { apiRequest, flushQueue, sendOrQueue } from "./api";
+import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
 
 describe("offline action replay", () => {
   beforeEach(() => {
@@ -87,6 +87,40 @@ describe("offline action replay", () => {
 
     await expect(apiRequest("/api/work-os/me/plan", { method: "PATCH", body: "{}" })).rejects.toThrow("Clock in before confirming a plan.");
     expect(mockState.queue).toEqual([]);
+  });
+
+  it("reconciles a lost completion response from Nifty-backed task detail", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    const onlineFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError("connection reset after write"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ task: { completed: true } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", onlineFetch);
+
+    await expect(updateTaskCompletion("task/one", true)).resolves.toMatchObject({
+      task: { completed: true },
+      providerStatus: "nifty_confirmed",
+      reconciled: true,
+    });
+    expect(onlineFetch).toHaveBeenCalledTimes(2);
+    expect(String(onlineFetch.mock.calls[1][0])).toContain("/api/work-os/me/tasks/task%2Fone");
+    expect(onlineFetch.mock.calls[1][1]?.method).toBeUndefined();
+  });
+
+  it("preserves the mutation failure when provider readback does not match", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    const onlineFetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError("connection reset before write"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ task: { completed: false } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", onlineFetch);
+
+    await expect(updateTaskCompletion("task-two", true)).rejects.toThrow("connection reset before write");
+    expect(onlineFetch).toHaveBeenCalledTimes(2);
   });
 
   it("moves a permanently rejected replay to Needs Attention", async () => {
