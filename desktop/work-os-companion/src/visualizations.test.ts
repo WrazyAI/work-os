@@ -10,7 +10,9 @@ const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
-    expect(app).toContain("Scheduled progress is separate from observed activity and task outcomes.");
+    expect(app).toContain("Scheduled progress, your explicit Work OS session, Worktivity observations, and task outcomes remain separate.");
+    expect(app).toContain("Worktivity observation");
+    expect(styles).toContain(".pulse-provider.active");
     expect(app).toContain("Observed time and task completion · separate scales");
     expect(insightStyles).toContain("truth-preserving trend visualization");
   });

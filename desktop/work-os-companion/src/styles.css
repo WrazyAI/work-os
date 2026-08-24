@@ -619,6 +619,29 @@ button:disabled {
 .evidence-kind.activity {
   color: #806d58;
 }
+.task-state {
+  width: max-content;
+  min-width: 58px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: .07em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.task-state.open {
+  border-color: #c9c7bc;
+  background: #efeee7;
+  color: #4f534b;
+}
+.task-state.complete {
+  border-color: #9fc77a;
+  background: #eaf5df;
+  color: #315f16;
+}
 .evidence-list h3 {
   font: 600 14px Manrope;
   margin: 0 0 5px;
@@ -1576,6 +1599,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: #7fbd34;
   box-shadow: 0 0 0 4px rgba(127, 189, 52, 0.14);
 }
+.pulse-title small i.observed {
+  background: #3f79aa;
+  box-shadow: 0 0 0 4px rgba(63, 121, 170, 0.14);
+}
 .pulse-visual {
   display: grid;
   grid-template-columns: 142px minmax(0, 1fr);
@@ -1686,6 +1713,25 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   margin: 0;
   line-height: 1.45;
 }
+.pulse-provider {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 13px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f5f4ed;
+  color: var(--ink);
+}
+.pulse-provider.active { border-color: #a9c5dd; background: #eef5fa; color: #24577f; }
+.pulse-provider.break { border-color: #d8c69b; background: #f8f2e5; color: #725723; }
+.pulse-provider.stale { border-color: #d8c69b; background: #f8f2e5; color: #725723; }
+.pulse-provider > div { display: grid; gap: 2px; }
+.pulse-provider small { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.pulse-provider strong { font: 650 12px Manrope; }
+.pulse-provider > span { font-size: 10px; color: var(--muted); }
 .pulse-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1718,6 +1764,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .pulse-stats strong {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) {
+  .pulse-provider { grid-template-columns: auto 1fr; }
+  .pulse-provider > span { grid-column: 2; }
 }
 .completion-ring > span,
 .task-ring {
