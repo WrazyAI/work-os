@@ -25,6 +25,7 @@ const migrations = [
   "supabase/migrations/0021_work_os_onboarding_telemetry_hardening.sql",
   "supabase/migrations/0022_work_os_phase1_reliability.sql",
   "supabase/migrations/0023_work_os_task_event_sync_repair.sql",
+  "supabase/migrations/0024_work_os_phase1_ledger_closure.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -52,13 +53,15 @@ test("Work OS companion migration is complete and idempotent", async () => {
     "work_evidence_events", "work_screenshot_summaries", "work_screenshot_access_log",
     "work_report_versions", "work_desktop_sessions", "work_audit_log",
     "work_employee_onboarding", "work_consent_records",
-    "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_session_events",
+    "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_session_events", "work_task_day_events",
   ];
   const tables = await db.query(`
     select table_name from information_schema.tables
     where table_schema = 'public' and table_name = any($1)
   `, [expectedTables]);
   assert.equal(tables.rows.length, expectedTables.length);
+  const exactCompletionIndex = await db.query(`select indexname from pg_indexes where schemaname='public' and indexname='work_task_day_events_exact_completion_uidx'`);
+  assert.equal(exactCompletionIndex.rows.length, 1);
 
   const policies = await db.query(`
     select count(*)::int as count from pg_policies where schemaname='public'
@@ -394,4 +397,34 @@ test("Work OS companion migration is complete and idempotent", async () => {
     values ($1,$2,'draft','duplicate','version-a')
   `, [orgA, reportA]));
   await db.close();
+});
+
+test("Phase 1 ledger closure keeps one canonical exact completion event", async () => {
+  const db = new PGlite();
+  await db.exec(`
+    create table work_task_day_events (
+      id uuid primary key default gen_random_uuid(),
+      organization_id uuid not null,
+      person_id uuid,
+      task_id uuid not null,
+      provider_task_id text not null,
+      event_type text not null,
+      provenance text not null,
+      exact_at timestamptz,
+      idempotency_key text not null,
+      created_at timestamptz not null default now(),
+      unique (organization_id, idempotency_key)
+    );
+    insert into work_task_day_events(organization_id,person_id,task_id,provider_task_id,event_type,provenance,exact_at,idempotency_key)
+    values
+      ('00000000-0000-0000-0000-000000000001',null,'00000000-0000-0000-0000-000000000002','provider-task','completed','migration_exact','2026-08-10T20:16:52.120Z','nifty:completed:provider-task:2026-08-10 20:16:52.12+00'),
+      ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000002','provider-task','completed','nifty_exact','2026-08-10T20:16:52.120Z','nifty:completed:provider-task:2026-08-10T20:16:52.120Z');
+  `);
+  await db.exec(await readFile("supabase/migrations/0024_work_os_phase1_ledger_closure.sql", "utf8"));
+  const events = await db.query(`select provenance,person_id,idempotency_key from work_task_day_events`);
+  assert.deepEqual(events.rows, [{
+    provenance: "nifty_exact",
+    person_id: "00000000-0000-0000-0000-000000000003",
+    idempotency_key: "nifty:completed:provider-task:2026-08-10T20:16:52.120Z",
+  }]);
 });
