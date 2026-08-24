@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
+import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DesktopSession, OfflineAction } from "./types";
 
 let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
@@ -13,15 +14,21 @@ function httpsOrigin(value: string) {
 }
 
 async function vault() {
-  if (!context) context = (async () => {
-    const path = await join(await appDataDir(), "work-os-vault.hold");
-    const password = await invoke<string>("get_vault_password");
-    const stronghold = await Stronghold.load(path, password);
-    let client: Client;
-    try { client = await stronghold.loadClient("work-os"); }
-    catch { client = await stronghold.createClient("work-os"); }
-    return { stronghold, client };
-  })();
+  if (!context) {
+    const pending = (async () => {
+      const path = await join(await appDataDir(), "work-os-vault.hold");
+      const password = await invoke<string>("get_vault_password");
+      const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
+      let client: Client;
+      try { client = await stronghold.loadClient("work-os"); }
+      catch { client = await stronghold.createClient("work-os"); }
+      return { stronghold, client };
+    })();
+    context = pending;
+    void pending.catch(() => {
+      if (context === pending) context = null;
+    });
+  }
   return context;
 }
 
