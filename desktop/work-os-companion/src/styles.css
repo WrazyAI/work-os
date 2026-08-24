@@ -1203,6 +1203,38 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .workspace-task h3 { font-size: 14px; line-height: 1.35; }
 .workspace-task p { margin: 4px 0 5px; font-size: 11px; line-height: 1.45; }
 .workspace-task small { font-size: 10px; line-height: 1.55; }
+.task-assignee-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 6px 0;
+}
+.task-assignee-tags > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 2px 8px 2px 3px;
+  border: 1px solid color-mix(in srgb, var(--signal) 42%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--signal) 12%, var(--paper));
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+.task-assignee-tags i {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--signal);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: .02em;
+}
 .workspace-task > svg { color: #9a9d94; }
 .workspace-task:hover > svg { color: var(--ink); transform: translateX(2px); }
 .evidence-kind { font-size: 9px; font-weight: 600; }

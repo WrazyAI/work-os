@@ -416,6 +416,13 @@ export async function updateNiftyTask(taskId: string, body: Record<string, unkno
   });
 }
 
+export async function assignNiftyTask(taskId: string, assignees: string[]): Promise<unknown> {
+  return niftyRequest(`/api/v1.0/tasks/${encodeURIComponent(taskId)}/assignees`, {
+    method: "PUT",
+    body: JSON.stringify({ assignees }),
+  });
+}
+
 export async function updateNiftyTaskField(taskId: string, fieldId: string, value: unknown): Promise<unknown> {
   return niftyRequest(`/api/v1.0/tasks/${encodeURIComponent(taskId)}/fields/${encodeURIComponent(fieldId)}`, {
     method: "PUT",
@@ -434,6 +441,12 @@ export async function archiveNiftyTask(taskId: string, archived = true): Promise
   return niftyRequest(`/api/v1.0/tasks/${encodeURIComponent(taskId)}/archive`, {
     method: "POST",
     body: JSON.stringify({ archived }),
+  });
+}
+
+export async function deleteNiftyTask(taskId: string): Promise<unknown> {
+  return niftyRequest(`/api/v1.0/tasks/${encodeURIComponent(taskId)}`, {
+    method: "DELETE",
   });
 }
 

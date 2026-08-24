@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  assignNiftyTask,
   archiveNiftyTask,
   completeNiftyTask,
   createNiftyTask,
+  deleteNiftyTask,
   getNiftyTask,
   listNiftyMembers,
   listNiftyProjects,
@@ -13,6 +15,7 @@ import {
   withNiftyOrganization,
   type NiftyTaskSummary,
 } from "@/lib/integrations/nifty";
+import { attachTaskAssigneeIdentities } from "@/lib/work-os-task-assignees";
 import { employeeName, wtPost, worktivityConfigured, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { fetchAppsSummary } from "@/lib/worktivityAudit";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
@@ -762,10 +765,10 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
     .from("work_tasks")
     .select("*, project:work_projects(*), evidence:work_evidence(id, source, title, evidence_date)")
     .eq("user_id", userId)
-    .neq("status", "archived")
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
     .range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
+  query = query.not("status", "in", "(archived,deleted)");
   if (opts.completed === "true") query = query.eq("completed", true);
   if (opts.completed === "false") query = query.eq("completed", false);
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
@@ -782,6 +785,16 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   if (opts.fromDate) query = query.gte("provider_created_at", `${opts.fromDate}T00:00:00Z`);
   if (opts.toDate) query = query.lt("provider_created_at", `${opts.toDate}T00:00:00Z`);
   return ensureNoError(query, "load tasks");
+}
+
+export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[]) {
+  const personIds = [...new Set(tasks.flatMap((task) => stringValues(task.assignee_person_ids)))];
+  if (!personIds.length) return attachTaskAssigneeIdentities(tasks, []);
+  const people = await ensureNoError(
+    db().from("work_people").select("id,display_name,email").eq("user_id", userId).in("id", personIds),
+    "load task assignee identities",
+  );
+  return attachTaskAssigneeIdentities(tasks, people ?? []);
 }
 
 /**
@@ -830,12 +843,9 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
     .map((task) => String(task.provider_task_id));
-  if (!parentProviderIds.length) return selected;
-  const childrenResult = await db().from("work_tasks")
-    .select("parent_provider_task_id,completed")
-    .eq("user_id", userId)
-    .neq("status", "archived")
-    .in("parent_provider_task_id", parentProviderIds);
+  const childrenResult = parentProviderIds.length
+    ? await db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)").in("parent_provider_task_id", parentProviderIds)
+    : { data: [], error: null };
   if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
   const progress = new Map<string, { total: number; completed: number }>();
   for (const child of childrenResult.data ?? []) {
@@ -845,10 +855,11 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     if (child.completed === true) current.completed += 1;
     progress.set(parentId, current);
   }
-  return selected.map((task): Record<string, any> => {
+  const withProgress = selected.map((task): Record<string, any> => {
     const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
+  return hydrateTaskAssignees(userId, withProgress);
 }
 
 export async function createTask(userId: string, body: Json) {
@@ -867,8 +878,19 @@ export async function createTask(userId: string, body: Json) {
   const result = await niftyForOwner(userId, () => createNiftyTask(payload));
   const initial = normalizeNiftyTaskPayload(result);
   if (initial) {
+    const requestedAssignees = stringValues(body.assignees);
+    if (requestedAssignees.length) {
+      await niftyForOwner(userId, () => assignNiftyTask(initial.id, requestedAssignees));
+    }
     await applyMappedFields(userId, initial.id, body);
-    const normalized = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(initial.id))) ?? initial;
+    let normalized = initial;
+    for (let attempt = 0; attempt < (requestedAssignees.length ? 6 : 1); attempt += 1) {
+      normalized = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(initial.id))) ?? normalized;
+      if (requestedAssignees.every((assignee) => normalized.assignees.includes(assignee))) break;
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    const missingAssignees = requestedAssignees.filter((assignee) => !normalized.assignees.includes(assignee));
+    if (missingAssignees.length) throw new Error(`Nifty did not confirm ${missingAssignees.length} requested assignee${missingAssignees.length === 1 ? "" : "s"}`);
     const task = await upsertNiftyTask(userId, normalized) as Json;
     return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
   }
@@ -943,6 +965,22 @@ export async function archiveTask(userId: string, taskId: string) {
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
     "archive task mirror",
+  );
+}
+
+export async function deleteTask(userId: string, taskId: string) {
+  const task = await getTaskByLocalOrProviderId(userId, taskId);
+  const providerTaskId = task.provider_task_id as string;
+  await niftyForOwner(userId, () => deleteNiftyTask(providerTaskId));
+  const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
+  return selectFirst(
+    db().from("work_tasks").update({
+      status: "deleted",
+      raw: { ...raw, deleted: true, deleted_at: new Date().toISOString() },
+      synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
+    "tombstone deleted task mirror",
   );
 }
 

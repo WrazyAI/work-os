@@ -126,7 +126,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       plannedCompleted: workspace.commitmentCompleted,
       completed: workspace.tasks.filter((task) => task.dayAttribution.reason === "completed").length,
       progressed: dayCheckIns.filter((item) => ["continuing", "material_progress"].includes(String(item.update_kind))).length,
-      deferred: items.filter((item) => item.disposition === "deferred" && item.task?.status !== "archived").length,
+      deferred: items.filter((item) => item.disposition === "deferred" && !["archived", "deleted"].includes(String(item.task?.status))).length,
       carried: workspace.carryOverGroups.reduce((sum, group) => sum + group.tasks.length, 0),
       unplanned: workspace.tasks.filter((task) => task.dayAttribution.reason === "creation_observed" && !task.due_date).length,
       carryOver: workspace.carryOverGroups.reduce((sum, group) => sum + group.tasks.length, 0),

@@ -22,6 +22,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const attendanceProjection = await source("src/modules/work-os/attendance.ts");
   const workdayService = await source("src/lib/work-os-workday.ts");
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
+  const nifty = await source("src/lib/integrations/nifty.ts");
+  const workOs = await source("src/lib/work-os.ts");
   assert.match(checkIns, /idempotency-key/);
   assert.match(proposals, /decision_idempotency_key/);
   assert.match(reports, /requireWorkOsAccess/);
@@ -46,11 +48,17 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(taskDetails, /getWorkOsEmployeeTaskDetails/);
   assert.match(taskDetails, /export async function DELETE/);
   assert.match(taskDetails, /archiveWorkOsEmployeeTask/);
+  assert.match(taskDetails, /deleteWorkOsEmployeeTask/);
+  assert.match(taskDetails, /mode must be archive or delete/);
   assert.match(taskDetails, /export async function PATCH/);
   assert.match(taskDetails, /moveWorkOsEmployeeSubtask/);
   assert.match(taskDetails, /setWorkOsEmployeeTaskCompletion/);
   assert.match(taskDetails, /typeof body\.completed === "boolean"/);
   assert.match(taskDetails, /requirePerson: true/);
+  assert.match(nifty, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/assignees/);
+  assert.match(nifty, /method: "DELETE"/);
+  assert.match(workOs, /Nifty did not confirm.*requested assignee/);
+  assert.match(workOs, /status: "deleted"/);
   assert.match(workday, /clockIn\(auth\.access/);
   assert.doesNotMatch(workday, /reconcileWorktivityAttendance|work_os_fallback/);
   assert.match(attendance, /observeWorktivityAttendance/);
