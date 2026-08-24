@@ -56,5 +56,5 @@ const PREVIEW_DATA: OnboardingData = {
 };
 
 export default function OnboardingPreview() {
-  return <Onboarding data={PREVIEW_DATA} simulated busy={false} onSubmit={async () => undefined} onSaveDraft={async () => undefined} onComplete={() => undefined} onOpenDebug={() => undefined} onLogout={() => undefined} />;
+  return <Onboarding data={PREVIEW_DATA} simulated busy={false} onSubmit={async () => undefined} onSaveDraft={async () => undefined} onComplete={() => undefined} onOpenDebug={() => undefined} onLogout={() => undefined} onNotify={() => undefined} />;
 }

@@ -4,12 +4,14 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Bug, Download, RotateCcw, X } from "lucide-react";
 import { diagnosticsSnapshot, exportDiagnostics, openLogsDir, type DiagnosticEvent, type DiagnosticLevel, type DiagnosticSource } from "./diagnostics";
+import { useNotifications } from "./NotificationFlyouts";
 import { ALL_ONBOARDING_DETAILS, DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
 import type { DebugDayState, DebugScenario } from "./types";
 
 type Tab = "scenarios" | "trace" | "export";
 
 export default function DebugWindow() {
+  const notifications = useNotifications();
   const [tab, setTab] = useState<Tab>("scenarios");
   const [scenario, setScenario] = useState<DebugScenario>(DEFAULT_DEBUG_SCENARIO);
   const [events, setEvents] = useState<DiagnosticEvent[]>([]);
@@ -20,7 +22,6 @@ export default function DebugWindow() {
   const [level, setLevel] = useState<DiagnosticLevel | "all">("all");
   const [source, setSource] = useState<DiagnosticSource | "all">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [exportStatus, setExportStatus] = useState("");
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -60,16 +61,16 @@ export default function DebugWindow() {
   }
 
   async function runExport() {
-    setExportStatus("Exporting…");
+    notifications.info("Preparing a redacted diagnostics bundle.", "Exporting diagnostics");
     try {
       const path = await exportDiagnostics({
         runtimeHealth: { online: navigator.onLine, userAgent: navigator.userAgent, href: window.location.href },
         queueSummary: { note: "Queue bodies are never exported." },
         sanitizedConfig: { window: "debug" },
       });
-      setExportStatus(`Wrote ${path}`);
+      notifications.success(`Saved to ${path}`, "Diagnostics exported");
     } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : "Export failed");
+      notifications.error(error instanceof Error ? error.message : "Export failed", "Diagnostics export failed", { label: "Open logs folder", onClick: () => void openLogsDir() });
     }
   }
 
@@ -149,7 +150,6 @@ export default function DebugWindow() {
         <button className="primary" onClick={() => void runExport()}><Download size={15} /> Export diagnostics ZIP</button>
         <button onClick={() => void openLogsDir()}>Open logs folder</button>
       </div>
-      {exportStatus && <p className="debug-help">{exportStatus}</p>}
     </div>}
   </main>;
 }
