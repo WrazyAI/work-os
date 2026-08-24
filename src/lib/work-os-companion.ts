@@ -462,7 +462,9 @@ export async function getWorkOsDay(
   ]);
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, at);
   const shift = resolveShiftWindow(rules, exceptions, at);
-  const shiftDate = shift?.shiftDate ?? localDateForTimezone(at, timezone);
+  // Upcoming-shift display must not advance task/history attribution into the
+  // next day after the current shift ends.
+  const shiftDate = localDateForTimezone(at, timezone);
   const { data: checkIns, error: checkInError } = await db()
     .from("work_check_ins")
     .select("substantive, confirmed_existing_tasks, occurred_at, snoozed_until")
