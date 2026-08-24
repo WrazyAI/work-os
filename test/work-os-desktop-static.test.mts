@@ -147,6 +147,7 @@ const companionServer = readFileSync(resolve(import.meta.dirname, "../src/lib/wo
 assert.match(companionServer, /refreshNiftyMirror/);
 assert.match(companionServer, /await syncNiftyPersonTasks\(ownerId, personId\)/);
 assert.match(companionServer, /todayOnly: true, todayDate: shiftDate, limit: 1000/);
+assert.match(companionServer, /const shiftDate = localDateForTimezone\(at, timezone\)/);
 assert.match(companionServer, /syncing: !niftyFresh/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.match(companionServer, /role", "admin"/);
