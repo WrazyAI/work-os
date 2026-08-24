@@ -502,7 +502,7 @@ export async function getWorkOsDay(
     ...(!options.refreshNifty && organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
   };
   const [tasks, taskHistory, evidence] = await Promise.all([
-    listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate }),
+    listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate, limit: 1000 }),
     listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
     listEvidence(ownerId, { personId, date: shiftDate }),
   ]);
