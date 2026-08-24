@@ -35,13 +35,15 @@ test("Worktivity statuses project attendance without scoring idle", () => {
   const at = "2026-08-12T10:00:00.000Z";
   assert.equal(projectWorktivityAttendance({ Status: 0, ClockIn: at }, at).state, "active");
   assert.equal(projectWorktivityAttendance({ Status: 1, ClockIn: at }, at).state, "active");
-  assert.match(projectWorktivityAttendance({ Status: 1, ClockIn: at }, at).message, /reconciled idempotently/);
+  assert.match(projectWorktivityAttendance({ Status: 1, ClockIn: at }, at).message, /clock-in remains explicit/);
   assert.equal(projectWorktivityAttendance({ Status: 2, ClockIn: at }, at).state, "paused");
   const idle = projectWorktivityAttendance({ Status: 3, ClockIn: at }, at);
   assert.equal(idle.state, "active");
   assert.doesNotMatch(idle.message, /productive|unproductive/i);
   assert.equal(projectWorktivityAttendance({ Status: 4, ClockOut: at }, at).state, "off_shift");
   assert.equal(projectWorktivityAttendance({ Status: 5 }, at).state, "off_shift");
+  assert.match(projectWorktivityAttendance({ Status: 4, ClockOut: at }, at).message, /clock-out remains explicit/);
+  assert.doesNotMatch(projectWorktivityAttendance({ Status: 5 }, at).message, /reconcil/i);
   assert.equal(projectWorktivityAttendance(null, at).state, "unknown");
 });
 

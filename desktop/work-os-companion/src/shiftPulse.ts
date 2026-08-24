@@ -7,6 +7,7 @@ export interface ShiftPulse {
   progressPercent: number;
   observedElapsedLabel: string;
   observedBreakLabel: string;
+  schedulePhase: "unavailable" | "upcoming" | "in_progress" | "complete";
 }
 
 function validTime(value?: string | null) {
@@ -23,6 +24,13 @@ export function shiftPulse(
 ): ShiftPulse {
   const startsAt = validTime(shift?.startsAt);
   const endsAt = validTime(shift?.endsAt);
+  const schedulePhase = startsAt === null || endsAt === null || endsAt <= startsAt
+    ? "unavailable"
+    : now.getTime() < startsAt
+      ? "upcoming"
+      : now.getTime() >= endsAt
+        ? "complete"
+        : "in_progress";
   const progressPercent = startsAt !== null && endsAt !== null && endsAt > startsAt
     ? Math.max(0, Math.min(100, ((now.getTime() - startsAt) / (endsAt - startsAt)) * 100))
     : 0;
@@ -37,7 +45,7 @@ export function shiftPulse(
   const observedBreakLabel = `${String(Math.floor(observedBreakMinutes / 60)).padStart(2, "0")}:${String(observedBreakMinutes % 60).padStart(2, "0")}`;
   const clockedInAt = validTime(session?.clocked_in_at);
   if (!session || clockedInAt === null || session.state === "clocked_out") {
-    return { elapsedLabel: "00:00", breakLabel: "00:00", breakSeconds: 0, progressPercent, observedElapsedLabel, observedBreakLabel };
+    return { elapsedLabel: "00:00", breakLabel: "00:00", breakSeconds: 0, progressPercent, observedElapsedLabel, observedBreakLabel, schedulePhase };
   }
   const clockedOutAt = validTime(session.clocked_out_at);
   const end = clockedOutAt ?? now.getTime();
@@ -49,5 +57,5 @@ export function shiftPulse(
   const elapsedLabel = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
   const breakMinutes = Math.floor(breakSeconds / 60);
   const breakLabel = `${String(Math.floor(breakMinutes / 60)).padStart(2, "0")}:${String(breakMinutes % 60).padStart(2, "0")}`;
-  return { elapsedLabel, breakLabel, breakSeconds, progressPercent, observedElapsedLabel, observedBreakLabel };
+  return { elapsedLabel, breakLabel, breakSeconds, progressPercent, observedElapsedLabel, observedBreakLabel, schedulePhase };
 }

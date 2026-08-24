@@ -786,8 +786,21 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
 }) {
   const timezone = shift?.timezone;
   const progress = Math.round(pulse.progressPercent);
-  const providerState = attendance?.stale ? "Stale" : attendance?.status ? sentence(attendance.status) : "Unavailable";
-  const state = active ? "Work OS live" : attendance?.state === "active" ? "Activity observed" : "Waiting";
+  const observationEnded = Boolean(attendance?.clockedOutAt);
+  const providerState = attendance?.stale
+    ? "Stale"
+    : observationEnded
+      ? "Observed session ended"
+      : attendance?.status
+        ? sentence(attendance.status)
+        : "Unavailable";
+  const state = active
+    ? "Work OS live"
+    : attendance?.state === "active" || attendance?.state === "paused"
+      ? "Activity observed"
+      : observationEnded
+        ? "Observation complete"
+        : "Waiting";
   const observationClass = attendance?.stale
     ? "stale"
     : attendance?.status === "break"
@@ -799,14 +812,25 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
   const providerClockOut = attendance?.clockedOutAt
     ? formatTime(attendance.clockedOutAt, timezone)
     : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : "—";
+  const scheduleLabel = pulse.schedulePhase === "upcoming" ? "Next shift" : "Scheduled shift";
+  const scheduleStatus = pulse.schedulePhase === "upcoming" ? "upcoming" : pulse.schedulePhase === "complete" ? "complete" : "elapsed";
+  const middleLabel = pulse.schedulePhase === "upcoming" ? "Starts in" : pulse.schedulePhase === "complete" ? "Shift status" : "Time remaining";
+  const middleValue = pulse.schedulePhase === "upcoming"
+    ? remainingShiftLabel(shift?.startsAt, now)
+    : pulse.schedulePhase === "complete"
+      ? "Complete"
+      : remainingShiftLabel(shift?.endsAt, now);
+  const scheduleAria = pulse.schedulePhase === "upcoming"
+    ? "The next scheduled shift has not started"
+    : `${progress}% of the scheduled shift has passed`;
   return <section className="pulse-card">
     <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small></div>
     <div className="pulse-visual">
-      <div className="pulse-orbit" style={{ "--pulse-progress": `${pulse.progressPercent * 3.6}deg` } as CSSProperties} role="img" aria-label={`${progress}% of the scheduled shift has passed`}>
-        <div><small>Scheduled shift</small><strong>{progress}%</strong><span>elapsed</span></div>
+      <div className="pulse-orbit" style={{ "--pulse-progress": `${pulse.progressPercent * 3.6}deg` } as CSSProperties} role="img" aria-label={scheduleAria}>
+        <div><small>{scheduleLabel}</small><strong>{progress}%</strong><span>{scheduleStatus}</span></div>
       </div>
       <div className="pulse-timeline">
-        <div className="pulse-schedule"><span><small>Shift start</small><strong>{formatTime(shift?.startsAt, timezone)}</strong></span><span><small>Time remaining</small><strong>{remainingShiftLabel(shift?.endsAt, now)}</strong></span><span><small>Shift end</small><strong>{formatTime(shift?.endsAt, timezone)}</strong></span></div>
+        <div className="pulse-schedule"><span><small>Shift start</small><strong>{formatTime(shift?.startsAt, timezone)}</strong></span><span><small>{middleLabel}</small><strong>{middleValue}</strong></span><span><small>Shift end</small><strong>{formatTime(shift?.endsAt, timezone)}</strong></span></div>
         <div className="pulse-track"><i style={{ width: `${pulse.progressPercent}%` }} /><b style={{ left: `clamp(7px, ${pulse.progressPercent}%, calc(100% - 7px))` }} /></div>
         <p>Scheduled progress, your explicit Work OS session, Worktivity observations, and task outcomes remain separate.</p>
       </div>
