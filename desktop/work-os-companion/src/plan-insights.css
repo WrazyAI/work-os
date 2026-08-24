@@ -491,3 +491,11 @@
     flex-wrap: wrap;
   }
 }
+
+/* Chart labels must remain readable at native Windows scaling. */
+.trend-axis,
+.trend-day > span,
+.trend-legend,
+.trend-legend small { font-size: 10px; line-height: 1.35; }
+.trend-bars > i > span,
+.trend-bars > b > span { font-size: 9px; }

@@ -35,4 +35,14 @@ describe("operational visualizations", () => {
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");
   });
+
+  it("treats keyboard and readable secondary text as part of the polish", () => {
+    expect(app).toContain("function moveMenuFocus");
+    expect(app).toContain('document.body.classList.add("modal-open")');
+    expect(app).toContain('event.key === "Escape"');
+    expect(app).toContain('event.key !== "Tab"');
+    expect(styles).toContain("Finishing-quality accessibility and legibility floor");
+    expect(styles).toContain('[role="menuitem"]):focus-visible');
+    expect(insightStyles).toContain("Chart labels must remain readable at native Windows scaling");
+  });
 });

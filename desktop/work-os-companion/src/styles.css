@@ -3253,3 +3253,55 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     justify-self: center;
   }
 }
+
+/* Finishing-quality accessibility and legibility floor. */
+body.modal-open { overflow: hidden; }
+::selection { background: rgba(184, 255, 90, 0.55); color: var(--ink); }
+:where(button, a, input, textarea, select, summary, [role="button"], [role="menuitem"]):focus-visible {
+  outline: 3px solid rgba(132, 190, 59, 0.42);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px #4e7b1a;
+}
+.rail nav button:focus-visible { outline-color: rgba(184, 255, 90, 0.72); outline-offset: 1px; }
+.task-modal-backdrop { overscroll-behavior: contain; }
+.task-modal,
+.delete-confirmation,
+.carry-flyout { outline: none; }
+.ellipsis-button,
+.date-navigator button,
+.task-modal > header button { min-width: 36px; min-height: 36px; }
+.workspace-task small,
+.subtask-list p,
+.evidence-list p,
+.evidence-list time,
+.setting p,
+.goal-card-head small,
+.goal-independence,
+.carry-alert small,
+.carry-alert em,
+.today-progress,
+.review-count span,
+.review-control-copy small,
+.proposal-card > footer small { font-size: 10.5px; line-height: 1.5; }
+.task-view-tabs button,
+.subtask-menu > button,
+.move-target-menu > button,
+.carry-flyout article button { font-size: 10.5px; }
+.evidence-kind,
+.today-goal small,
+.today-goal span,
+.carry-flyout > header span,
+.move-target-menu > span,
+.review-flow small,
+.proposal-card > header span,
+.proposal-compare section > span,
+.proposal-compare dl div,
+.pulse-orbit small,
+.pulse-orbit span,
+.pulse-schedule small,
+.pulse-timeline p,
+.pulse-stats small { font-size: 9.5px; line-height: 1.45; }
+@media (max-width: 560px) {
+  .task-view-tabs button { min-width: 74px; min-height: 38px; }
+  .workspace-task small { font-size: 10px; }
+}
