@@ -16,6 +16,7 @@ import {
   moveTaskToParent,
   reviewReport,
   syncNifty,
+  syncNiftyPersonTasks,
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
@@ -486,11 +487,10 @@ export async function getWorkOsDay(
   let effectiveLastSyncedAt = lastSyncedAt;
   let niftyFresh = !!effectiveLastSyncedAt && Date.now() - new Date(effectiveLastSyncedAt).getTime() < NIFTY_FRESH_MS;
   if (options.refreshNifty) {
-    await refreshNiftyMirror(access.organizationId, ownerId);
-    const refreshed = await db().from("work_organizations").select("nifty_synced_at").eq("id", access.organizationId).single();
-    if (refreshed.error) throw new Error(`load refreshed Nifty state: ${refreshed.error.message}`);
-    effectiveLastSyncedAt = refreshed.data.nifty_synced_at as string | undefined;
-    niftyFresh = !!effectiveLastSyncedAt;
+    const refreshed = await syncNiftyPersonTasks(ownerId, personId);
+    effectiveLastSyncedAt = refreshed.syncedAt;
+    niftyFresh = true;
+    void refreshNiftyMirror(access.organizationId, ownerId).catch(() => undefined);
   } else if (!niftyFresh) {
     void refreshNiftyMirror(access.organizationId, ownerId).catch(() => undefined);
   }
