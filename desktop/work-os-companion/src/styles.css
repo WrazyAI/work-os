@@ -1053,7 +1053,7 @@ button:disabled {
 .date-navigator { display: flex; align-items: center; gap: 5px; margin-bottom: 30px; }
 .date-navigator button, .formatted-date-picker { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); }
 .date-navigator button { width: 38px; display: grid; place-items: center; }
-.formatted-date-picker { min-width: 106px; position: relative; display: grid; place-items: center; padding: 0 12px; overflow: hidden; font: 600 11px Manrope; }
+.formatted-date-picker { min-width: 132px; position: relative; display: grid; place-items: center; padding: 0 12px; overflow: hidden; font: 600 11px Manrope; }
 .formatted-date-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .daily-goal-card { margin-bottom: 12px; }
 .goal-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }

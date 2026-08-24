@@ -401,7 +401,7 @@
 .trend-day {
   position: relative;
   z-index: 1;
-  min-width: 58px;
+  min-width: 82px;
   flex: 1;
   display: grid;
   grid-template-rows: 1fr 20px;
@@ -446,7 +446,7 @@
 }
 .trend-day > span {
   align-self: end;
-  overflow: hidden;
+  overflow: visible;
   color: var(--muted);
   font-size: 7px;
   text-align: center;
@@ -484,7 +484,7 @@
 }
 @media (max-width: 620px) {
   .trend-day {
-    min-width: 52px;
+    min-width: 78px;
   }
   .trend-legend {
     padding-left: 0;
