@@ -22,7 +22,13 @@ describe("desktop session gate", () => {
   });
 
   it("offers explicit clock-in when a shift exists", () => {
-    expect(sessionGate(day(null))).toEqual({ active: false, canClockIn: true, message: "Clock in explicitly to confirm a plan or send work updates." });
+    expect(sessionGate(day(null))).toMatchObject({ active: false, canClockIn: true, worktivitySynced: false, persistentTitle: "Work OS session not started" });
+  });
+
+  it("suppresses the clock-in warning while fresh Worktivity activity is syncing", () => {
+    const syncing = day(null);
+    syncing.attendance = { source: "worktivity", state: "active", status: "working", observedAt: "2026-08-14T09:02:00.000Z", clockedInAt: "2026-08-14T09:00:00.000Z", clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Activity observed." };
+    expect(sessionGate(syncing)).toEqual({ active: false, canClockIn: true, message: "Worktivity is syncing. Start a Work OS session before sending session-based updates.", worktivitySynced: true });
   });
 
   it("allows an explicit acknowledged exception session without a current shift", () => {
