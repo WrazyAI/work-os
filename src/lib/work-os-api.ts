@@ -15,6 +15,7 @@ interface WorkOsRequestContext {
 export interface WorkOsAccess {
   ctx: WorkOsRequestContext;
   organizationId: string;
+  organizationOwnerId: string | null;
   role: WorkOsOrgRole;
   personId: string | null;
   membershipId: string;
@@ -70,13 +71,15 @@ function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+const DESKTOP_LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
+
 async function resolveDesktopContext(authorization: string) {
   const match = authorization.match(/^Bearer\s+([^\s]+)$/i);
   if (!match) return null;
   const supabase = createAdminClient();
   const { data: session, error: sessionError } = await supabase
     .from("work_desktop_sessions")
-    .select("id, organization_id, user_id, expires_at, revoked_at")
+    .select("id, organization_id, user_id, expires_at, revoked_at, last_used_at")
     .eq("token_hash", tokenHash(match[1]))
     .maybeSingle();
   if (sessionError) throw new Error(`load Work OS desktop session: ${sessionError.message}`);
@@ -89,7 +92,10 @@ async function resolveDesktopContext(authorization: string) {
     .maybeSingle();
   if (profileError) throw new Error(`load Work OS desktop profile: ${profileError.message}`);
   if (!row) return null;
-  await supabase.from("work_desktop_sessions").update({ last_used_at: new Date().toISOString() }).eq("id", session.id);
+  const lastUsedAt = session.last_used_at as string | null;
+  if (!lastUsedAt || Date.now() - new Date(lastUsedAt).getTime() > DESKTOP_LAST_USED_THROTTLE_MS) {
+    await supabase.from("work_desktop_sessions").update({ last_used_at: new Date().toISOString() }).eq("id", session.id);
+  }
   return {
     ctx: {
       user: { id: row.id as string },
@@ -151,7 +157,7 @@ export async function requireWorkOsAccess(options: {
   const role = membership.role as WorkOsOrgRole;
   const { data: organization, error: organizationError } = await createAdminClient()
     .from("work_organizations")
-    .select("feature_flags")
+    .select("feature_flags, legacy_owner_id, created_by")
     .eq("id", membership.organization_id)
     .single();
   if (organizationError) throw new Error(`load Work OS feature flags: ${organizationError.message}`);
@@ -172,12 +178,18 @@ export async function requireWorkOsAccess(options: {
     access: {
       ctx,
       organizationId: membership.organization_id as string,
+      organizationOwnerId: ((organization.legacy_owner_id || organization.created_by) as string | null) ?? null,
       role,
       personId: membership.person_id as string | null,
       membershipId: membership.id as string,
       featureFlags,
     } satisfies WorkOsAccess,
   };
+}
+
+export function workOsOrganizationOwnerId(access: WorkOsAccess): string {
+  if (!access.organizationOwnerId) throw new Error("Work OS organization has no owner");
+  return access.organizationOwnerId;
 }
 
 export async function accessibleWorkOsPersonIds(access: WorkOsAccess): Promise<string[] | null> {
@@ -220,7 +232,7 @@ export async function requireWorkOsAdmin(): Promise<
   return { ctx: result.access.ctx, access: result.access };
 }
 
-export function jsonError(err: unknown, status = 500) {
+export function jsonError(err: unknown, status?: number) {
   if (isWorkOsMigrationRequired(err)) {
     return NextResponse.json({
       error: err instanceof Error ? err.message : "Work OS database migration required.",
@@ -237,6 +249,6 @@ export function jsonError(err: unknown, status = 500) {
       migration: "supabase/migrations/0010_work_os_employee_companion.sql",
     }, { status: 503 });
   }
-  const code = message.includes("required") || message.includes("not found") || message.includes("must be") ? 400 : status;
+  const code = status ?? (message.includes("required") || message.includes("not found") || message.includes("must be") ? 400 : 500);
   return NextResponse.json({ error: message }, { status: code });
 }

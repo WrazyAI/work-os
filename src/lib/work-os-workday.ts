@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
-import { getWorkOsOrganizationOwnerId, listPersonTasks } from "@/lib/work-os";
+import { WorkOsConflictError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { listPersonTasks } from "@/lib/work-os";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
@@ -181,7 +181,7 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
   const existing = await loadPlanByDate(access, shiftDate);
   if (existing) return existing;
   const carryOver = await loadCarryOverItems(access, shiftDate);
-  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const ownerId = workOsOrganizationOwnerId(access);
   const currentTasks = await listPersonTasks(ownerId, access.personId as string, {
     completed: "false", todayOnly: true, todayDate: shiftDate, limit: 100,
   });
@@ -534,7 +534,7 @@ export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, i
   const { shiftDate } = await localWorkDate(access);
   const plan = await ensureDailyPlanForDate(access, shiftDate, await activeSession(access));
   if (!plan || plan.status === "closed") throw new Error("Today's task workspace is read-only.");
-  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const ownerId = workOsOrganizationOwnerId(access);
   const attributableTasks = await listPersonTasks(ownerId, access.personId as string, { completed: "false", includeLedgerHistory: true, limit: 1000 });
   const task = attributableTasks.find((item) => String(item.id) === taskId || String(item.provider_task_id) === taskId);
   if (!task) throw new Error("The Nifty task is not attributable to this employee.");
@@ -594,7 +594,7 @@ export async function convertDailyPlanOutcome(access: WorkOsAccess, body: Json, 
   const { shiftDate } = await localWorkDate(access);
   const plan = await loadPlanByDate(access, shiftDate);
   if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
-  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const ownerId = workOsOrganizationOwnerId(access);
   const taskResult = await db().from("work_tasks").select("id,title,completed,completed_at").eq("user_id", ownerId)
     .eq("id", taskId).contains("assignee_person_ids", [access.personId as string]).maybeSingle();
   if (taskResult.error) throw new Error(`validate converted Nifty task: ${taskResult.error.message}`);

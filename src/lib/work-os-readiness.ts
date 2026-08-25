@@ -1,3 +1,4 @@
+import { todayIso as today } from "@/lib/work-os-dates";
 import { resolveProviderAttribution } from "@/lib/work-os-attribution";
 
 export type WorkOsReadinessStatus = "ready" | "needs_setup" | "blocked";
@@ -132,10 +133,6 @@ function active(value: boolean | null | undefined) {
 
 function asFlag(value: unknown) {
   return value === true;
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsReadinessReport {

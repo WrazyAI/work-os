@@ -1,6 +1,7 @@
+import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
+import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getWorkOsOrganizationOwnerId, hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
-import type { WorkOsAccess } from "@/lib/work-os-api";
+import { hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 
 type Json = Record<string, any>;
@@ -86,12 +87,6 @@ export async function recordTaskDayEvent(
 const db = () => createAdminClient();
 const dateOf = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 
-function addDays(value: string, amount: number) {
-  const date = new Date(`${value}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + amount);
-  return date.toISOString().slice(0, 10);
-}
-
 function cursorValue(row: DailyWorkspaceTaskRow) {
   const priority = ({ due_date: 0, surfaced: 1, completed: 2, creation_observed: 3, carried: 4, subtask_activity: 5 } as const)[row.dayAttribution.reason];
   return `${String(priority).padStart(2, "0")}|${String(row.due_date ?? "9999-12-31")}|${String(row.provider_created_at ?? row.created_at ?? "")}|${row.id}`;
@@ -140,7 +135,7 @@ export async function resolveDailyWorkspace(
   const now = options.now ?? new Date();
   const context = await employeeContext(access, now);
   const date = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : context.currentDate;
-  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const ownerId = workOsOrganizationOwnerId(access);
   const [tasksResult, eventsResult, planResult, sessionResult] = await Promise.all([
     db().from("work_tasks")
       .select("*,project:work_projects(id,name,provider_project_id)")

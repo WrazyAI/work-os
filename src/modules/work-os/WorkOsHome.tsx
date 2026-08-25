@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useRouter } from "next/navigation";
+import { todayIso } from "@/lib/work-os-dates";
 import {
   AlertCircle,
   BriefcaseBusiness,
@@ -44,10 +45,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error || `Request failed: ${res.status}`);
   return body as T;
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function cls(...items: Array<string | false | null | undefined>) {

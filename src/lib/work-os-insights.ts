@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { WorkOsAccess } from "@/lib/work-os-api";
+import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
+import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
-import { getWorkOsOrganizationOwnerId } from "@/lib/work-os";
 
 type Json = Record<string, any>;
 export type InsightRange = "day" | "7d" | "30d";
@@ -12,12 +12,6 @@ function validDate(value: string | null | undefined) {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const parsed = new Date(`${value}T12:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? null : value;
-}
-
-function addDays(value: string, amount: number) {
-  const date = new Date(`${value}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + amount);
-  return date.toISOString().slice(0, 10);
 }
 
 export function effectiveBreakObservation(session: Json, now: Date, authoritative: boolean) {
@@ -73,7 +67,7 @@ export function deterministicInsightBrief(days: Json[], references: Json[]) {
 export async function getPersonalInsights(access: WorkOsAccess, range: InsightRange, throughValue?: string | null, now = new Date()) {
   const { through, count, from } = insightDateWindow(range, throughValue, now);
   const personId = access.personId as string;
-  const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
+  const ownerId = workOsOrganizationOwnerId(access);
   const dates = Array.from({ length: count }, (_, index) => addDays(from, index));
   const [sessionsResult, plansResult, checkInsResult, evidenceResult, orgResult, workspaces] = await Promise.all([
     db().from("work_sessions").select("id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,provider_break_seconds,provider_break_observed_at,provider_break_provenance,attendance_observed_at,correction_status,correction_reason")

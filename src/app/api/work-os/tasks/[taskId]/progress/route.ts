@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { addTaskProgress, getWorkOsOrganizationOwnerId } from "@/lib/work-os";
-import { jsonError, requireWorkOsAdmin } from "@/lib/work-os-api";
+import { addTaskProgress } from "@/lib/work-os";
+import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     const { taskId } = await params;
     const body = await req.json();
     body.idempotency_key = req.headers.get("idempotency-key") || body.idempotency_key;
-    const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
+    const ownerId = workOsOrganizationOwnerId(auth.access);
     const evidence = await addTaskProgress(ownerId, taskId, body);
     return NextResponse.json({ evidence }, { status: 201 });
   } catch (err) {
