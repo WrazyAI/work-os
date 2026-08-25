@@ -130,7 +130,6 @@ async function promoteSubmittedAdminSchedule(
   });
   if (auditError) throw new Error(`audit promoted admin onboarding schedule: ${auditError.message}`);
 }
-
 function currentScheduleShape(schedule: Json | null) {
   if (!schedule) return null;
   const breaks = Array.isArray(schedule.break_windows) ? schedule.break_windows : [];

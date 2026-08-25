@@ -113,7 +113,6 @@ test("Worktivity duration ends at actual activity rather than no-attendance samp
     { Status: 5, CreateDate: "2026-08-20T18:59:00.000Z" },
   ], observed), "2026-08-20T16:00:00.000Z");
 });
-
 test("timezone picker keeps canonical IANA IDs and has a bundled fallback", () => {
   assert.ok(FALLBACK_TIMEZONES.includes("UTC"));
   assert.ok(supportedTimezones().includes("UTC"));
