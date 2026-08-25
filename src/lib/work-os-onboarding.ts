@@ -81,6 +81,56 @@ async function policyScheduleProposal(organizationId: string, value: unknown) {
   return await worktivityAuthoritativeBreaks(organizationId) ? { ...proposal, breaks: [] } : proposal;
 }
 
+export function shouldPromoteSubmittedSchedule(role: WorkOsAccess["role"]) {
+  return role === "admin";
+}
+
+async function promoteSubmittedAdminSchedule(
+  access: WorkOsAccess,
+  schedule: Awaited<ReturnType<typeof policyScheduleProposal>>,
+  timezone: string,
+) {
+  if (!shouldPromoteSubmittedSchedule(access.role)) return;
+  const supabase = db();
+  const { data: existing, error: existingError } = await supabase.from("work_schedules").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("active", true)
+    .order("effective_from", { ascending: false }).limit(1).maybeSingle();
+  if (existingError) throw new Error(`load official schedule for admin onboarding: ${existingError.message}`);
+  const payload = {
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    timezone,
+    days_of_week: schedule.daysOfWeek,
+    shift_start: schedule.shiftStart,
+    shift_end: schedule.shiftEnd,
+    break_windows: schedule.breaks,
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
+  const saved = existing
+    ? await supabase.from("work_schedules").update(payload).eq("organization_id", access.organizationId).eq("id", existing.id).select("id").single()
+    : await supabase.from("work_schedules").insert({
+      ...payload,
+      effective_from: new Date().toISOString().slice(0, 10),
+      created_by: access.ctx.user.id,
+    }).select("id").single();
+  if (saved.error) throw new Error(`promote admin onboarding schedule: ${saved.error.message}`);
+  const { error: auditError } = await supabase.from("work_audit_log").insert({
+    organization_id: access.organizationId,
+    actor_user_id: access.ctx.user.id,
+    action: existing ? "schedule.updated_from_admin_onboarding" : "schedule.created_from_admin_onboarding",
+    target_type: "schedule",
+    target_id: saved.data.id,
+    metadata: {
+      source: "employee_onboarding",
+      personId: access.personId,
+      previous: existing ? currentScheduleShape(existing as Json) : null,
+      submitted: { ...schedule, timezone },
+    },
+  });
+  if (auditError) throw new Error(`audit promoted admin onboarding schedule: ${auditError.message}`);
+}
+
 function currentScheduleShape(schedule: Json | null) {
   if (!schedule) return null;
   const breaks = Array.isArray(schedule.break_windows) ? schedule.break_windows : [];
@@ -385,6 +435,9 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
     if (/another device|40001/i.test(error.message)) throw new WorkOsConflictError("This onboarding draft changed on another device. Refresh before submitting again.");
     throw new Error(`submit employee onboarding atomically: ${error.message}`);
   }
+  // A dual-role admin is authorized to make their submitted schedule official.
+  // Employee and manager memberships still create a proposal only.
+  await promoteSubmittedAdminSchedule(access, proposedSchedule, timezone);
   return getEmployeeOnboarding(access);
 }
 

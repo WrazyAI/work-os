@@ -5,6 +5,13 @@ import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } 
 import { deriveWorktivityBreakSeconds, deriveWorktivityLastActivityAt, deriveWorktivitySessionStart, deriveWorktivitySessionWindow, normalizeWorktivityActivityLogs, worktivityLocalDayBounds } from "../src/lib/work-os-attendance";
 import { FALLBACK_TIMEZONES, supportedTimezones, timezoneLabel } from "../src/modules/work-os/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm } from "../desktop/work-os-companion/src/onboardingDraftState";
+import { shouldPromoteSubmittedSchedule } from "../src/lib/work-os-onboarding";
+
+test("only admin onboarding submissions promote the official schedule", () => {
+  assert.equal(shouldPromoteSubmittedSchedule("admin"), true);
+  assert.equal(shouldPromoteSubmittedSchedule("manager"), false);
+  assert.equal(shouldPromoteSubmittedSchedule("employee"), false);
+});
 
 test("catalog exposes eight reviewed employee archetypes", () => {
   assert.equal(WORK_ARCHETYPES.length, 8);
