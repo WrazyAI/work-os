@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getWorkOsOrganizationOwnerId, listPersonTasks } from "@/lib/work-os";
+import { listPersonTasks } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions } from "@/lib/work-os-companion";
-import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     const auth = await access(req);
     if (auth.response) return auth.response;
     const params = new URL(req.url).searchParams;
-    const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
+    const ownerId = workOsOrganizationOwnerId(auth.access);
     const limit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
     const offset = integer(params.get("offset"), 0, 100000);
     const requestedDate = date(params.get("date"));

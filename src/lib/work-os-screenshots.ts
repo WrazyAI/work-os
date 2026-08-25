@@ -83,7 +83,9 @@ async function mirrorSummary(access: ScreenshotScope, personId: string, eventId:
   if (error) throw new Error(`mirror screenshot evidence: ${error.message}`);
 }
 
-async function ensureBucket() {
+let ensureBucketPromise: Promise<void> | null = null;
+
+async function ensureBucketOnce() {
   const supabase = db();
   const { data, error } = await supabase.storage.getBucket(BUCKET);
   if (!error && data) {
@@ -99,6 +101,14 @@ async function ensureBucket() {
   if (created.error && !/already exists/i.test(created.error.message)) {
     throw new Error(`create screenshot bucket: ${created.error.message}`);
   }
+}
+
+function ensureBucket() {
+  ensureBucketPromise ??= ensureBucketOnce().catch((error) => {
+    ensureBucketPromise = null;
+    throw error;
+  });
+  return ensureBucketPromise;
 }
 
 async function screenshotConfig(organizationId: string, personId: string) {

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { addDaysIso, todayIso as today } from "@/lib/work-os-dates";
 import {
   assignNiftyTask,
   archiveNiftyTask,
@@ -161,16 +162,6 @@ async function niftyForOwner<T>(userId: string, operation: () => Promise<T>) {
   if (error) throw new Error(`load Nifty organization scope: ${error.message}`);
   if (!data) throw new Error("Work OS organization is required before accessing Nifty");
   return withNiftyOrganization(data.id, operation);
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDaysIso(base: string, days: number) {
-  const d = new Date(`${base}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 function dateOnly(value?: string | null) {

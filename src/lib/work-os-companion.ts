@@ -12,7 +12,6 @@ import {
   isNiftyTaskAttributableToMember,
   listEvidence,
   listPersonTasks,
-  listTasks,
   niftyTaskEventIdempotencyKey,
   moveTaskToParent,
   reviewReport,
@@ -83,12 +82,6 @@ function text(value: unknown) {
 function dateOnly(value: unknown) {
   const match = String(value ?? "").match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0] ?? null;
-}
-
-function addDays(value: string, amount: number) {
-  const result = new Date(`${value}T12:00:00Z`);
-  result.setUTCDate(result.getUTCDate() + amount);
-  return result.toISOString().slice(0, 10);
 }
 
 async function organizationOwnerId(organizationId: string) {

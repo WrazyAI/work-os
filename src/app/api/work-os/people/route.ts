@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
-import { getWorkOsOrganizationOwnerId, listRoleProfiles, updatePerson } from "@/lib/work-os";
+import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { listRoleProfiles, updatePerson } from "@/lib/work-os";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     if (personIds) query = query.in("id", personIds);
     const { data, error } = await query.order("display_name");
     if (error) throw new Error(`load Work OS people: ${error.message}`);
-    const ownerId = auth.access.role === "admin" ? await getWorkOsOrganizationOwnerId(auth.access.organizationId) : null;
+    const ownerId = auth.access.role === "admin" ? workOsOrganizationOwnerId(auth.access) : null;
     const roleProfiles = ownerId ? await listRoleProfiles(ownerId) : [];
     return NextResponse.json({ people: data ?? [], roleProfiles });
   } catch (error) {
@@ -31,7 +31,7 @@ export async function PATCH(req: Request) {
     if (auth.response) return auth.response;
     const body = await req.json();
     if (!body?.id) return NextResponse.json({ error: "id is required" }, { status: 400 });
-    const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
+    const ownerId = workOsOrganizationOwnerId(auth.access);
     return NextResponse.json({ person: await updatePerson(ownerId, body.id, body) });
   } catch (error) {
     return jsonError(error);
