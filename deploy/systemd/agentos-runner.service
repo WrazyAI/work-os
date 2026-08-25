@@ -1,0 +1,17 @@
+[Unit]
+Description=Agentic OS — local agent runner (bridge executor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dev/agent-os
+# The runner self-loads .env / .env.local from WorkingDirectory.
+# node/npm + local agent CLIs (claude, codex, agy, hermes) on PATH.
+Environment=PATH=/home/dev/.hermes/node/bin:/home/dev/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/dev/.hermes/node/bin/npm run runner
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
