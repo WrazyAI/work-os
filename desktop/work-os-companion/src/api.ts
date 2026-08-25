@@ -36,7 +36,7 @@ export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH"
     if (navigator.onLine && !(error instanceof TypeError)) throw error;
     diagnostics.warn("offline_queue.enqueued", "Request queued for retry", { path, method }, { source: "sync" });
     const queue = await secureState.queue();
-    const pending = path === "/api/work-os/me/plan" && method === "PUT"
+    const pending = (path === "/api/work-os/me/plan" || path === "/api/work-os/me/onboarding") && method === "PUT"
       ? queue.filter((queued) => queued.path !== path || queued.method !== method)
       : queue;
     await secureState.saveQueue([...pending, action]);

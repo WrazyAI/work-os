@@ -43,7 +43,7 @@ function onboardingFixture(): OnboardingData {
     employeeComplete: true,
     employeeRequirements: {
       consentProvided: true, profileConfirmed: true, timezoneProvided: true,
-      scheduleProvided: true, notificationsConfigured: true, privacyAcknowledged: true,
+      scheduleProvided: true, notificationsConfigured: true, screenshotConsentProvided: true, privacyAcknowledged: true,
     },
     managerRequirements: { roleAssigned: true, teamAssigned: true, managerAssigned: true, officialScheduleConfigured: true },
     profile: {
@@ -73,7 +73,9 @@ function onboardingFixture(): OnboardingData {
       officialSchedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [{ start: "12:30", end: "13:00" }] },
     },
     status: "complete", submittedAt: new Date().toISOString(),
-    draft: { step: "connected", updatedAt: new Date().toISOString() },
+    draft: { step: "connected", updatedAt: new Date().toISOString(), revision: 1 },
+    breakPolicy: { worktivityAuthoritative: false },
+    screenshotPolicy: { retention: "30 day encrypted retention", limitation: "Not a productivity signal", sensitiveCapture: "Sensitive captures are deleted" },
     catalog: { version: "debug", archetypes: [
       { id: "engineering", name: "Engineering", description: "Build and operate reliable software systems.", keywords: [], specialties: [{ id: "engineering:frontend", name: "Frontend" }], items: [
         { id: "engineering:responsibility:ship", kind: "responsibility", label: "Ship reliable product changes", source: "suggested" },

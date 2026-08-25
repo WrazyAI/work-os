@@ -15,6 +15,7 @@ function pngColorType(path: string) {
 describe("companion artwork", () => {
   it("ships a true-alpha PNG so the checkerboard never renders", () => {
     expect(pngColorType(resolve(root, "public/work-os-companion.png"))).toBe(6);
+    expect(pngColorType(resolve(root, "src/assets/work-os-task-stack-v2.png"))).toBe(6);
   });
 
   it("composites the companion over dark UI without screen blending", () => {
@@ -23,7 +24,7 @@ describe("companion artwork", () => {
     expect(css).not.toMatch(/\.companion\s*\{[^}]*mix-blend-mode:\s*screen/);
     expect(css).not.toMatch(/\.connect\s*>\s*aside img\s*\{[^}]*mix-blend-mode:\s*screen/);
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toContain('from "./assets/work-os-companion.png"');
+    expect(app).toContain('from "./assets/work-os-task-stack-v2.png"');
     expect(app).not.toContain('src="/work-os-companion.png"');
   });
 

@@ -8,6 +8,8 @@ export interface WorkSession {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   paused_seconds: number;
+  provider_break_seconds?: number;
+  provider_break_observed_at?: string | null;
   first_follow_up_at?: string | null;
   next_fallback_at?: string | null;
   last_prompt_kind?: "follow_up" | "hourly_fallback" | "eod" | null;
@@ -31,6 +33,8 @@ export interface DailyPlan {
   id: string;
   status: "draft" | "confirmed" | "closed";
   freeform_intent: string | null;
+  goal_provenance?: "employee" | "suggested" | "accepted_suggestion" | null;
+  suggestion_task_ids?: string[];
   shift_date: string;
   revision: number;
   confirmed_at?: string | null;
@@ -86,6 +90,7 @@ export interface DayData {
   session: WorkSession | null;
   plan: DailyPlan | null;
   attendance?: AttendanceProjection;
+  breakPolicy?: { worktivityAuthoritative: boolean };
   access?: { organizationId: string; role: string; personId: string };
 }
 
@@ -119,6 +124,7 @@ export interface DesktopSession {
 
 export type OnboardingRequirement =
   | "consentProvided"
+  | "screenshotConsentProvided"
   | "profileConfirmed"
   | "timezoneProvided"
   | "scheduleProvided"
@@ -178,7 +184,9 @@ export interface OnboardingData {
   };
   status: string;
   submittedAt: string | null;
-  draft: { step: string; updatedAt: string | null };
+  draft: { step: string; updatedAt: string | null; revision: number };
+  breakPolicy: { worktivityAuthoritative: boolean };
+  screenshotPolicy: { retention: string; limitation: string; sensitiveCapture: string };
   catalog: { version: string; archetypes: WorkArchetype[] };
 }
 

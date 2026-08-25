@@ -57,7 +57,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 600 12px/1 Manrope;
+  font: 600 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.12em;
 }
 .wordmark img {
@@ -168,7 +168,7 @@ select:focus-visible {
 }
 .masthead h1 {
   margin: 0;
-  font: 600 24px Manrope;
+  font: 600 24px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .mast-actions {
   display: flex;
@@ -268,10 +268,10 @@ select:focus-visible {
   color: #8d9187;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .hero-copy h2 {
-  font: 600 clamp(30px, 4vw, 48px)/1.02 Manrope;
+  font: 600 clamp(30px, 4vw, 48px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 12px 0;
 }
@@ -332,7 +332,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 600 13px Manrope;
+  font: 600 13px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .card-title small {
   color: var(--muted);
@@ -348,7 +348,7 @@ button:disabled {
   font-size: 11px;
 }
 .pulse-time {
-  font: 600 48px/1 Manrope;
+  font: 600 48px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.06em;
   margin: 14px 0;
 }
@@ -420,7 +420,7 @@ button:disabled {
   border-top: 1px solid var(--line);
 }
 .focus-row > b {
-  font: 500 10px Manrope;
+  font: 500 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   color: #92958d;
 }
 .focus-row div {
@@ -451,7 +451,7 @@ button:disabled {
   margin: 18px 0 30px;
 }
 .page-intro h2 {
-  font: 600 clamp(32px, 5vw, 54px)/1.02 Manrope;
+  font: 600 clamp(32px, 5vw, 54px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.05em;
   margin: 10px 0;
 }
@@ -467,7 +467,7 @@ button:disabled {
 .intent {
   display: grid;
   gap: 8px;
-  font: 600 11px Manrope;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .plan-list {
   margin-top: 20px;
@@ -525,7 +525,7 @@ button:disabled {
   padding: 20px;
 }
 .proposal-card h3 {
-  font: 600 17px/1.3 Manrope;
+  font: 600 17px/1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .proposal-card p {
   color: var(--muted);
@@ -559,13 +559,13 @@ button:disabled {
   font-size: 10px;
 }
 .metric strong {
-  font: 600 18px Manrope;
+  font: 600 18px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .insight {
   margin-top: 12px;
 }
 .insight h3 {
-  font: 600 16px Manrope;
+  font: 600 16px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .signal-bars {
   display: grid;
@@ -620,7 +620,7 @@ button:disabled {
   color: #806d58;
 }
 .evidence-list h3 {
-  font: 600 14px Manrope;
+  font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   margin: 0 0 5px;
 }
 .evidence-list p,
@@ -712,7 +712,7 @@ button:disabled {
   height: 38px;
 }
 .connect h1 {
-  font: 600 clamp(45px, 6vw, 78px)/0.95 Manrope;
+  font: 600 clamp(45px, 6vw, 78px)/0.95 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.06em;
   max-width: 600px;
   margin: 14px 0;
@@ -772,7 +772,7 @@ button:disabled {
   width: 54px;
 }
 .loading h1 {
-  font: 600 28px Manrope;
+  font: 600 28px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   margin: 18px 0 5px;
 }
 .loading p {
@@ -850,7 +850,7 @@ button:disabled {
   padding: 16px 0;
 }
 .debug-section h2 {
-  font: 600 12px Manrope;
+  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1043,6 +1043,86 @@ button:disabled {
     animation: none !important;
   }
 }
+
+.preview-workspace .stage {
+  grid-column: 2;
+}
+
+/* Unified Tasks daily workspace */
+.tasks-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
+.date-navigator { display: flex; align-items: center; gap: 5px; margin-bottom: 30px; }
+.date-navigator button, .date-navigator input { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); }
+.date-navigator button { width: 38px; display: grid; place-items: center; }
+.date-navigator input { padding: 0 10px; }
+.daily-goal-card { margin-bottom: 12px; }
+.goal-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.goal-card-head > div { display: grid; gap: 3px; }
+.goal-card-head > div > span { font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+.goal-card-head small, .goal-independence { font-size: 9px; color: var(--muted); }
+.daily-goal-card > textarea { width: 100%; min-height: 82px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; background: #f7f6ef; padding: 13px; font: 600 16px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; color: var(--ink); }
+.daily-goal-card > p { font: 600 18px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; margin: 7px 0; }
+.goal-suggestion { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin: 10px 0; padding: 12px; border: 1px solid #cfdabf; border-radius: 10px; background: rgba(184,255,90,.08); }
+.goal-suggestion svg { color: #668c38; }
+.goal-suggestion div { display: grid; gap: 3px; }
+.goal-suggestion strong { font-size: 10px; }
+.goal-suggestion p { margin: 0; font-size: 10px; color: var(--muted); }
+.goal-suggestion button, .carry-flyout article button { border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 6px 8px; font-size: 8px; }
+.goal-independence { display: block; margin-top: 9px; }
+.carry-alert { width: 100%; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; margin: 0 0 12px; border: 1px solid #e2ca95; border-radius: 11px; background: #fff8e5; padding: 12px 14px; text-align: left; color: var(--ink); }
+.carry-alert > svg:first-child { color: #9c6815; }
+.carry-alert span { display: grid; gap: 3px; }
+.carry-alert strong { font-size: 10px; }
+.carry-alert small { max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #786b4d; font-size: 9px; }
+.carry-alert em { font-style: normal; font-size: 9px; font-weight: 600; }
+.task-view-tabs { display: flex; gap: 5px; margin: 0 0 12px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); width: max-content; }
+.task-view-tabs button { height: 32px; border: 0; border-radius: 7px; background: transparent; padding: 0 12px; font-size: 9px; }
+.task-view-tabs button.active { background: var(--ink); color: #fff; }
+.workspace-task { grid-template-columns: 74px minmax(0,1fr) auto auto auto !important; overflow: visible; }
+.workspace-task-menu { position: relative; }
+.workspace-task:has(.ellipsis-button[aria-expanded="true"]) { position: relative; z-index: 10; }
+.today-goal { display: grid; gap: 4px; margin: 12px 0 15px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(184,255,90,.07); }
+.today-goal small, .today-goal span { font-size: 8px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.today-goal strong { font: 600 13px/1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+.today-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 9px; }
+.today-progress > span:not(.completion-ring) { color: #a15d1d; }
+.completion-ring { --progress: 0deg; display: inline-flex; align-items: center; gap: 9px; color: var(--ink); }
+.completion-ring > span { width: 58px; height: 58px; flex: 0 0 auto; border-radius: 50%; display: grid; grid-template-columns: auto auto; place-content: center; align-items: baseline; column-gap: 2px; background: radial-gradient(circle at center, var(--paper) 57%, transparent 60%), conic-gradient(var(--signal) var(--progress), #deddd5 0); }
+.completion-ring strong { font: 600 16px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+.completion-ring small { font-size: 8px; color: var(--muted); }
+.completion-ring em { color: var(--muted); font-style: normal; font-size: 9px; }
+.completion-ring.compact { display: grid; justify-items: center; gap: 3px; }
+.completion-ring.compact > span { width: 43px; height: 43px; }
+.completion-ring.compact strong { font-size: 12px; }
+.completion-ring.compact small { font-size: 7px; }
+.completion-ring.compact em { font-size: 7px; }
+.carry-flyout-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(18,20,17,.36); display: flex; justify-content: flex-end; }
+.carry-flyout { width: min(520px,94vw); height: 100%; overflow: auto; background: var(--paper); box-shadow: -18px 0 60px rgba(0,0,0,.15); padding: 24px; }
+.carry-flyout > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.carry-flyout > header span { font-size: 9px; text-transform: uppercase; color: var(--muted); }
+.carry-flyout h2 { margin: 5px 0 0; font: 600 20px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+.carry-flyout > header button { border: 0; background: transparent; }
+.carry-flyout > div > section { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.carry-flyout h3 { font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; margin: 0 0 8px; }
+.carry-flyout article { display: grid; gap: 9px; padding: 11px; border-radius: 9px; background: #efeee7; margin-top: 7px; }
+.carry-flyout article > div:first-child { display: grid; gap: 3px; }
+.carry-flyout article strong { font-size: 10px; }
+.carry-flyout article small { font-size: 8px; color: var(--muted); }
+.carry-flyout article > div:last-child { display: flex; gap: 5px; flex-wrap: wrap; }
+
+@media (max-width: 780px) {
+  .tasks-heading { display: block; }
+  .date-navigator { margin-top: -16px; }
+  .goal-suggestion { grid-template-columns: auto 1fr; }
+  .goal-suggestion button { grid-column: 2; }
+  .carry-alert { grid-template-columns: auto 1fr auto; }
+  .carry-alert em { display: none; }
+  .workspace-task { grid-template-columns: 68px minmax(0,1fr) auto !important; }
+  .workspace-task .completion-ring { grid-column: 2; justify-self: start; }
+  .workspace-task-menu { grid-column: 3; grid-row: 1; }
+  .workspace-task > svg { display: none; }
+  .task-view-tabs { max-width: 100%; overflow: auto; }
+  .today-progress { gap: 8px; flex-wrap: wrap; }
+}
 .insight-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.6fr);
@@ -1099,7 +1179,7 @@ button:disabled {
     conic-gradient(var(--signal) var(--progress), #deddd5 0);
 }
 .task-ring strong {
-  font: 600 24px Manrope;
+  font: 600 24px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .task-ring small {
   font-size: 9px;
@@ -1167,13 +1247,13 @@ button:disabled {
   gap: 20px;
 }
 .task-modal > header span {
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: #6f7369;
 }
 .task-modal > header h2 {
-  font: 600 25px/1.15 Manrope;
+  font: 600 25px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.035em;
   margin: 7px 0 0;
   max-width: 520px;
@@ -1200,7 +1280,7 @@ button:disabled {
 }
 .task-modal-body > label > span,
 .task-modal legend {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #666a61;
@@ -1307,7 +1387,7 @@ button:disabled {
 }
 .task-description > span,
 .inline-subtask > span {
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.11em;
   color: #74776e;
@@ -1340,7 +1420,7 @@ button:disabled {
   gap: 8px;
 }
 .subtask-section > header span {
-  font: 600 12px Manrope;
+  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .subtask-section > header strong {
   min-width: 21px;
@@ -1449,7 +1529,7 @@ button:disabled {
 }
 .move-target-menu > span {
   padding: 7px 8px 5px;
-  font: 600 8px Manrope;
+  font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #777a71;
@@ -1559,7 +1639,7 @@ button:disabled {
 }
 .delete-confirmation h2 {
   margin: 4px 0 0;
-  font: 600 22px/1.15 Manrope;
+  font: 600 22px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.03em;
 }
 .delete-confirmation p {
@@ -1671,7 +1751,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 600 11px Manrope;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.12em;
 }
 .story-brand img {
@@ -1690,13 +1770,13 @@ button:disabled {
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
 }
 .story-copy > span {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.17em;
   text-transform: uppercase;
   color: var(--signal);
 }
 .story-copy h1 {
-  font: 600 clamp(30px, 4vw, 51px)/0.98 Manrope;
+  font: 600 clamp(30px, 4vw, 51px)/0.98 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.055em;
   margin: 13px 0;
 }
@@ -1762,7 +1842,7 @@ button:disabled {
   border-bottom: 1px solid #deddd4;
 }
 .onboarding-workspace > header > span {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #7b7e75;
@@ -1806,10 +1886,10 @@ button:disabled {
   color: #71756b;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .phase-intro h2 {
-  font: 600 clamp(28px, 3.6vw, 44px)/1.02 Manrope;
+  font: 600 clamp(28px, 3.6vw, 44px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 11px 0;
 }
@@ -2192,7 +2272,7 @@ button:disabled {
   color: var(--muted);
 }
 .connected-state h2 {
-  font: 600 38px/1.05 Manrope;
+  font: 600 38px/1.05 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 10px 0;
 }

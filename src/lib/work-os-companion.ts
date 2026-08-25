@@ -36,6 +36,7 @@ import {
 } from "@/modules/work-os/companion";
 import { activeSession, getWorkday, saveDailyPlan } from "@/lib/work-os-workday";
 import { observeWorktivityAttendance } from "@/lib/work-os-attendance";
+import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 
 type Json = Record<string, unknown>;
 type ProposalOperation =
@@ -184,6 +185,27 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
   return { task: moved, providerStatus: "nifty_confirmed" };
 }
 
+export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: string, body: Json) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const name = text(body.name);
+  const description = typeof body.description === "string" ? body.description.trim() : undefined;
+  if (!name) throw new Error("Task title is required");
+  if (name.length > 240) throw new Error("Task title must be 240 characters or fewer");
+  if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
+  const updated = await updateTask(ownerId, task.provider_task_id as string, { name, ...(description !== undefined ? { description } : {}) });
+  await audit(access, "task.updated", "nifty_task", task.provider_task_id as string, { fields: description === undefined ? ["name"] : ["name", "description"] });
+  return { task: updated, providerStatus: "nifty_confirmed" };
+}
+
+export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
+  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const updated = await completeTask(ownerId, task.provider_task_id as string, completed);
+  await audit(access, completed ? "task.completed" : "task.reopened", "nifty_task", task.provider_task_id as string, {
+    source: "employee_explicit",
+  });
+  return { task: updated, providerStatus: "nifty_confirmed" };
+}
+
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
   const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
@@ -200,9 +222,11 @@ export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: st
 export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json) {
   const title = text(body.name);
   const description = text(body.description);
+  const dueDate = text(body.due_date);
   if (!title) throw new Error("Task title is required");
   if (title.length > 240) throw new Error("Task title must be 240 characters or fewer");
   if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) throw new Error("Task due date must use YYYY-MM-DD");
 
   const requestedPersonIds = Array.isArray(body.assignee_person_ids)
     ? [...new Set(body.assignee_person_ids.filter((value): value is string => typeof value === "string" && !!value.trim()))]
@@ -230,6 +254,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   const task = await createTask(ownerId, {
     name: title,
     description: description ?? undefined,
+    due_date: dueDate ?? undefined,
     project_id: text(parent?.provider_project_id) ?? projectId,
     task_group_id: text(parent?.task_group_id) ?? defaultTaskGroupId,
     task_id: text(parent?.provider_task_id) ?? undefined,
@@ -295,6 +320,10 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
   const effectiveFrom = body.effective_from ? validateWorkOsDate(body.effective_from, "effective_from") : new Date().toISOString().slice(0, 10);
   const effectiveTo = body.effective_to ? validateWorkOsDate(body.effective_to, "effective_to") : null;
   validateWorkOsDateRange(effectiveFrom, effectiveTo);
+  const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
+  if (authoritativeBreaks && Array.isArray(body.break_windows) && body.break_windows.length) {
+    throw new Error("Scheduled break windows are disabled because Worktivity is the break source for this organization.");
+  }
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
@@ -302,7 +331,7 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
     days_of_week: days,
     shift_start: shiftStart,
     shift_end: shiftEnd,
-    break_windows: validateWorkOsBreakWindows(body.break_windows, shiftStart, shiftEnd),
+    break_windows: authoritativeBreaks ? [] : validateWorkOsBreakWindows(body.break_windows, shiftStart, shiftEnd),
     effective_from: effectiveFrom,
     effective_to: effectiveTo,
     active: body.active !== false,
@@ -329,6 +358,10 @@ export async function saveWorkOsScheduleException(access: WorkOsAccess, body: Js
   const shiftEnd = body.shift_end ? validateWorkOsTime(body.shift_end, "shift_end") : null;
   if (!!shiftStart !== !!shiftEnd) throw new Error("shift_start and shift_end must be provided together");
   if (shiftStart === shiftEnd && shiftStart) throw new Error("shift_start and shift_end must be different");
+  const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
+  if (authoritativeBreaks && Array.isArray(body.break_windows) && body.break_windows.length) {
+    throw new Error("Scheduled breaks are disabled: Worktivity OnBreak is the organization break source.");
+  }
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
@@ -336,7 +369,7 @@ export async function saveWorkOsScheduleException(access: WorkOsAccess, body: Js
     kind,
     shift_start: shiftStart,
     shift_end: shiftEnd,
-    break_windows: validateWorkOsBreakWindows(body.break_windows, shiftStart ?? undefined, shiftEnd ?? undefined),
+    break_windows: authoritativeBreaks ? [] : validateWorkOsBreakWindows(body.break_windows, shiftStart ?? undefined, shiftEnd ?? undefined),
     note: text(body.note),
     created_by: access.ctx.user.id,
     updated_at: new Date().toISOString(),
@@ -414,7 +447,7 @@ export async function getWorkOsDay(access: WorkOsAccess, personId: string, at = 
   };
   const [tasks, taskHistory, evidence] = await Promise.all([
     listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate }),
-    listPersonTasks(ownerId, personId, { fromDate: addDays(shiftDate, -1), toDate: addDays(shiftDate, 1), includeCompleted: true, limit: 100 }),
+    listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
     listEvidence(ownerId, { personId, date: shiftDate }),
   ]);
   const { data: proposals, error: proposalError } = await db()
