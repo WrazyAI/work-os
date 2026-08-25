@@ -44,7 +44,7 @@
   border-radius: 20px;
   padding: 6px 9px;
   background: #e6e5dd;
-  font: 600 8px Manrope;
+  font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.09em;
 }
@@ -77,7 +77,7 @@
   gap: 3px;
 }
 .plan-board-title strong {
-  font: 600 12px Manrope;
+  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .plan-board-title small {
   font-size: 9px;
@@ -123,7 +123,7 @@
   color: var(--muted);
 }
 .plan-archive h3 {
-  font: 600 20px/1.35 Manrope;
+  font: 600 20px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   max-width: 680px;
 }
 .range-switch {
@@ -156,13 +156,13 @@
   gap: 20px;
 }
 .insight-brief > header span {
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #668c38;
 }
 .insight-brief h3 {
-  font: 600 19px/1.35 Manrope;
+  font: 600 19px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   max-width: 690px;
   margin: 8px 0;
 }
@@ -265,7 +265,7 @@
 }
 .insight-table-wrap caption {
   text-align: left;
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   margin-bottom: 8px;
 }
 .insight-table-wrap th,
@@ -435,7 +435,7 @@
   bottom: calc(100% + 5px);
   transform: translateX(-50%);
   color: var(--muted);
-  font: 600 6px Manrope;
+  font: 600 6px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   white-space: nowrap;
   opacity: 0;
   transition: opacity 0.15s ease;

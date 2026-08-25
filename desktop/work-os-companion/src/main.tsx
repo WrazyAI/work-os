@@ -8,6 +8,7 @@ import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { NotificationProvider } from "./NotificationFlyouts";
 import "./styles.css";
 import "./sessionGate.css";
+import "./workspace-redesign.css";
 
 installDiagnosticErrorHandlers();
 diagnostics.info("app.webview.start", "WebView booting", { search: window.location.search, userAgent: navigator.userAgent });
