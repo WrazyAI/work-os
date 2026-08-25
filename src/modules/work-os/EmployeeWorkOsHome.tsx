@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -16,6 +16,7 @@ import {
   TimerReset,
   X,
 } from "lucide-react";
+import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
 
 type AnyRow = Record<string, any>;
 
@@ -37,6 +38,7 @@ interface DayResponse {
   session: AnyRow | null;
   plan: { id: string; status: "draft" | "confirmed" | "closed"; freeform_intent: string | null; items: AnyRow[] } | null;
   attendance?: AnyRow;
+  breakPolicy?: { worktivityAuthoritative: boolean };
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -82,8 +84,9 @@ export default function EmployeeWorkOsHome() {
   const [onboardingBreakStart, setOnboardingBreakStart] = useState("");
   const [onboardingBreakEnd, setOnboardingBreakEnd] = useState("");
   const [onboardingDesktop, setOnboardingDesktop] = useState(true);
-  const [onboardingScreenshot, setOnboardingScreenshot] = useState(false);
+  const [onboardingConsent, setOnboardingConsent] = useState(false);
   const [onboardingExclusions, setOnboardingExclusions] = useState("");
+  const onboardingHydrationKey = useRef<string | null>(null);
   const onboarding = useQuery<AnyRow>({
     queryKey: ["work-os", "employee-onboarding"],
     queryFn: () => fetchJson("/api/work-os/me/onboarding"),
@@ -102,20 +105,23 @@ export default function EmployeeWorkOsHome() {
   useEffect(() => {
     const profile = onboarding.data?.profile;
     if (!profile) return;
-    setOnboardingName((value) => value || profile.displayName || "");
-    setOnboardingEmail((value) => value || profile.email || "");
-    setOnboardingTimezone((value) => value || profile.timezone || "UTC");
-    setOnboardingLanguage((value) => value || profile.language || "en");
+    const resetKey = `${String(profile.email ?? "").trim().toLowerCase()}:${onboarding.data?.status ?? "not_started"}`;
+    if (onboardingHydrationKey.current === resetKey) return;
+    onboardingHydrationKey.current = resetKey;
+    setOnboardingName(profile.displayName || "");
+    setOnboardingEmail(profile.email || "");
+    setOnboardingTimezone(profile.timezone || "UTC");
+    setOnboardingLanguage(profile.language || "en");
     const schedule = profile.schedule || {};
-    setOnboardingStart((value) => value === "09:00" && schedule.shiftStart ? schedule.shiftStart : value);
-    setOnboardingEnd((value) => value === "17:00" && schedule.shiftEnd ? schedule.shiftEnd : value);
+    setOnboardingStart(schedule.shiftStart || "09:00");
+    setOnboardingEnd(schedule.shiftEnd || "17:00");
     const firstBreak = Array.isArray(schedule.breaks) ? schedule.breaks[0] : null;
-    setOnboardingBreakStart((value) => value || firstBreak?.start || "");
-    setOnboardingBreakEnd((value) => value || firstBreak?.end || "");
+    setOnboardingBreakStart(firstBreak?.start || "");
+    setOnboardingBreakEnd(firstBreak?.end || "");
     setOnboardingDesktop(typeof profile.notifications?.desktopEnabled === "boolean" ? profile.notifications.desktopEnabled : true);
-    setOnboardingScreenshot(profile.privacy?.screenshotAnalysisConsent === true);
-    setOnboardingExclusions((value) => value || (profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
-  }, [onboarding.data]);
+    setOnboardingConsent(onboarding.data?.employeeRequirements?.consentProvided === true && onboarding.data?.employeeRequirements?.screenshotConsentProvided === true && onboarding.data?.employeeRequirements?.privacyAcknowledged === true);
+    setOnboardingExclusions((profile.privacy?.sensitiveAppExclusions ?? []).join(", "));
+  }, [onboarding.data?.profile?.email, onboarding.data?.status]);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
   const saveOnboarding = useMutation({
@@ -135,11 +141,13 @@ export default function EmployeeWorkOsHome() {
         },
         notifications: { desktopEnabled: onboardingDesktop },
         privacy: {
-          screenshotAnalysisConsent: onboardingScreenshot,
+          screenshotAnalysisConsent: true,
           sensitiveAppExclusions: onboardingExclusions.split(",").map((value) => value.trim()).filter(Boolean),
         },
         acceptTrackingConsent: true,
         privacyNoticeAcknowledged: true,
+        revision: onboarding.data?.draft?.revision ?? 0,
+        clientMutationKey: requestId(),
         source: "web",
       }),
     }),
@@ -149,7 +157,7 @@ export default function EmployeeWorkOsHome() {
     },
   });
   const changeConsent = useMutation({
-    mutationFn: (action: "withdraw_tracking" | "withdraw_screenshot_analysis" | "accept_screenshot_analysis") => fetchJson("/api/work-os/me/onboarding", {
+    mutationFn: (action: "withdraw_tracking" | "withdraw_screenshot_analysis") => fetchJson("/api/work-os/me/onboarding", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, source: "web" }),
@@ -268,7 +276,7 @@ export default function EmployeeWorkOsHome() {
               <div>
                 <h2 className="text-sm font-semibold">{onboarding.data?.onboardingRequired ? "Complete your Work OS setup" : "Work OS privacy and setup"}</h2>
                 <p className="mt-1 max-w-3xl text-[12px] leading-5 text-[var(--text-secondary)]">
-                  Confirm your profile, working hours, notification preference, and purpose-limited tracking consent. Screenshots are optional, excluded by app/domain policy, encrypted, and retained for 30 days when enabled.
+                  Confirm your profile, working hours, notification preference, and purpose-limited tracking consent. Sampled Worktivity screenshot analysis is mandatory for this onboarding policy, excluded by app/domain policy, encrypted, retained for 30 days, and never proves productivity or task completion.
                 </p>
               </div>
               <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>
@@ -279,26 +287,22 @@ export default function EmployeeWorkOsHome() {
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Preferred name<input value={onboardingName} onChange={(event) => setOnboardingName(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Work email<input type="email" value={onboardingEmail} onChange={(event) => setOnboardingEmail(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Timezone<input value={onboardingTimezone} onChange={(event) => setOnboardingTimezone(event.target.value)} placeholder="America/New_York" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Timezone<input role="combobox" aria-autocomplete="list" list="employee-work-os-timezones" value={onboardingTimezone} onChange={(event) => setOnboardingTimezone(event.target.value)} placeholder="Search IANA timezone" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /><datalist id="employee-work-os-timezones">{supportedTimezones().map((zone) => <option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}</datalist></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Language<input value={onboardingLanguage} onChange={(event) => setOnboardingLanguage(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Shift start<input type="time" value={onboardingStart} onChange={(event) => setOnboardingStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Shift end<input type="time" value={onboardingEnd} onChange={(event) => setOnboardingEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break start<input type="time" value={onboardingBreakStart} onChange={(event) => setOnboardingBreakStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break end<input type="time" value={onboardingBreakEnd} onChange={(event) => setOnboardingBreakEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                {!onboarding.data?.breakPolicy?.worktivityAuthoritative && <><label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break start<input type="time" value={onboardingBreakStart} onChange={(event) => setOnboardingBreakStart(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
+                <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Break end<input type="time" value={onboardingBreakEnd} onChange={(event) => setOnboardingBreakEnd(event.target.value)} className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label></>}
                 <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingDesktop} onChange={(event) => setOnboardingDesktop(event.target.checked)} /> Desktop notifications</label>
-                <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingScreenshot} onChange={(event) => setOnboardingScreenshot(event.target.checked)} /> Allow neutral screenshot summaries</label>
+                <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]"><input type="checkbox" checked={onboardingConsent} onChange={(event) => setOnboardingConsent(event.target.checked)} /> I accept Work OS tracking and sampled screenshot analysis, including encrypted 30-day raw retention, sensitive-capture deletion, and that screenshots do not prove productivity or task completion.</label>
                 <label className="grid gap-1 text-[11px] font-semibold uppercase text-[var(--text-tertiary)] md:col-span-2">Sensitive apps/domains to exclude<input value={onboardingExclusions} onChange={(event) => setOnboardingExclusions(event.target.value)} placeholder="password manager, bank.example" className="border bg-transparent px-3 py-2 text-[12px] font-normal normal-case text-[var(--text-primary)] outline-none" /></label>
-                <div className="flex items-end md:col-span-2 xl:col-span-1"><button disabled={!onboardingName.trim() || !onboardingEmail.trim() || saveOnboarding.isPending} onClick={() => saveOnboarding.mutate()} className="w-full px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>{saveOnboarding.isPending ? "Saving..." : "Save setup and consent"}</button></div>
+                <div className="flex items-end md:col-span-2 xl:col-span-1"><button disabled={!onboardingName.trim() || !onboardingEmail.trim() || !onboardingConsent || saveOnboarding.isPending} onClick={() => saveOnboarding.mutate()} className="w-full px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>{saveOnboarding.isPending ? "Saving..." : "Save required consent"}</button></div>
               </div>
             ) : (
               <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--text-secondary)]">
                 <span>Tracking consent is active.</span>
-                <span>Screenshot analysis: {onboarding.data?.profile?.privacy?.screenshotAnalysisConsent ? "enabled" : "disabled"}.</span>
-                {onboarding.data?.profile?.privacy?.screenshotAnalysisConsent ? (
-                  <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Disable screenshots</button>
-                ) : (
-                  <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("accept_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "var(--border)" }}>Enable screenshots</button>
-                )}
+                <span>Required Work OS and screenshot-analysis consent is active.</span>
+                <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_screenshot_analysis")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Withdraw required screenshot consent</button>
                 <button disabled={changeConsent.isPending} onClick={() => changeConsent.mutate("withdraw_tracking")} className="border px-2 py-1 text-[11px] font-semibold text-[var(--status-err)]" style={{ borderColor: "var(--status-err)" }}>Withdraw tracking consent</button>
               </div>
             )}
@@ -319,7 +323,7 @@ export default function EmployeeWorkOsHome() {
                 <button disabled={!day.data?.shift || sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "POST", body: { source: "web", late_acknowledged: true } })} className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}><Check size={14} /> Clock in</button>
               ) : (
                 <>
-                  {workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
+                  {!day.data?.breakPolicy?.worktivityAuthoritative && workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
                   <button disabled={sessionAction.isPending} onClick={() => window.confirm("Clock out and close today’s plan?") && sessionAction.mutate({ method: "PATCH", body: { action: "clock_out", extended_acknowledged: true } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Clock out</button>
                 </>
               )}

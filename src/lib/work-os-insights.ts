@@ -24,12 +24,23 @@ function dateOf(value: unknown) {
   return typeof value === "string" && value.length >= 10 ? value.slice(0, 10) : null;
 }
 
-function elapsedSeconds(session: Json, now: Date) {
+export function effectiveBreakObservation(session: Json, now: Date, authoritative: boolean) {
+  if (!authoritative) return { seconds: Number(session.paused_seconds ?? 0), freshness: "manual" as const };
+  const observedAt = Date.parse(String(session.provider_break_observed_at ?? ""));
+  if (!Number.isFinite(observedAt)) return { seconds: 0, freshness: "unknown" as const };
+  const active = !session.clocked_out_at;
+  return {
+    seconds: Number(session.provider_break_seconds ?? 0),
+    freshness: active && now.getTime() - observedAt > 10 * 60_000 ? "stale" as const : "observed" as const,
+  };
+}
+
+function elapsedSeconds(session: Json, now: Date, authoritative: boolean) {
   const start = Date.parse(String(session.clocked_in_at ?? ""));
   if (!Number.isFinite(start)) return 0;
   const rawEnd = session.clocked_out_at ? Date.parse(String(session.clocked_out_at)) : now.getTime();
   const end = Number.isFinite(rawEnd) ? rawEnd : now.getTime();
-  return Math.max(0, Math.round((end - start) / 1000) - Number(session.paused_seconds ?? 0));
+  return Math.max(0, Math.round((end - start) / 1000) - effectiveBreakObservation(session, now, authoritative).seconds);
 }
 
 export function deterministicInsightBrief(days: Json[], references: Json[]) {
@@ -98,7 +109,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const personId = access.personId as string;
   const ownerId = await getWorkOsOrganizationOwnerId(access.organizationId);
   const [sessionsResult, plansResult, checkInsResult, evidenceResult, tasksResult, orgResult] = await Promise.all([
-    db().from("work_sessions").select("id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,attendance_observed_at")
+    db().from("work_sessions").select("id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,provider_break_seconds,provider_break_observed_at,provider_break_provenance,attendance_observed_at")
       .eq("organization_id", access.organizationId).eq("person_id", personId).gte("shift_date", from).lte("shift_date", through),
     db().from("work_daily_plans").select("id,shift_date,status,items:work_daily_plan_items(id,task_id,item_kind,completion_state,completed_at,source,title_snapshot,task:work_tasks(id,title,completed,completed_at))")
       .eq("organization_id", access.organizationId).eq("person_id", personId).gte("shift_date", from).lte("shift_date", through),
@@ -109,7 +120,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     db().from("work_tasks").select("id,title,completed,completed_at,due_date,provider_created_at")
       .eq("user_id", ownerId).contains("assignee_person_ids", [personId])
       .or(`due_date.lte.${through},provider_created_at.lt.${addDays(through, 1)}T00:00:00Z`),
-    db().from("work_organizations").select("nifty_synced_at").eq("id", access.organizationId).single(),
+    db().from("work_organizations").select("nifty_synced_at,feature_flags").eq("id", access.organizationId).single(),
   ]);
   for (const [label, result] of [["sessions", sessionsResult], ["plans", plansResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["tasks", tasksResult], ["organization", orgResult]] as const) {
     if (result.error) throw new Error(`load Work OS insight ${label}: ${result.error.message}`);
@@ -119,6 +130,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const checkIns = checkInsResult.data ?? [];
   const evidence = evidenceResult.data ?? [];
   const tasks = tasksResult.data ?? [];
+  const authoritativeBreaks = (orgResult.data?.feature_flags as Json | null)?.worktivity_authoritative_breaks === true;
   const allReferences: Json[] = [];
   const days = Array.from({ length: count }, (_, index) => addDays(from, index)).map((date) => {
     const daySessions = sessions.filter((item) => item.shift_date === date);
@@ -144,8 +156,11 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     allReferences.push(...references);
     return {
       date,
-      observedSeconds: daySessions.reduce((sum, item) => sum + elapsedSeconds(item, now), 0),
-      pausedSeconds: daySessions.reduce((sum, item) => sum + Number(item.paused_seconds ?? 0), 0),
+      observedSeconds: daySessions.reduce((sum, item) => sum + elapsedSeconds(item, now, authoritativeBreaks), 0),
+      pausedSeconds: daySessions.reduce((sum, item) => sum + effectiveBreakObservation(item, now, authoritativeBreaks).seconds, 0),
+      breakFreshness: authoritativeBreaks
+        ? (daySessions.some((item) => effectiveBreakObservation(item, now, true).freshness === "unknown") ? "unknown" : daySessions.some((item) => effectiveBreakObservation(item, now, true).freshness === "stale") ? "stale" : "observed")
+        : "manual",
       planStatus: plan?.status ?? "none",
       planned: items.filter((item) => item.disposition !== "removed").length,
       plannedCompleted: items.filter((item) => item.disposition !== "removed" && completedItem(item)).length,
@@ -165,7 +180,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   return {
     range, from, through, days, totals,
     brief: await aiBrief(days, allReferences),
-    freshness: { niftySyncedAt: orgResult.data?.nifty_synced_at ?? null, worktivityObservedAt: observed },
+    freshness: { niftySyncedAt: orgResult.data?.nifty_synced_at ?? null, worktivityObservedAt: observed, authoritativeBreaks },
   };
 }
 

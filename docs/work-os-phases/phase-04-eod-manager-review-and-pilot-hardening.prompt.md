@@ -1,6 +1,6 @@
-# Phase 4 Prompt — EOD, Manager Review, and Pilot Hardening
+# Phase 4 Prompt — Manager Review, Governance, and Pilot Hardening
 
-You are implementing Phase 4 of the Work OS desktop companion pilot in `/home/maigreeks/projects/work-os`. Phases 1–3 must already provide a reliable work session, adaptive text/voice updates, Nifty task proposals, and explainable engineering evidence.
+You are implementing Phase 4 of the Work OS desktop companion pilot in `/home/maigreeks/projects/work-os`. Phases 1–3 must already provide a reliable work session, task-led daily intent, role-aware check-ins, employee-facing EOD Review reconciliation, Nifty task proposals, and explainable evidence.
 
 The pilot remains scoped to David as a software engineer. This phase closes the daily loop and makes the pilot safe and operable; it does not expand to additional roles.
 
@@ -8,27 +8,27 @@ Follow the repository `AGENTS.md`, preserve all unrelated changes, create/reuse 
 
 ## Objective
 
-Produce an employee-controlled EOD workflow that combines the day's plan, employee updates, Nifty state, repository/GitHub output evidence, Agent OS Codex verification results, optional Worktivity context, blockers, and unresolved uncertainty into a reviewable report. Then harden the desktop/web system for a real single-user pilot and manager review.
+Extend the employee-controlled EOD Review from Phase 2 with immutable submission, authorized manager review, governance, and pilot hardening. Do not create a parallel EOD model or replace Phase 2's deterministic planned-versus-actual reconciliation. Enrich that shared record with approved evidence, review history, and unresolved uncertainty.
 
 ## Deliverables
 
-### 1. Final-shift interaction
+### 1. Final-shift interaction hardening
 
 At 5–10 minutes before scheduled shift end:
 
 - Suppress ordinary progress prompts.
 - Present the EOD interaction with text and voice options.
-- Summarize the agreed plan and known task state.
+- Summarize the accepted daily workspace and known task state.
 - Ask targeted questions only for missing outcomes, blockers, and unverified claims.
 - Allow “extend shift,” “submit after clock-out,” and “clock out now.”
 
 Do not auto-submit a report because the shift ended. Preserve a recoverable draft if the app closes.
 
-### 2. Evidence-backed EOD synthesis
+### 2. Evidence-backed EOD enrichment
 
-Generate a draft with clearly separated sections:
+Enrich the Phase 2 reconciliation record with clearly separated sections:
 
-- Planned work.
+- Accepted morning work.
 - Completed outcomes.
 - Progress on open work.
 - Unplanned work.
@@ -39,7 +39,7 @@ Generate a draft with clearly separated sections:
 - Self-reported or insufficiently verified claims.
 - Carry-over recommendations for the next workday.
 
-Every material statement must link to its claim, task, or evidence source. Never silently convert a partial or uncertain conclusion into “completed.” Preserve the employee's submitted version immutably.
+Every material statement must link to its claim, task, or evidence source. Never silently convert a partial or uncertain conclusion into “completed.” Preserve Phase 2's reconciliation categories and the employee's submitted version immutably.
 
 ### 3. Nifty reconciliation
 

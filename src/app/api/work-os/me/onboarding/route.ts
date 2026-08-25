@@ -38,7 +38,9 @@ export async function PUT(req: Request) {
   try {
     const auth = await access(req);
     if (auth.response) return auth.response;
-    return NextResponse.json(await saveEmployeeOnboardingDraft(auth.access, await req.json()));
+    const body = await req.json();
+    const clientMutationKey = req.headers.get("idempotency-key") ?? body.clientMutationKey;
+    return NextResponse.json(await saveEmployeeOnboardingDraft(auth.access, { ...body, clientMutationKey }));
   } catch (error) {
     return jsonError(error);
   }

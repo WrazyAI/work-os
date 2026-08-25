@@ -18,6 +18,7 @@ import {
 import type { WorkOsNiftyStatus } from "./types";
 import EmployeeWorkOsHome from "./EmployeeWorkOsHome";
 import ManagerWorkOsHome from "./ManagerWorkOsHome";
+import { supportedTimezones, timezoneLabel } from "./timezones";
 
 type AnyRow = Record<string, any>;
 type WorkOsSession = { organizationId: string; role: "employee" | "manager" | "admin"; personId: string | null; userId: string; featureFlags: Record<string, boolean> };
@@ -254,7 +255,7 @@ export default function WorkOsHome() {
   const saveSchedule = useMutation({
     mutationFn: () => fetchJson("/api/work-os/schedules", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [] }),
+      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: authoritativeBreaks ? [] : scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [] }),
     }),
     onSuccess: refresh,
   });
@@ -375,6 +376,7 @@ export default function WorkOsHome() {
   });
 
   const selectedPerson = useMemo(() => (people.data?.people ?? []).find((p) => p.id === personId), [people.data, personId]);
+  const authoritativeBreaks = organization.data?.organization?.feature_flags?.worktivity_authoritative_breaks === true;
   if (session.isLoading) {
     return <div className="grid min-h-[50vh] place-items-center text-[12px] text-[var(--text-tertiary)]"><RefreshCw size={18} className="animate-spin" /></div>;
   }
@@ -589,11 +591,11 @@ export default function WorkOsHome() {
               <Card>
                 <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold"><ClipboardList size={15} style={{ color: "var(--accent)" }} /> Recurring schedule</h2>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <Field label="Timezone"><input value={scheduleTimezone} onChange={(event) => setScheduleTimezone(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="America/New_York" /></Field>
+                  <Field label="Timezone"><input role="combobox" aria-autocomplete="list" list="work-os-timezones" value={scheduleTimezone} onChange={(event) => setScheduleTimezone(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} placeholder="Search IANA timezone" /><datalist id="work-os-timezones">{supportedTimezones().map((zone) => <option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}</datalist></Field>
                   <Field label="Shift start"><input type="time" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
                   <Field label="Shift end"><input type="time" value={scheduleEnd} onChange={(event) => setScheduleEnd(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
-                  <Field label="Break start"><input type="time" value={scheduleBreakStart} onChange={(event) => setScheduleBreakStart(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
-                  <Field label="Break end"><input type="time" value={scheduleBreakEnd} onChange={(event) => setScheduleBreakEnd(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  {!authoritativeBreaks && <><Field label="Break start"><input type="time" value={scheduleBreakStart} onChange={(event) => setScheduleBreakStart(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="Break end"><input type="time" value={scheduleBreakEnd} onChange={(event) => setScheduleBreakEnd(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field></>}
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, day) => (

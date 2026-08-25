@@ -1,4 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec /home/maigreeks/Downloads/toolchains/zig-x86_64-linux-0.15.1/zig rc "$@"
+# Translate GNU windres arguments emitted by embed-resource to Zig rc's
+# Microsoft-compatible syntax for the Windows cross-build.
+input=""
+output=""
+includes=()
+while (($#)); do
+  case "$1" in
+    -i|--input) input="$2"; shift 2 ;;
+    -o|--output) output="$2"; shift 2 ;;
+    -I) includes+=(/i "$2"); shift 2 ;;
+    -I*) includes+=(/i "${1#-I}"); shift ;;
+    --target=*) shift ;;
+    -O|--output-format) shift 2 ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$input" && -n "$output" ]] || { echo "windres input and output are required" >&2; exit 2; }
+exec /home/maigreeks/Downloads/toolchains/zig-x86_64-linux-0.15.1/zig rc /:output-format coff /fo "$output" "${includes[@]}" "$input"
