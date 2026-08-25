@@ -1,0 +1,657 @@
+:root {
+  --ink: #182018;
+  --muted: #626a61;
+  --paper: #f8f8f3;
+  --white: #ffffff;
+  --line: #d9ded5;
+  --signal: #a8f15b;
+  --signal-strong: #7cc936;
+  --surface: #eef1eb;
+  --surface-raised: #fbfcf8;
+  --shadow-card: 0 1px 2px rgba(20, 30, 18, 0.035), 0 7px 24px rgba(20, 30, 18, 0.035);
+}
+
+body {
+  background: #eef1eb;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.workspace {
+  grid-template-columns: 208px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 84% 0%, rgba(168, 241, 91, 0.055), transparent 26rem),
+    #f3f5f1;
+}
+
+.rail {
+  width: 208px;
+  padding: 24px 16px 20px;
+  background: rgba(250, 251, 247, 0.96);
+  color: var(--ink);
+  border-right: 1px solid var(--line);
+  box-shadow: 8px 0 30px rgba(20, 30, 18, 0.025);
+}
+
+.wordmark {
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.wordmark img {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.rail nav {
+  margin-top: 40px;
+  gap: 6px;
+}
+
+.rail nav button {
+  min-height: 46px;
+  padding: 0 13px;
+  border-radius: 11px;
+  color: #667064;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.rail nav button:hover {
+  background: #edf1e9;
+  color: var(--ink);
+}
+
+.rail nav button.active {
+  background: #e4f4d3;
+  color: #244513;
+}
+
+.rail nav button.active::before {
+  left: -16px;
+  width: 4px;
+  height: 24px;
+  background: #75bb38;
+}
+
+.rail-foot {
+  margin: auto 4px 0;
+  padding: 18px 6px 2px;
+  border-top-color: var(--line);
+}
+
+.rail-foot small {
+  color: var(--muted);
+}
+
+.stage {
+  grid-column: 2;
+  padding: 0 30px 56px;
+}
+
+.masthead {
+  width: min(100%, 1200px);
+  height: 82px;
+  margin: 0 auto;
+  border-bottom: 1px solid rgba(24, 32, 24, 0.08);
+}
+
+.masthead p {
+  margin-bottom: 4px;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.masthead h1 {
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.mast-actions {
+  gap: 8px;
+}
+
+.provider,
+.icon,
+.avatar {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.avatar {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.provider {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.notice {
+  width: min(100%, 1200px);
+  max-width: none;
+  min-height: 46px;
+  margin: 14px auto 16px;
+  padding: 9px 12px 9px 14px;
+  border-radius: 12px;
+  background: #fffbe7;
+  border-color: #dfd49c;
+  font-size: 12px;
+}
+
+.notice.session-gate .primary {
+  min-height: 32px;
+  margin-left: auto;
+}
+
+.hero-card,
+.pulse-card,
+.capture-card,
+.focus-card,
+.panel,
+.proposal-card,
+.metric,
+.evidence-list,
+.settings-panel {
+  border-color: var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.day-grid {
+  width: min(100%, 1200px);
+  max-width: none;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  grid-template-areas:
+    "hero pulse"
+    "focus capture";
+  gap: 16px;
+  align-items: start;
+}
+
+.hero-card {
+  grid-area: hero;
+  min-height: 232px;
+  padding: 30px 32px;
+  background:
+    radial-gradient(circle at 87% 18%, rgba(168, 241, 91, 0.18), transparent 14rem),
+    #fbfcf8;
+  color: var(--ink);
+}
+
+.hero-copy {
+  max-width: 66%;
+}
+
+.hero-copy h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(30px, 3vw, 38px);
+  letter-spacing: -0.045em;
+}
+
+.hero-copy p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hero-actions {
+  margin-top: 20px;
+}
+
+.attendance-context {
+  margin-top: 12px;
+  color: #6c7569;
+}
+
+.companion {
+  width: min(36%, 270px);
+  right: 6px;
+  bottom: -24px;
+  opacity: 0.96;
+  animation: companion-settle 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.pulse-card {
+  grid-area: pulse;
+  min-height: 232px;
+  padding: 22px;
+}
+
+.pulse-time {
+  margin: 10px 0 14px;
+  font-size: 42px;
+}
+
+.stat-row {
+  padding-top: 15px;
+}
+
+.stat-row small,
+.focus-row small,
+.card-title small {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.focus-card {
+  grid-area: focus;
+  padding: 22px;
+}
+
+.capture-card {
+  grid-area: capture;
+  align-self: start;
+  padding: 22px;
+}
+
+.capture-card textarea,
+.intent textarea {
+  min-height: 116px;
+  border: 1px solid #dde1da;
+  background: #f0f2ed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.capture-actions select {
+  min-height: 40px;
+  background: var(--white);
+  font-size: 12px;
+}
+
+.card-title {
+  margin-bottom: 16px;
+}
+
+.card-title > span {
+  font-size: 13px;
+}
+
+.card-title button {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.today-goal {
+  margin: 0 0 16px;
+  padding: 14px;
+  border-color: #d5e2ca;
+  background: #f1f7e9;
+}
+
+.today-goal strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.today-progress {
+  min-height: 58px;
+  margin-bottom: 4px;
+}
+
+.focus-row {
+  min-height: 62px;
+  padding: 12px 0;
+  transition: background 150ms ease, padding-inline 150ms ease;
+}
+
+.focus-row:hover {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  border-radius: 9px;
+  background: #f2f5ef;
+}
+
+.focus-row strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.page {
+  width: min(100%, 1200px);
+  max-width: none;
+}
+
+.day-grid,
+.page {
+  animation: view-enter 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.page-intro {
+  max-width: 700px;
+  margin: 20px 0 22px;
+}
+
+.page-intro h2 {
+  margin: 7px 0 8px;
+  font-size: clamp(32px, 3.5vw, 42px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.page-intro p {
+  max-width: 650px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.panel {
+  padding: 20px;
+}
+
+.tasks-heading,
+.insights-heading {
+  align-items: end;
+}
+
+.date-navigator,
+.range-switch {
+  margin-bottom: 22px;
+}
+
+.daily-goal-card {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.3fr) minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.goal-card-head {
+  align-items: start;
+  margin: 2px 0 0;
+}
+
+.goal-card-head > div > span {
+  font-size: 11px;
+}
+
+.daily-goal-card > textarea {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 62px;
+  padding: 11px 12px;
+  background: #f2f4ef;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.daily-goal-card > p {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 4px 0;
+  font-size: 15px;
+}
+
+.goal-suggestion,
+.goal-independence {
+  grid-column: 2;
+}
+
+.goal-suggestion {
+  margin: 9px 0 0;
+  padding: 10px 11px;
+}
+
+.goal-independence {
+  margin-top: 8px;
+  font-size: 10px;
+}
+
+.carry-alert {
+  min-height: 54px;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border-color: #e4cf9c;
+  background: #fff9e9;
+}
+
+.carry-alert strong,
+.carry-alert small,
+.carry-alert em {
+  font-size: 10px;
+}
+
+.task-view-tabs {
+  margin-bottom: 14px;
+  padding: 4px;
+  border-radius: 11px;
+}
+
+.task-view-tabs button {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 10px;
+}
+
+.workspace-task {
+  min-height: 78px;
+  padding: 14px 10px;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.workspace-task h3 {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workspace-task p {
+  display: -webkit-box;
+  margin: 4px 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.workspace-task small {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.metric-grid {
+  gap: 12px;
+}
+
+.metric {
+  min-height: 126px;
+  padding: 18px;
+}
+
+.primary,
+.icon,
+.avatar,
+.provider,
+.card-title button,
+.task-view-tabs button,
+.date-navigator button,
+.range-switch button {
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.primary:not(:disabled):hover {
+  border-color: #8bd248;
+  background: #b4f76c;
+  box-shadow: 0 6px 18px rgba(117, 187, 56, 0.18);
+}
+
+.meter i,
+.completion-ring > span,
+.trend-bars i,
+.trend-bars b {
+  transition: width 360ms cubic-bezier(0.2, 0.8, 0.2, 1), height 360ms cubic-bezier(0.2, 0.8, 0.2, 1), background 180ms ease;
+}
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes companion-settle {
+  from {
+    opacity: 0;
+    transform: translateY(9px) rotate(1.5deg) scale(0.97);
+  }
+
+  to {
+    opacity: 0.96;
+    transform: none;
+  }
+}
+
+.metric small {
+  font-size: 11px;
+}
+
+.metric strong {
+  font-size: 25px;
+}
+
+.insight-brief,
+.trend-panel,
+.insight-drilldown {
+  margin-top: 14px;
+}
+
+.insight-brief h3 {
+  font-size: 18px;
+}
+
+.insight-brief > div section {
+  min-height: 112px;
+  background: #f2f4ef;
+}
+
+.insight-brief section strong,
+.insight-brief section p {
+  font-size: 11px;
+}
+
+.trend-chart {
+  height: 220px;
+}
+
+.insight-table-wrap table {
+  font-size: 10px;
+}
+
+@media (max-width: 1120px) {
+  .workspace {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+
+  .rail {
+    width: 80px;
+    padding: 20px 12px;
+  }
+
+  .wordmark {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .wordmark span,
+  .rail nav span,
+  .rail-foot div {
+    display: none;
+  }
+
+  .rail nav button {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rail nav button.active::before {
+    left: -12px;
+  }
+
+  .stage {
+    padding-inline: 22px;
+  }
+}
+
+@media (max-width: 900px) {
+  .day-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "hero"
+      "pulse"
+      "focus"
+      "capture";
+  }
+
+  .daily-goal-card {
+    display: block;
+  }
+
+  .goal-card-head {
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace {
+    display: block;
+  }
+
+  .rail {
+    width: auto;
+  }
+
+  .stage {
+    padding: 0 14px 82px;
+  }
+
+  .masthead {
+    height: 72px;
+  }
+
+  .hero-card {
+    min-height: 238px;
+    padding: 25px;
+  }
+
+  .hero-copy {
+    max-width: 86%;
+  }
+
+  .page-intro h2 {
+    font-size: 32px;
+  }
+
+  .capture-actions {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day-grid,
+  .page,
+  .companion {
+    animation: none;
+  }
+}

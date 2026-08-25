@@ -57,7 +57,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 600 12px/1 Manrope;
+  font: 600 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.12em;
 }
 .wordmark img {
@@ -172,7 +172,7 @@ select:focus-visible {
 }
 .masthead h1 {
   margin: 0;
-  font: 600 24px Manrope;
+  font: 600 24px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .mast-actions {
   display: flex;
@@ -384,10 +384,10 @@ select:focus-visible {
   color: #8d9187;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .hero-copy h2 {
-  font: 600 clamp(30px, 4vw, 48px)/1.02 Manrope;
+  font: 600 clamp(30px, 4vw, 48px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 12px 0;
 }
@@ -448,7 +448,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 600 13px Manrope;
+  font: 600 13px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .card-title small {
   color: var(--muted);
@@ -464,7 +464,7 @@ button:disabled {
   font-size: 11px;
 }
 .pulse-time {
-  font: 600 48px/1 Manrope;
+  font: 600 48px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.06em;
   margin: 14px 0;
 }
@@ -536,7 +536,7 @@ button:disabled {
   border-top: 1px solid var(--line);
 }
 .focus-row > b {
-  font: 500 10px Manrope;
+  font: 500 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   color: #92958d;
 }
 .focus-row div {
@@ -567,7 +567,7 @@ button:disabled {
   margin: 18px 0 30px;
 }
 .page-intro h2 {
-  font: 600 clamp(32px, 5vw, 54px)/1.02 Manrope;
+  font: 600 clamp(32px, 5vw, 54px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.05em;
   margin: 10px 0;
 }
@@ -583,7 +583,7 @@ button:disabled {
 .intent {
   display: grid;
   gap: 8px;
-  font: 600 11px Manrope;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .plan-list {
   margin-top: 20px;
@@ -641,7 +641,7 @@ button:disabled {
   padding: 20px;
 }
 .proposal-card h3 {
-  font: 600 17px/1.3 Manrope;
+  font: 600 17px/1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .proposal-card p {
   color: var(--muted);
@@ -675,13 +675,13 @@ button:disabled {
   font-size: 10px;
 }
 .metric strong {
-  font: 600 18px Manrope;
+  font: 600 18px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .insight {
   margin-top: 12px;
 }
 .insight h3 {
-  font: 600 16px Manrope;
+  font: 600 16px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .signal-bars {
   display: grid;
@@ -764,7 +764,7 @@ button:disabled {
   color: #8f2f25;
 }
 .evidence-list h3 {
-  font: 600 14px Manrope;
+  font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   margin: 0 0 5px;
 }
 .evidence-list p,
@@ -856,7 +856,7 @@ button:disabled {
   height: 38px;
 }
 .connect h1 {
-  font: 600 clamp(45px, 6vw, 78px)/0.95 Manrope;
+  font: 600 clamp(45px, 6vw, 78px)/0.95 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.06em;
   max-width: 600px;
   margin: 14px 0;
@@ -916,7 +916,7 @@ button:disabled {
   width: 54px;
 }
 .loading h1 {
-  font: 600 28px Manrope;
+  font: 600 28px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   margin: 18px 0 5px;
 }
 .loading p {
@@ -994,7 +994,7 @@ button:disabled {
   padding: 16px 0;
 }
 .debug-section h2 {
-  font: 600 12px Manrope;
+  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1558,15 +1558,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .date-navigator { display: flex; align-items: center; gap: 5px; margin-bottom: 30px; }
 .date-navigator button, .formatted-date-picker { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); }
 .date-navigator button { width: 38px; display: grid; place-items: center; }
-.formatted-date-picker { min-width: 132px; position: relative; display: grid; place-items: center; padding: 0 12px; overflow: hidden; font: 600 11px Manrope; }
+.formatted-date-picker { min-width: 132px; position: relative; display: grid; place-items: center; padding: 0 12px; overflow: hidden; font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .formatted-date-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .daily-goal-card { margin-bottom: 12px; }
 .goal-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .goal-card-head > div { display: grid; gap: 3px; }
-.goal-card-head > div > span { font: 600 10px Manrope; text-transform: uppercase; letter-spacing: .08em; }
+.goal-card-head > div > span { font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: .08em; }
 .goal-card-head small, .goal-independence { font-size: 9px; color: var(--muted); }
-.daily-goal-card > textarea { width: 100%; min-height: 82px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; background: #f7f6ef; padding: 13px; font: 600 16px/1.45 Manrope; color: var(--ink); }
-.daily-goal-card > p { font: 600 18px/1.45 Manrope; margin: 7px 0; }
+.daily-goal-card > textarea { width: 100%; min-height: 82px; resize: vertical; border: 1px solid var(--line); border-radius: 10px; background: #f7f6ef; padding: 13px; font: 600 16px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; color: var(--ink); }
+.daily-goal-card > p { font: 600 18px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; margin: 7px 0; }
 .goal-suggestion { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin: 10px 0; padding: 12px; border: 1px solid #cfdabf; border-radius: 10px; background: rgba(184,255,90,.08); }
 .goal-suggestion svg { color: #668c38; }
 .goal-suggestion div { display: grid; gap: 3px; }
@@ -1588,12 +1588,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .workspace-task:has(.ellipsis-button[aria-expanded="true"]) { position: relative; z-index: 10; }
 .today-goal { display: grid; gap: 4px; margin: 12px 0 15px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(184,255,90,.07); }
 .today-goal small, .today-goal span { font-size: 8px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-.today-goal strong { font: 600 13px/1.4 Manrope; }
+.today-goal strong { font: 600 13px/1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .today-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 9px; }
 .today-progress > span:not(.completion-ring) { color: #a15d1d; }
 .completion-ring { --progress: 0deg; display: inline-flex; align-items: center; gap: 9px; color: var(--ink); }
 .completion-ring > span { width: 58px; height: 58px; flex: 0 0 auto; border-radius: 50%; display: grid; grid-template-columns: auto auto; place-content: center; align-items: baseline; column-gap: 2px; background: radial-gradient(circle at center, var(--paper) 57%, transparent 60%), conic-gradient(var(--signal) var(--progress), #deddd5 0); }
-.completion-ring strong { font: 600 16px Manrope; }
+.completion-ring strong { font: 600 16px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .completion-ring small { font-size: 8px; color: var(--muted); }
 .completion-ring em { color: var(--muted); font-style: normal; font-size: 9px; }
 .completion-ring.compact { display: grid; justify-items: center; gap: 3px; }
@@ -1605,10 +1605,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .carry-flyout { width: min(520px,94vw); height: 100%; overflow: auto; background: var(--paper); box-shadow: -18px 0 60px rgba(0,0,0,.15); padding: 24px; }
 .carry-flyout > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .carry-flyout > header span { font-size: 9px; text-transform: uppercase; color: var(--muted); }
-.carry-flyout h2 { margin: 5px 0 0; font: 600 20px Manrope; }
+.carry-flyout h2 { margin: 5px 0 0; font: 600 20px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .carry-flyout > header button { border: 0; background: transparent; }
 .carry-flyout > div > section { padding: 18px 0; border-bottom: 1px solid var(--line); }
-.carry-flyout h3 { font: 600 11px Manrope; margin: 0 0 8px; }
+.carry-flyout h3 { font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; margin: 0 0 8px; }
 .carry-flyout article { display: grid; gap: 9px; padding: 11px; border-radius: 9px; background: #efeee7; margin-top: 7px; }
 .carry-flyout article > div:first-child { display: grid; gap: 3px; }
 .carry-flyout article strong { font-size: 10px; }
@@ -1685,7 +1685,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     conic-gradient(var(--signal) var(--progress), #deddd5 0);
 }
 .task-ring strong {
-  font: 600 24px Manrope;
+  font: 600 24px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .task-ring small {
   font-size: 9px;
@@ -1762,7 +1762,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .pulse-orbit strong {
   margin: 3px 0;
-  font: 650 25px/1 Manrope;
+  font: 650 25px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
 }
@@ -1790,7 +1790,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   font-size: 8px;
 }
 .pulse-schedule strong {
-  font: 600 11px Manrope;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   font-variant-numeric: tabular-nums;
 }
 .pulse-track {
@@ -1851,14 +1851,14 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .pulse-provider.stale { border-color: #d8c69b; background: #f8f2e5; color: #725723; }
 .pulse-provider > div { display: grid; gap: 2px; }
 .pulse-provider small { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
-.pulse-provider strong { font: 650 12px Manrope; }
+.pulse-provider strong { font: 650 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .pulse-provider .pulse-provider-facts {
   grid-column: 1 / -1;
   grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 10px;
 }
 .pulse-provider-facts > span { display: grid; gap: 2px; min-width: 0; font-size: 10px; color: var(--muted); }
-.pulse-provider-facts > span strong { overflow: hidden; color: var(--ink); font: 650 11px Manrope; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.pulse-provider-facts > span strong { overflow: hidden; color: var(--ink); font: 650 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .pulse-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1920,7 +1920,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   white-space: nowrap;
 }
 .review-count strong {
-  font: 650 29px/1 Manrope;
+  font: 650 29px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   color: #739e3d;
 }
 .review-count span {
@@ -1976,7 +1976,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-radius: 50%;
   background: var(--paper);
   color: var(--muted);
-  font: 600 8px Manrope;
+  font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   font-style: normal;
 }
 .review-flow .complete i {
@@ -2016,7 +2016,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-radius: 10px;
   background: var(--ink);
   color: var(--signal);
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .proposal-card > header > div:nth-child(2) { display: grid; gap: 4px; }
 .proposal-card > header span {
@@ -2027,7 +2027,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .proposal-card > header h3 {
   margin: 0;
-  font: 600 15px/1.35 Manrope;
+  font: 600 15px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .proposal-card > header em {
   border: 1px solid #d7d4b5;
@@ -2071,11 +2071,11 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .proposal-compare blockquote {
   margin: 0;
   color: #4e5149;
-  font: 500 11px/1.55 Manrope;
+  font: 500 11px/1.55 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .proposal-compare blockquote:before { content: "“"; color: #8fbe51; }
 .proposal-compare blockquote:after { content: "”"; color: #8fbe51; }
-.proposal-compare section > strong { font: 600 12px/1.45 Manrope; }
+.proposal-compare section > strong { font: 600 12px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .proposal-compare dl { display: grid; gap: 6px; margin: 11px 0 0; }
 .proposal-compare dl div { display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 8px; }
 .proposal-compare dt { color: var(--muted); }
@@ -2124,7 +2124,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   box-shadow: 0 0 0 9px rgba(184, 255, 90, 0.1);
 }
 .review-empty > span { color: var(--muted); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
-.review-empty h3 { margin: 7px 0; font: 600 22px Manrope; }
+.review-empty h3 { margin: 7px 0; font: 600 22px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
 .review-empty p { max-width: 390px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 
 @media (max-width: 850px) {
@@ -2203,13 +2203,13 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 20px;
 }
 .task-modal > header span {
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: #6f7369;
 }
 .task-modal > header h2 {
-  font: 600 25px/1.15 Manrope;
+  font: 600 25px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.035em;
   margin: 7px 0 0;
   max-width: 520px;
@@ -2236,7 +2236,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .task-modal-body > label > span,
 .task-modal legend {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #666a61;
@@ -2343,7 +2343,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .task-description > span,
 .inline-subtask > span {
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.11em;
   color: #74776e;
@@ -2382,7 +2382,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 8px;
 }
 .subtask-section > header span {
-  font: 600 12px Manrope;
+  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .subtask-section > header strong {
   min-width: 21px;
@@ -2503,7 +2503,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .move-target-menu > span {
   padding: 7px 8px 5px;
-  font: 600 8px Manrope;
+  font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #777a71;
@@ -2613,7 +2613,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .delete-confirmation h2 {
   margin: 4px 0 0;
-  font: 600 22px/1.15 Manrope;
+  font: 600 22px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.03em;
 }
 .delete-confirmation p {
@@ -2733,7 +2733,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 600 11px Manrope;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.12em;
 }
 .story-brand img {
@@ -2752,13 +2752,13 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
 }
 .story-copy > span {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.17em;
   text-transform: uppercase;
   color: var(--signal);
 }
 .story-copy h1 {
-  font: 600 clamp(30px, 4vw, 51px)/0.98 Manrope;
+  font: 600 clamp(30px, 4vw, 51px)/0.98 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.055em;
   margin: 13px 0;
 }
@@ -2824,7 +2824,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-bottom: 1px solid #deddd4;
 }
 .onboarding-workspace > header > span {
-  font: 600 10px Manrope;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #7b7e75;
@@ -2868,10 +2868,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   color: #71756b;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  font: 600 9px Manrope;
+  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 .phase-intro h2 {
-  font: 600 clamp(28px, 3.6vw, 44px)/1.02 Manrope;
+  font: 600 clamp(28px, 3.6vw, 44px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 11px 0;
 }
@@ -3254,7 +3254,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   color: var(--muted);
 }
 .connected-state h2 {
-  font: 600 38px/1.05 Manrope;
+  font: 600 38px/1.05 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: -0.045em;
   margin: 10px 0;
 }
