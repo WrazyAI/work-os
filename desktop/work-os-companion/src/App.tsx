@@ -463,12 +463,8 @@ export default function App() {
   const paused = workSession?.state === "paused";
   const hasVisibleSession = Boolean(visibleSession);
   useEffect(() => {
-    const key = "work-os-session-gate";
-    if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) {
-      notifications.clearPersistent(key);
-      return;
-    }
-    notifications.persistent(key, gate.persistentMessage, gate.persistentTitle, "info");
+    if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) return;
+    notifications.persistent("work-os-session-gate", gate.persistentMessage, gate.persistentTitle, "info");
   }, [gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
   const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
   const openTasks = todayParentTasks.filter((task) => !task.completed);
@@ -1001,16 +997,12 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
     ? latest.sessionQuality.message || "This session needs correction before duration can be reported."
     : null;
   useEffect(() => {
-    const key = "insights-stale-data";
-    if (!data?.freshness.stale) { notifications.clearPersistent(key); return; }
-    notifications.persistent(key, `Retained insight data is stale${staleAt ? ` as of ${formatWorkOsDateTime(staleAt)}` : ""}. Refresh is pending.`, "Insights refresh pending", "info");
-    return () => notifications.clearPersistent(key);
+    if (!data?.freshness.stale) return;
+    notifications.persistent("insights-stale-data", `Retained insight data is stale${staleAt ? ` as of ${formatWorkOsDateTime(staleAt)}` : ""}. Refresh is pending.`, "Insights refresh pending", "info");
   }, [data?.freshness.stale, notifications, staleAt]);
   useEffect(() => {
-    const key = "insights-session-correction";
-    if (!correctionMessage) { notifications.clearPersistent(key); return; }
-    notifications.persistent(key, correctionMessage, "Session needs correction", "error");
-    return () => notifications.clearPersistent(key);
+    if (!correctionMessage) return;
+    notifications.persistent("insights-session-correction", correctionMessage, "Session needs correction", "error");
   }, [correctionMessage, notifications]);
   return <main className="page insights-page"><div className="insights-heading"><PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." /><div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div></div>
     {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
