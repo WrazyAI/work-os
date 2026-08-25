@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { appendNotification, notificationAriaRole, notificationTimeoutMs, NotificationFlyouts, type AppNotification } from "./NotificationFlyouts";
+import { appendNotification, notificationAriaRole, notificationAutoDismissMs, notificationTimeoutMs, NotificationFlyouts, type AppNotification } from "./NotificationFlyouts";
 
 describe("application notification flyouts", () => {
   it("renders failures as assertive red flyouts and successes as green status flyouts", () => {
@@ -11,11 +11,26 @@ describe("application notification flyouts", () => {
       { id: "success", tone: "success", title: "Task created", message: "Nifty confirmed the new task." },
     ];
     const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications, onDismiss: () => undefined }));
-    expect(markup).toContain('class="notification-flyout error"');
+    expect(markup).toContain('class="notification-flyout error transient"');
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain('class="notification-flyout success"');
+    expect(markup).toContain('class="notification-flyout success transient"');
     expect(markup).toContain('role="status"');
     expect(markup).toContain("Dismiss Task created");
+  });
+
+  it("keeps persistent flyouts until dismissal and reserves stack capacity", () => {
+    const persistent = appendNotification([], { tone: "info", title: "Work OS ready", message: "Worktivity is syncing.", persistence: "persistent", persistenceKey: "session" }, 2, 2);
+    const updated = appendNotification(persistent, { tone: "info", title: "Work OS ready", message: "Activity is still syncing.", persistence: "persistent", persistenceKey: "session" }, 2, 2);
+    const stacked = ["one", "two", "three"].reduce((current, message) => appendNotification(current, { tone: "success", title: "Done", message }, 2, 2), updated);
+    expect(updated).toHaveLength(1);
+    expect(updated[0]?.id).toBe(persistent[0]?.id);
+    expect(stacked.filter((item) => item.persistence === "persistent")).toHaveLength(1);
+    expect(stacked.filter((item) => item.persistence !== "persistent")).toHaveLength(2);
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: stacked, onDismiss: () => undefined }));
+    expect(markup).toContain('class="notification-flyout info persistent"');
+    const persistentMarkup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: updated, onDismiss: () => undefined }));
+    expect(persistentMarkup).not.toContain("<i");
+    expect(notificationAutoDismissMs(updated[0]!)).toBeNull();
   });
 
   it("deduplicates repeated messages and bounds the visible stack", () => {

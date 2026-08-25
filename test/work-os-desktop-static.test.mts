@@ -127,7 +127,7 @@ assert.doesNotMatch(app, /if \(!window\.confirm\(warning\)\)/);
 assert.doesNotMatch(app, /openTaskComposer\(task\)/);
 assert.doesNotMatch(app, /Nifty task group ID/);
 assert.doesNotMatch(app, /task_group_id: taskComposer/);
-assert.match(read("src/sessionGate.ts"), /Clock in explicitly/);
+assert.match(read("src/sessionGate.ts"), /Worktivity is syncing/);
 assert.doesNotMatch(app, /disabled=\{!active \|\| !input\.trim\(\) \|\| busy\}/);
 assert.doesNotMatch(app, /className="notice error"/);
 assert.match(app, /notifications\.success/);
@@ -135,9 +135,11 @@ assert.match(app, /notifications\.error/);
 
 const notificationFlyouts = read("src/NotificationFlyouts.tsx");
 assert.match(notificationFlyouts, /tone === "error" \? "alert" : "status"/);
-assert.match(notificationFlyouts, /notification-flyout \$\{notification\.tone\}/);
+assert.match(notificationFlyouts, /notification-flyout \$\{notification\.tone\} \$\{notification\.persistence/);
 assert.match(notificationFlyouts, /NotificationProvider/);
 assert.match(notificationFlyouts, /unhandledrejection/);
+assert.match(notificationFlyouts, /clearPersistent/);
+assert.match(notificationFlyouts, /persistence === "persistent"/);
 
 const debugWindow = read("src/DebugWindow.tsx");
 assert.match(debugWindow, /if \(!isTauri\(\)\)/);

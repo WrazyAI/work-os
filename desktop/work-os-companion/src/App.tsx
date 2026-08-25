@@ -461,6 +461,15 @@ export default function App() {
   const gate = sessionGate(visibleDay);
   const active = gate.active;
   const paused = workSession?.state === "paused";
+  const hasVisibleSession = Boolean(visibleSession);
+  useEffect(() => {
+    const key = "work-os-session-gate";
+    if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) {
+      notifications.clearPersistent(key);
+      return;
+    }
+    notifications.persistent(key, gate.persistentMessage, gate.persistentTitle, "info");
+  }, [gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
   const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
   const openTasks = todayParentTasks.filter((task) => !task.completed);
   const completedTodayTasks = visibleDay?.workspaceSummary?.completed ?? visibleDay?.tasks.filter((task) => task.completed).length ?? 0;
@@ -705,15 +714,14 @@ export default function App() {
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
       <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
-      <div className="rail-foot"><span className={`presence ${active && !paused ? "live" : ""}`} /> <div><strong>{active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
+      <div className="rail-foot"><span className={`presence ${active && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{active ? paused ? "Paused" : "On shift" : gate.worktivitySynced ? "Activity synced" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><span className="provider" title={visibleDay?.niftySync?.error || `Nifty is authoritative · last synced ${visibleDay?.niftySync?.syncedAt ? formatWorkOsDateTime(visibleDay.niftySync.syncedAt, visibleDay.shift?.timezone) : "never"}`}><PlugZap size={14} /> Nifty {visibleDay?.niftySync?.fresh ? `source · ${openTasks.length} open` : visibleDay?.niftySync?.syncing ? "refreshing" : "delayed"}</span><button className="icon" title="Refresh Nifty, Worktivity, and the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> Scenario mode is active. Writes are disabled.<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
-      {!active && <div className="notice session-gate" role="status"><Clock3 size={15} /><span>{gate.message}</span>{gate.canClockIn && <button className="primary" disabled={busy} onClick={clockIn}><CirclePlay size={15} /> Clock in</button>}</div>}
       {view === "day" && <main className="day-grid">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : "Ready when you are"}</span><h2>{active ? paused ? "Take the pause." : "Make today count." : "Your workday, in focus."}</h2><p>{active ? visibleDay?.prompt.reason : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}. Clock in when you begin.` : "No scheduled shift is active. An explicit clock-in starts an exception session without an inferred EOD time."}</p>
+          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Take the pause." : "Make today count." : "Your workday, in focus."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Worktivity activity is syncing. Your Work OS session remains separate and ready when you need it." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "No scheduled shift is active. Starting work creates an exception session without an inferred end time."}</p>
             <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <>{!visibleDay?.breakPolicy?.worktivityAuthoritative && <button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button>}<button disabled={busy} onClick={() => setClockOutConfirmation(true)}>Clock out</button></>}</div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
           </div><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" />
@@ -986,11 +994,26 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
 const durationLabel = (seconds: number) => `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
 
 function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
+  const notifications = useNotifications();
   const latest = data?.days.at(-1);
+  const staleAt = data?.freshness.staleAt ?? null;
+  const correctionMessage = latest?.sessionQuality?.status === "needs_correction"
+    ? latest.sessionQuality.message || "This session needs correction before duration can be reported."
+    : null;
+  useEffect(() => {
+    const key = "insights-stale-data";
+    if (!data?.freshness.stale) { notifications.clearPersistent(key); return; }
+    notifications.persistent(key, `Retained insight data is stale${staleAt ? ` as of ${formatWorkOsDateTime(staleAt)}` : ""}. Refresh is pending.`, "Insights refresh pending", "info");
+    return () => notifications.clearPersistent(key);
+  }, [data?.freshness.stale, notifications, staleAt]);
+  useEffect(() => {
+    const key = "insights-session-correction";
+    if (!correctionMessage) { notifications.clearPersistent(key); return; }
+    notifications.persistent(key, correctionMessage, "Session needs correction", "error");
+    return () => notifications.clearPersistent(key);
+  }, [correctionMessage, notifications]);
   return <main className="page insights-page"><div className="insights-heading"><PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." /><div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div></div>
     {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
-      {data.freshness.stale && <div className="notice session-gate"><AlertTriangle size={16} /> Retained insight data is stale{data.freshness.staleAt ? ` as of ${formatWorkOsDateTime(data.freshness.staleAt)}` : ""}. Refresh is pending.</div>}
-      {latest?.sessionQuality?.status === "needs_correction" && <div className="notice session-gate"><AlertTriangle size={16} /> {latest.sessionQuality.message || "This session needs correction before duration can be reported."}</div>}
       <div className="metric-grid"><Metric icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} /><article className="metric"><ListChecks size={18} /><small>Daily tasks</small><CompletionRing compact completed={data.totals.plannedCompleted} total={data.totals.planned} label="complete" /></article><Metric icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} /><Metric icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} /></div>
       <section className="panel insight-brief"><header><div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div><small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small></header><div><section><strong>Wins</strong>{data.brief.wins.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Needs attention</strong>{data.brief.attention.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Next focus</strong>{data.brief.nextFocus.map((item) => <p key={item}>{item}</p>)}</section></div></section>
       <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>

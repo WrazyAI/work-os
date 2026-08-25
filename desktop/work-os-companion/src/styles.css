@@ -148,6 +148,10 @@ select:focus-visible {
 .presence.live {
   background: var(--signal);
 }
+.presence.observed {
+  background: #c99519;
+  box-shadow: 0 0 0 4px #4a4025;
+}
 .stage {
   grid-column: 2;
   min-width: 0;
@@ -236,6 +240,10 @@ select:focus-visible {
   display: grid;
   gap: 10px;
   pointer-events: none;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 .notification-flyout {
   --notification-accent: #496176;
@@ -267,6 +275,17 @@ select:focus-visible {
   --notification-accent: #b43831;
   --notification-surface: #fff1ef;
   --notification-border: #edb3ad;
+}
+.notification-flyout.persistent {
+  --notification-accent: #846414;
+  --notification-surface: #fff9e8;
+  --notification-border: #e6cf8d;
+  box-shadow: 0 20px 50px rgba(49, 42, 21, 0.2), 0 3px 10px rgba(49, 42, 21, 0.1);
+}
+.notification-flyout.persistent.error {
+  --notification-accent: #9f342e;
+  --notification-surface: #fff1ef;
+  --notification-border: #e8aaa4;
 }
 .notification-icon {
   width: 34px;
