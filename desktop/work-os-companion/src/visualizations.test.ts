@@ -6,13 +6,14 @@ import { describe, expect, it } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
+const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
-    expect(app).toContain("Scheduled progress, your explicit Work OS session, Worktivity observations, and task outcomes remain separate.");
+    expect(app).toContain("Clock in when you begin. Activity observation stays separate.");
     expect(app).toContain("Worktivity observation");
-    expect(styles).toContain(".pulse-provider.active");
+    expect(workspaceStyles).toContain(".pulse-provider-popover.active");
     expect(app).toContain("Observed time and task completion · separate scales");
     expect(insightStyles).toContain("truth-preserving trend visualization");
     expect(app).toContain("Observed active time");
@@ -22,7 +23,10 @@ describe("operational visualizations", () => {
     expect(app).toContain("Not observed");
     expect(app).toContain('pulse.schedulePhase === "upcoming" ? "Next shift"');
     expect(app).toContain('pulse.schedulePhase === "upcoming" ? "Starts in"');
-    expect(styles).toContain("repeat(auto-fit, minmax(88px, 1fr))");
+    expect(workspaceStyles).toContain(".pulse-provider-popover .pulse-provider-facts");
+    expect(app).toContain('aria-label="Shift pulse options"');
+    expect(app).toContain('role="menuitem"');
+    expect(app).not.toContain('className="pulse-stats"');
   });
 
   it("uses unmistakable task-state semantics", () => {

@@ -59,6 +59,13 @@ The active-day hierarchy is:
 5. Progress-update composer.
 6. Shift/provider details on demand.
 
+Before clock-in, keep Shift Pulse deliberately compact: show the countdown or
+schedule phase, the scheduled window, and one truthful clock-in cue. Do not
+repeat Work OS session state, task counts, review counts, or check-in timing in
+that card. Its ellipsis menu exposes one `Worktivity status` action, which opens
+the six provider-observation facts in a detached card. Those facts must never
+expand the default Shift Pulse layout.
+
 ### 2.4 Keep data meanings separate
 
 Do not visually or linguistically collapse different evidence classes:
@@ -121,6 +128,10 @@ Recommended primary employee destinations:
 - Settings
 
 The active destination uses a soft green surface and a narrow green edge marker. Avoid high-contrast filled navigation unless the entire product adopts that pattern.
+
+Settings and connection state form the rail footer, but remain two quiet,
+separate rows on the same rail surface. Do not turn them into stacked dark
+cards inside the light navigation shell.
 
 ### 3.2 Page hierarchy
 
