@@ -42,6 +42,9 @@ assert.match(onboarding, /I accept Work OS tracking and the sampled screenshot-a
 assert.doesNotMatch(onboarding, /Allow neutral screenshot summaries/);
 const styles = read("src/styles.css");
 assert.match(styles, /prefers-reduced-motion/);
+const redesignStyles = read("src/workspace-redesign.css");
+assert.match(redesignStyles, /\.goal-composer-panel/);
+assert.match(redesignStyles, /\.focus-edit-button/);
 
 const app = read("src/App.tsx");
 assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
@@ -69,6 +72,11 @@ assert.doesNotMatch(app, /Convert to Nifty/);
 assert.match(app, /Focus note for \{historical \? formatWorkOsDate\(selectedDate\) : "today"\}/);
 assert.match(app, /formatWorkOsDate\(task\.due_date\)/);
 assert.match(app, /Suggested from your tasks/);
+assert.match(app, /What is the goal for today\?/);
+assert.match(app, /onOpenGoal/);
+assert.match(app, /onEditFocus/);
+assert.match(app, /Queued offline/);
+assert.match(app, /focus-dock-button/);
 assert.match(app, /Review unfinished work/);
 assert.match(app, /Add to today/);
 assert.match(app, /Open original day/);
