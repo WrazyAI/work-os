@@ -798,8 +798,8 @@ export default function App() {
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
           </div><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" />
         </section>
-        <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} prompt={visibleDay?.prompt ?? null} active={active} attendance={visibleDay?.attendance ?? null} openTasks={openTasks.length} reviews={visibleDay?.proposals.length ?? 0} />
-        <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Focus and tasks</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Focus note</small><strong>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Derived from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Nifty is the task record"}</span></div><div className="today-progress"><CompletionRing completed={completedTodayTasks} total={totalTodayTasks} label="tasks complete" />{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>{visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length} overdue task{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) === 1 ? "" : "s"}</button>}</div>{openTasks.slice(0, 3).map((task, index) => { const state = taskState(task, visibleDay?.shiftDate ?? ""); return <div className="focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></div><span className={`task-state ${state}`}>{sentence(state)}</span></div>; })}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Add Task</button><button onClick={() => setView("tasks")}>Update Focus</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
+        <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
+        <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Focus and tasks</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Focus note</small><strong>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Derived from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Nifty is the task record"}</span></div>{openTasks.length ? <><div className="today-progress"><CompletionRing completed={completedTodayTasks} total={totalTodayTasks} label="tasks complete" />{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>{visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length} overdue task{(visibleDay?.workspaceSummary?.overdueCount ?? unfinishedCarryOver.length) === 1 ? "" : "s"}</button>}</div>{openTasks.slice(0, 3).map((task, index) => { const state = taskState(task, visibleDay?.shiftDate ?? ""); return <div className="focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><div><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></div><span className={`task-state ${state}`}>{sentence(state)}</span></div>; })}</> : <div className="pre-shift-empty-tasks"><span>0</span><div><strong>No tasks scheduled for today</strong><small>{unfinishedCarryOver.length ? "Choose a priority or bring forward unfinished work before you clock in." : "Add your first priority before you clock in."}</small></div>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>{unfinishedCarryOver.length} overdue</button>}</div>}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Add Task</button><button onClick={() => setView("tasks")}>Update Focus</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
       </main> : <ActiveDayWorkspace
         focus={planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}
         focusSource={planIntent ? goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note" : goalSuggestion ? "Suggested from today’s tasks" : "Nifty task record"}
@@ -972,10 +972,13 @@ export function ProgressComposer({ input, open, panel, pending, receipt, busy, r
   </div>;
 }
 
-function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTasks, reviews }: {
-  pulse: ReturnType<typeof shiftPulse>; now: Date; shift: DayData["shift"]; prompt: DayData["prompt"] | null;
-  active: boolean; attendance: DayData["attendance"] | null; openTasks: number; reviews: number;
+export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialDetailsOpen = false, initialMenuOpen = false }: {
+  pulse: ReturnType<typeof shiftPulse>; now: Date; shift: DayData["shift"];
+  active: boolean; attendance: DayData["attendance"] | null; initialDetailsOpen?: boolean; initialMenuOpen?: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(initialMenuOpen);
+  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen);
+  const disclosureRef = useRef<HTMLDivElement>(null);
   const timezone = shift?.timezone;
   const progress = Math.round(pulse.progressPercent);
   const observationEnded = Boolean(attendance?.clockedOutAt);
@@ -1004,7 +1007,6 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
       : attendance?.state === "active"
         ? "active"
         : "idle";
-  const workOsState = active ? `Active · ${pulse.elapsedLabel}` : "Not clocked in";
   const providerClockOut = attendance?.clockedOutAt
     ? formatTime(attendance.clockedOutAt, timezone)
     : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : attendance?.clockedInAt ? "Not observed" : "—";
@@ -1019,36 +1021,36 @@ function ShiftPulseCard({ pulse, now, shift, prompt, active, attendance, openTas
   const scheduleAria = pulse.schedulePhase === "upcoming"
     ? "The next scheduled shift has not started"
     : `${progress}% of the scheduled shift has passed`;
-  return <section className="pulse-card">
-    <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small></div>
-    <div className="pulse-visual">
-      <div className="pulse-orbit" style={{ "--pulse-progress": `${pulse.progressPercent * 3.6}deg` } as CSSProperties} role="img" aria-label={scheduleAria}>
-        <div><small>{scheduleLabel}</small><strong>{progress}%</strong><span>{scheduleStatus}</span></div>
-      </div>
-      <div className="pulse-timeline">
-        <div className="pulse-schedule"><span><small>Shift start</small><strong>{formatTime(shift?.startsAt, timezone)}</strong></span><span><small>{middleLabel}</small><strong>{middleValue}</strong></span><span><small>Shift end</small><strong>{formatTime(shift?.endsAt, timezone)}</strong></span></div>
-        <div className="pulse-track"><i style={{ width: `${pulse.progressPercent}%` }} /><b style={{ left: `clamp(7px, ${pulse.progressPercent}%, calc(100% - 7px))` }} /></div>
-        <p>Scheduled progress, your explicit Work OS session, Worktivity observations, and task outcomes remain separate.</p>
-      </div>
+  const phaseCaption = pulse.schedulePhase === "upcoming"
+    ? `Starts at ${formatTime(shift?.startsAt, timezone)}`
+    : pulse.schedulePhase === "complete"
+      ? `Ended at ${formatTime(shift?.endsAt, timezone)}`
+      : `Ends at ${formatTime(shift?.endsAt, timezone)}`;
+
+  useEffect(() => {
+    if (!menuOpen && !detailsOpen) return;
+    const close = (event: KeyboardEvent | MouseEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      if (event instanceof MouseEvent && disclosureRef.current?.contains(event.target as Node)) return;
+      setMenuOpen(false);
+      setDetailsOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    window.addEventListener("pointerdown", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("pointerdown", close);
+    };
+  }, [detailsOpen, menuOpen]);
+
+  return <section className="pulse-card pre-shift-pulse">
+    <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><div className="pulse-card-controls"><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small><div className="pulse-disclosure" ref={disclosureRef}><button className="ellipsis-button pulse-more" aria-label="Shift pulse options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setDetailsOpen(false); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="pulse-menu" role="menu" onKeyDown={(event) => moveMenuFocus(event.nativeEvent)}><button role="menuitem" autoFocus onClick={() => { setMenuOpen(false); setDetailsOpen(true); }}><Activity size={15} /><span><strong>Worktivity status</strong><small>View observed attendance</small></span><ChevronRight size={14} /></button></div>}{detailsOpen && <section className={`pulse-provider-popover ${observationClass}`} role="dialog" aria-label="Worktivity status"><header><div><Activity size={16} /><span><small>Worktivity observation</small><strong>{providerState}</strong></span></div><button aria-label="Close Worktivity status" onClick={() => setDetailsOpen(false)}><X size={15} /></button></header><div className="pulse-provider-facts"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{providerClockOut}</strong></span><span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span><span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span><span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span><span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span></div><footer>Observed provider data remains separate from your Work OS session.</footer></section>}</div></div></div>
+    <div className="pulse-countdown" role="img" aria-label={scheduleAria}>
+      <div className="pulse-countdown-copy"><small>{middleLabel}</small><strong>{middleValue}</strong><span>{phaseCaption}</span></div>
+      <div className="pulse-window"><CalendarDays size={17} /><div><small>{scheduleLabel}</small><strong>{formatTime(shift?.startsAt, timezone)} <i>to</i> {formatTime(shift?.endsAt, timezone)}</strong></div></div>
     </div>
-    <div className={`pulse-provider ${observationClass}`}>
-      <Activity size={15} />
-      <div><small>Worktivity observation</small><strong>{providerState}</strong></div>
-      <div className="pulse-provider-facts">
-        <span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span>
-        <span><small>Clocked out</small><strong>{providerClockOut}</strong></span>
-        <span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span>
-        <span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span>
-        <span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span>
-        <span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span>
-      </div>
-    </div>
-    <div className="pulse-stats">
-      <span><Clock3 size={14} /><small>Work OS session</small><strong>{workOsState}</strong></span>
-      <span><MessageSquareText size={14} /><small>Next check-in</small><strong>{formatTime(prompt?.nextPromptAt, timezone)}</strong></span>
-      <span><ListChecks size={14} /><small>Open tasks</small><strong>{openTasks}</strong></span>
-      <span><ShieldCheck size={14} /><small>Awaiting review</small><strong>{reviews}</strong></span>
-    </div>
+    <div className="pulse-compact-track" aria-hidden="true"><div><i style={{ width: `${pulse.progressPercent}%` }} /><b style={{ left: `clamp(5px, ${pulse.progressPercent}%, calc(100% - 5px))` }} /></div><span><small>{formatTime(shift?.startsAt, timezone)}</small><small>{scheduleStatus}</small><small>{formatTime(shift?.endsAt, timezone)}</small></span></div>
+    <p className="pulse-separation-note"><Clock3 size={13} /> Clock in when you begin. Activity observation stays separate.</p>
   </section>;
 }
 
