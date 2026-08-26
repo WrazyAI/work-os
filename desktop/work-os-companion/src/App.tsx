@@ -8,7 +8,7 @@ import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, Cale
 import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
-import { formatWorkOsDate, formatWorkOsDateTime } from "./dateFormat";
+import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
@@ -48,7 +48,6 @@ const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
   { id: "evidence", label: "Evidence", icon: ShieldCheck }, { id: "settings", label: "Settings", icon: Settings },
 ];
 
-const formatTime = (value?: string | null, zone?: string) => value ? new Intl.DateTimeFormat(undefined, { timeZone: zone, hour: "numeric", minute: "2-digit" }).format(new Date(value)) : "—";
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const initials = (value?: string | null) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
 const timeRemaining = (value?: string | null) => {
@@ -919,9 +918,7 @@ function Empty({ title, body }: { title: string; body: string }) { return <div c
 function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) { return <header className="page-intro"><span>{eyebrow}</span><h2>{title}</h2><p>{body}</p></header>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
 function moveDate(date: string, amount: number) {
-  const value = new Date(`${date}T12:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
+  return shiftWorkOsDate(date, amount);
 }
 
 function CompletionRing({ completed, total, label, compact = false }: { completed: number; total: number; label: string; compact?: boolean }) {

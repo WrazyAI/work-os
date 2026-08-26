@@ -627,6 +627,8 @@ Every asynchronous surface must define:
 - Recoverable failure.
 - Blocking failure.
 
+Provider-sourced calendar dates, timestamps, and timezones must be validated before formatting or date arithmetic. Invalid values degrade to unavailable copy or an empty comparison key; they must never throw during render and replace the workspace with an application error.
+
 Loading should preserve approximate layout to reduce shift. Use skeletons for repeatable content and concise status text for one-off operations.
 
 Empty states should be specific:
