@@ -129,6 +129,21 @@ export function tasksForDate(tasks: TaskRow[], date: string, surfacedTaskIds: st
   });
 }
 
+export function filterWorkspaceTasks(tasks: TaskRow[], currentDate: string, filters: { query?: string; from?: string; to?: string }) {
+  const query = filters.query?.trim().toLowerCase() ?? "";
+  return tasks.filter((task) => {
+    const searchable = [task.title, task.description, task.project?.name, task.milestone?.name]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .join(" ")
+      .toLowerCase();
+    if (query && !searchable.includes(query)) return false;
+    const attributedDate = taskDateAttribution(task, currentDate).date;
+    if (filters.from && (!attributedDate || attributedDate < filters.from)) return false;
+    if (filters.to && (!attributedDate || attributedDate > filters.to)) return false;
+    return true;
+  });
+}
+
 export function subtaskProgress(task: TaskRow) {
   const total = Number(task.subtaskProgress?.total ?? task.subtask_total ?? 0);
   const completed = Number(task.subtaskProgress?.completed ?? task.subtask_completed ?? 0);

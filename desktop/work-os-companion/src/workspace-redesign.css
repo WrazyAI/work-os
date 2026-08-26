@@ -1930,6 +1930,15 @@ body {
   font-size: 8px;
 }
 
+.card-title .task-filter-result {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef2ea;
+  color: #687166;
+  font-size: 8px;
+  font-weight: 700;
+}
+
 @keyframes composer-rise {
   from {
     opacity: 0;

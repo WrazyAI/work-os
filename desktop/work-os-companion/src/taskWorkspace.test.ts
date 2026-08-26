@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { filterWorkspaceTasks, organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 
 describe("unified Tasks workspace", () => {
   it("suggests a deterministic goal without persisting authorship", () => {
@@ -71,5 +71,29 @@ describe("unified Tasks workspace", () => {
     expect(safeTaskText("TypeError: Failed to fetch", "No description added.")).toBe("No description added.");
     expect(safeTaskText("  A useful task description  ", "No description added.")).toBe("A useful task description");
     expect(safeTaskText({ message: "failure" }, "Untitled Nifty task")).toBe("Untitled Nifty task");
+  });
+
+  it("filters tasks by case-insensitive task text", () => {
+    const tasks = [
+      { id: "title", title: "Repair provider sync", description: "Restore the Nifty bridge" },
+      { id: "description", title: "Desktop polish", description: "Verify PROVIDER fallback behavior" },
+      { id: "other", title: "Write release notes", description: "Summarize the installer" },
+    ];
+
+    expect(filterWorkspaceTasks(tasks, "2026-08-26", { query: " provider " }).map((task) => task.id)).toEqual(["title", "description"]);
+  });
+
+  it("filters tasks by inclusive attributed date range", () => {
+    const tasks = [
+      { id: "before", title: "Before", due_date: "2026-08-19" },
+      { id: "from", title: "From", due_date: "2026-08-20" },
+      { id: "inside", title: "Inside", provider_created_at: "2026-08-21T09:00:00Z" },
+      { id: "to", title: "To", dayAttribution: { date: "2026-08-22", reason: "surfaced" } },
+      { id: "after", title: "After", due_date: "2026-08-23" },
+      { id: "unknown", title: "Unknown" },
+    ];
+
+    expect(filterWorkspaceTasks(tasks, "2026-08-26", { from: "2026-08-20", to: "2026-08-22" }).map((task) => task.id)).toEqual(["from", "inside", "to"]);
+    expect(filterWorkspaceTasks(tasks, "2026-08-26", { from: "2026-08-21", to: "2026-08-21" }).map((task) => task.id)).toEqual(["inside"]);
   });
 });
