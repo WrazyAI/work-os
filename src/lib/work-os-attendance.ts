@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { activeSession } from "@/lib/work-os-workday";
+import { activeSession, syncWorktivitySession } from "@/lib/work-os-workday";
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -190,9 +190,9 @@ async function persistProviderBreaks(access: WorkOsAccess, session: Record<strin
   return data;
 }
 
-/** Worktivity is observational. It may update neutral attendance context and
- * explicit OnBreak duration, but it never creates or transitions a Work OS
- * session. Attendance remains controlled by employee clock actions. */
+/** Fresh Worktivity attendance converges into the Work OS interval ledger.
+ * Provider facts retain their provenance, while stale or unknown observations
+ * never create or transition a session. */
 export async function observeWorktivityAttendance(access: WorkOsAccess, at = new Date()) {
   if (!access.personId) throw new Error("Work OS person mapping required");
   if (!worktivityConfigured()) return { attendance: unknownAttendance("Worktivity is not configured.", at.toISOString()), session: await activeSession(access) };
@@ -212,8 +212,9 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
   void sessionStartAt;
   let session = existing;
   if (projection.source === "worktivity" && !projection.stale) {
+    session = await syncWorktivitySession(access, projection);
     session = await persistProviderBreaks(access, session, activityLogs, projection.observedAt, false);
-    if (projection.status === "break") projection.message = "Worktivity OnBreak observed; provider-derived break time is refreshed.";
+    if (projection.status === "break") projection.message = "Worktivity OnBreak observed; the active workday and provider break time are synchronized.";
   }
   session = await attachObservedAttendance(access, session, projection);
   return { attendance: projection, session };
@@ -234,6 +235,5 @@ export async function refreshWorktivityProviderBreaks(access: WorkOsAccess, sess
   return persistProviderBreaks(access, session, result.activityLogs, result.projection.observedAt, false);
 }
 
-// Keep the old name for callers outside the focused checkout while preserving
-// the provider's neutral observation semantics.
+// Keep the old name for callers outside the focused checkout.
 export const reconcileWorktivityAttendance = observeWorktivityAttendance;

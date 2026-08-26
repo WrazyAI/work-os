@@ -357,6 +357,18 @@ export default function App() {
     }
     catch (value) {
       const message = value instanceof Error ? value.message : "Action failed";
+      if (label === "shift.clock_in" && /workday is already closed/i.test(message)) {
+        try {
+          const nextDay = await refresh({ dayOnly: true, refreshProviders: true });
+          if (nextDay && sessionGate(nextDay).worktivitySynced) {
+            diagnostics.info("ui.action.recovered", "Fresh Worktivity activity replaced a stale closed-workday view.", { action: label, activeView: view });
+            notifications.info("Worktivity activity is active. The focused workday view is now synchronized.", "Activity synchronized");
+            return;
+          }
+        } catch {
+          // Preserve the original conflict when the provider refresh also fails.
+        }
+      }
       diagnostics.error("ui.action.failed", message, { action: label, activeView: view });
       showError(message, message);
     }
@@ -471,7 +483,9 @@ export default function App() {
   const workSession = visibleDay?.session;
   const gate = sessionGate(visibleDay);
   const active = gate.active;
-  const paused = workSession?.state === "paused";
+  const sessionActive = !!workSession && ["clocked_in", "active", "paused", "eod_due"].includes(workSession.state);
+  const observedOnly = gate.worktivitySynced && !sessionActive;
+  const paused = sessionActive ? workSession?.state === "paused" : observedOnly && visibleDay?.attendance?.state === "paused";
   const hasVisibleSession = Boolean(visibleSession);
   useEffect(() => {
     if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) return;
@@ -721,45 +735,15 @@ export default function App() {
     setInput("");
   }
 
-  function addAgendaTask() {
-    const text = input.trim();
-    if (!text || !visibleDay?.shiftDate) return;
-    setPendingProgressUpdate(text);
-    setProgressReceipt(null);
-    setProgressPanel("update");
-    setProgressComposerOpen(true);
-    setInput("");
-    void act("task.create", async () => {
-      const result = await sendOrQueue("/api/work-os/me/tasks", "POST", {
-        name: text.replace(/\s+/g, " ").slice(0, 240),
-        description: "Added from today’s agenda composer.",
-        due_date: visibleDay.shiftDate,
-        assignee_person_ids: visibleDay.access?.personId ? [visibleDay.access.personId] : [],
-      }) as { queued?: boolean; providerStatus?: string };
-      const queued = result.queued === true;
-      setPendingProgressUpdate("");
-      setProgressReceipt({
-        kind: "new_task",
-        text,
-        queued,
-        message: queued
-          ? `“${text}” is queued for today and will sync after reconnection.`
-          : result.providerStatus === "nifty_confirmed"
-            ? `Added “${text}” to today’s Nifty agenda.`
-            : `Added “${text}” to today; Nifty confirmation is still pending.`,
-      });
-    });
-  }
-
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
     const text = pendingProgressUpdate.trim();
     if (!text) return;
-    requireActive("check_in.classify", async () => {
+    void act("check_in.classify", async () => {
       if (kind === "new_task") {
         const title = text.replace(/\s+/g, " ").slice(0, 240);
         const taskResult = await sendOrQueue("/api/work-os/me/tasks", "POST", {
           name: title,
-          description: "Added from today’s progress conversation.",
+          description: "Added from the Work OS daily composer.",
           due_date: visibleDay?.shiftDate,
           assignee_person_ids: visibleDay?.access?.personId ? [visibleDay.access.personId] : [],
         }) as { queued?: boolean; providerStatus?: string; mirrorStatus?: string };
@@ -799,15 +783,6 @@ export default function App() {
     });
   }
 
-  function requireActive(label: string, action: () => Promise<unknown>) {
-    if (!active) {
-      diagnostics.warn("ui.action.blocked", gate.message, { action: label, activeView: view });
-      showError(gate.message, gate.message, "Action unavailable");
-      return;
-    }
-    void act(label, action);
-  }
-
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   if (!visibleOnboarding) return <LoadingScreen failed={!!error} retry={() => void refresh()} />;
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
@@ -816,7 +791,7 @@ export default function App() {
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
       <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
-      <div className="rail-foot"><span className={`presence ${active && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{active ? paused ? "Paused" : "On shift" : gate.worktivitySynced ? "Activity synced" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
+      <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><span className="provider" title={visibleDay?.niftySync?.error || `Nifty is authoritative · last synced ${visibleDay?.niftySync?.syncedAt ? formatWorkOsDateTime(visibleDay.niftySync.syncedAt, visibleDay.shift?.timezone) : "never"}`}><PlugZap size={14} /> Nifty {visibleDay?.niftySync?.fresh ? `source · ${openTasks.length} open` : visibleDay?.niftySync?.syncing ? "refreshing" : "delayed"}</span><button className="icon" title="Refresh Nifty, Worktivity, and the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
@@ -836,7 +811,7 @@ export default function App() {
         tasks={visibleDay?.tasks ?? []}
         previousTasks={unfinishedCarryOver.filter((item) => item.attribution.date === moveDate(visibleDay?.shiftDate ?? "", -1)).map((item) => item.task)}
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay?.shiftDate ?? "", -1)).map((item) => item.task)}
-        elapsed={pulse.elapsedLabel}
+        elapsed={observedOnly ? pulse.observedElapsedLabel : pulse.elapsedLabel}
         progressPercent={pulse.progressPercent}
         nextPrompt={formatTime(visibleDay?.prompt.nextPromptAt, visibleDay?.shift?.timezone)}
         shiftStart={formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}
@@ -844,11 +819,13 @@ export default function App() {
         remaining={timeRemaining(visibleDay?.shift?.endsAt)}
         timezone={visibleDay?.shift?.timezone}
         attendance={visibleDay?.attendance}
-        providerBreakSeconds={workSession?.provider_break_seconds ?? 0}
+        providerBreakSeconds={workSession?.provider_break_seconds ?? visibleDay?.attendance?.providerBreakSeconds ?? 0}
         reviews={visibleDay?.proposals.length ?? 0}
         paused={paused}
         busy={busy}
-        canPause={!visibleDay?.breakPolicy?.worktivityAuthoritative}
+        observedOnly={observedOnly}
+        canPause={sessionActive && !visibleDay?.breakPolicy?.worktivityAuthoritative}
+        canClockOut={sessionActive}
         onEditFocus={openGoalComposer}
         onAddTask={() => void openTaskComposer()}
         onManageTasks={() => setView("tasks")}
@@ -863,14 +840,14 @@ export default function App() {
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
       {(view === "day" || view === "tasks" && planHistoryDate === visibleDay?.shiftDate) && <ProgressComposer
-        mode={active && view === "day" ? "progress" : "agenda"}
+        mode={sessionActive && view === "day" ? "progress" : "agenda"}
         input={input}
         open={progressComposerOpen}
         panel={progressPanel}
         pending={pendingProgressUpdate}
         receipt={progressReceipt}
         busy={busy}
-        required={active && view === "day" && !!visibleDay?.prompt.required}
+        required={sessionActive && view === "day" && !!visibleDay?.prompt.required}
         goal={planIntent}
         goalProvenance={goalProvenance}
         goalSuggestion={goalSuggestion}
@@ -879,7 +856,7 @@ export default function App() {
         onOpen={() => { setProgressPanel("update"); setProgressComposerOpen(true); }}
         onOpenGoal={openGoalComposer}
         onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setProgressReceipt(null); }}
-        onSubmit={active && view === "day" ? startProgressUpdate : addAgendaTask}
+        onSubmit={startProgressUpdate}
         onClassify={classifyProgressUpdate}
         onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })}
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
@@ -944,10 +921,10 @@ function ShiftDetailsFloatingCard({ view, progressPercent, shiftStart, remaining
   </section>;
 }
 
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, paused, busy, canPause, onEditFocus, onAddTask, onManageTasks, onOpenTask, onToggleTask, onPause, onClockOut }: {
+export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenTask, onToggleTask, onPause, onClockOut }: {
   focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number; nextPrompt: string;
   shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number; reviews: number;
-  initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; paused: boolean; busy: boolean; canPause: boolean;
+  initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
   onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void; onPause: () => void; onClockOut: () => void;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
@@ -964,8 +941,8 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
   return <main className="active-day-page">
     <section className="active-day-card">
       <header className="active-day-header">
-        <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div><span><small>Next update</small><strong>{nextPrompt}</strong></span></div>
-        <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}<button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button><div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open shift details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close shift details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} nextPrompt={nextPrompt} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Shift details</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
+        <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{observedOnly ? paused ? "Worktivity break" : "Activity observed" : paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div><span><small>Next update</small><strong>{observedOnly ? "Syncing" : nextPrompt}</strong></span></div>
+        <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open shift details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close shift details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} nextPrompt={nextPrompt} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu">{!observedOnly && <button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Shift details</button>}<button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
       </header>
       <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={tasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
       <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
@@ -998,12 +975,15 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   ];
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   const agendaMode = mode === "agenda";
+  const receiptTitle = receipt?.kind === "new_task"
+    ? receipt.queued ? "Task queued" : "Task added"
+    : receipt?.queued ? "Update queued" : "Update recorded";
   return <div className={`progress-dock ${agendaMode ? "agenda-dock" : "progress-mode"} ${open ? "open" : ""}`}>
-    {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : agendaMode ? "Today’s agenda" : "Progress conversation"}>
-      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : agendaMode ? <><ListChecks size={14} /> Today’s agenda</> : <><MessageSquareText size={14} /> Workday update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : agendaMode ? "Plan ahead · this does not clock you in" : required ? "An update is due" : "Today’s private work log"}</small></div><button aria-label="Close composer" onClick={onClose}><X size={16} /></button></header>
-      {panel === "goal" ? <div className="goal-composer-panel"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" />{!goal && goalSuggestion && <div className="goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}<small>Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div> : <div className="progress-conversation">{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{agendaMode ? receipt.queued ? "Task queued" : "Task added" : receipt.queued ? "Update queued" : "Update recorded"}</strong><p>{receipt.message}</p></div></div> : agendaMode ? pending ? <><div className="progress-message user"><p>{pending}</p></div><div className="progress-message assistant"><Sparkles size={16} /><div><strong>Adding this to today…</strong><p>The task will stay separate from attendance and progress reporting.</p></div></div></> : <div className="progress-welcome agenda-welcome"><ListChecks size={17} /><div><strong>Set the agenda before the shift begins.</strong><p>Add a clear task below. For descriptions and assignees, use Detailed Task.</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div><div className="progress-message assistant"><Sparkles size={16} /><div><strong>What kind of update is this?</strong><p>Choose one so Work OS records it correctly. Nothing is inferred yet.</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div></> : <div className="progress-welcome"><Sparkles size={17} /><div><strong>Share what changed.</strong><p>You can describe progress naturally. Work OS will ask how to file it after you send.</p></div></div>}</div>}
+    {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
+      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><button aria-label="Close composer" onClick={onClose}><X size={16} /></button></header>
+      {panel === "goal" ? <div className="goal-composer-panel"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" />{!goal && goalSuggestion && <div className="goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}<small>Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div> : <div className="progress-conversation">{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div><div className="progress-message assistant"><Sparkles size={16} /><div><strong>What kind of update is this?</strong><p>Choose one so Work OS records it correctly. Nothing is inferred yet.</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div></> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
-    <div className="progress-input-shell"><button className="focus-dock-button" aria-label="Update today’s focus" onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>{agendaMode ? <ListChecks size={18} /> : <MessageSquareText size={18} />}<textarea rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder={agendaMode ? "Add a task to today’s agenda…" : "Share a progress update…"} aria-label={agendaMode ? "Add a task to today’s agenda" : "Share a progress update"} /><span>{agendaMode ? "Enter to add" : required ? "Update due" : "Enter to send"}</span><button className="progress-send" aria-label={agendaMode ? "Add task to today" : "Send progress update"} disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>
+    <div className="progress-input-shell"><button className="focus-dock-button" aria-label="Update today’s focus" onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>{agendaMode ? <ListChecks size={18} /> : <MessageSquareText size={18} />}<textarea rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder="Share an update or add a task…" aria-label="Share an update or add a task" /><span>{required ? "Update due" : "Enter to continue"}</span><button className="progress-send" aria-label="Review update type" disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>
   </div>;
 }
 
