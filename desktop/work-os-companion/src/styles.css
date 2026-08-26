@@ -1584,8 +1584,76 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-view-tabs button { height: 32px; border: 0; border-radius: 7px; background: transparent; padding: 0 12px; font-size: 9px; }
 .task-view-tabs button.active { background: var(--ink); color: #fff; }
 .workspace-task { grid-template-columns: 74px minmax(0,1fr) auto auto auto !important; overflow: visible; }
-.workspace-task-menu { position: relative; }
+.workspace-task-menu { position: relative; z-index: 2; }
+.workspace-task-menu.open { z-index: 64; }
+.workspace-task-menu.open .subtask-menu { z-index: 65; }
+.task-records:has(.workspace-task-menu.open) .workspace-task-menu:not(.open) .ellipsis-button {
+  opacity: 0;
+  pointer-events: none;
+}
 .workspace-task:has(.ellipsis-button[aria-expanded="true"]) { position: relative; z-index: 10; }
+.task-record-section {
+  display: block;
+  position: relative;
+}
+.task-record-section + .task-record-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.task-record-section > header {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+.task-record-section > header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.task-record-section > header strong {
+  font-size: 10px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.task-record-section > header span {
+  min-width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #e8e7df;
+  color: #65685f;
+  font-size: 8px;
+  font-weight: 700;
+}
+.task-record-section > header small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.task-record-section.overdue > header strong { color: #9b3f31; }
+.task-record-section.overdue > header span {
+  background: #f8ded8;
+  color: #91392d;
+}
+.task-record-section.overdue .workspace-task {
+  border-left: 2px solid #d45f4c;
+  padding-left: 12px !important;
+}
+.task-load-more {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f7f5ed;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+}
 .today-goal { display: grid; gap: 4px; margin: 12px 0 15px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(184,255,90,.07); }
 .today-goal small, .today-goal span { font-size: 8px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
 .today-goal strong { font: 600 13px/1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
@@ -1628,6 +1696,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .workspace-task > svg { display: none; }
   .task-view-tabs { max-width: 100%; overflow: auto; }
   .today-progress { gap: 8px; flex-wrap: wrap; }
+  .task-record-section > header { align-items: flex-start; }
+  .task-record-section > header small { max-width: 130px; text-align: right; }
 }
 .insight-grid {
   display: grid;

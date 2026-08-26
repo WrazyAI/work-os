@@ -1436,7 +1436,7 @@ body {
 
 .active-task-list article {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 26px minmax(0, 1fr) auto 30px;
   gap: 11px;
   align-items: center;
   min-height: 66px;
@@ -1450,17 +1450,27 @@ body {
   z-index: 4;
 }
 
+.dashboard-task-menu.open {
+  z-index: 64;
+}
+
 .dashboard-task-menu .ellipsis-button {
   width: 30px;
   height: 30px;
   padding: 0;
+  transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
 .dashboard-task-menu .subtask-menu {
-  z-index: 48;
+  z-index: 65;
   top: calc(100% + 5px);
-  right: 0;
+  right: -6px;
   width: 194px;
+}
+
+.active-task-list:has(.dashboard-task-menu.open) .dashboard-task-menu:not(.open) .ellipsis-button {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .dashboard-focus-row {

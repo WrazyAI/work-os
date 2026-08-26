@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parentTasks, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 
 describe("unified Tasks workspace", () => {
   it("suggests a deterministic goal without persisting authorship", () => {
@@ -49,5 +49,27 @@ describe("unified Tasks workspace", () => {
   it("normalizes parent task completion progress", () => {
     expect(subtaskProgress({ subtask_total: 4, subtask_completed: 3 })).toEqual({ total: 4, completed: 3 });
     expect(subtaskProgress({ subtask_total: 2, subtask_completed: 8 })).toEqual({ total: 2, completed: 2 });
+  });
+
+  it("groups overdue work separately and orders recent work newest first", () => {
+    const sections = organizeTaskSections([
+      { id: "recent", title: "Recent", provider_updated_at: "2026-08-26T12:00:00Z", completed: false },
+      { id: "older", title: "Older", provider_updated_at: "2026-08-25T12:00:00Z", completed: false },
+      { id: "late-two", title: "Late two", due_date: "2026-08-24", completed: false },
+      { id: "late-one", title: "Late one", due_date: "2026-08-20", completed: false },
+      { id: "done", title: "Done", completed_at: "2026-08-26T13:00:00Z", completed: true },
+    ], "2026-08-26");
+    expect(sections.map((section) => [section.id, section.tasks.map((task) => task.id)])).toEqual([
+      ["overdue", ["late-one", "late-two"]],
+      ["open", ["recent", "older"]],
+      ["completed", ["done"]],
+    ]);
+    expect(orderTasksByRecency([{ id: "invalid", updated_at: "not-a-date" }, { id: "valid", updated_at: "2026-08-26" }]).map((task) => task.id)).toEqual(["valid", "invalid"]);
+  });
+
+  it("replaces provider failure payloads with deliberate fallback copy", () => {
+    expect(safeTaskText("TypeError: Failed to fetch", "No description added.")).toBe("No description added.");
+    expect(safeTaskText("  A useful task description  ", "No description added.")).toBe("A useful task description");
+    expect(safeTaskText({ message: "failure" }, "Untitled Nifty task")).toBe("Untitled Nifty task");
   });
 });
