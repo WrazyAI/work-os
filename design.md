@@ -66,6 +66,17 @@ that card. Its ellipsis menu exposes one `Worktivity status` action, which opens
 the six provider-observation facts in a detached card. Those facts must never
 expand the default Shift Pulse layout.
 
+Task planning is available before, during, and after a scheduled shift. The
+anchored composer changes intent with context: before clock-in and on the Tasks
+workspace it adds a task directly to today’s agenda; during the active Today
+workspace it records a progress update. Its copy must always state which action
+will occur, and pre-shift planning must explicitly avoid implying attendance.
+
+The pre-shift agenda summary keeps today and yesterday separate. Show the total
+scheduled for today as the primary neutral/green count, and show tasks whose due
+date was yesterday as a distinct red attention count. Do not fold all historical
+carry-over into the yesterday count.
+
 ### 2.4 Keep data meanings separate
 
 Do not visually or linguistically collapse different evidence classes:

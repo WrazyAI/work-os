@@ -73,6 +73,11 @@ assert.match(app, /Focus note for \{historical \? formatWorkOsDate\(selectedDate
 assert.match(app, /formatWorkOsDate\(task\.due_date\)/);
 assert.match(app, /Suggested from your tasks/);
 assert.match(app, /What is the goal for today\?/);
+assert.match(app, /scheduled for today/);
+assert.match(app, /due from yesterday/);
+assert.match(app, /Plan ahead · this does not clock you in/);
+assert.match(app, /Add a task to today’s agenda/);
+assert.match(app, /mode=\{active && view === "day" \? "progress" : "agenda"\}/);
 assert.match(app, /onOpenGoal/);
 assert.match(app, /onEditFocus/);
 assert.match(app, /Queued offline/);
