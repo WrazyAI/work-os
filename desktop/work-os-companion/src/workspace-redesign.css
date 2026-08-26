@@ -2649,3 +2649,519 @@ button:not(:disabled):active {
     animation: none;
   }
 }
+
+/* ============================================================================
+   Tasks workflow — full-surface polish layer
+   Extends the agenda hero / search / task-section language into every
+   remaining Tasks surface: rows, chips, menus, modals, confirmations,
+   the unfinished-work flyout, and the historical read-only state.
+   Anchored menus render through a portal at the document root, so their
+   stacking context is the page itself (above modal scrim, below toasts).
+   ========================================================================== */
+
+.anchored-menu {
+  position: fixed;
+  display: block;
+  z-index: 90;
+  box-shadow: 0 16px 44px rgba(18, 27, 17, 0.16), 0 2px 8px rgba(18, 27, 17, 0.08);
+}
+
+.anchored-menu > button[role="menuitem"] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.anchored-menu > button[role="menuitem"] svg + svg {
+  margin-left: auto;
+}
+
+.anchored-menu > button[role="menuitem"] svg:last-child {
+  margin-left: 0;
+}
+
+.move-target-menu.anchored-menu {
+  width: 240px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.move-target-menu > span {
+  padding: 6px 8px 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.move-target-menu > p {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Composer clearance: the sticky dock must never cover the last task row. */
+.tasks-workspace {
+  padding-bottom: 128px;
+}
+
+@media (max-width: 780px) {
+  .tasks-workspace {
+    padding-bottom: 148px;
+  }
+}
+
+/* Task rows — hover, focus, selected, completed, dense */
+.workspace-task {
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.workspace-task:hover {
+  background: #f6f7f1;
+}
+
+.workspace-task:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.24);
+}
+
+.workspace-task.is-surfaced {
+  background: #f3f8ea;
+  box-shadow: inset 2px 0 0 var(--signal-strong);
+}
+
+.workspace-task.is-completed h3,
+.workspace-task.is-completed p {
+  color: var(--muted);
+}
+
+.workspace-task.is-completed h3 {
+  text-decoration: line-through;
+  text-decoration-color: rgba(98, 106, 97, 0.5);
+  text-decoration-thickness: 1px;
+}
+
+.workspace-task small {
+  display: block;
+  max-width: 720px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sync provenance chips — quiet, semantic, never color-only */
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  vertical-align: 1px;
+}
+
+.sync-chip::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sync-chip.synced {
+  background: var(--signal-wash, #e6f7d5);
+  color: #557d35;
+}
+
+.sync-chip.awaiting {
+  background: #edf4ff;
+  color: #3974d8;
+}
+
+.sync-chip.degraded {
+  background: #fff8e8;
+  color: #9b6611;
+}
+
+/* Historical read-only state */
+.task-readonly-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid #c9d8f2;
+  border-radius: 11px;
+  background: #edf4ff;
+}
+
+.task-readonly-banner strong {
+  flex: 0 0 auto;
+  color: #2c5aa8;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.task-readonly-banner span {
+  color: #45618f;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+/* Details modal: provenance footer + subtask states */
+.task-detail-modal > footer.task-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 26px;
+  border-top: 1px solid var(--line);
+  background: #f2f1e9;
+}
+
+.task-detail-footer small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.subtask-list article.completed strong {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(98, 106, 97, 0.45);
+  text-decoration-thickness: 1px;
+}
+
+.subtask-count-ring {
+  min-width: 40px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8e7df;
+  color: #5d6158;
+  font-size: 9px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-loading {
+  padding: 26px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Confirmations: reversible archive vs. permanent delete are visually
+   separated — archive stays neutral green, delete alone is red. */
+.delete-confirmation {
+  width: min(460px, 100%);
+  padding: 26px 26px 22px;
+  border-radius: 18px;
+  background: #f7f5ed;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.delete-confirmation > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f8ded8;
+  color: #a03324;
+}
+
+.delete-confirmation.reversible > span {
+  background: var(--signal-wash, #e6f7d5);
+  color: #557d35;
+}
+
+.delete-confirmation h2 {
+  margin: 0;
+  font: 650 19px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.delete-confirmation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.delete-confirmation p strong {
+  color: var(--ink);
+}
+
+.delete-confirmation > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.delete-confirmation .confirm-delete {
+  border: 1px solid #c4574a;
+  border-radius: 9px;
+  background: #d4493f;
+  color: #fff;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 720;
+}
+
+.delete-confirmation .confirm-delete:hover {
+  background: #c13f36;
+}
+
+.delete-confirmation .confirm-archive {
+  border: 1px solid #9acb60;
+  border-radius: 9px;
+  background: #b4f76c;
+  color: #2f4718;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 720;
+}
+
+.delete-confirmation .confirm-archive:hover {
+  background: #a5ef58;
+}
+
+.delete-confirmation > div > button:not(.confirm-delete):not(.confirm-archive) {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+}
+
+/* Unfinished-work flyout — same language as the agenda hero */
+.carry-flyout {
+  display: flex;
+  flex-direction: column;
+  background: #fbfcf8;
+  padding: 0;
+}
+
+.carry-flyout > header {
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.carry-flyout > header span {
+  color: #8d6b27;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.carry-flyout > header h2 {
+  margin: 6px 0 0;
+  font: 650 22px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.carry-flyout > header small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.carry-flyout > header button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f4f3ec;
+}
+
+.carry-flyout > div {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 24px 18px;
+}
+
+.carry-flyout > div > section {
+  padding: 14px 0 4px;
+}
+
+.carry-flyout > div > section + section {
+  border-top: 1px solid var(--line);
+}
+
+.carry-flyout h3 {
+  margin: 0 0 4px;
+  color: #5d6158;
+  font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.carry-flyout article {
+  display: grid;
+  gap: 10px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e7e6de;
+  background: transparent;
+  border-radius: 0;
+}
+
+.carry-flyout article:last-child {
+  border-bottom: 0;
+}
+
+.carry-row-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.carry-row-copy strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.carry-row-copy small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.carry-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.carry-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 0 11px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.carry-row-actions button:not(:disabled):hover {
+  border-color: #b8b9af;
+  background: #fffef8;
+  transform: translateY(-1px);
+}
+
+.carry-row-actions button:first-child {
+  border-color: #9acb60;
+  background: #e9f7d3;
+  color: #3c5a1e;
+}
+
+.carry-row-actions button:first-child:not(:disabled):hover {
+  border-color: #86bd4f;
+  background: #ddf3b8;
+}
+
+.carry-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 48px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.carry-empty svg {
+  color: #7fb944;
+}
+
+.carry-empty strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.carry-empty span {
+  font-size: 10px;
+}
+
+.carry-flyout > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+  background: #f4f3ec;
+}
+
+.carry-flyout > footer small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.carry-flyout > footer button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Filter result count */
+.task-filter-result {
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e8e7df;
+  color: #5d6158;
+  font-size: 8px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 780px) {
+  .workspace-task small {
+    white-space: normal;
+  }
+
+  .sync-chip {
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  .carry-row-actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anchored-menu {
+    animation: none;
+  }
+}

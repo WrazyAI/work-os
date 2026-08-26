@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
 const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
@@ -86,7 +87,8 @@ describe("operational visualizations", () => {
   });
 
   it("treats keyboard and readable secondary text as part of the polish", () => {
-    expect(app).toContain("function moveMenuFocus");
+    expect(app).toContain("moveMenuFocus");
+    expect(taskSurfaces).toContain("function moveMenuFocus");
     expect(app).toContain('document.body.classList.add("modal-open")');
     expect(app).toContain('event.key === "Escape"');
     expect(app).toContain('event.key !== "Tab"');

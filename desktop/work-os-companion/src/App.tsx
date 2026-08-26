@@ -4,7 +4,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
@@ -15,6 +15,7 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } fro
 import { schedulePrompt } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
+import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation } from "./taskSurfaces";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState } from "./vault";
@@ -80,19 +81,6 @@ const actionSuccessMessages: Record<string, string> = {
   "workspace.task_defer": "The task was deferred.",
 };
 
-function moveMenuFocus(event: KeyboardEvent) {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return false;
-  const active = document.activeElement as HTMLElement | null;
-  const menu = active?.closest<HTMLElement>('[role="menu"]');
-  if (!menu) return false;
-  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
-  if (!items.length) return false;
-  event.preventDefault();
-  const current = Math.max(0, items.indexOf(active!));
-  const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
-  items[next]?.focus();
-  return true;
-}
 
 export default function App() {
   const notifications = useNotifications();
@@ -865,27 +853,10 @@ export default function App() {
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
       />}
     </section>
-    {taskComposerOpen && <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setTaskComposerOpen(false); }}><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title"><header><div><span>New task</span><h2 id="task-modal-title">What needs to get done?</h2></div><button aria-label="Close task composer" disabled={busy} onClick={() => setTaskComposerOpen(false)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Task title</span><input autoFocus maxLength={240} value={taskComposerTitle} onChange={(event) => setTaskComposerTitle(event.target.value)} placeholder="Give the task a clear outcome" /></label><label><span>Description <em>optional</em></span><textarea maxLength={20000} value={taskComposerDescription} onChange={(event) => setTaskComposerDescription(event.target.value)} placeholder="Add context, expectations, links, or a definition of done…" /></label><fieldset><legend><UserRound size={14} /> Assignees <em>optional</em></legend>{taskOptionsLoading ? <p>Loading your organization…</p> : taskAssigneeOptions.length ? <div className="assignee-grid">{taskAssigneeOptions.map((person) => { const selected = taskComposerAssignees.includes(person.id); return <label className={selected ? "selected" : ""} key={person.id}><input type="checkbox" checked={selected} onChange={() => setTaskComposerAssignees((current) => selected ? current.filter((id) => id !== person.id) : [...current, person.id])} /><span><strong>{person.displayName}</strong><small>{person.email || "Nifty member"}</small></span><Check size={14} /></label>; })}</div> : <p>No assignable Nifty-mapped members were found. You can still create this task unassigned.</p>}</fieldset></div><footer><button disabled={busy} onClick={() => setTaskComposerOpen(false)}>Cancel</button><button className="primary" disabled={busy || !taskComposerTitle.trim()} onClick={submitTaskFromDesktop}>{busy ? "Creating…" : "Create task"}</button></footer></section></div>}
-    {taskDetails && <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setTaskDetails(null); }}>
-      <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
-        <header><div><span>{taskDetails.task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{taskDetails.task.title}</h2></div><button aria-label="Close task details" disabled={busy} onClick={() => setTaskDetails(null)}><X size={18} /></button></header>
-        <div className="task-modal-body">{taskDetailsLoading ? <p className="task-loading">Loading task details…</p> : <>
-          <section className="task-description"><span>Description</span><p>{taskDetails.task.description || "No description has been added."}</p><AssigneeTags task={taskDetails.task} /><div><small>{taskDetails.task.project?.name || "Nifty"}</small>{taskDetails.task.due_date && <small>Due {formatWorkOsDate(taskDetails.task.due_date)}</small>}<span className={`task-state ${taskState(taskDetails.task, visibleDay?.shiftDate ?? "")}`}>{sentence(taskState(taskDetails.task, visibleDay?.shiftDate ?? ""))}</span></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{taskDetails.subtasks.length}</strong></div>{taskDetails.subtasks.length > 0 && <CompletionRing compact completed={taskDetails.subtasks.filter((subtask) => subtask.completed === true).length} total={taskDetails.subtasks.length} label="complete" />}</header>
-            <div className="subtask-list">{taskDetails.subtasks.length ? taskDetails.subtasks.map((subtask) => {
-              const subtaskId = String(subtask.provider_task_id || subtask.id);
-              const menuOpen = subtaskMenuId === subtaskId;
-              const state = taskState(subtask, visibleDay?.shiftDate ?? "");
-              return <article key={subtask.id}><div><strong>{subtask.title}</strong><p>{subtask.description || "No description"}</p><AssigneeTags task={subtask} /></div><span className={`task-state ${state}`}>{sentence(state)}</span>{!taskDetailsReadOnly && <div className="subtask-actions"><button className="ellipsis-button" aria-label={`Actions for ${subtask.title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => { setSubtaskMenuId(menuOpen ? null : subtaskId); setMoveMenuId(null); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu"><button role="menuitem" onClick={() => { setSubtaskMenuId(null); setTaskCompletion(subtask, !subtask.completed, true); }}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button><button role="menuitem" onClick={() => editTask(subtask)}><Pencil size={14} /> Edit</button><button role="menuitem" onClick={() => setMoveMenuId(moveMenuId === subtaskId ? null : subtaskId)}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>{moveMenuId === subtaskId && <div className="move-target-menu" role="menu" aria-label="Move subtask to"><span>Move to task</span>{taskDetails.moveTargets.length ? taskDetails.moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => moveSubtask(subtask, target)}>{target.title}</button>) : <p>No other open tasks available.</p>}</div>}<button role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "archive")}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => requestTaskRemoval(subtask, false, "delete")}><Trash2 size={14} /> Delete permanently</button></div>}</div>}</article>;
-            }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
-            {!taskDetailsReadOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => setSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => setSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={submitInlineSubtask}><Plus size={14} /> Add subtask</button></div>}
-          </section>
-        </>}</div>
-        <footer className="task-detail-footer"><button onClick={() => setTaskDetails(null)}>Done</button></footer>
-      </section>
-    </div>}
-    {deleteRequest && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description"><span>{deleteRequest.mode === "delete" ? <Trash2 size={18} /> : <Archive size={18} />}</span><h2 id="delete-confirmation-title">{deleteRequest.mode === "delete" ? "Permanently delete" : "Archive"} this {deleteRequest.closeParent ? "task" : "subtask"}?</h2><p id="delete-confirmation-description">{deleteRequest.mode === "delete" ? <>“{deleteRequest.task.title}” will be permanently removed from Nifty and cannot be restored.</> : <>“{deleteRequest.task.title}” will be hidden from active work but retained in Nifty. It can be restored from Nifty’s archived tasks.</>}{deleteRequest.closeParent && taskDetails?.subtasks.length ? ` Its ${taskDetails.subtasks.length} remaining subtask${taskDetails.subtasks.length === 1 ? "" : "s"} will also be ${deleteRequest.mode === "delete" ? "permanently deleted" : "archived"}.` : ""}</p><div><button disabled={busy} onClick={() => setDeleteRequest(null)}>Cancel</button><button className="confirm-delete" disabled={busy} onClick={confirmTaskRemoval}>{busy ? deleteRequest.mode === "delete" ? "Deleting…" : "Archiving…" : deleteRequest.mode === "delete" ? "Delete permanently" : "Archive"}</button></div></section></div>}
-    {editRequest && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title"><header><div><span>Edit {editRequest.kind}</span><h2 id="edit-task-title">Update the Nifty record</h2></div><button aria-label="Close editor" disabled={busy} onClick={() => setEditRequest(null)}><X size={18} /></button></header><div className="task-modal-body"><label><span>Title</span><input autoFocus maxLength={240} value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label><label><span>Description</span><textarea maxLength={20000} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} /></label></div><footer><button disabled={busy} onClick={() => setEditRequest(null)}>Cancel</button><button className="primary" disabled={busy || !editTitle.trim()} onClick={submitTaskEdit}>Save changes</button></footer></section></div>}
+    {taskComposerOpen && <TaskComposerModal busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={() => setTaskComposerOpen(false)} onSubmit={submitTaskFromDesktop} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+    {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
+    {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
@@ -928,29 +899,12 @@ function TaskLifecycleMenu({ task, busy, initialOpen = false, onEdit, onArchive,
   task: TaskRow; busy: boolean; initialOpen?: boolean; onEdit: (task: TaskRow) => void; onArchive: (task: TaskRow) => void; onDelete: (task: TaskRow) => void;
 }) {
   const [open, setOpen] = useState(initialOpen);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
-    const onKey = (event: KeyboardEvent) => {
-      if (moveMenuFocus(event)) return;
-      if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Node) || !menuRef.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [open]);
   const choose = (action: (item: TaskRow) => void) => { setOpen(false); action(task); };
-  return <div className={`dashboard-task-menu ${open ? "open" : ""}`} ref={menuRef} onClick={(event) => event.stopPropagation()}><button className="ellipsis-button" aria-label={`Actions for ${safeTaskText(task.title, "task")}`} aria-haspopup="menu" aria-expanded={open} disabled={busy} onClick={() => setOpen((current) => !current)}><MoreHorizontal size={17} /></button>{open && <div className="subtask-menu" role="menu"><button role="menuitem" onClick={() => choose(onEdit)}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => choose(onArchive)}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => choose(onDelete)}><Trash2 size={14} /> Delete permanently</button></div>}</div>;
+  return <div className={`dashboard-task-menu ${open ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={open} label={`Actions for ${safeTaskText(task.title, "task")}`} disabled={busy} onToggle={() => setOpen((current) => !current)} onClose={() => setOpen(false)}>
+    <button role="menuitem" onClick={() => choose(onEdit)}><Pencil size={14} /> Edit task</button>
+    <button role="menuitem" onClick={() => choose(onArchive)}><Archive size={14} /> Archive <small>reversible</small></button>
+    <button className="danger" role="menuitem" onClick={() => choose(onDelete)}><Trash2 size={14} /> Delete permanently</button>
+  </EllipsisMenu></div>;
 }
 
 export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
@@ -1140,16 +1094,7 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-function AssigneeTags({ task }: { task: Record<string, any> }) {
-  const assignees = Array.isArray(task.assignees) ? task.assignees.filter((item) => item && typeof item.displayName === "string") : [];
-  if (!assignees.length) return null;
-  return <div className="task-assignee-tags" aria-label={`Assigned to ${assignees.map((person) => person.displayName).join(", ")}`}>
-    {assignees.slice(0, 3).map((person) => <span key={person.personId || person.displayName} title={person.email || person.displayName}><i>{initials(person.displayName)}</i>{person.displayName}</span>)}
-    {assignees.length > 3 && <span title={assignees.slice(3).map((person) => person.displayName).join(", ")}>+{assignees.length - 3}</span>}
-  </div>;
-}
-
-export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
+export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
@@ -1157,31 +1102,12 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
+  initialTaskMenuId?: string | null; initialSearch?: string;
 }) {
-  const [taskMenuId, setTaskMenuId] = useState<string | null>(null);
-  const [taskSearch, setTaskSearch] = useState("");
+  const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
+  const [taskSearch, setTaskSearch] = useState(initialSearch);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
-  useEffect(() => {
-    if (!taskMenuId) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>('.workspace-task-menu .subtask-menu [role="menuitem"]')?.focus());
-    const onKey = (event: KeyboardEvent) => {
-      if (moveMenuFocus(event)) return;
-      if (event.key === "Escape") { event.preventDefault(); setTaskMenuId(null); }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(".workspace-task-menu")) setTaskMenuId(null);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [taskMenuId]);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
@@ -1215,6 +1141,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   const previousDays = new Set(carryOver.map((item) => item.attribution.date).filter(Boolean)).size;
+  const carryGroups = [...groups.entries()].map(([date, items]) => ({ date, label: date === moveDate(currentDate, -1) ? `Yesterday · ${formatWorkOsDate(date)}` : formatWorkOsDate(date), items }));
   const agendaText = historical
     ? shownPlan?.freeform_intent || "No focus note was recorded for this day."
     : goal || suggestion?.text || "Your open tasks define today’s work.";
@@ -1241,9 +1168,9 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
       const description = safeTaskText(task.description, "No description added.");
       const projectName = safeTaskText(task.project?.name, "Nifty");
       const milestoneName = safeTaskText(task.milestone?.name, "");
-      return <article className="task-record workspace-task" role="button" tabIndex={0} key={taskId} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state ${state}`}>{sentence(state)}</span><div><h3>{title}</h3><p>{description}</p><AssigneeTags task={task} /><small>{projectName}{milestoneName ? ` · ${milestoneName}` : ""}{task.priority ? ` · ${sentence(String(task.priority))} priority` : ""}{task.due_date ? ` · due ${formatWorkOsDate(task.due_date)}` : ""}{task.provider_created_at ? ` · created ${formatWorkOsDate(task.provider_created_at)}` : ""}{task.parent_provider_task_id ? " · subtask" : ""}{task.sync_error ? " · Nifty details unavailable" : task.synced_at ? " · Nifty synced" : " · Awaiting Nifty sync"}</small></div>{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{!historical && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><button className="ellipsis-button" aria-label={`Actions for ${title}`} aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy} onClick={() => setTaskMenuId(menuOpen ? null : taskId)}><MoreHorizontal size={17} /></button>{menuOpen && <div className="subtask-menu" role="menu">{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</div>}</div>}<ChevronRight size={17} /></article>;
+      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""} ${isSelected ? "is-surfaced" : ""}`} role="button" tabIndex={0} key={taskId} aria-selected={isSelected} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state ${state}`}>{sentence(state)}</span><div><h3>{title}</h3><p>{description}</p><AssigneeTags task={task} /><small>{projectName}{milestoneName ? ` · ${milestoneName}` : ""}{task.priority ? ` · ${sentence(String(task.priority))} priority` : ""}{task.due_date ? ` · due ${formatWorkOsDate(task.due_date)}` : ""}{task.provider_created_at ? ` · created ${formatWorkOsDate(task.provider_created_at)}` : ""}{task.parent_provider_task_id ? " · subtask" : ""}</small><SyncChip task={task} /></div>{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{!historical && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}<ChevronRight size={17} /></article>;
     })}</section>) : <Empty title={hasFilters ? "No tasks match these filters" : historical ? "No tasks surfaced" : "No tasks in this view"} body={hasFilters ? "Try a different search or clear the date filters." : historical ? "No Nifty tasks were recorded for this day." : taskView === "completed" ? "Completed tasks will appear here." : "Add a task or choose another view."} />}</div>{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading more tasks…" : "Load older tasks"}</button>}</section>
-    {carryOverOpen && <div className="carry-flyout-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onCarryOverOpen(false); }}><aside className="carry-flyout" aria-label="Unfinished work" role="dialog" aria-modal="true"><header><div><span>Unfinished work</span><h2>Review before carrying forward.</h2></div><button aria-label="Close unfinished work" onClick={() => onCarryOverOpen(false)}><X size={18} /></button></header><div>{[...groups.entries()].map(([date, items]) => <section key={date}><h3>{date === moveDate(currentDate, -1) ? `Yesterday · ${formatWorkOsDate(date)}` : formatWorkOsDate(date)}</h3>{items.map(({ task, attribution }) => <article key={task.id}><div><strong>{task.title}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div><div><button disabled={busy} onClick={() => onSurfaceTask(task)}>Add to today</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button disabled={busy} onClick={() => onTaskCompletion(task, true)}>Complete</button><button onClick={() => void onDate(attribution.date!)}>Open day</button></div></article>)}</section>)}</div></aside></div>}
+    {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }
 
