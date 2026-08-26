@@ -57,6 +57,17 @@ describe("operational visualizations", () => {
     expect(styles).toContain("animation: pageEnter");
   });
 
+  it("keeps agenda planning available independently of attendance", () => {
+    expect(app).toContain("scheduled for today");
+    expect(app).toContain("due from yesterday");
+    expect(app).toContain('type ComposerMode = "progress" | "agenda"');
+    expect(app).toContain('mode={active && view === "day" ? "progress" : "agenda"}');
+    expect(app).toContain("Plan ahead · this does not clock you in");
+    expect(app).toContain("Added from today’s agenda composer.");
+    expect(workspaceStyles).toContain(".pre-shift-agenda-summary .has-due");
+    expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
+  });
+
   it("treats keyboard and readable secondary text as part of the polish", () => {
     expect(app).toContain("function moveMenuFocus");
     expect(app).toContain('document.body.classList.add("modal-open")');

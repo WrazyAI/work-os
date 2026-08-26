@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LayoutDashboard, ListChecks, MessageSquareText, Gauge, ShieldCheck, Settings } from "lucide-react";
-import { TasksWorkspace } from "./App";
+import { ProgressComposer, TasksWorkspace } from "./App";
 import { suggestDailyGoal, unfinishedBefore, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan } from "./types";
 import { formatWorkOsDate } from "./dateFormat";
@@ -29,11 +29,16 @@ export default function TasksPreview() {
   const history = params.has("history");
   const [carryOpen, setCarryOpen] = useState(params.has("carryover"));
   const [goal, setGoal] = useState(currentPlan.freeform_intent ?? "");
+  const [input, setInput] = useState("");
+  const [composerOpen, setComposerOpen] = useState(params.has("agenda"));
+  const [composerPanel, setComposerPanel] = useState<"update" | "goal">("update");
+  const [receipt, setReceipt] = useState<{ text: string; message: string; kind: "new_task" } | null>(null);
   const suggestion = suggestDailyGoal(tasks, CURRENT_DATE, currentPlan.items);
   return <div className="workspace preview-workspace">
     <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav aria-label="Work OS"><div className="nav-group nav-core">{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"]].map(([Icon, label]) => <button className={label === "Tasks" ? "active" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-context">{[[Gauge, "Insights"], [ShieldCheck, "Evidence"]].map(([Icon, label]) => <button className={label === "Evidence" ? "nav-evidence" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-settings"><button><Settings size={18} /><span>Settings</span></button></div></nav><div className="rail-foot"><span className="presence live" /><div><strong>On shift</strong><small>Synced</small></div></div></aside>
     <section className="stage"><header className="masthead"><div><p>{formatWorkOsDate(history ? "2026-08-20" : CURRENT_DATE)}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Nifty live · 3 open</span><button className="avatar">DZ</button></div></header>
       <TasksWorkspace currentDate={CURRENT_DATE} historyDate={history ? "2026-08-20" : CURRENT_DATE} currentPlan={currentPlan} historicalPlan={history ? historicalPlan : null} historicalTasks={history ? tasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView="today" todayTasks={tasks.filter((task) => task.due_date === CURRENT_DATE)} taskHistory={tasks} carryOver={unfinishedBefore(tasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} onTaskView={() => undefined} onDate={async () => undefined} onGoal={setGoal} onAcceptSuggestion={() => suggestion && setGoal(suggestion.text)} onAddTask={() => undefined} onOpenTask={() => undefined} onEditTask={() => undefined} onArchiveTask={() => undefined} onSurfaceTask={() => undefined} onTaskCompletion={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined} />
+      {!history && <ProgressComposer mode="agenda" input={input} open={composerOpen} panel={composerPanel} pending="" receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="accepted_suggestion" goalSuggestion={suggestion} saveState="saved" onInput={setInput} onOpen={() => { setComposerPanel("update"); setComposerOpen(true); }} onOpenGoal={() => { setComposerPanel("goal"); setComposerOpen(true); }} onClose={() => setComposerOpen(false)} onSubmit={() => { const text = input.trim(); if (!text) return; setReceipt({ text, kind: "new_task", message: `Added “${text}” to today’s Nifty agenda.` }); setInput(""); setComposerOpen(true); }} onClassify={() => undefined} onGoal={setGoal} onAcceptSuggestion={() => suggestion && setGoal(suggestion.text)} />}
     </section>
   </div>;
 }
