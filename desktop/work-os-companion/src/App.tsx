@@ -952,13 +952,19 @@ export function ProgressComposer({ input, open, panel, pending, receipt, busy, r
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open]);
   const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
     { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },
     { kind: "blocked", label: "Blocker" }, { kind: "priority_change", label: "Priority change" }, { kind: "new_task", label: "New task" },
   ];
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   return <div className={`progress-dock ${open ? "open" : ""}`}>
-    {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : ""}`} aria-label={panel === "goal" ? "Daily focus editor" : "Progress conversation"}>
+    {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Progress conversation"}>
       <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Workday update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : "Today’s private work log"}</small></div><button aria-label="Close composer" onClick={onClose}><X size={16} /></button></header>
       {panel === "goal" ? <div className="goal-composer-panel"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" />{!goal && goalSuggestion && <div className="goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}<small>Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div> : <div className="progress-conversation">{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receipt.queued ? "Update queued" : "Update recorded"}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div><div className="progress-message assistant"><Sparkles size={16} /><div><strong>What kind of update is this?</strong><p>Choose one so Work OS records it correctly. Nothing is inferred yet.</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div></> : <div className="progress-welcome"><Sparkles size={17} /><div><strong>Share what changed.</strong><p>You can describe progress naturally. Work OS will ask how to file it after you send.</p></div></div>}</div>}
     </section>}
