@@ -71,6 +71,20 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
   });
 
+  it("keeps focus contextual and task lifecycle actions consistent", () => {
+    expect(app).toContain('className={`panel task-agenda-hero');
+    expect(app).toContain("Today’s agenda");
+    expect(app).toContain("Review unfinished work");
+    expect(app).toContain("onEditFocus={openGoalComposer}");
+    expect(app).not.toContain('className="panel daily-goal-card"');
+    expect(app).toContain("function TaskLifecycleMenu");
+    expect(app).toContain("Delete permanently");
+    expect(app).toContain("Archive <small>reversible</small>");
+    expect(workspaceStyles).toContain(".task-agenda-hero");
+    expect(workspaceStyles).toContain(".dashboard-task-menu");
+    expect(workspaceStyles).toContain(".goal-composer-panel .composer-goal-suggestion");
+  });
+
   it("treats keyboard and readable secondary text as part of the polish", () => {
     expect(app).toContain("function moveMenuFocus");
     expect(app).toContain('document.body.classList.add("modal-open")');

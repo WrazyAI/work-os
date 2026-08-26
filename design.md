@@ -738,8 +738,12 @@ On shift:
 ### 19.2 Tasks
 
 - Search and date controls are first-class.
+- On the current-day view, use one split hero: today’s agenda/focus on the left and unfinished work from previous days on the right. The left side may expose a compact `Edit focus` action; the right side opens the unfinished-work review flow.
+- Do not keep an editable focus textarea permanently open at the top of Tasks. Focus editing belongs in the shared anchored composer so the hero remains a summary and decision surface.
+- At compact widths, stack the two hero halves without changing their order or meaning. Historical dates use a single read-only agenda summary rather than presenting current-day actions.
 - Keep filters understandable and reversible.
 - Preserve the same task behavior as Today.
+- Keep task lifecycle actions consistent between Today and Tasks. Viewing and completion remain direct; editing, archiving, and permanent deletion live in the task’s contextual menu, with explicit confirmation for destructive actions.
 - Use a focused task-detail modal for deeper editing and subtasks.
 - Clearly distinguish historical read-only views.
 - Make Nifty sync state visible but not dominant.

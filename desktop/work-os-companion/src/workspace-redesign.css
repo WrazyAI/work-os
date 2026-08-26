@@ -1445,6 +1445,46 @@ body {
   transition: background 150ms ease, transform 150ms ease;
 }
 
+.dashboard-task-menu {
+  position: relative;
+  z-index: 4;
+}
+
+.dashboard-task-menu .ellipsis-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.dashboard-task-menu .subtask-menu {
+  z-index: 48;
+  top: calc(100% + 5px);
+  right: 0;
+  width: 194px;
+}
+
+.dashboard-focus-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto 32px;
+}
+
+.focus-task-copy {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.focus-task-copy strong,
+.focus-task-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .active-task-list article:hover {
   background: #f3f6f0;
 }
@@ -1613,18 +1653,27 @@ body {
 
 .goal-composer-panel {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   padding: 16px 18px 18px;
 }
 
-.goal-composer-panel > label {
+.goal-editor-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.goal-editor-field > label {
   color: var(--ink);
   font-size: 11px;
   font-weight: 700;
 }
 
-.goal-composer-panel > textarea {
+.goal-editor-field > textarea {
+  width: 100%;
   min-height: 92px;
+  padding: 11px 12px;
   resize: vertical;
   border: 1px solid #d4dacd;
   border-radius: 11px;
@@ -1635,10 +1684,20 @@ body {
   line-height: 1.5;
 }
 
-.goal-composer-panel > small {
+.goal-editor-field > textarea:focus {
+  border-color: #86bd58;
+  outline: 3px solid rgba(168, 241, 91, 0.28);
+}
+
+.goal-editor-field > small {
   color: var(--muted);
   font-size: 9px;
   line-height: 1.45;
+}
+
+.goal-composer-panel .composer-goal-suggestion {
+  grid-column: 1;
+  margin: 0;
 }
 
 .progress-message,
@@ -1731,6 +1790,12 @@ body {
   color: #42503e;
   font-size: 9px;
   font-weight: 700;
+}
+
+.focus-dock-button.active {
+  border-color: #86bd58;
+  background: #e6f5d7;
+  color: #315f17;
 }
 
 .progress-input-shell textarea {
@@ -1959,6 +2024,178 @@ body {
   font-size: 10px;
 }
 
+.task-agenda-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  min-height: 184px;
+  margin-bottom: 14px;
+  padding: 0;
+  overflow: hidden;
+  border-color: #d6ddd1;
+  background: #fbfcf8;
+}
+
+.task-agenda-hero.historical {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.agenda-hero-today {
+  display: flex;
+  min-width: 0;
+  padding: 24px 26px;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    radial-gradient(circle at 94% 8%, rgba(168, 241, 91, 0.2), transparent 13rem),
+    linear-gradient(135deg, #fbfcf8, #f4f8ef);
+}
+
+.agenda-hero-today > header,
+.agenda-hero-today > footer,
+.agenda-edit-button,
+.unfinished-work-action {
+  display: flex;
+  align-items: center;
+}
+
+.agenda-hero-today > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agenda-hero-today > header > span,
+.unfinished-work-copy > small {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.agenda-hero-today h2 {
+  max-width: 720px;
+  margin: 16px 0 22px;
+  font-size: clamp(21px, 2.5vw, 30px);
+  line-height: 1.18;
+  letter-spacing: -0.035em;
+}
+
+.agenda-hero-today > footer {
+  gap: 12px;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+.agenda-hero-today > footer > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.agenda-hero-today > footer small {
+  font-size: 9px;
+}
+
+.agenda-edit-button {
+  min-height: 34px;
+  padding: 0 10px;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 1px solid #cbd7c3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #40543a;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agenda-edit-button:hover {
+  border-color: #91c568;
+  background: #edf6e4;
+}
+
+.unfinished-work-hero {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  min-width: 0;
+  padding: 24px 22px 20px;
+  border: 0;
+  border-left: 1px solid #dfe4da;
+  border-radius: 0;
+  background: #f7f7f1;
+  color: var(--ink);
+  text-align: left;
+}
+
+.unfinished-work-hero.attention {
+  background: linear-gradient(145deg, #fffaf0, #fbf6e8);
+}
+
+.unfinished-work-hero:not(:disabled):hover {
+  background: #fff6df;
+}
+
+.unfinished-work-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  grid-row: 1;
+  place-items: center;
+  border-radius: 11px;
+  background: #e9eee4;
+  color: #61705a;
+}
+
+.unfinished-work-hero.attention .unfinished-work-icon {
+  background: #f7e3b7;
+  color: #9b6611;
+}
+
+.unfinished-work-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  align-content: start;
+}
+
+.unfinished-work-copy > small {
+  color: #8d6b27;
+}
+
+.unfinished-work-copy > strong {
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.unfinished-work-copy > em {
+  color: #777f73;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.unfinished-work-action {
+  grid-column: 1 / -1;
+  align-self: end;
+  justify-content: space-between;
+  min-height: 34px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(151, 105, 29, 0.18);
+  color: #6e4a10;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.unfinished-work-hero.clear .unfinished-work-action {
+  color: #737b70;
+}
+
 .carry-alert {
   min-height: 54px;
   margin-bottom: 14px;
@@ -2158,6 +2395,16 @@ button:not(:disabled):active {
     display: block;
   }
 
+  .task-agenda-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .unfinished-work-hero {
+    min-height: 126px;
+    border-top: 1px solid #dfe4da;
+    border-left: 0;
+  }
+
   .goal-card-head {
     margin-bottom: 10px;
   }
@@ -2297,7 +2544,7 @@ button:not(:disabled):active {
   }
 
   .active-task-list article {
-    grid-template-columns: 26px minmax(0, 1fr) 18px;
+    grid-template-columns: 26px minmax(0, 1fr) 32px;
   }
 
   .active-task-list .task-status {
@@ -2320,6 +2567,47 @@ button:not(:disabled):active {
   }
 
   .progress-input-shell > span {
+    display: none;
+  }
+
+  .progress-input-shell {
+    padding-left: 8px;
+  }
+
+  .focus-dock-button {
+    width: 38px;
+    padding: 0;
+    margin-right: 6px;
+  }
+
+  .focus-dock-button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .agenda-hero-today {
+    padding: 20px;
+  }
+
+  .agenda-hero-today h2 {
+    margin-block: 14px 18px;
+    font-size: 22px;
+  }
+
+  .agenda-hero-today > footer {
+    gap: 6px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-focus-row {
+    grid-template-columns: 24px minmax(0, 1fr) 32px;
+  }
+
+  .dashboard-focus-row > .task-state {
     display: none;
   }
 
