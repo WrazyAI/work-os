@@ -159,7 +159,9 @@ export default function App() {
     // (same scenario the debugger's "Offline playground" preset applies).
     const devParams = import.meta.env.DEV ? new URLSearchParams(window.location.search) : null;
     if (devParams?.has("ai")) {
-      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: false, liveWrites: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
+      const aiDay = devParams.get("day");
+      const allowed = ["no_shift", "scheduled", "shift_start", "clocked_in", "paused", "catch_up", "optional", "final_hour", "eod_due", "eod", "clocked_out"];
+      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: false, liveWrites: true, authState: "real", onboardingState: "complete", dayState: (allowed.includes(aiDay ?? "") ? aiDay : "clocked_in") as DebugScenario["dayState"] };
     }
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
       const params = new URLSearchParams(window.location.search);
@@ -1577,6 +1579,7 @@ const durationLabel = (seconds: number) => `${Math.floor(seconds / 3600)}h ${Mat
 function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
   const notifications = useNotifications();
   const [synthesis, setSynthesis] = useState<{ status: "loading" | "ready" | "failed"; text?: string } | null>(null);
+  const liveInsights = new URLSearchParams(window.location.search).has("liveinsights");
   const synthesize = () => {
     if (!data || synthesis?.status === "loading") return;
     setSynthesis({ status: "loading" });
