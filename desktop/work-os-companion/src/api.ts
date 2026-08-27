@@ -8,6 +8,12 @@ const MAX_QUEUE_ATTEMPTS = 6;
 // leave the app. Reads are served by scenario fixtures at the view layer;
 // writes are simulated by App-level handlers.
 let syncBypassActive = false;
+// Dev-only bridge: scenario mode can register its fabricated session so the
+// API layer resolves it in a plain browser. Never active in production builds.
+let debugSession: import("./types").DesktopSession | null = null;
+export function setDebugSession(session: import("./types").DesktopSession | null) {
+  debugSession = import.meta.env && import.meta.env.DEV ? session : null;
+}
 export function setSyncBypass(active: boolean) {
   syncBypassActive = active;
 }
@@ -78,7 +84,7 @@ function reschedule(action: OfflineAction, error: unknown, now = Date.now()): Of
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   return diagnostics.withSpan("api.request", async () => {
     if (syncBypassActive) throw new SyncBypassError();
-    const session = await secureState.session();
+    const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
     if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
       throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
     }
