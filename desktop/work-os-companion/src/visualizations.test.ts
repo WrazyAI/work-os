@@ -52,7 +52,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("nav-group nav-core");
     expect(app).toContain("nav-group nav-context");
     expect(app).toContain("nav-group nav-settings");
-    expect(app).toContain("Plan and complete Nifty work without losing the history behind it.");
+    expect(app).toContain("Plan today’s work and keep the history behind it.");
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");

@@ -3614,3 +3614,107 @@ button:not(:disabled):active {
 .synthesis-fallback {
   color: #77705e;
 }
+
+/* Slice E — overdue tap-through chip and slim focus metrics */
+.overdue-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid #e4b7ad;
+  border-radius: 11px;
+  background: #fff4f2;
+  color: #a03324;
+  text-align: left;
+}
+
+.overdue-metric:hover {
+  border-color: #cf6f5f;
+  background: #ffe9e5;
+}
+
+.overdue-metric strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overdue-metric em {
+  color: #8f4438;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Slice E — slim My Day focus bar: the day's focus compresses to one row;
+   metrics move beside it instead of stacking as a hero block. */
+.active-focus-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 12px 22px;
+}
+
+.active-focus-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.active-focus-copy > span {
+  font-size: 8px;
+}
+
+.active-focus-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.active-focus-heading h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(14px, 1.6vw, 18px);
+  line-height: 1.25;
+}
+
+.focus-edit-button {
+  flex: 0 0 auto;
+}
+
+.hero-task-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-task-metrics .completion-ring > span {
+  width: 40px;
+  height: 40px;
+}
+
+.hero-task-metrics .completion-ring.compact > span {
+  width: 34px;
+  height: 34px;
+}
+
+.hero-task-metrics .completion-ring strong {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .active-focus-block {
+    grid-template-columns: 1fr;
+  }
+
+  .active-focus-heading h2 {
+    white-space: normal;
+  }
+}

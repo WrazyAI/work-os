@@ -100,6 +100,7 @@ function dayFixture(): DayData {
     tasks: [
       { id: "debug-task-1", title: "Complete the Work OS Phase 1 runtime", completed: false },
       { id: "debug-task-2", title: "Review desktop recovery states", completed: false },
+      { id: "debug-task-overdue", title: "Fix the flaky screenshot upload", completed: false, due_date: "2026-08-26" },
     ],
     evidence: [{ id: "debug-evidence", source: "github", title: "Desktop build verified", summary: "Windows GUI artifact passed packaging checks.", occurred_at: now.toISOString() }],
     proposals: [{ id: "debug-proposal", operation: "progress_update", proposed_change: { summary: "Phase 1 runtime is ready for review" }, input_text: "Finished the runtime flow.", status: "pending" }],
