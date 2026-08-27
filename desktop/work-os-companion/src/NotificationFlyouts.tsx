@@ -29,6 +29,7 @@ const DEFAULT_TITLES: Record<NotificationTone, string> = {
   success: "Done",
   warning: "Heads up",
   error: "Something went wrong",
+  warning: "Needs attention",
   info: "Heads up",
 };
 
