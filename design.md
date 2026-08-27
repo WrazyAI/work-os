@@ -4,6 +4,38 @@ This document defines the visual, interaction, content, and product-design syste
 
 The purpose of this specification is consistency. New work should feel like an extension of one product rather than a collection of independently designed pages. Existing implementations may contain older patterns; use this document as the direction of travel when touching those areas.
 
+### Normative status and precedence
+
+This file is the canonical Work OS design blueprint. It covers both the installed
+desktop companion and the multi-user web platform, including employee, manager,
+administrator, onboarding, review, evidence, and settings surfaces.
+
+The words **must**, **should**, and **may** are deliberate:
+
+- **Must** is a release requirement. A change that violates it is incomplete.
+- **Should** is the default. Deviate only for a documented product or accessibility reason.
+- **May** describes an allowed option, not a required pattern.
+
+When sources disagree, use this order of authority:
+
+1. Privacy, accessibility, truthful-provenance, and destructive-action requirements.
+2. This specification.
+3. The latest reviewed desktop Today, Tasks, focus-composer, task-detail, and contextual-menu implementations and their visual-review states.
+4. Shared product tokens and established reusable components.
+5. Older desktop or web screens.
+
+The polished desktop employee surfaces are the current visual and interaction
+reference. The web employee experience must converge on the same hierarchy,
+language, task behavior, and material system. Web-specific manager and
+administrator workflows may be denser, but they must still look and behave like
+the same product. Older web layouts are implementation history, not design
+authority.
+
+Agents and contributors must read this entire document before changing a Work OS
+interface. A build or unit-test pass is not design acceptance. The rendered result
+must also be exercised and visually reviewed at the states and widths defined
+below.
+
 ## 1. Product character
 
 Work OS should feel:
@@ -543,7 +575,7 @@ If a menu option opens a richer view, replace the menu with a floating card in a
 
 Use a modal dialog for focused creation, destructive confirmation, or an operation that should temporarily suspend the underlying workflow.
 
-Use a detached floating card for contextual details that should not suspend the page, such as Shift details or Worktivity details.
+Use a detached floating card for contextual details that should not suspend the page, such as Workday status or Worktivity details.
 
 Requirements:
 
@@ -738,8 +770,12 @@ On shift:
 ### 19.2 Tasks
 
 - Search and date controls are first-class.
+- On the current-day view, use one split hero: today’s agenda/focus on the left and unfinished work from previous days on the right. The left side may expose a compact `Edit focus` action; the right side opens the unfinished-work review flow.
+- Do not keep an editable focus textarea permanently open at the top of Tasks. Focus editing belongs in the shared anchored composer so the hero remains a summary and decision surface.
+- At compact widths, stack the two hero halves without changing their order or meaning. Historical dates use a single read-only agenda summary rather than presenting current-day actions.
 - Keep filters understandable and reversible.
 - Preserve the same task behavior as Today.
+- Keep task lifecycle actions consistent between Today and Tasks. Viewing and completion remain direct; editing, archiving, and permanent deletion live in the task’s contextual menu, with explicit confirmation for destructive actions.
 - Use a focused task-detail modal for deeper editing and subtasks.
 - Clearly distinguish historical read-only views.
 - Make Nifty sync state visible but not dominant.
@@ -904,7 +940,649 @@ Before considering a UI change complete, verify:
 - [ ] Browser screenshots were reviewed at representative widths.
 - [ ] Functional interaction was tested, not inferred from a static render.
 
-## 23. Source references
+## 23. Canonical cross-platform composition
+
+### 23.1 One system, two delivery surfaces
+
+Desktop and web share the same product model:
+
+- The same destination names and task vocabulary.
+- The same warm neutral foundation and signal-green emphasis.
+- The same task-first state hierarchy.
+- The same task lifecycle actions and confirmation rules.
+- The same separation between Work OS session state, Worktivity observation,
+  Nifty provider state, employee claims, AI proposals, and output evidence.
+- The same loading, empty, degraded, success, and error language.
+
+Platform differences are limited to delivery constraints:
+
+| Concern | Desktop companion | Web platform |
+|---|---|---|
+| Shell | Persistent application rail and masthead | Product shell navigation with the same content axis and destination order |
+| Density | Pointer-first compact controls | Pointer and touch-aware; slightly larger controls where needed |
+| Composer | Sticky dock above the window edge | Sticky dock or page-local sticky action surface that never covers navigation |
+| Overlays | Constrained to the Tauri window | Constrained to the browser viewport and safe areas |
+| Provider state | May include local queue/offline state | Must distinguish browser request state from provider confirmation |
+| Admin workflows | Rare and secondary | May use denser master-detail and table layouts |
+
+Do not create a visually separate “web design system.” Tailwind utilities, CSS
+modules, or component-library primitives are implementation choices; their output
+must resolve to the same semantic tokens and component contracts.
+
+### 23.2 Content axes and shell geometry
+
+At full desktop width (`>1120px`), the reference shell is:
+
+```text
+┌──────── 208px rail ────────┬──────────── stage ──────────────┐
+│ 24px top / 16px sides      │ 30px horizontal stage padding  │
+│ wordmark                   │ 82px masthead                  │
+│ 40px gap                   │ ─────────────────────────────  │
+│ primary navigation         │ centered content ≤ 1200px     │
+│                            │                                │
+│ settings                   │                                │
+│ connection/session state  │ 56px minimum bottom breathing │
+└────────────────────────────┴────────────────────────────────┘
+```
+
+Mandatory alignment rules:
+
+- Masthead, notices, page introductions, heroes, panels, task lists, and sticky
+  composer share the centered stage axis.
+- The masthead is context, not a second hero. Use a 9px date/context line and a
+  21px destination title in the desktop companion reference.
+- The content stage is `min(100%, 1200px)`. Ordinary pages must not become
+  edge-to-edge dashboards on large displays.
+- The default stage background is a warm gray-green, optionally with one faint
+  signal-green radial wash near the upper-right. Content remains legible when the
+  wash is removed.
+- The rail is one continuous light surface. Settings and connection/session state
+  are quiet footer rows separated by rules, never dark inset cards.
+
+At `≤1120px`, the desktop rail collapses to `80px`, labels disappear, and the
+stage uses approximately `22px` side padding. At `≤560px`, content uses `14px`
+side padding and reserves approximately `82px` for compact navigation/system UI.
+The compact shell must preserve an accessible name or tooltip for every icon-only
+destination.
+
+### 23.3 Cross-platform role variants
+
+- **Employee:** task-first, state-responsive, supportive, and progressively
+  disclosed. Today and Tasks are the primary reference surfaces.
+- **Manager:** review-first. Use a master-detail composition: approximately
+  `320px` queue column plus a flexible detail column at large widths, stacking at
+  smaller widths. The selected employee, report date, evidence provenance, and
+  decision controls must remain visible.
+- **Administrator:** setup and operations-first. Use a stable tab row, grouped
+  settings panels, compact health notices, and tables or structured lists for
+  repeated entities. Do not reuse the employee hero merely for visual parity.
+- **Onboarding:** one decision cluster per step, one primary continuation action,
+  persisted draft state, and explicit separation between provider connection,
+  consent, and readiness.
+
+## 24. Canonical visual tokens
+
+### 24.1 Foundation colors
+
+These are the canonical light-theme values. Web tokens such as `--bg-primary`,
+`--bg-card`, and `--accent` must map to these meanings rather than introduce a
+second palette.
+
+| Semantic token | Reference value | Contract |
+|---|---:|---|
+| `color-ink` | `#182018` | Primary text, selected dark controls, avatar |
+| `color-muted` | `#626a61` | Secondary copy and metadata |
+| `color-canvas` | `#eef1eb` | Outer application background |
+| `color-stage` | `#f3f5f1` | Main stage background |
+| `color-paper` | `#f8f8f3` | Warm base surface |
+| `color-raised` | `#fbfcf8` | Primary cards and raised groups |
+| `color-white` | `#ffffff` | Editable and floating surfaces |
+| `color-line` | `#d9ded5` | Default borders and separators |
+| `color-signal` | `#a8f15b` | Primary actions and bounded progress |
+| `color-signal-strong` | `#7cc936` | Active meter fill and stronger green state |
+| `color-nav-active` | `#e4f4d3` | Selected navigation background |
+| `color-nav-marker` | `#75bb38` | Selected navigation edge marker |
+| `color-danger` | `#d4493f` | Error/destructive/immediate carry-over |
+| `color-danger-soft` | `#f8ded8` | Error/overdue background tint |
+| `color-warning` | `#d99216` | Older unfinished work and recoverable warning |
+| `color-warning-soft` | `#fff8e8` | Warning surface |
+| `color-observed-ink` | `#235778` | Worktivity/provider observation |
+| `color-observed-soft` | `#edf6fd` | Provider-observation surface |
+
+Do not use `color-signal` for every positive-looking object. It means primary
+action, current selection/progress, or explicitly confirmed success depending on
+the accompanying label. Observation remains cool blue/neutral even when activity
+is currently present.
+
+### 24.2 Geometry, elevation, and motion tokens
+
+| Role | Value |
+|---|---:|
+| Compact icon/control radius | `7–9px` |
+| Standard button/input radius | `9–11px` |
+| Internal notice/menu radius | `10–12px` |
+| Standard card radius | `14px` |
+| Primary hero/active-day radius | `18px` |
+| Compact control height | `34–36px` |
+| Standard input/search height | `42px` |
+| Rail navigation row | `46px` |
+| Sticky composer input | `58px` |
+| Standard card shadow | `0 1px 2px rgba(20,30,18,.035), 0 7px 24px rgba(20,30,18,.035)` |
+| Raised hero shadow | `0 16px 48px rgba(20,30,18,.07)` |
+| Floating surface shadow | `0 18px 60px rgba(18,27,17,.14)` |
+| Product easing | `cubic-bezier(.2,.8,.2,1)` |
+
+Use a 1px border on cards, inputs, buttons, menus, and dialogs unless a semantic
+state calls for a 2px edge accent. A shadow does not replace a boundary when the
+surface must remain understandable in high contrast or reduced transparency.
+
+### 24.3 Typography implementation
+
+- Application stack: `Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif`.
+- Web fonts must be self-hosted through the existing Next.js font configuration.
+- Use negative tracking only for page/hero statements (`-0.025em` to `-0.045em`).
+- Use tabular numerals for timers, timestamps, counts that change in place, and
+  aligned operational metrics.
+- Eyebrows are 9–10px, 700–800 weight, uppercase, and approximately `.08–.10em`
+  tracking. Limit a screen region to one eyebrow level.
+- Task descriptions use 11–12px and a two-line clamp in dense lists. Full text is
+  available in details.
+
+## 25. Canonical component contracts
+
+### 25.1 Navigation rail
+
+An expanded rail is `208px` wide with `24px 16px 20px` padding. The wordmark uses
+a 30px mark in a 9px radius container. Navigation begins about 40px below it, uses
+6px row gaps, and 46px rows with 11px radius. The active row has a soft-green fill
+and a 4px by 24px marker at the outer rail edge.
+
+The footer order is always Settings, then connection/session state. The status
+row can show `On shift`, `Paused`, `Activity synced`, `Off shift`, `Offline`, or a
+queued count, but it must not claim provider success from local request success.
+
+### 25.2 Buttons and icon controls
+
+- Compact icon button: 30–36px square, 7–9px radius, 14–17px Lucide icon.
+- Standard labeled button: 34–40px high, 9–11px radius, 6–8px internal gap.
+- Primary button: signal-green fill with ink text; hover may lighten and lift 1px.
+- Secondary button: white/paper fill with neutral border.
+- Tertiary button: transparent or quiet surface; preserve a visible hover target.
+- Pressed feedback: at most `translateY(1px) scale(.985)`.
+- Disabled controls remain readable, remove hover/press motion, and explain the
+  blocker when it is not obvious.
+
+### 25.3 Inputs, search, and date range
+
+The Tasks search control is a first-class 42px surface with a search icon, 11px
+input text, and a 27px clear button. Search matches task title, description,
+project, and milestone, case-insensitively.
+
+The date-range control is a peer 42px surface containing `From` and `To` fields.
+Its range is inclusive at both ends. A single populated endpoint is valid and
+means “on or after” or “on or before.” The UI must prevent or normalize an
+inverted range, provide `Clear dates`, and show a result count when any filter is
+active. At narrow widths, search and range stack; the range may scroll internally
+but may not clip either endpoint.
+
+### 25.4 Contextual menus
+
+- Menus open 5–7px from the trigger and align to its trailing edge.
+- Task menus are approximately 194px wide; simple two-option menus may be 176px.
+- Menu items are at least 34–38px high and use icon, label, then optional quiet
+  qualifier (`reversible`).
+- Permanent deletion is separated by a rule and uses danger color.
+- The menu floats above rows and never changes row height. Neighboring ellipsis
+  triggers must not paint through it; temporarily hiding competing row triggers
+  while a menu is open is acceptable.
+- Use one open menu per region. Outside click, Escape, action selection, route
+  change, and row removal close it. Restore focus to the trigger when possible.
+- Collision logic must keep the full menu in the viewport; do not guess direction
+  solely from “last row” because filtered sections may contain one item.
+
+### 25.5 Detached detail cards
+
+Contextual status detail uses a detached card, not an expanding row. The active
+workday detail card is up to 560px wide, 14px radius, and anchored beneath the
+header ellipsis. Its header has a 30px Back button, title/subtitle, and 30px Close
+button. `Workday status` and `Worktivity details` are sibling options:
+
+- Workday status: scheduled progress, start, remaining, end, elapsed, next update,
+  open tasks, and awaiting review.
+- Worktivity details: provider status, clocked in, clocked out, last activity,
+  observed active time, provider refresh, and deducted OnBreak time.
+
+The Worktivity surface uses the cool observation palette. It must not imply Work
+OS attendance, task completion, or productivity.
+
+### 25.6 Dialogs
+
+Dialogs use a viewport scrim, a single raised surface, and a maximum width suited
+to the operation: approximately 448px for confirmation, 512px for simple create
+or edit, and larger only for task detail or evidence review. Header, scrolling
+body, and footer actions are distinct regions. Destructive confirmations name the
+task and distinguish reversible archive from permanent deletion.
+
+## 26. Today page blueprint
+
+### 26.1 Pre-shift composition
+
+The first screenful is a two-column readiness composition at wide widths:
+
+- **Left primary hero:** readiness phrase, scheduled window, one `Clock in`
+  action, and one concise attendance-provenance sentence. Decorative companion
+  art may occupy the far right but never displace the action.
+- **Right Shift Pulse:** compact countdown/schedule state. The default card does
+  not repeat task counts, review counts, session state, or six Worktivity facts.
+  Its ellipsis exposes `Worktivity status` in a detached card.
+- **Below:** focus and agenda card with today’s focus, `N tasks scheduled for
+  today`, and a separate red `M tasks due from yesterday` indicator.
+
+The agenda composer is available before clock-in. Its copy says it adds tasks or
+sets focus and explicitly states that planning does not affect attendance.
+
+### 26.2 Active or Worktivity-observed composition
+
+The active workspace is one 18px-radius card, not several competing dashboard
+cards. Its vertical anatomy is fixed:
+
+1. **64px minimum status header:** live/paused/observed label, elapsed value,
+   compact progress meter, next update, Pause/Resume where Work OS owns the
+   session, Clock out where allowed, and ellipsis.
+2. **178px minimum focus hero:** green-tinted neutral surface, focus eyebrow,
+   25–36px focus statement, provenance, `Update focus`, and exactly two metrics.
+3. **Task toolbar:** Today, Previous day, Other days, and `Add task`.
+4. **Task list:** at least enough reserved height to avoid collapse while loading.
+5. **54px minimum footer:** truthful Nifty sync sentence and link to full Tasks.
+6. **Sticky composer:** visually attached to the workflow but layered above the
+   page edge.
+
+The two hero metrics are:
+
+- Green bounded progress: `X of Y tasks done`, selecting Today.
+- Previous-day count: neutral at zero and red when positive, selecting Previous day.
+
+Older work uses the amber Other days tab/count and an optional local notice. Do
+not add a third hero metric.
+
+In Worktivity-observed mode, the hierarchy still transforms into the active-day
+workspace. The header must identify observation truthfully and may remove Work
+OS-owned Pause/Clock out actions, but the ellipsis must continue to expose both
+`Workday status` and `Worktivity details`.
+
+### 26.3 Active task row
+
+At wide widths the row grid is approximately:
+
+```text
+26px completion | flexible title + metadata | status | 30px menu
+```
+
+Rows are at least 66px high with 11px gaps and neutral separators. On compact
+screens, hide the redundant status word before hiding title or completion; the
+three-column layout becomes completion, content, menu. Completion remains direct.
+Viewing uses the task title/body. Editing, archive, and permanent deletion use the
+ellipsis menu.
+
+## 27. Tasks workspace blueprint
+
+### 27.1 Page order
+
+The current-day Tasks page uses this exact order:
+
+1. Page intro and date navigator on a shared baseline.
+2. Split agenda hero.
+3. View tabs: Today, Unfinished, Completed, All tasks.
+4. Search and inclusive date-range toolbar.
+5. Task-list panel with local `Add task` action.
+6. Sticky agenda/focus composer.
+
+Do not restore a permanently editable focus textarea above the task list.
+
+### 27.2 Split agenda hero
+
+At wide widths the hero is a minimum 184px grid with columns approximately
+`1.35fr 0.65fr`; the right column has a practical minimum near 280px.
+
+- **Left, Today’s agenda:** 24–26px padding, quiet green radial wash, focus text
+  at 21–30px, `Edit focus`, scheduled task count, authorship/provenance, and save
+  state.
+- **Right, unfinished work:** neutral or amber surface, 38px state icon, unfinished
+  count, number of prior workdays involved, and `Review unfinished work` anchored
+  at the bottom.
+
+At `≤900px`, stack left then right. Replace the vertical divider with a horizontal
+divider. Historical dates show one read-only agenda panel and omit current-day
+mutation controls.
+
+### 27.3 Task views, ordering, and overdue meaning
+
+Tasks are grouped, not presented as an undifferentiated provider dump:
+
+| Section | Membership | Order | Visual treatment |
+|---|---|---|---|
+| Overdue | Open task with due date before current workday | Oldest due first | Red label/count and 2px danger edge |
+| Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
+| Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
+
+Provider refresh timestamps must not masquerade as meaningful task activity when
+a provider-created, provider-updated, completed, or user-action timestamp is
+available. Tie-break deterministically by normalized task title.
+
+Malformed provider titles/descriptions, HTML error bodies, `[object Object]`, and
+fetch exception text never render as task content. Use `Untitled Nifty task`, `No
+description added.`, `Nifty details unavailable`, or another deliberate fallback.
+Invalid timestamps never reach a formatter that can throw.
+
+### 27.4 Filtering states
+
+- Search and date range compose with the selected view; neither silently resets
+  the other.
+- Show `N results` whenever filters are active.
+- The filtered-empty state is `No tasks match these filters` plus a clear-filters
+  action. It must not say the user has no tasks.
+- The unfiltered empty state reflects the selected view: for example, completed
+  tasks will appear after completion.
+- `Load older tasks` is explicit pagination, not an ambiguous `Load more`.
+- Historical task workspaces are read-only but retain search, inspectability, and
+  a truthful original-day link where relevant.
+
+## 28. Shared composer blueprint
+
+The composer is one reusable interaction with contextual modes, not separate
+lookalike input bars.
+
+### 28.1 Dock geometry
+
+- Sticky near the bottom (`16px` desktop, about `10px` compact).
+- Width: `min(calc(100% - 48px), 760px)` at full width.
+- Input shell: at least 58px high, 17px radius, white raised surface.
+- Focus control: labeled 36px-high secondary button on desktop; icon with an
+  accessible hidden label at very narrow widths.
+- Send control: 36px square, 11px radius, dark ink when enabled.
+- Reserve page bottom padding so the dock never obscures the last task or footer.
+
+### 28.2 Modes and outcomes
+
+| Context | Default intent | Allowed outcomes |
+|---|---|---|
+| Pre-shift Today | Agenda planning | New task, focus edit |
+| Tasks workspace | Agenda planning | New task, focus edit |
+| Active Today | Progress communication | Progress, completed work, blocker, priority change, new task |
+
+Ambiguous active-day text opens a classification conversation. It is not silently
+reduced to “progress.” Classification options remain explicit and the final
+receipt names what was recorded or proposed. Focus opens the same goal editor from
+the hero and dock. The goal editor shows provenance, save state, optional task
+suggestion, and the statement that focus does not affect attendance.
+
+The flyout appears directly above the dock with approximately 16px radius and a
+48px header. It may scroll internally, must close on Escape, and must preserve
+typed content unless the user intentionally discards it.
+
+## 29. Supporting surface blueprints
+
+### 29.1 Review
+
+Review is a decision workspace, not an activity feed. Its wide composition is:
+
+1. Page introduction and compact pending count.
+2. One short control-flow strip showing `Your update → Structured draft → Your
+   decision → Nifty write-back`.
+3. Proposal cards ordered oldest decision-needed first unless product urgency
+   explicitly overrides age.
+
+A proposal card uses three regions:
+
+- **Header:** sequence/index, operation type, affected task/entity, and proposal
+  status.
+- **Comparison:** employee wording on the left, proposed structured change on the
+  right, with a directional cue between them. Stack source then proposal at narrow
+  widths.
+- **Footer:** truthful provider-write status on the left and `Reject` then
+  signal-green `Approve change` on the right.
+
+The original employee statement is visually quoted and never rewritten. Proposed
+fields use a compact definition list rather than prose. Stale proposals lose
+mutation actions and explain why they need regeneration. Approval remains a
+primary local action only while the proposal is actionable; a successful browser
+request is not displayed as Nifty write-back until provider confirmation exists.
+
+### 29.2 Insights
+
+Insights follows summary → comparison → exact record:
+
+1. Page intro and Day / 7 days / 30 days range control.
+2. A small metric row for separate evidence classes, never a composite score.
+3. Evidence-based brief with Wins, Needs attention, and Next focus.
+4. Trend visualization when at least two comparable dates exist.
+5. Exact-values table or drilldown for auditability.
+6. Source freshness and limitation note.
+
+Use no more than four primary metric tiles in the first row. A tile is at least
+126px high on wide desktop and contains one icon, label, and value/progress object.
+Observed duration, daily-task completion, Nifty outcomes, and output evidence use
+separate labels and scales. A dual-series chart must provide a legend that names
+both scales; it may not visually imply that activity time and task completion are
+the same measure.
+
+Charts reserve their geometry while loading, include exact accessible text, and
+fall back to a table at narrow widths. Stale data remains visible with a local
+freshness notice rather than disappearing behind a spinner.
+
+### 29.3 Evidence
+
+Evidence is provenance-first. Default to a structured list or timeline with:
+
+```text
+evidence class | title and summary | source | observed/created time | status/actions
+```
+
+The title states what the record is, not what it supposedly proves. The metadata
+line always includes evidence class and source. Output artifacts, employee claims,
+Worktivity context, screenshots, provider events, and review decisions use
+distinct labels.
+
+Evidence details may reveal identifiers, timestamps, hashes, provider links, and
+correction history behind disclosure. Raw screenshots are restricted content:
+show availability and review state first, request a reason before access, audit
+the access, and present the image in a modal with a neutral descriptive alt label.
+Never use a screenshot thumbnail as a decorative productivity indicator.
+
+Dispute/correction actions are visually secondary but discoverable. A disputed
+record remains in the timeline with its correction status rather than vanishing.
+
+### 29.4 Settings
+
+Settings is organized by user intent, in this order where applicable:
+
+1. Profile and locale.
+2. Schedule and notifications.
+3. Privacy and exclusions.
+4. Provider connections and sync state.
+5. Application behavior.
+6. Diagnostics.
+7. Destructive reset/account actions.
+
+Each setting row uses a flexible label/description column and intrinsic control
+column. Rows are normally 72–104px high depending on helper copy. At narrow widths,
+stack the control below the explanation and make it full width when appropriate.
+Do not place unrelated settings in dashboard metric cards.
+
+Provider connections show provider name, mapped identity/workspace, last verified
+state, and a clear reconnect or inspect action. `Connected` requires a verified
+provider-scoped read, not the presence of stored credentials. Destructive settings
+live in a separated danger section and require explicit confirmation.
+
+### 29.5 Onboarding
+
+Onboarding uses a focused single-card flow rather than the full operational shell.
+Each step contains:
+
+- A quiet progress/phase label.
+- One short outcome-oriented heading.
+- One decision cluster or related field group.
+- Local help for privacy, schedule, or provider consequences.
+- Back and one primary continuation action.
+
+Keep the content measure narrow enough to scan; forms normally use one column and
+may use two columns only for paired values such as shift start/end. Save drafts as
+fields become valid and preserve later typing when earlier network responses
+return. Provider connection, notification permission, Worktivity mapping,
+screenshot configuration, and consent are separate checkpoints with separate
+truthful states.
+
+Consent is never a decorative checkbox. The surface names the data, purpose,
+retention boundary, sensitive-capture behavior, and withdrawal route before the
+acceptance control.
+
+### 29.6 Manager review
+
+At large widths, manager review uses a `320px minmax(0, 1fr)` master-detail grid:
+
+- **Queue column:** pending reports with employee, report date, and decision state.
+  The selected row has a non-color marker and stable surface treatment.
+- **Detail column:** employee/date header, submitted report snapshot, sourced
+  evidence, manager notes, and final decision footer.
+
+The evidence area is collapsed to summaries by default and preserves employee
+privacy boundaries. `Reject` is outlined danger; `Approve` is signal-green.
+Neither action is icon-only. After a decision, retain a receipt and advance to the
+next pending report only when doing so will not discard unsaved notes.
+
+On compact widths, queue precedes detail and selecting a report may move focus to
+the detail heading. Provide an obvious path back to the queue.
+
+### 29.7 Administration
+
+Administration is denser than the employee experience but uses the same tokens,
+typography, controls, notices, and provenance rules.
+
+- Use stable noun tabs for Today, Tasks, People, Schedules, Blueprints, Evidence,
+  Reports, and Settings.
+- Place readiness or system blockers above the affected workflow, not in a global
+  wall of alerts.
+- Prefer tables for repeated entities and structured forms for creation/editing.
+- Use a two-column working grid only when the left context or selection directly
+  controls the right content.
+- Group connection fields by provider and identity; do not expose internal IDs as
+  the only human label.
+- Health summaries use explicit counts and source timestamps. They are not hero
+  marketing metrics.
+- Long forms are divided into named sections with local save actions or a single
+  sticky footer, never several visually identical primary buttons in one panel.
+
+## 30. Responsive specification matrix
+
+Every changed surface must be reviewed at these representative classes:
+
+| Class | Reference viewport | Required behavior |
+|---|---|---|
+| Wide desktop | `1440×900` or larger | 208px rail, side-by-side heroes, all useful metadata |
+| Compact desktop | approximately `1024×768` | 80px icon rail, usable stage, overlays inside viewport |
+| Narrow/tablet | approximately `720×900` | stacked Tasks hero, compact rail/navigation, composer clear of rows |
+| Small | approximately `390×844` | single-column content, touch targets ≥40px, no horizontal page scroll |
+
+Specific collapse rules:
+
+- At `≤1120px`, collapse rail labels before compressing task content.
+- At `≤900px`, stack split heroes and search/date controls.
+- At `≤560px`, stack the active-day header and footer actions, hide redundant task
+  status labels, make task tabs share available width, and use two columns for
+  detail facts.
+- Long task titles and focus statements wrap where they are primary; dense task
+  rows clamp descriptions to two lines.
+- Menus, dialogs, and detached cards use viewport collision handling and internal
+  scrolling. They never extend beneath the sticky composer or browser safe area.
+- The composer must not cover the row action currently being used. Scroll or
+  reserve space rather than relying on transparency.
+
+Test zoom at 200% or an equivalent narrow content width. Layout must remain
+operable when system font metrics differ from the design machine.
+
+## 31. Operational state matrix
+
+For every asynchronous page or reusable component, implement and review the
+applicable cells:
+
+| State | Required presentation |
+|---|---|
+| Initial loading | Stable skeleton or reserved geometry; primary actions do not jump |
+| Refreshing | Existing truthful data remains visible with local refresh affordance |
+| Empty | Specific to the current view and offers the next useful action |
+| Filtered empty | Says no records match and offers clear/reset |
+| Dense | Long titles, many rows, counts, and metadata remain aligned |
+| Partial provider data | Deliberate fallback copy and source/freshness label |
+| Offline/queued | Says queued locally; never says Nifty confirmed |
+| Recoverable error | Local notice, retry, and preserved user input |
+| Blocking error | Clear failed boundary and recovery route; no raw stack/payload |
+| Optimistic mutation | Visually pending until authoritative confirmation |
+| Confirmed success | Concise receipt naming the persisted outcome |
+| Conflict | Explains changed provider state and preserves both user intent and latest value |
+| Read-only history | Removes mutation affordances while retaining inspection and provenance |
+
+Date and time formatting is a rendering boundary. Validate ISO dates, instants,
+timezone identifiers, durations, and range endpoints before using `Date`, `Intl`,
+or arithmetic. Unavailable data renders `—`, `Unavailable`, or context-specific
+copy. It never produces `Invalid Date` or an application-level error screen.
+
+## 32. Design governance and acceptance
+
+### 32.1 Before implementation
+
+An agent changing UI must:
+
+1. Read this document in full.
+2. Identify the applicable page blueprint, component contracts, responsive rules,
+   state matrix, and provenance constraints.
+3. Inspect the latest reviewed implementation and preview state rather than copying
+   an older adjacent screen.
+4. Inventory reusable tokens/components before adding a new pattern.
+5. State any intentional deviation and the product reason before implementation.
+
+### 32.2 During implementation
+
+- Reuse semantic tokens; do not scatter near-duplicate hex values or dimensions.
+- Keep desktop and web behavior aligned when both expose the same workflow.
+- Add or update deterministic preview fixtures for important visual states.
+- Add behavioral tests for sorting, filtering, empty states, date validation,
+  overlay closure/focus, and mutation receipts where applicable.
+- If a new pattern is likely to recur, document its anatomy and rationale here in
+  the same change.
+
+### 32.3 Required visual QA evidence
+
+A UI change is not complete until the agent has:
+
+- Rendered the relevant preview or authenticated surface at wide desktop and
+  compact/narrow widths.
+- Exercised the changed controls with pointer and keyboard.
+- Reviewed at least loading, empty, dense, error/degraded, and normal data states
+  when the component supports them.
+- Opened menus/dialogs near top, middle, and bottom/edge positions to check
+  collision and stacking.
+- Checked focus visibility and Escape/outside-click behavior.
+- Checked `prefers-reduced-motion`.
+- Confirmed no horizontal overflow, covered actions, clipped labels, raw provider
+  errors, invalid dates, or layout shifts from asynchronous counts.
+- Recorded what was actually viewed and exercised in the handoff. A build-only
+  statement is insufficient.
+
+### 32.4 Blueprint change control
+
+The design system may evolve, but not silently. A pull request or commit that
+changes a canonical pattern must include:
+
+- The product problem the existing pattern could not express.
+- The new reusable contract and which surfaces consume it.
+- Responsive, accessibility, state, and provenance behavior.
+- Updated visual references or preview fixtures.
+- An update to this document when the change is intended to become precedent.
+
+One-off experiments remain explicitly experimental until reviewed. They must not
+be copied into other surfaces as de facto design language.
+
+## 33. Source references
 
 Use these existing references when extending the system:
 
@@ -912,5 +1590,7 @@ Use these existing references when extending the system:
 - `desktop/work-os-companion/src/App.tsx` for Today, Tasks, progress composer, task details, and floating Shift/Worktivity patterns.
 - `desktop/work-os-companion/src/TodayPreview.tsx` and `TasksPreview.tsx` for focused visual review states.
 - `design-qa.md` for the latest reviewed screenshots and known comparison history.
+- `src/modules/work-os/EmployeeWorkOsHome.tsx` for the current web employee implementation that must converge on the canonical employee blueprint.
+- `src/modules/work-os/ManagerWorkOsHome.tsx` and `WorkOsHome.tsx` for web manager and administrator workflow requirements; their older visual treatment is not precedent when it conflicts with this specification.
 
 This specification is the default, not a prohibition on improvement. A new pattern is appropriate when the existing system cannot express a real product need. When introducing one, document the reason, ensure it composes with the rest of the system, and update this specification if the pattern becomes reusable.

@@ -7,7 +7,38 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # WrazyAI web platform — operations runbook
 
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
-design in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
+architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
+
+## Mandatory Work OS design blueprint
+
+Before designing, implementing, reviewing, or modifying any Work OS interface,
+read `design.md` completely and use it as the canonical product-design blueprint.
+It governs both the desktop companion and web platform, including employee,
+manager, administrator, onboarding, review, evidence, and settings surfaces.
+
+The latest polished desktop Today, Tasks, shared composer, task-detail, and
+contextual-menu patterns are the current visual and interaction authority. The
+web experience must converge on their hierarchy, tokens, component behavior,
+responsive rules, provenance language, and state handling. Older adjacent screens
+are implementation history and must not be copied when they conflict with
+`design.md`.
+
+For every UI change:
+
+- Identify and follow the applicable blueprint, component contract, responsive
+  matrix, operational state matrix, and accessibility requirements in `design.md`.
+- Reuse established semantic tokens and patterns before creating new ones.
+- Preserve task-first hierarchy, progressive disclosure, concise copy, semantic
+  status color, detached contextual surfaces, and truthful data provenance.
+- Validate representative wide desktop, compact/narrow, loading, empty, dense,
+  degraded/error, keyboard, focus, overlay-collision, and reduced-motion states.
+- Review rendered screenshots and exercise the relevant controls. A successful
+  build or static assertion is not visual or interaction acceptance.
+- Document any intentional deviation. If a new pattern becomes reusable, update
+  `design.md` with its rationale and full contract in the same change.
+
+Do not declare a UI task complete without reporting what was actually rendered
+and exercised, what state coverage was verified, and anything that remains open.
 
 ## Architecture (two halves)
 - **Cloud control plane** — Supabase: Auth + Postgres (with RLS for per-user

@@ -15,6 +15,8 @@ export const ALL_ONBOARDING_DETAILS: Array<{ key: DebugOnboardingDetail; label: 
 
 export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   enabled: false,
+  syncBypass: false,
+  companionForce: null,
   authState: "real",
   onboardingState: "real",
   invalidateOnboardingData: false,
@@ -34,6 +36,7 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; scenario: Partial
   { id: "explicit_clock_in", label: "Explicit clock-in", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "scheduled" } },
   { id: "provider_failure", label: "Provider outage", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
+  { id: "offline_playground", label: "Offline playground (no backend)", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in" } },
 ];
 
 function onboardingFixture(): OnboardingData {
@@ -97,6 +100,7 @@ function dayFixture(): DayData {
     tasks: [
       { id: "debug-task-1", title: "Complete the Work OS Phase 1 runtime", completed: false },
       { id: "debug-task-2", title: "Review desktop recovery states", completed: false },
+      { id: "debug-task-overdue", title: "Fix the flaky screenshot upload", completed: false, due_date: "2026-08-26" },
     ],
     evidence: [{ id: "debug-evidence", source: "github", title: "Desktop build verified", summary: "Windows GUI artifact passed packaging checks.", occurred_at: now.toISOString() }],
     proposals: [{ id: "debug-proposal", operation: "progress_update", proposed_change: { summary: "Phase 1 runtime is ready for review" }, input_text: "Finished the runtime flow.", status: "pending" }],
@@ -183,6 +187,15 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
       } : null,
       plan: sessionState ? { ...result.plan!, status: sessionState === "clocked_in" ? "draft" : result.plan?.status ?? "draft" } : null,
       prompt: kind === "clocked_out" ? { kind: null, required: false, reason: "Shift ended.", nextPromptAt: null } : { ...prompt, nextPromptAt: null },
+    };
+  }
+  if (scenario.dayState === "eod" || scenario.dayState === "eod_due") {
+    result = {
+      ...result,
+      report: {
+        id: "debug-report-eod", status: "draft", report_date: result.shiftDate,
+        markdown: ["# EOD Report: David Z (scenario)", "", "## Summary", "Worked on the debugger fix and desktop recovery states.", "", "## Completed", "- Reviewed desktop recovery states", "", "## Carried forward", "- Complete the Work OS Phase 1 runtime", "", "## Bottleneck", "(needs your input — what prevented you from completing your task list?)"].join("\n"),
+      },
     };
   }
   return result;

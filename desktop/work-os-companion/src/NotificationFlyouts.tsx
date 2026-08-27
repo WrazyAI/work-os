@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, Check, Info, Pin, X } from "lucide-react";
 
-export type NotificationTone = "success" | "error" | "info";
+export type NotificationTone = "success" | "error" | "warning" | "info";
 export type NotificationPersistence = "transient" | "persistent";
 
 export type AppNotification = {
@@ -27,6 +27,7 @@ type NotificationContextValue = {
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 const DEFAULT_TITLES: Record<NotificationTone, string> = {
   success: "Done",
+  warning: "Heads up",
   error: "Something went wrong",
   info: "Heads up",
 };
@@ -116,7 +117,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
     const timer = window.setTimeout(() => onDismiss(notification.id), duration);
     return () => window.clearTimeout(timer);
   }, [duration, notification.id, onDismiss]);
-  const Icon = notification.persistence === "persistent" ? Pin : notification.tone === "success" ? Check : notification.tone === "error" ? AlertTriangle : Info;
+    const Icon = notification.persistence === "persistent" ? Pin : notification.tone === "success" ? Check : notification.tone === "error" || notification.tone === "warning" ? AlertTriangle : Info;
   return <article
     className={`notification-flyout ${notification.tone} ${notification.persistence ?? "transient"}`}
     role={notificationAriaRole(notification.tone)}

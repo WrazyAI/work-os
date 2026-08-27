@@ -1436,13 +1436,63 @@ body {
 
 .active-task-list article {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 26px minmax(0, 1fr) auto 30px;
   gap: 11px;
   align-items: center;
   min-height: 66px;
   padding: 9px 10px;
   border-top: 1px solid #e5e9e1;
   transition: background 150ms ease, transform 150ms ease;
+}
+
+.dashboard-task-menu {
+  position: relative;
+  z-index: 4;
+}
+
+.dashboard-task-menu.open {
+  z-index: 64;
+}
+
+.dashboard-task-menu .ellipsis-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.dashboard-task-menu .subtask-menu {
+  z-index: 65;
+  top: calc(100% + 5px);
+  right: -6px;
+  width: 194px;
+}
+
+.active-task-list:has(.dashboard-task-menu.open) .dashboard-task-menu:not(.open) .ellipsis-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dashboard-focus-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto 32px;
+}
+
+.focus-task-copy {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.focus-task-copy strong,
+.focus-task-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .active-task-list article:hover {
@@ -1613,18 +1663,27 @@ body {
 
 .goal-composer-panel {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   padding: 16px 18px 18px;
 }
 
-.goal-composer-panel > label {
+.goal-editor-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.goal-editor-field > label {
   color: var(--ink);
   font-size: 11px;
   font-weight: 700;
 }
 
-.goal-composer-panel > textarea {
+.goal-editor-field > textarea {
+  width: 100%;
   min-height: 92px;
+  padding: 11px 12px;
   resize: vertical;
   border: 1px solid #d4dacd;
   border-radius: 11px;
@@ -1635,10 +1694,20 @@ body {
   line-height: 1.5;
 }
 
-.goal-composer-panel > small {
+.goal-editor-field > textarea:focus {
+  border-color: #86bd58;
+  outline: 3px solid rgba(168, 241, 91, 0.28);
+}
+
+.goal-editor-field > small {
   color: var(--muted);
   font-size: 9px;
   line-height: 1.45;
+}
+
+.goal-composer-panel .composer-goal-suggestion {
+  grid-column: 1;
+  margin: 0;
 }
 
 .progress-message,
@@ -1731,6 +1800,12 @@ body {
   color: #42503e;
   font-size: 9px;
   font-weight: 700;
+}
+
+.focus-dock-button.active {
+  border-color: #86bd58;
+  background: #e6f5d7;
+  color: #315f17;
 }
 
 .progress-input-shell textarea {
@@ -1855,6 +1930,15 @@ body {
   font-size: 8px;
 }
 
+.card-title .task-filter-result {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eef2ea;
+  color: #687166;
+  font-size: 8px;
+  font-weight: 700;
+}
+
 @keyframes composer-rise {
   from {
     opacity: 0;
@@ -1957,6 +2041,178 @@ body {
 .goal-independence {
   margin-top: 8px;
   font-size: 10px;
+}
+
+.task-agenda-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  min-height: 184px;
+  margin-bottom: 14px;
+  padding: 0;
+  overflow: hidden;
+  border-color: #d6ddd1;
+  background: #fbfcf8;
+}
+
+.task-agenda-hero.historical {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.agenda-hero-today {
+  display: flex;
+  min-width: 0;
+  padding: 24px 26px;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    radial-gradient(circle at 94% 8%, rgba(168, 241, 91, 0.2), transparent 13rem),
+    linear-gradient(135deg, #fbfcf8, #f4f8ef);
+}
+
+.agenda-hero-today > header,
+.agenda-hero-today > footer,
+.agenda-edit-button,
+.unfinished-work-action {
+  display: flex;
+  align-items: center;
+}
+
+.agenda-hero-today > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agenda-hero-today > header > span,
+.unfinished-work-copy > small {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.agenda-hero-today h2 {
+  max-width: 720px;
+  margin: 16px 0 22px;
+  font-size: clamp(21px, 2.5vw, 30px);
+  line-height: 1.18;
+  letter-spacing: -0.035em;
+}
+
+.agenda-hero-today > footer {
+  gap: 12px;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+.agenda-hero-today > footer > span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.agenda-hero-today > footer small {
+  font-size: 9px;
+}
+
+.agenda-edit-button {
+  min-height: 34px;
+  padding: 0 10px;
+  gap: 6px;
+  flex: 0 0 auto;
+  border: 1px solid #cbd7c3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #40543a;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agenda-edit-button:hover {
+  border-color: #91c568;
+  background: #edf6e4;
+}
+
+.unfinished-work-hero {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  min-width: 0;
+  padding: 24px 22px 20px;
+  border: 0;
+  border-left: 1px solid #dfe4da;
+  border-radius: 0;
+  background: #f7f7f1;
+  color: var(--ink);
+  text-align: left;
+}
+
+.unfinished-work-hero.attention {
+  background: linear-gradient(145deg, #fffaf0, #fbf6e8);
+}
+
+.unfinished-work-hero:not(:disabled):hover {
+  background: #fff6df;
+}
+
+.unfinished-work-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  grid-row: 1;
+  place-items: center;
+  border-radius: 11px;
+  background: #e9eee4;
+  color: #61705a;
+}
+
+.unfinished-work-hero.attention .unfinished-work-icon {
+  background: #f7e3b7;
+  color: #9b6611;
+}
+
+.unfinished-work-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  align-content: start;
+}
+
+.unfinished-work-copy > small {
+  color: #8d6b27;
+}
+
+.unfinished-work-copy > strong {
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.unfinished-work-copy > em {
+  color: #777f73;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.unfinished-work-action {
+  grid-column: 1 / -1;
+  align-self: end;
+  justify-content: space-between;
+  min-height: 34px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(151, 105, 29, 0.18);
+  color: #6e4a10;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.unfinished-work-hero.clear .unfinished-work-action {
+  color: #737b70;
 }
 
 .carry-alert {
@@ -2158,6 +2414,16 @@ button:not(:disabled):active {
     display: block;
   }
 
+  .task-agenda-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .unfinished-work-hero {
+    min-height: 126px;
+    border-top: 1px solid #dfe4da;
+    border-left: 0;
+  }
+
   .goal-card-head {
     margin-bottom: 10px;
   }
@@ -2297,7 +2563,7 @@ button:not(:disabled):active {
   }
 
   .active-task-list article {
-    grid-template-columns: 26px minmax(0, 1fr) 18px;
+    grid-template-columns: 26px minmax(0, 1fr) 32px;
   }
 
   .active-task-list .task-status {
@@ -2323,6 +2589,47 @@ button:not(:disabled):active {
     display: none;
   }
 
+  .progress-input-shell {
+    padding-left: 8px;
+  }
+
+  .focus-dock-button {
+    width: 38px;
+    padding: 0;
+    margin-right: 6px;
+  }
+
+  .focus-dock-button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .agenda-hero-today {
+    padding: 20px;
+  }
+
+  .agenda-hero-today h2 {
+    margin-block: 14px 18px;
+    font-size: 22px;
+  }
+
+  .agenda-hero-today > footer {
+    gap: 6px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboard-focus-row {
+    grid-template-columns: 24px minmax(0, 1fr) 32px;
+  }
+
+  .dashboard-focus-row > .task-state {
+    display: none;
+  }
+
   .task-date-range {
     overflow-x: auto;
     justify-content: flex-start;
@@ -2340,5 +2647,1074 @@ button:not(:disabled):active {
   .active-day-page,
   .progress-flyout {
     animation: none;
+  }
+}
+
+/* ============================================================================
+   Tasks workflow — full-surface polish layer
+   Extends the agenda hero / search / task-section language into every
+   remaining Tasks surface: rows, chips, menus, modals, confirmations,
+   the unfinished-work flyout, and the historical read-only state.
+   Anchored menus render through a portal at the document root, so their
+   stacking context is the page itself (above modal scrim, below toasts).
+   ========================================================================== */
+
+.anchored-menu {
+  position: fixed;
+  display: block;
+  z-index: 90;
+  box-shadow: 0 16px 44px rgba(18, 27, 17, 0.16), 0 2px 8px rgba(18, 27, 17, 0.08);
+}
+
+.anchored-menu > button[role="menuitem"] {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.anchored-menu > button[role="menuitem"] svg + svg {
+  margin-left: auto;
+}
+
+.anchored-menu > button[role="menuitem"] svg:last-child {
+  margin-left: 0;
+}
+
+.move-target-menu.anchored-menu {
+  width: 240px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.move-target-menu > span {
+  padding: 6px 8px 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.move-target-menu > p {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Composer clearance: the sticky dock must never cover the last task row. */
+.tasks-workspace {
+  padding-bottom: 128px;
+}
+
+@media (max-width: 780px) {
+  .tasks-workspace {
+    padding-bottom: 148px;
+  }
+}
+
+/* Task rows — hover, focus, selected, completed, dense */
+.workspace-task {
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.workspace-task:hover {
+  background: #f6f7f1;
+}
+
+.workspace-task:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.24);
+}
+
+.workspace-task.is-surfaced {
+  background: #f3f8ea;
+  box-shadow: inset 2px 0 0 var(--signal-strong);
+}
+
+.workspace-task.is-completed h3,
+.workspace-task.is-completed p {
+  color: var(--muted);
+}
+
+.workspace-task.is-completed h3 {
+  text-decoration: line-through;
+  text-decoration-color: rgba(98, 106, 97, 0.5);
+  text-decoration-thickness: 1px;
+}
+
+.workspace-task small {
+  display: block;
+  max-width: 720px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sync provenance chips — quiet, semantic, never color-only */
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  vertical-align: 1px;
+}
+
+.sync-chip::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sync-chip.synced {
+  background: var(--signal-wash, #e6f7d5);
+  color: #557d35;
+}
+
+.sync-chip.awaiting {
+  background: #edf4ff;
+  color: #3974d8;
+}
+
+.sync-chip.degraded {
+  background: #fff8e8;
+  color: #9b6611;
+}
+
+/* Historical read-only state */
+.task-readonly-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid #c9d8f2;
+  border-radius: 11px;
+  background: #edf4ff;
+}
+
+.task-readonly-banner strong {
+  flex: 0 0 auto;
+  color: #2c5aa8;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.task-readonly-banner span {
+  color: #45618f;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+/* Details modal: provenance footer + subtask states */
+.task-detail-modal > footer.task-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 26px;
+  border-top: 1px solid var(--line);
+  background: #f2f1e9;
+}
+
+.task-detail-footer small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.subtask-list article.completed strong {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(98, 106, 97, 0.45);
+  text-decoration-thickness: 1px;
+}
+
+.subtask-count-ring {
+  min-width: 40px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8e7df;
+  color: #5d6158;
+  font-size: 9px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-loading {
+  padding: 26px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Confirmations: reversible archive vs. permanent delete are visually
+   separated — archive stays neutral green, delete alone is red. */
+.delete-confirmation {
+  width: min(460px, 100%);
+  padding: 26px 26px 22px;
+  border-radius: 18px;
+  background: #f7f5ed;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.delete-confirmation > span {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f8ded8;
+  color: #a03324;
+}
+
+.delete-confirmation.reversible > span {
+  background: var(--signal-wash, #e6f7d5);
+  color: #557d35;
+}
+
+.delete-confirmation h2 {
+  margin: 0;
+  font: 650 19px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.delete-confirmation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.delete-confirmation p strong {
+  color: var(--ink);
+}
+
+.delete-confirmation > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.delete-confirmation .confirm-delete {
+  border: 1px solid #c4574a;
+  border-radius: 9px;
+  background: #d4493f;
+  color: #fff;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 720;
+}
+
+.delete-confirmation .confirm-delete:hover {
+  background: #c13f36;
+}
+
+.delete-confirmation .confirm-archive {
+  border: 1px solid #9acb60;
+  border-radius: 9px;
+  background: #b4f76c;
+  color: #2f4718;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 720;
+}
+
+.delete-confirmation .confirm-archive:hover {
+  background: #a5ef58;
+}
+
+.delete-confirmation > div > button:not(.confirm-delete):not(.confirm-archive) {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+}
+
+/* Unfinished-work flyout — same language as the agenda hero */
+.carry-flyout {
+  display: flex;
+  flex-direction: column;
+  background: #fbfcf8;
+  padding: 0;
+}
+
+.carry-flyout > header {
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.carry-flyout > header span {
+  color: #8d6b27;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.carry-flyout > header h2 {
+  margin: 6px 0 0;
+  font: 650 22px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.carry-flyout > header small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.carry-flyout > header button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f4f3ec;
+}
+
+.carry-flyout > div {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 24px 18px;
+}
+
+.carry-flyout > div > section {
+  padding: 14px 0 4px;
+}
+
+.carry-flyout > div > section + section {
+  border-top: 1px solid var(--line);
+}
+
+.carry-flyout h3 {
+  margin: 0 0 4px;
+  color: #5d6158;
+  font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.carry-flyout article {
+  display: grid;
+  gap: 10px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e7e6de;
+  background: transparent;
+  border-radius: 0;
+}
+
+.carry-flyout article:last-child {
+  border-bottom: 0;
+}
+
+.carry-row-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.carry-row-copy strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.carry-row-copy small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.carry-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.carry-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 0 11px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.carry-row-actions button:not(:disabled):hover {
+  border-color: #b8b9af;
+  background: #fffef8;
+  transform: translateY(-1px);
+}
+
+.carry-row-actions button:first-child {
+  border-color: #9acb60;
+  background: #e9f7d3;
+  color: #3c5a1e;
+}
+
+.carry-row-actions button:first-child:not(:disabled):hover {
+  border-color: #86bd4f;
+  background: #ddf3b8;
+}
+
+.carry-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 48px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.carry-empty svg {
+  color: #7fb944;
+}
+
+.carry-empty strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.carry-empty span {
+  font-size: 10px;
+}
+
+.carry-flyout > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+  background: #f4f3ec;
+}
+
+.carry-flyout > footer small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.carry-flyout > footer button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Filter result count */
+.task-filter-result {
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e8e7df;
+  color: #5d6158;
+  font-size: 8px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 780px) {
+  .workspace-task small {
+    white-space: normal;
+  }
+
+  .sync-chip {
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  .carry-row-actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anchored-menu {
+    animation: none;
+  }
+}
+
+/* Task rows are not a timeline: the evidence-view rail line and row dots
+   leak into .task-records via the shared .evidence-list treatment. The
+   state chips already carry that meaning, so remove both pseudos. */
+.task-records.evidence-list::before,
+.task-records .workspace-task::before,
+.task-records .subtask-list article::before {
+  content: none;
+  display: none;
+}
+
+/* Unfinished-work flyout: a proper overlay surface. The scrim now dims AND
+   blurs the entire window (rail included) with the same treatment as the
+   task modals, and the panel slides in from its edge with the platform
+   easing. */
+.carry-flyout-backdrop {
+  background: rgba(18, 20, 16, 0.5);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  animation: modalFade 0.18s ease both;
+}
+
+.carry-flyout {
+  animation: carryFlyoutEnter 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  box-shadow: -18px 0 60px rgba(0, 0, 0, 0.22);
+}
+
+@keyframes carryFlyoutEnter {
+  from {
+    opacity: 0.4;
+    transform: translateX(28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carry-flyout-backdrop,
+  .carry-flyout {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+   Composer dock — focus-first input upgrade
+   The dock is the page's persistent primary action, so it earns the
+   blueprint's focus treatment: signal ring + lift when engaged, an
+   auto-growing field, a kbd send hint, and a send button that arms
+   from quiet neutral to signal green.
+   ========================================================================== */
+.progress-input-shell {
+  min-height: 56px;
+  padding: 7px 8px 7px 14px;
+  border-color: #ccd3c7;
+  border-radius: 18px;
+  background: var(--surface-raised, #fbfcf8);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.progress-input-shell:focus-within {
+  border-color: var(--signal-strong, #7cc936);
+  box-shadow: var(--shadow-card), 0 0 0 3px rgba(124, 201, 54, 0.24);
+  transform: translateY(-1px);
+}
+
+.progress-input-shell textarea {
+  min-height: 34px;
+  max-height: 118px;
+  padding: 8px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  transition: color 140ms ease;
+}
+
+.progress-input-shell textarea::placeholder {
+  color: #8a9288;
+}
+
+.progress-input-shell:focus-within textarea::placeholder {
+  color: #6f786e;
+}
+
+.composer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8a9288;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.composer-hint kbd {
+  padding: 2px 6px;
+  border: 1px solid #d3d8cc;
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--paper, #f8f8f3);
+  color: #5d6158;
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.composer-hint.due {
+  color: #9b6611;
+  font-weight: 700;
+}
+
+.composer-hint.due::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d99216;
+}
+
+.progress-send {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e6e9e1;
+  color: #99a094;
+  box-shadow: none;
+  transition: background 160ms cubic-bezier(0.2, 0.8, 0.2, 1), color 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.progress-send:disabled {
+  background: #e6e9e1;
+  color: #99a094;
+  opacity: 1;
+}
+
+.progress-dock .progress-send.ready {
+  background: linear-gradient(160deg, var(--signal, #a8f15b), var(--signal-strong, #7cc936));
+  color: #23360f;
+  box-shadow: 0 6px 18px rgba(117, 187, 56, 0.35);
+}
+
+.progress-dock .progress-send.ready:not(:disabled):hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 9px 24px rgba(117, 187, 56, 0.45);
+}
+
+.progress-dock .progress-send.ready:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+}
+
+@media (max-width: 640px) {
+  .composer-hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-input-shell,
+  .progress-input-shell textarea,
+  .progress-send {
+    transition: none;
+  }
+
+  .progress-input-shell:focus-within {
+    transform: none;
+  }
+}
+
+/* Loading screen: when the day fails to load, the recovery actions must
+   include the offline bypass and the debugger — not only Retry. */
+.loading-alternatives {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.loading-alternatives button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.loading-alternatives button.quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.loading-alternatives button:not(:disabled):hover {
+  border-color: #b8b9af;
+  background: #fffef8;
+}
+
+.loading > small {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Interpretation review — AI-drafted operations awaiting approval */
+.interpretation-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.interpretation-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 9px;
+  align-items: center;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper, #f8f8f3);
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.interpretation-row.off {
+  opacity: 0.62;
+}
+
+.interpretation-row input[type="checkbox"] {
+  justify-self: start;
+  accent-color: #74a936;
+}
+
+.interpretation-statement {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  padding: 4px 6px;
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.interpretation-statement:focus {
+  outline: none;
+  border-color: #a7c982;
+  background: #fffef9;
+}
+
+.interpretation-row select {
+  grid-column: 2;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised, #fbfcf8);
+  color: var(--ink);
+  font-size: 9px;
+}
+
+.approve-interpretation {
+  justify-self: end;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 0 14px;
+  font-size: 10px;
+  font-weight: 720;
+}
+
+/* EOD composer — Slice C */
+.eod-composer {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.eod-composer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eod-composer-header span {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.eod-composer-header h2 {
+  margin: 5px 0 0;
+  font: 650 20px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.eod-composer-header small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.eod-composer-header button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #cbd7c3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #40543a;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.eod-composer-header button:not(:disabled):hover {
+  border-color: #91c568;
+  background: #edf6e4;
+}
+
+.eod-markdown-label,
+.eod-bottleneck-label {
+  display: grid;
+  gap: 6px;
+}
+
+.eod-markdown-label > span,
+.eod-bottleneck-label > span {
+  color: #666a61;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eod-markdown-label textarea,
+.eod-bottleneck-label textarea {
+  width: 100%;
+  border: 1px solid #d3d3ca;
+  border-radius: 11px;
+  background: #fffef8;
+  color: var(--ink);
+  padding: 12px;
+  font: 400 11px/1.6 ui-monospace, Consolas, monospace;
+  resize: vertical;
+}
+
+.eod-bottleneck-label textarea {
+  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.eod-markdown-label textarea:focus,
+.eod-bottleneck-label textarea:focus {
+  outline: none;
+  border-color: #a7c982;
+  box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
+}
+
+.eod-bottleneck-label small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.eod-composer > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.eod-composer > footer small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+/* Insights AI synthesis — Slice D */
+.insight-synthesis > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.insight-synthesis > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.insight-synthesis > header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6d5bd0;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.insight-synthesis > header h3 {
+  font: 650 16px/1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.insight-synthesis > header button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #cbc0ee;
+  border-radius: 9px;
+  background: #f3f0ff;
+  color: #4c3ba8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.insight-synthesis > header button:not(:disabled):hover {
+  border-color: #a99ae0;
+  background: #ebe5ff;
+}
+
+.synthesis-text {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.synthesis-hint,
+.synthesis-fallback {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.synthesis-fallback {
+  color: #77705e;
+}
+
+/* Slice E — overdue tap-through chip and slim focus metrics */
+.overdue-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid #e4b7ad;
+  border-radius: 11px;
+  background: #fff4f2;
+  color: #a03324;
+  text-align: left;
+}
+
+.overdue-metric:hover {
+  border-color: #cf6f5f;
+  background: #ffe9e5;
+}
+
+.overdue-metric strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overdue-metric em {
+  color: #8f4438;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Slice E — slim My Day focus bar: the day's focus compresses to one row;
+   metrics move beside it instead of stacking as a hero block. */
+.active-focus-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 12px 22px;
+}
+
+.active-focus-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.active-focus-copy > span {
+  font-size: 8px;
+}
+
+.active-focus-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.active-focus-heading h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(14px, 1.6vw, 18px);
+  line-height: 1.25;
+}
+
+.focus-edit-button {
+  flex: 0 0 auto;
+}
+
+.hero-task-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-task-metrics .completion-ring > span {
+  width: 40px;
+  height: 40px;
+}
+
+.hero-task-metrics .completion-ring.compact > span {
+  width: 34px;
+  height: 34px;
+}
+
+.hero-task-metrics .completion-ring strong {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .active-focus-block {
+    grid-template-columns: 1fr;
+  }
+
+  .active-focus-heading h2 {
+    white-space: normal;
   }
 }

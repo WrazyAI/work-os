@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
 const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
@@ -51,7 +52,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("nav-group nav-core");
     expect(app).toContain("nav-group nav-context");
     expect(app).toContain("nav-group nav-settings");
-    expect(app).toContain("Plan and complete Nifty work without losing the history behind it.");
+    expect(app).toContain("Plan today’s work and keep the history behind it.");
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");
@@ -61,15 +62,33 @@ describe("operational visualizations", () => {
     expect(app).toContain("scheduled for today");
     expect(app).toContain("due from yesterday");
     expect(app).toContain('type ComposerMode = "progress" | "agenda"');
-    expect(app).toContain('mode={active && view === "day" ? "progress" : "agenda"}');
-    expect(app).toContain("Plan ahead · this does not clock you in");
-    expect(app).toContain("Added from today’s agenda composer.");
+    expect(app).toContain('mode={sessionActive && view === "day" ? "progress" : "agenda"}');
+    expect(app).toContain('label === "shift.clock_in" && /workday is already closed/i.test(message)');
+    expect(app).toContain("Record work or add a task · this does not clock you in");
+    expect(app).toContain("Added from the Work OS daily composer.");
+    expect(app).toContain("Share an update or add a task…");
+    for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
     expect(workspaceStyles).toContain(".pre-shift-agenda-summary .has-due");
     expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
   });
 
+  it("keeps focus contextual and task lifecycle actions consistent", () => {
+    expect(app).toContain('className={`panel task-agenda-hero');
+    expect(app).toContain("Today’s agenda");
+    expect(app).toContain("Review unfinished work");
+    expect(app).toContain("onEditFocus={openGoalComposer}");
+    expect(app).not.toContain('className="panel daily-goal-card"');
+    expect(app).toContain("function TaskLifecycleMenu");
+    expect(app).toContain("Delete permanently");
+    expect(app).toContain("Archive <small>reversible</small>");
+    expect(workspaceStyles).toContain(".task-agenda-hero");
+    expect(workspaceStyles).toContain(".dashboard-task-menu");
+    expect(workspaceStyles).toContain(".goal-composer-panel .composer-goal-suggestion");
+  });
+
   it("treats keyboard and readable secondary text as part of the polish", () => {
-    expect(app).toContain("function moveMenuFocus");
+    expect(app).toContain("moveMenuFocus");
+    expect(taskSurfaces).toContain("function moveMenuFocus");
     expect(app).toContain('document.body.classList.add("modal-open")');
     expect(app).toContain('event.key === "Escape"');
     expect(app).toContain('event.key !== "Tab"');

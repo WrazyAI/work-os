@@ -1,3 +1,9 @@
+> **SUPERSEDED 2026-08-27** — Active plan: `phase-02-ai-companion-and-simplification.prompt.md`.
+> Voice capture/transcription and the v1 interaction model were deferred by owner review
+> (2026-08-21 + 2026-08-25 meetings): the AI assistant ships working first, UI simplification
+> joined the phase, and Evidence is hidden (not removed). This file stays as the source for
+> the deferred voice/transcription contracts (§3–§5) and quality-control details.
+
 # Phase 2 Prompt — Adaptive Companion and Voice Interaction
 
 You are implementing Phase 2 of the Work OS desktop companion pilot in `/home/maigreeks/projects/work-os`. Phase 1 must already provide an explicit work session, a confirmed daily plan, shift-aware server scheduling, Nifty-backed task proposals, and offline reconciliation.

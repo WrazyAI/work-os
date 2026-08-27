@@ -450,8 +450,18 @@ export async function getWorkOsDay(
   at = new Date(),
   options: { refreshNifty?: boolean } = {},
 ) {
+  // The provider refreshes are independent external calls: start them (and
+  // the owner lookup the Nifty sync depends on) immediately and in parallel
+  // so refreshProviders=true costs max(worktivity, nifty) rather than the
+  // sum. Each is still awaited at its original point, so error and ordering
+  // behavior are unchanged.
+  const attendancePromise = observeWorktivityAttendance(access, at);
+  const ownerIdPromise = organizationOwnerId(access.organizationId);
+  const niftySyncPromise = ownerIdPromise.then((ownerId) =>
+    options.refreshNifty ? syncNiftyPersonTasks(ownerId, personId) : Promise.resolve(null),
+  );
   const [attendance, authoritativeBreaks] = await Promise.all([
-    observeWorktivityAttendance(access, at),
+    attendancePromise,
     worktivityAuthoritativeBreaks(access.organizationId),
   ]);
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, at);
@@ -468,7 +478,7 @@ export async function getWorkOsDay(
     .order("occurred_at", { ascending: true });
   if (checkInError) throw new Error(`load shift check-ins: ${checkInError.message}`);
   const prompt = decideWorkOsPrompt(shift, (checkIns ?? []) as WorkOsCheckInState[], at);
-  const ownerId = await organizationOwnerId(access.organizationId);
+  const ownerId = await ownerIdPromise;
   const [latestTaskResult, latestProjectResult, organizationSyncResult] = await Promise.all([
     db().from("work_tasks").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
     db().from("work_projects").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
@@ -483,7 +493,7 @@ export async function getWorkOsDay(
   let effectiveLastSyncedAt = lastSyncedAt;
   let niftyFresh = !!effectiveLastSyncedAt && Date.now() - new Date(effectiveLastSyncedAt).getTime() < NIFTY_FRESH_MS;
   if (options.refreshNifty) {
-    const refreshed = await syncNiftyPersonTasks(ownerId, personId);
+    const refreshed = (await niftySyncPromise)!;
     effectiveLastSyncedAt = refreshed.syncedAt;
     niftyFresh = true;
     void refreshNiftyMirror(access.organizationId, ownerId).catch(() => undefined);

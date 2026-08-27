@@ -5,12 +5,13 @@ import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, HOURLY_FALLBACK_DELAY_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
 const db = () => createAdminClient();
 const value = (input: unknown) => typeof input === "string" && input.trim() ? input.trim() : null;
 
-async function audit(access: WorkOsAccess, sessionId: string, eventType: string, fromState: string | null, toState: string, idempotencyKey: string, observedAt: string, metadata: Json = {}, source: "web" | "desktop" | "agent" | "system" = "desktop") {
+async function audit(access: WorkOsAccess, sessionId: string, eventType: string, fromState: string | null, toState: string, idempotencyKey: string, observedAt: string, metadata: Json = {}, source: "web" | "desktop" | "agent" | "system" | "worktivity" = "desktop") {
   const { error } = await db().from("work_session_events").insert({
     organization_id: access.organizationId, person_id: access.personId, session_id: sessionId,
     event_type: eventType, from_state: fromState, to_state: toState, source,
@@ -161,15 +162,16 @@ export async function ensureDailyPlan(access: WorkOsAccess, session: Record<stri
   const shiftDate = String(session.shift_date);
   const dated = await loadPlanByDate(access, shiftDate);
   if (dated) {
-    if (!dated.session_id) {
+    if (dated.session_id !== session.id || dated.status === "closed") {
       const { data, error } = await db().from("work_daily_plans").update({
         session_id: session.id,
+        status: dated.status === "closed" ? dated.confirmed_at ? "confirmed" : "draft" : dated.status,
         revision: Number(dated.revision ?? 1) + 1,
         updated_at: new Date().toISOString(),
-      }).eq("organization_id", access.organizationId).eq("id", dated.id).is("session_id", null)
+      }).eq("organization_id", access.organizationId).eq("id", dated.id)
         .select("*, items:work_daily_plan_items(*)").single();
       if (error) throw new Error(`attach daily plan to session: ${error.message}`);
-      await auditPlan(access, "plan.session_attached", String(dated.id), { sessionId: session.id, shiftDate });
+      await auditPlan(access, dated.status === "closed" ? "plan.workday_reopened" : "plan.session_attached", String(dated.id), { sessionId: session.id, previousSessionId: dated.session_id, shiftDate });
       return data;
     }
     return dated;
@@ -284,16 +286,9 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   };
   const sameDay = await db().from("work_sessions").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
-    .eq("shift_date", context.shiftDate).maybeSingle();
+    .eq("shift_date", context.shiftDate).eq("state", "scheduled")
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (sameDay.error) throw new Error(`load existing workday session: ${sameDay.error.message}`);
-  if (sameDay.data && sameDay.data.state !== "scheduled") {
-    if (["clocked_in", "active", "paused", "eod_due"].includes(String(sameDay.data.state))) {
-      return { session: sameDay.data, plan: await ensureDailyPlan(access, sameDay.data) };
-    }
-    throw new WorkOsConflictError(sameDay.data.correction_status === "needs_correction"
-      ? "This workday needs a clock-out correction before it can be restarted."
-      : "This workday is already closed.");
-  }
   const write = sameDay.data
     ? db().from("work_sessions").update(payload).eq("organization_id", access.organizationId).eq("id", sameDay.data.id)
     : db().from("work_sessions").insert(payload);
@@ -311,11 +306,60 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   const source = value(body.source);
   await audit(access, session.id as string, "clock_in", shift ? "scheduled" : null, "clocked_in", idempotencyKey, observed.toISOString(), {
     late, unscheduled, exceptionAcknowledged: unscheduled, exceptionReason: unscheduled ? payload.exception_reason : null,
-  }, source === "web" || source === "agent" || source === "system" ? source : "desktop");
+  }, source === "web" || source === "agent" || source === "system" || source === "worktivity" ? source : "desktop");
   return { session, plan: await ensureDailyPlan(access, session) };
 }
 
-export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" = "desktop", allowProviderBreakTransitions = false) {
+/** Converge a fresh provider attendance interval into the explicit session
+ * ledger. Every restart creates a new row, so earlier closed time remains
+ * intact and the one-active-session invariant still protects races. */
+export async function syncWorktivitySession(access: WorkOsAccess, projection: AttendanceProjection) {
+  if (projection.source !== "worktivity" || projection.stale) return activeSession(access);
+  const existing = await activeSession(access);
+  if (projection.state === "active" || projection.state === "paused") {
+    if (existing) {
+      if (existing.source !== "worktivity") return existing;
+      const action = projection.state === "paused"
+        ? existing.state === "paused" ? null : "pause"
+        : existing.state === "paused" ? "resume" : existing.state === "clocked_in" ? "mark_active" : null;
+      if (!action) return existing;
+      return (await transitionSession(access, { action, observed_at: projection.observedAt },
+        `worktivity:${action}:${existing.id}:${projection.observedAt}`, "worktivity", true)).session;
+    }
+    const context = await unscheduledSessionContext(access, new Date(projection.observedAt));
+    const latestClosed = await db().from("work_sessions").select("clocked_out_at")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("shift_date", context.shiftDate).eq("state", "clocked_out")
+      .order("clocked_out_at", { ascending: false }).limit(1).maybeSingle();
+    if (latestClosed.error) throw new Error(`load latest closed work interval: ${latestClosed.error.message}`);
+    const candidate = new Date(projection.clockedInAt ?? projection.activityObservedAt ?? projection.observedAt);
+    const observed = Number.isFinite(candidate.getTime()) ? candidate : new Date(projection.observedAt);
+    const priorEnd = latestClosed.data?.clocked_out_at ? Date.parse(String(latestClosed.data.clocked_out_at)) : Number.NaN;
+    if (Number.isFinite(priorEnd) && observed.getTime() <= priorEnd) observed.setTime(priorEnd + 1);
+    const providerInterval = projection.clockedInAt ?? projection.activityObservedAt ?? projection.observedAt;
+    const result = await clockIn(access, {
+      observed_at: observed.toISOString(), source: "worktivity", late_acknowledged: true,
+      exception_acknowledged: true, exception_reason: "Fresh Worktivity attendance observed",
+    }, `worktivity:clock-in:${access.personId}:${providerInterval}`);
+    if (result.session.state === "clocked_in") {
+      const action = projection.state === "paused" ? "pause" : "mark_active";
+      return (await transitionSession(access, { action, observed_at: projection.observedAt },
+        `worktivity:${action}:${result.session.id}:${projection.observedAt}`, "worktivity", true)).session;
+    }
+    return result.session;
+  }
+  if (projection.state === "off_shift" && existing?.source === "worktivity" && projection.clockedOutAt) {
+    const clockedOutAt = new Date(projection.clockedOutAt);
+    const clockedInAt = Date.parse(String(existing.clocked_in_at ?? ""));
+    if (Number.isFinite(clockedOutAt.getTime()) && Number.isFinite(clockedInAt) && clockedOutAt.getTime() > clockedInAt) {
+      return (await transitionSession(access, { action: "clock_out", observed_at: clockedOutAt.toISOString(), extended_acknowledged: true },
+        `worktivity:clock-out:${existing.id}:${clockedOutAt.toISOString()}`, "worktivity", true)).session;
+    }
+  }
+  return existing;
+}
+
+export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" | "worktivity" = "desktop", allowProviderBreakTransitions = false) {
   const existingEvent = await db().from("work_session_events").select("session_id")
     .eq("organization_id", access.organizationId).eq("idempotency_key", idempotencyKey).maybeSingle();
   if (existingEvent.error) throw new Error(`load idempotent session transition: ${existingEvent.error.message}`);
