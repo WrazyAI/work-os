@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interpretationFallbackReason, normalizeInterpretation, operationLabel } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -68,5 +68,47 @@ describe("EOD composer helpers", () => {
     expect(final).toContain("## Summary\nA day.");
     expect(final).toContain("## Bottleneck\nThe certificate was pending.");
     expect(final).not.toContain("(placeholder)");
+  });
+});
+
+describe("fileApprovedOperations", () => {
+  const context = { shiftDate: "2026-08-27", personId: "person-1", promptKind: "plan" };
+  const ops = (overrides: Array<Partial<import("./interpretation").ProposedOperation>>) => overrides.map((o) => ({
+    op: "record_progress" as const, statement: "Did the work.", enabled: true, ...o,
+  })) as import("./interpretation").ProposedOperation[];
+
+  it("routes each operation through the right transport and counts receipts", async () => {
+    const calls: string[] = [];
+    const transport = {
+      completeTask: async () => { calls.push("complete"); return { providerStatus: "nifty_confirmed" }; },
+      createTask: async () => { calls.push("create"); return { queued: true }; },
+      fileCheckIn: async () => { calls.push("checkin"); return {}; },
+    };
+    const outcome = await fileApprovedOperations(ops([
+      { op: "complete_task", taskId: "t-1" },
+      { op: "create_task", taskTitle: "New work" },
+      { op: "record_progress", taskId: "t-1" },
+    ]), context, transport);
+    expect(calls).toEqual(["complete", "create", "checkin"]);
+    expect(outcome.recorded).toBe(2);
+    expect(outcome.queued).toBe(1);
+    expect(outcome.failed).toHaveLength(0);
+  });
+
+  it("never loses an approved operation to a mid-loop failure and reports per-op", async () => {
+    const transport = {
+      completeTask: async () => ({ providerStatus: "nifty_confirmed" }),
+      createTask: async () => { throw new Error("Nifty is unreachable"); },
+      fileCheckIn: async () => { throw new Error("offline"); },
+    };
+    const outcome = await fileApprovedOperations(ops([
+      { op: "complete_task", taskId: "t-1" },
+      { op: "create_task", taskTitle: "New work" },
+      { op: "record_blocker", taskId: "t-2" },
+    ]), context, transport);
+    expect(outcome.recorded).toBe(1);
+    expect(outcome.failed).toHaveLength(2);
+    expect(outcome.failed[0]?.message).toBe("Nifty is unreachable");
+    expect(outcome.failed[1]?.op.op).toBe("record_blocker");
   });
 });

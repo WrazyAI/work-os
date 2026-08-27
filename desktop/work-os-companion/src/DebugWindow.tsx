@@ -99,7 +99,8 @@ export default function DebugWindow() {
       <section className="debug-section">
         <h2>Backend</h2>
         <label className="toggle-row"><span><strong>Offline sync bypass</strong><small>Never contact the backend; writes stay on this device</small></span><input type="checkbox" checked={scenario.syncBypass} onChange={(event) => update({ enabled: true, syncBypass: event.target.checked })} /></label>
-        <p className="debug-help">Launches the workspace from local fixtures even when the server is unreachable (quota-restricted, offline, or not yet signed in). Task, composer, and shift actions are simulated locally, so full workflows — including the update classification flow — can be exercised end to end. No server data is changed.</p>
+        <label className="toggle-row"><span><strong>Live writes in scenario</strong><small>Approval actions file against the real server</small></span><input type="checkbox" checked={!!scenario.liveWrites} onChange={(event) => update({ enabled: true, liveWrites: event.target.checked })} /></label>
+        <p className="debug-help">Launches the workspace from local fixtures even when the server is unreachable (quota-restricted, offline, or not yet signed in). Task, composer, and shift actions are simulated locally, so full workflows — including the update classification flow — can be exercised end to end. No server data is changed. With live writes enabled, approvals are actually sent; use only against a server you intend to change.</p>
       </section>
       <section className="debug-section">
         <h2>Missing details</h2>

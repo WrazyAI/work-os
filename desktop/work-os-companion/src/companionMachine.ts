@@ -114,8 +114,8 @@ function backoffRemainingMs(cause: string, record: CompanionRecord, now: Date): 
 
 function answeredSinceFire(record: CompanionRecord, cause: string, firedAt: string, lastResponseAt: string | null): boolean {
   const answeredAt = record.answered[cause];
-  if (answeredAt && Date.parse(answeredAt) >= Date.parse(firedAt)) return true;
-  return !!lastResponseAt && Date.parse(lastResponseAt) >= Date.parse(firedAt);
+  if (answeredAt && Date.parse(answeredAt) > Date.parse(firedAt)) return true;
+  return !!lastResponseAt && Date.parse(lastResponseAt) > Date.parse(firedAt);
 }
 
 /**
@@ -168,11 +168,6 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
     }
   }
 
-  if (record.quiet.active) return { state: "quiet", prompt: null, suppressReason: "quiet-mode" };
-  if (record.snooze.until && Date.parse(record.snooze.until) > now.getTime()) {
-    return { state: "quiet", prompt: null, suppressReason: "snoozed" };
-  }
-
   const sessionState = day?.session?.state;
   if (sessionState === "clocked_out") return { state: "idle", prompt: null, suppressReason: "clocked-out" };
   if (!gate.active) return { state: "idle", prompt: null, suppressReason: "off-shift" };
@@ -182,10 +177,11 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   const shiftEnd = day?.shift?.endsAt ?? null;
   const minutesLeft = minutesUntil(shiftEnd, now);
 
-  // EOD is the one required interrupt: 5–10 minutes before shift end, or when
-  // the server marks the prompt as EOD. Exempt from caps, backoff, final-hour
-  // suppression, quiet, and snooze — but still deduplicated.
-  const eodWindow = minutesLeft !== null && minutesLeft <= 10 && minutesLeft > -15;
+  // EOD is the one required interrupt: it opens EOD_WINDOW_MS before the shift
+  // ends (or when the server marks the prompt as EOD) and pierces quiet mode
+  // and snooze — the employee still gets their mandatory wrap-up — but it is
+  // deduplicated until a response lands.
+  const eodWindow = minutesLeft !== null && minutesLeft <= EOD_WINDOW_MS / 60_000 && minutesLeft > -15;
   if (day?.prompt.kind === "eod" || eodWindow) {
     const cause = `eod:${sessionId}`;
     const minutes = minutesLeft === null ? null : Math.max(0, minutesLeft);
@@ -206,6 +202,11 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
     return { state: "eod_due", prompt, suppressReason: null };
   }
 
+  if (record.quiet.active) return { state: "quiet", prompt: null, suppressReason: "quiet-mode" };
+  if (record.snooze.until && Date.parse(record.snooze.until) > now.getTime()) {
+    return { state: "quiet", prompt: null, suppressReason: "snoozed" };
+  }
+
   const blocker = openBlocker(day);
   const overdueCount = day?.tasks?.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < day.shiftDate).length ?? 0;
   const openCount = day?.tasks?.filter((task) => task.completed !== true).length ?? 0;
@@ -216,8 +217,12 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (day?.prompt.kind === "plan" && day.prompt.required && !planConfirmed(day)) {
     const cause = `plan:${sessionId}`;
     const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
-    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
-      return { state: "awaiting_plan", prompt: null, suppressReason: suppressed ?? "backoff" };
+    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
+    if (backoff > 0 || suppressed) {
+      return { state: "awaiting_plan", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
+    }
+    if (ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "awaiting_plan", prompt: null, suppressReason: "already-reminded" };
     }
     return {
       state: "awaiting_plan",
@@ -236,8 +241,12 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (blocker && (!lastResponseAt || now.getTime() - Date.parse(lastResponseAt) > BLOCKER_FOLLOW_UP_MS)) {
     const cause = `blocker:${sessionId}:${blocker}`;
     const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
-    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
-      return { state: "blocker_follow_up", prompt: null, suppressReason: suppressed ?? "backoff" };
+    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
+    if (backoff > 0 || suppressed) {
+      return { state: "blocker_follow_up", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
+    }
+    if (ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "blocker_follow_up", prompt: null, suppressReason: "already-reminded" };
     }
     return {
       state: "blocker_follow_up",
@@ -257,8 +266,12 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (day?.prompt.kind && nextPromptAt && now.getTime() >= Date.parse(nextPromptAt)) {
     const cause = `progress:${sessionId}:${nextPromptAt}`;
     const suppressed = ordinarySuppression;
-    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
-      return { state: "progress_check", prompt: null, suppressReason: suppressed ?? "backoff" };
+    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
+    if (backoff > 0 || suppressed) {
+      return { state: "progress_check", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
+    }
+    if (ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "progress_check", prompt: null, suppressReason: "already-reminded" };
     }
     const intent = day.plan?.freeform_intent?.trim();
     return {
@@ -385,6 +398,31 @@ export function markFired(record: CompanionRecord, cause: string, now: Date): Co
 
 export function markAnswered(record: CompanionRecord, cause: string, now: Date): CompanionRecord {
   return { ...record, answered: { ...record.answered, [cause]: now.toISOString() }, ignored: { ...record.ignored, [cause]: 0 } };
+}
+
+/** A user response re-arms every prompt that fired before it and resets its backoff. */
+export function markResponded(record: CompanionRecord, now: Date): CompanionRecord {
+  const iso = now.toISOString();
+  const answered = { ...record.answered };
+  const ignored = { ...record.ignored };
+  for (const [cause, firedAt] of Object.entries(record.fired)) {
+    if (Date.parse(firedAt) <= now.getTime()) {
+      answered[cause] = iso;
+      ignored[cause] = 0;
+    }
+  }
+  return { ...record, answered, ignored };
+}
+
+/** Drops bookkeeping older than the retention window so persisted state stays bounded. */
+export function pruneRecord(record: CompanionRecord, now: Date, maxAgeMs = 7 * 24 * 60 * 60_000): CompanionRecord {
+  const cutoff = now.getTime() - maxAgeMs;
+  const fresh = (entries: Record<string, string>) =>
+    Object.fromEntries(Object.entries(entries).filter(([, iso]) => {
+      const parsed = Date.parse(iso);
+      return Number.isFinite(parsed) && parsed >= cutoff;
+    }));
+  return { ...record, fired: fresh(record.fired), answered: fresh(record.answered) };
 }
 
 export function markIgnored(record: CompanionRecord, cause: string, now: Date): CompanionRecord {
