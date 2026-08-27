@@ -122,7 +122,7 @@ export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: 
   const key = process.env.OPENROUTER_API_KEY;
   const input = text(body.input, 4000);
   if (!input) return { ok: false, reason: "ai_malformed", detail: "input is required" };
-  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
+  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "AI interpretation is not configured on this server" };
 
   const planIntent = text(body.planIntent, 500);
   const today = text(body.today, 10) ?? new Date().toISOString().slice(0, 10);

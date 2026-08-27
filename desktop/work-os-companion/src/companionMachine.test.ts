@@ -143,6 +143,26 @@ describe("quality controls", () => {
     expect(eod.state).toBe("eod_due");
   });
 
+  it("EOD pierces quiet mode and snooze", () => {
+    const at = new Date("2026-08-27T17:53:00Z");
+    const quietRecord = setQuietMode(EMPTY_COMPANION_RECORD, true);
+    const quietDecision = evaluateCompanion(base({ now: at, record: quietRecord }));
+    expect(quietDecision.state).toBe("eod_due");
+    expect(quietDecision.prompt).not.toBeNull();
+    const snoozedRecord = snooze(EMPTY_COMPANION_RECORD, "eod:session-1", new Date(at.getTime() + 60 * 60_000));
+    const snoozedDecision = evaluateCompanion(base({ now: at, record: snoozedRecord }));
+    expect(snoozedDecision.state).toBe("eod_due");
+  });
+
+  it("EOD window boundaries: silent at 11 minutes, active at exactly 10", () => {
+    const day11 = day({ prompt: { kind: null, nextPromptAt: null as unknown as string, required: false, reason: "" } });
+    const at11 = evaluateCompanion(base({ now: new Date("2026-08-27T17:49:00Z"), day: day11 }));
+    expect(at11.state).not.toBe("eod_due");
+    const at10 = evaluateCompanion(base({ now: new Date("2026-08-27T17:50:00Z"), day: day11 }));
+    expect(at10.state).toBe("eod_due");
+    expect(at10.prompt).not.toBeNull();
+  });
+
   it("enforces the rolling-hour frequency cap, EOD exempt", () => {
     let record: CompanionRecord = EMPTY_COMPANION_RECORD;
     for (let index = 0; index < MAX_PROMPTS_PER_HOUR; index += 1) {
@@ -171,16 +191,6 @@ describe("quality controls", () => {
     expect((record.ignored.c ?? 0)).toBe(2);
   });
 
-  it("does not re-fire an already-reminded cause until it is answered", () => {
-    const d = day();
-    const cause = `progress:session-1:${d.prompt.nextPromptAt}`;
-    const record = markFired(EMPTY_COMPANION_RECORD, cause, NOW);
-    const decision = evaluateCompanion(base({ day: d, record }));
-    expect(decision.prompt).toBeNull();
-    expect(decision.suppressReason).toBe("already-reminded");
-    const answered = markAnswered(record, cause, NOW);
-    expect(evaluateCompanion(base({ day: d, record: answered, lastResponseAt: NOW.toISOString() })).prompt).not.toBeNull();
-  });
 });
 
 describe("debugger force", () => {

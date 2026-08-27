@@ -28,6 +28,7 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 const DEFAULT_TITLES: Record<NotificationTone, string> = {
   success: "Done",
   error: "Something went wrong",
+  warning: "Needs attention",
   info: "Heads up",
 };
 

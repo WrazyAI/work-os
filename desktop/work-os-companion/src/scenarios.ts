@@ -14,6 +14,7 @@ export const ALL_ONBOARDING_DETAILS: Array<{ key: DebugOnboardingDetail; label: 
 ];
 
 export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
+  liveWrites: false,
   enabled: false,
   syncBypass: false,
   companionForce: null,
