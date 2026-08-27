@@ -221,6 +221,7 @@ export type DebugDayState = "real" | "no_shift" | "scheduled" | "shift_start" | 
 export interface DebugScenario {
   enabled: boolean;
   syncBypass: boolean;
+  companionForce?: string | null;
   authState: "real" | "unauthenticated";
   onboardingState: "real" | "complete" | "missing";
   invalidateOnboardingData: boolean;

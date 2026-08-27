@@ -6,13 +6,14 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { apiRequest, flushQueue, sendOrQueue, setSyncBypass, updateTaskCompletion } from "./api";
+import { evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
-import { schedulePrompt } from "./scheduler";
+import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation } from "./taskSurfaces";
@@ -145,7 +146,8 @@ export default function App() {
     // Dev-only bootstrap: /?offline boots straight into the offline playground
     // (same scenario the debugger's "Offline playground" preset applies).
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
-      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
+      const params = new URLSearchParams(window.location.search);
+      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", companionForce: params.get("companion") };
     }
     return DEFAULT_DEBUG_SCENARIO;
   });
@@ -154,6 +156,18 @@ export default function App() {
   const syncBypass = debugScenario.enabled && debugScenario.syncBypass;
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
+  const [companionRecord, setCompanionRecord] = useState<CompanionRecord>(() => {
+    try {
+      const stored = window.localStorage.getItem("work-os.companion.v1");
+      return stored ? { ...EMPTY_COMPANION_RECORD, ...JSON.parse(stored) } : EMPTY_COMPANION_RECORD;
+    } catch { return EMPTY_COMPANION_RECORD; }
+  });
+  const companionRecordRef = useRef(companionRecord);
+  companionRecordRef.current = companionRecord;
+  const lastResponseAtRef = useRef<string | null>(null);
+  useEffect(() => {
+    try { window.localStorage.setItem("work-os.companion.v1", JSON.stringify(companionRecord)); } catch {}
+  }, [companionRecord]);
   const planEditVersion = useRef(0);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen;
 
@@ -252,7 +266,7 @@ export default function App() {
     setSuggestionTaskIds(nextDay.plan?.suggestion_task_ids ?? []);
     setPlanItems([...(nextDay.plan?.items ?? [])].sort((a, b) => a.rank - b.rank));
     setPlanDirty(false); setPlanSaveState("saved"); setPlanHistoryDate((current) => current || nextDay.shiftDate);
-    await schedulePrompt(nextDay, () => apiRequest<DayData>("/api/work-os/me/day"));
+    await schedulePrompt(nextDay, () => { void runCompanionTick(true); });
     return nextDay;
   }, [showError]);
 
@@ -408,6 +422,60 @@ export default function App() {
     }
     finally { setBusy(false); }
   }
+  const runCompanionTick = async (refreshFirst = false) => {
+    if (busy) return;
+    if (!visibleSession) return;
+    const dayNow = refreshFirst ? await refresh({ dayOnly: true }).catch(() => null) : visibleDay;
+    const target = dayNow ?? visibleDay;
+    if (!target) return;
+    const currentGate = sessionGate(target);
+    const decision = evaluateCompanion({
+      now: new Date(), online: navigator.onLine, gate: currentGate, day: target,
+      record: companionRecordRef.current, force: (debugScenario.companionForce as CompanionState | null) ?? null,
+      lastResponseAt: lastResponseAtRef.current,
+    });
+    if (!decision.prompt) return;
+    const prompt = decision.prompt;
+    const previous = companionRecordRef.current;
+    const unanswered = Object.entries(previous.fired)
+      .filter(([cause, firedAt]) => cause !== prompt.id && !(lastResponseAtRef.current && Date.parse(lastResponseAtRef.current) > Date.parse(firedAt)))
+      .map(([cause]) => cause);
+    let next = previous;
+    for (const cause of unanswered) next = markIgnored(next, cause, new Date());
+    next = markFired(next, prompt.id, new Date());
+    setCompanionRecord(next);
+    void sendOSNotification(prompt.title, prompt.body, prompt.id);
+    const actionLabel = prompt.action === "open_eod" ? "Open EOD review" : prompt.action === "open_plan" ? "Confirm plan" : prompt.action === "open_tasks" ? "Open tasks" : "Record update";
+    notifications.persistent(
+      `companion:${prompt.id}`,
+      prompt.body,
+      prompt.title,
+      prompt.severity === "attention" ? "info" : "info",
+      { label: actionLabel, onClick: () => {
+        if (prompt.action === "open_eod") setView("review");
+        else if (prompt.action === "open_plan") { setView("tasks"); openGoalComposer(); }
+        else if (prompt.action === "open_tasks") setView("tasks");
+        else setProgressComposerOpen(true);
+      } },
+    );
+  };
+
+  const companionTickRef = useRef(runCompanionTick);
+  companionTickRef.current = runCompanionTick;
+
+  // Re-evaluate the companion on every clock tick (30s) — the machine itself
+  // deduplicates, backs off, and caps frequency, so re-running is safe.
+  useEffect(() => {
+    void companionTickRef.current(false);
+  }, [pulseNow]);
+
+  // First evaluation shortly after boot so a due prompt (or forced debugger
+  // state) surfaces without waiting for the first 30-second tick.
+  useEffect(() => {
+    const timer = window.setTimeout(() => void companionTickRef.current(false), 2_500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   function setScenario(next: DebugScenario) { debugRef.current = next; setDebugScenario(next); void emit("work-os://debug-current", next); }
 
   async function openDebugger() {
@@ -844,6 +912,7 @@ export default function App() {
   }
 
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
+    lastResponseAtRef.current = new Date().toISOString();
     const text = pendingProgressUpdate.trim();
     if (!text) return;
     if (syncBypassRef.current) {
@@ -966,7 +1035,7 @@ export default function App() {
       {view === "review" && <ReviewWorkspace proposals={visibleDay?.proposals ?? []} busy={busy} onReject={(id) => void act("proposal.reject", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "reject" }))} onApprove={(id) => void act("proposal.accept", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "accept" }))} />}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
-      {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
+      {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Quiet mode" detail={companionRecord.quiet.active ? "Companion reminders are paused" : "Reminders follow the normal schedule"}><button disabled={busy} onClick={() => setCompanionRecord((current) => setMachineQuiet(current, !current.quiet.active))}>{companionRecord.quiet.active ? "Resume reminders" : "Pause reminders"}</button></Setting><Setting title="Snooze reminders" detail={companionRecord.snooze.until ? `Until ${new Date(companionRecord.snooze.until).toLocaleTimeString()}` : "Silence the companion for one hour"}><button disabled={busy} onClick={() => { setCompanionRecord((current) => snoozeMachine(current, null, new Date(Date.now() + 60 * 60_000))); notifications.info("Companion reminders are snoozed for one hour.", "Snoozed"); }}><CirclePause size={15} /> Snooze 1h</button></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
       {(view === "day" || view === "tasks" && planHistoryDate === visibleDay?.shiftDate) && <ProgressComposer
         mode={sessionActive && view === "day" ? "progress" : "agenda"}
         input={input}

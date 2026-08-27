@@ -116,6 +116,20 @@ export default function DebugWindow() {
           <DebugToggle label="No evidence" checked={scenario.emptyEvidence} onChange={(value) => update({ emptyEvidence: value })} />
           <DebugToggle label="No proposals" checked={scenario.emptyProposals} onChange={(value) => update({ emptyProposals: value })} />
         </div>
+        <section className="debug-section">
+          <h2>Companion</h2>
+          <label><span>Force state</span><select value={scenario.companionForce ?? ""} onChange={(event) => update({ companionForce: event.target.value || null })}>
+            <option value="">Auto (evaluate normally)</option>
+            <option value="clock_in_greeting">Clock-in greeting</option>
+            <option value="awaiting_plan">Awaiting plan</option>
+            <option value="progress_check">Progress check</option>
+            <option value="blocker_follow_up">Blocker follow-up</option>
+            <option value="eod_due">EOD due</option>
+            <option value="quiet">Quiet</option>
+            <option value="offline">Offline</option>
+          </select></label>
+          <p className="debug-help">Forces the companion machine into a state with its synthetic prompt. Offline beats every force; quiet mode in Settings suppresses notifications for real.</p>
+        </section>
         <label><span>Queued updates</span><input type="number" min="0" max="99" value={scenario.queuedUpdates} onChange={(event) => update({ queuedUpdates: Math.max(0, Math.min(99, Number(event.target.value) || 0)) })} /></label>
       </section>
       <button className="debug-reset" onClick={() => update(DEFAULT_DEBUG_SCENARIO)}><RotateCcw size={15} /> Reset all overrides</button>

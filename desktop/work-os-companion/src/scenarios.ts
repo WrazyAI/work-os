@@ -16,6 +16,7 @@ export const ALL_ONBOARDING_DETAILS: Array<{ key: DebugOnboardingDetail; label: 
 export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   enabled: false,
   syncBypass: false,
+  companionForce: null,
   authState: "real",
   onboardingState: "real",
   invalidateOnboardingData: false,
