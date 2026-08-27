@@ -1538,6 +1538,18 @@ const durationLabel = (seconds: number) => `${Math.floor(seconds / 3600)}h ${Mat
 
 function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
   const notifications = useNotifications();
+  const [synthesis, setSynthesis] = useState<{ status: "loading" | "ready" | "failed"; text?: string } | null>(null);
+  const synthesize = () => {
+    if (!data || synthesis?.status === "loading") return;
+    setSynthesis({ status: "loading" });
+    apiRequest<{ synthesis: string }>("/api/work-os/me/insights/synthesize", {
+      method: "POST", body: JSON.stringify({ range, through: data.through }),
+    }).then((result) => setSynthesis({ status: "ready", text: String(result.synthesis) }))
+      .catch(() => {
+        setSynthesis({ status: "failed" });
+        notifications.info("The assistant is unavailable — the deterministic brief below stands as-is.", "Synthesis unavailable");
+      });
+  };
   const latest = data?.days.at(-1);
   const staleAt = data?.freshness.staleAt ?? null;
   const correctionMessage = latest?.sessionQuality?.status === "needs_correction"
@@ -1552,7 +1564,12 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
     notifications.persistent("insights-session-correction", correctionMessage, "Session needs correction", "error");
   }, [correctionMessage, notifications]);
   return <main className="page insights-page"><div className="insights-heading"><PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." /><div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div></div>
-    {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
+    {data && !loading && <section className="panel insight-synthesis" aria-label="AI synthesis">
+        <header><div><span><Sparkles size={14} /> AI synthesis</span><h3>{synthesis?.status === "ready" ? "The assistant's read of your week." : "Your record, narrated."}</h3></div>
+        <button disabled={synthesis?.status === "loading"} onClick={synthesize}>{synthesis?.status === "loading" ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}</button></header>
+        {synthesis?.status === "ready" ? <p className="synthesis-text">{synthesis.text}</p> : synthesis?.status === "failed" ? <p className="synthesis-fallback">The assistant is unavailable — the deterministic brief and exact values below stand as-is.</p> : <p className="synthesis-hint">A calm narrative grounded strictly in the exact values on this page. Never invented.</p>}
+      </section>}
+      {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
       <div className="metric-grid"><Metric icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} /><article className="metric"><ListChecks size={18} /><small>Daily tasks</small><CompletionRing compact completed={data.totals.plannedCompleted} total={data.totals.planned} label="complete" /></article><Metric icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} /><Metric icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} /></div>
       <section className="panel insight-brief"><header><div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div><small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small></header><div><section><strong>Wins</strong>{data.brief.wins.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Needs attention</strong>{data.brief.attention.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Next focus</strong>{data.brief.nextFocus.map((item) => <p key={item}>{item}</p>)}</section></div></section>
       <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>

@@ -153,16 +153,15 @@ describe("quality controls", () => {
     expect(decision.suppressReason).toBe("frequency-cap");
   });
 
-  it("backs off after ignored prompts and clears on an answer", () => {
+  it("escalates the quiet window with each ignored prompt", () => {
     const d = day();
     const cause = `progress:session-1:${d.prompt.nextPromptAt}`;
-    let record = markIgnored(EMPTY_COMPANION_RECORD, cause, NOW);
-    const backedOff = evaluateCompanion(base({ day: d, record }));
-    expect(backedOff.prompt).toBeNull();
-    expect(backedOff.suppressReason).toBe("backoff");
-    record = markAnswered(record, cause, NOW);
-    const afterAnswer = evaluateCompanion(base({ day: d, record, lastResponseAt: NOW.toISOString() }));
-    expect(afterAnswer.prompt).not.toBeNull();
+    let record = markFired(EMPTY_COMPANION_RECORD, cause, NOW);
+    record = markIgnored(record, cause, NOW);
+    const fiveMinLater = new Date(NOW.getTime() + 5 * 60_000);
+    expect(evaluateCompanion(base({ day: d, record, now: fiveMinLater })).prompt).toBeNull();
+    const elevenMinLater = evaluateCompanion(base({ day: d, record, now: new Date(NOW.getTime() + 11 * 60_000) }));
+    expect(elevenMinLater.prompt).not.toBeNull();
   });
 
   it("applies escalating backoff windows", () => {
@@ -171,15 +170,17 @@ describe("quality controls", () => {
     expect((record.ignored.c ?? 0)).toBe(2);
   });
 
-  it("does not re-fire an already-reminded cause until it is answered", () => {
+  it("re-surfaces an ignored prompt after its backoff window, re-armed by an answer", () => {
     const d = day();
     const cause = `progress:session-1:${d.prompt.nextPromptAt}`;
     const record = markFired(EMPTY_COMPANION_RECORD, cause, NOW);
-    const decision = evaluateCompanion(base({ day: d, record }));
-    expect(decision.prompt).toBeNull();
-    expect(decision.suppressReason).toBe("already-reminded");
+    const justFired = evaluateCompanion(base({ day: d, record }));
+    expect(justFired.prompt).toBeNull();
+    expect(justFired.suppressReason).toBe("backoff");
+    const afterWindow = evaluateCompanion(base({ day: d, record, now: new Date(NOW.getTime() + 6 * 60_000) }));
+    expect(afterWindow.prompt).not.toBeNull();
     const answered = markAnswered(record, cause, NOW);
-    expect(evaluateCompanion(base({ day: d, record: answered, lastResponseAt: NOW.toISOString() })).prompt).not.toBeNull();
+    expect(evaluateCompanion(base({ day: d, record: answered, lastResponseAt: NOW.toISOString(), now: new Date(NOW.getTime() + 60_000) })).prompt).not.toBeNull();
   });
 });
 

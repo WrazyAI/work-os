@@ -114,8 +114,8 @@ function backoffRemainingMs(cause: string, record: CompanionRecord, now: Date): 
 
 function answeredSinceFire(record: CompanionRecord, cause: string, firedAt: string, lastResponseAt: string | null): boolean {
   const answeredAt = record.answered[cause];
-  if (answeredAt && Date.parse(answeredAt) > Date.parse(firedAt)) return true;
-  return !!lastResponseAt && Date.parse(lastResponseAt) > Date.parse(firedAt);
+  if (answeredAt && Date.parse(answeredAt) >= Date.parse(firedAt)) return true;
+  return !!lastResponseAt && Date.parse(lastResponseAt) >= Date.parse(firedAt);
 }
 
 /**
@@ -200,7 +200,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
       action: "open_eod",
       severity: "attention",
     };
-    if (alreadyReminded(record, cause, lastResponseAt)) {
+    if (eodAlreadyReminded(record, cause, lastResponseAt)) {
       return { state: "eod_due", prompt: null, suppressReason: "already-reminded" };
     }
     return { state: "eod_due", prompt, suppressReason: null };
@@ -216,12 +216,8 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (day?.prompt.kind === "plan" && day.prompt.required && !planConfirmed(day)) {
     const cause = `plan:${sessionId}`;
     const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
-    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
-    if (backoff > 0 || suppressed) {
-      return { state: "awaiting_plan", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
-    }
-    if (alreadyReminded(record, cause, lastResponseAt)) {
-      return { state: "awaiting_plan", prompt: null, suppressReason: "already-reminded" };
+    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "awaiting_plan", prompt: null, suppressReason: suppressed ?? "backoff" };
     }
     return {
       state: "awaiting_plan",
@@ -240,12 +236,8 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (blocker && (!lastResponseAt || now.getTime() - Date.parse(lastResponseAt) > BLOCKER_FOLLOW_UP_MS)) {
     const cause = `blocker:${sessionId}:${blocker}`;
     const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
-    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
-    if (backoff > 0 || suppressed) {
-      return { state: "blocker_follow_up", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
-    }
-    if (alreadyReminded(record, cause, lastResponseAt)) {
-      return { state: "blocker_follow_up", prompt: null, suppressReason: "already-reminded" };
+    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "blocker_follow_up", prompt: null, suppressReason: suppressed ?? "backoff" };
     }
     return {
       state: "blocker_follow_up",
@@ -265,12 +257,8 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   if (day?.prompt.kind && nextPromptAt && now.getTime() >= Date.parse(nextPromptAt)) {
     const cause = `progress:${sessionId}:${nextPromptAt}`;
     const suppressed = ordinarySuppression;
-    const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
-    if (backoff > 0 || suppressed) {
-      return { state: "progress_check", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
-    }
-    if (alreadyReminded(record, cause, lastResponseAt)) {
-      return { state: "progress_check", prompt: null, suppressReason: "already-reminded" };
+    if (suppressed || ordinarySuppressed(record, cause, lastResponseAt, now)) {
+      return { state: "progress_check", prompt: null, suppressReason: suppressed ?? "backoff" };
     }
     const intent = day.plan?.freeform_intent?.trim();
     return {
