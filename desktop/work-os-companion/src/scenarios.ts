@@ -15,6 +15,7 @@ export const ALL_ONBOARDING_DETAILS: Array<{ key: DebugOnboardingDetail; label: 
 
 export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   enabled: false,
+  syncBypass: false,
   authState: "real",
   onboardingState: "real",
   invalidateOnboardingData: false,
@@ -34,6 +35,7 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; scenario: Partial
   { id: "explicit_clock_in", label: "Explicit clock-in", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "scheduled" } },
   { id: "provider_failure", label: "Provider outage", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
+  { id: "offline_playground", label: "Offline playground (no backend)", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in" } },
 ];
 
 function onboardingFixture(): OnboardingData {

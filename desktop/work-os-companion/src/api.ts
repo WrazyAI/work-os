@@ -3,6 +3,20 @@ import { diagnostics } from "./diagnostics";
 import type { OfflineAction } from "./types";
 
 const MAX_QUEUE_ATTEMPTS = 6;
+
+// Offline sync bypass (debugger scenario): when active, no network call may
+// leave the app. Reads are served by scenario fixtures at the view layer;
+// writes are simulated by App-level handlers.
+let syncBypassActive = false;
+export function setSyncBypass(active: boolean) {
+  syncBypassActive = active;
+}
+export class SyncBypassError extends Error {
+  constructor() {
+    super("Offline sync bypass is active — the backend was not contacted.");
+    this.name = "SyncBypassError";
+  }
+}
 const MAX_BACKOFF_MS = 60 * 60_000;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
@@ -63,6 +77,7 @@ function reschedule(action: OfflineAction, error: unknown, now = Date.now()): Of
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   return diagnostics.withSpan("api.request", async () => {
+    if (syncBypassActive) throw new SyncBypassError();
     const session = await secureState.session();
     if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
       throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
@@ -134,6 +149,7 @@ export async function updateTaskCompletion(taskId: string, completed: boolean): 
 }
 
 export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH", body: Record<string, unknown>) {
+  if (syncBypassActive) throw new SyncBypassError();
   const createdAt = new Date().toISOString();
   const replaySafeBody = { ...body, observed_at: body.observed_at ?? createdAt };
   const action: OfflineAction = {
@@ -167,6 +183,9 @@ export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH"
 export async function flushQueue(now = Date.now()) {
   return diagnostics.withSpan("offline_queue.flush", async () => {
     const queue = await secureState.queue();
+    if (syncBypassActive) {
+      return { remaining: queue.length, needsAttention: queue.filter((action) => action.status === "needs_attention").length };
+    }
     const due = queue.filter((action) =>
       action.status !== "needs_attention"
       && (!action.nextAttemptAt || Date.parse(action.nextAttemptAt) <= now)

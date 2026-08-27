@@ -5,7 +5,7 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
-import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
+import { apiRequest, flushQueue, sendOrQueue, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
@@ -141,9 +141,19 @@ export default function App() {
   const [missedClockOut, setMissedClockOut] = useState<MissedClockOutCorrection | null>(null);
   const [missedClockOutAt, setMissedClockOutAt] = useState("");
   const [missedClockOutReason, setMissedClockOutReason] = useState("");
-  const [debugScenario, setDebugScenario] = useState<DebugScenario>(DEFAULT_DEBUG_SCENARIO);
+  const [debugScenario, setDebugScenario] = useState<DebugScenario>(() => {
+    // Dev-only bootstrap: /?offline boots straight into the offline playground
+    // (same scenario the debugger's "Offline playground" preset applies).
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
+      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
+    }
+    return DEFAULT_DEBUG_SCENARIO;
+  });
   const [pulseNow, setPulseNow] = useState(() => new Date());
   const debugRef = useRef(debugScenario);
+  const syncBypass = debugScenario.enabled && debugScenario.syncBypass;
+  const syncBypassRef = useRef(syncBypass);
+  syncBypassRef.current = syncBypass;
   const planEditVersion = useRef(0);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen;
 
@@ -213,6 +223,7 @@ export default function App() {
   }, [moveMenuId, subtaskMenuId]);
 
   const refresh = useCallback(async (options: { refreshProviders?: boolean; dayOnly?: boolean } = {}) => {
+    if (syncBypassRef.current) return null;
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
       apiRequest<DayData>(`/api/work-os/me/day${options.refreshProviders ? "?refreshProviders=true" : ""}`),
@@ -249,7 +260,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    const recover = async () => { if (!navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); await refresh({ dayOnly: true }); };
+    const recover = async () => { if (syncBypassRef.current || !navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); await refresh({ dayOnly: true }); };
     window.addEventListener("online", recover); const timer = window.setInterval(() => void recover().catch(() => undefined), 60_000);
     return () => { window.removeEventListener("online", recover); clearInterval(timer); };
   }, [refresh, session]);
@@ -259,7 +270,23 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  // Offline sync bypass: activate the hard network gate and hydrate the
+  // workspace from the scenario fixture when no day has been loaded.
   useEffect(() => {
+    setSyncBypass(syncBypass);
+    if (!syncBypass) return;
+    setError("");
+    setDay((current) => current ?? (applyDayScenario(null, debugScenario) as DayData));
+  }, [debugScenario, syncBypass]);
+
+  function bypassAct(label: string, mutator?: (day: DayData) => DayData) {
+    diagnostics.info("ui.action.bypass", label, { activeView: view });
+    if (mutator) setDay((current) => mutator(current ?? (applyDayScenario(null, debugScenario) as DayData)));
+    notifications.success(actionSuccessMessages[label] ?? "The change was saved on this device.");
+  }
+
+  useEffect(() => {
+    if (syncBypassRef.current) { setPlanSaveState("saved"); setPlanDirty(false); return; }
     if (!planDirty || !day?.plan || debugRef.current.enabled || day.plan.status === "closed") return;
     const version = planEditVersion.current;
     const timer = window.setTimeout(() => {
@@ -338,7 +365,12 @@ export default function App() {
     setBusy(true); setError("");
     diagnostics.info("ui.action.requested", label, { activeView: view });
     try {
-      if (debugRef.current.enabled) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
+      if (syncBypassRef.current) {
+      diagnostics.info("ui.action.bypass", label, { activeView: view });
+      notifications.success(actionSuccessMessages[label] ?? "The change was saved on this device.");
+      return;
+    }
+    if (debugRef.current.enabled) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
       await action(); const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); await refresh();
       diagnostics.info("ui.action.completed", label, { activeView: view });
       notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
@@ -498,6 +530,7 @@ export default function App() {
 
   async function loadPlanHistory(date: string) {
     setPlanHistoryDate(date);
+    if (syncBypassRef.current) return;
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
     try {
       const [planResult, taskResult] = await Promise.all([
@@ -522,7 +555,7 @@ export default function App() {
   }
 
   async function loadMoreTasks() {
-    if (taskHistoryCursor === null || !visibleDay || taskHistoryLoading) return;
+    if (syncBypassRef.current || taskHistoryCursor === null || !visibleDay || taskHistoryLoading) return;
     setTaskHistoryLoading(true);
     try {
       const result = await apiRequest<{ tasks: Array<Record<string, any>>; cursor: { next: string | null } }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(visibleDay.shiftDate)}&cursor=${encodeURIComponent(taskHistoryCursor)}&limit=100`);
@@ -537,6 +570,10 @@ export default function App() {
     setTaskComposerTitle(""); setTaskComposerDescription("");
     setTaskComposerAssignees(visibleDay?.access?.personId ? [visibleDay.access.personId] : []);
     setTaskComposerOpen(true);
+    if (syncBypassRef.current) {
+      setTaskAssigneeOptions([{ id: "debug-person-1", displayName: visibleOnboarding?.profile.displayName || "David Z", email: visibleOnboarding?.profile.email ?? null }]);
+      return;
+    }
     if (taskAssigneeOptions.length || taskOptionsLoading) return;
     setTaskOptionsLoading(true);
     try {
@@ -552,6 +589,11 @@ export default function App() {
   }
 
   async function openTaskDetails(task: Record<string, any>, readOnly = false) {
+    if (syncBypassRef.current) {
+      setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(false);
+      setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
+      return;
+    }
     const taskId = String(task.provider_task_id || task.id);
     setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(true); setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
     try {
@@ -565,6 +607,17 @@ export default function App() {
 
   function submitTaskFromDesktop() {
     if (!taskComposerTitle.trim()) return;
+    if (syncBypassRef.current) {
+      const id = `debug-task-${Date.now()}`;
+      setDay((current) => {
+        const base = current ?? (applyDayScenario(null, debugScenario) as DayData);
+        return { ...base, tasks: [...base.tasks, { id, title: taskComposerTitle.trim(), completed: false, due_date: base.shiftDate }] };
+      });
+      setTaskComposerTitle(""); setTaskComposerDescription(""); setTaskComposerAssignees([]);
+      setTaskComposerOpen(false);
+      notifications.success(actionSuccessMessages["task.create"]);
+      return;
+    }
     void act("task.create", async () => {
       const result = await apiRequest<{ task: Record<string, any>; providerStatus: string; mirrorStatus: string }>("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskComposerTitle.trim(), description: taskComposerDescription.trim() || undefined, assignee_person_ids: taskComposerAssignees }) });
       setTaskComposerTitle(""); setTaskComposerDescription(""); setTaskComposerAssignees([]);
@@ -574,6 +627,7 @@ export default function App() {
   }
 
   function surfaceTask(task: TaskRow, disposition: "selected" | "deferred" = "selected") {
+    if (syncBypassRef.current) { bypassAct(disposition === "selected" ? "workspace.task_surface" : "workspace.task_defer"); return; }
     void act(disposition === "selected" ? "workspace.task_surface" : "workspace.task_defer", () => sendOrQueue("/api/work-os/me/plan", "PATCH", {
       [disposition === "selected" ? "surface_task_id" : "defer_task_id"]: task.id,
     }));
@@ -581,6 +635,18 @@ export default function App() {
 
   function setTaskCompletion(task: TaskRow, completed: boolean, refreshDetails = false) {
     const taskId = String(task.provider_task_id || task.id);
+    if (syncBypassRef.current) {
+      setDay((current) => ({ ...current ?? (applyDayScenario(null, debugScenario) as DayData), tasks: current?.tasks?.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row) ?? [] }));
+      if (refreshDetails && taskDetails) {
+        setTaskDetails((current) => current ? {
+          ...current,
+          task: String(current.task.provider_task_id || current.task.id) === taskId ? { ...current.task, completed } : current.task,
+          subtasks: current.subtasks.map((row) => String(row.provider_task_id || row.id) === taskId ? { ...row, completed } : row),
+        } : current);
+      }
+      notifications.success(actionSuccessMessages[completed ? "task.complete" : "task.reopen"]);
+      return;
+    }
     void act(completed ? "task.complete" : "task.reopen", async () => {
       await updateTaskCompletion(taskId, completed);
       if (refreshDetails && taskDetails) {
@@ -599,6 +665,15 @@ export default function App() {
 
   function submitTaskEdit() {
     if (!editRequest || !editTitle.trim()) return;
+    if (syncBypassRef.current) {
+      const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
+      const patch = (row: Record<string, any>) => String(row.provider_task_id || row.id) === taskId ? { ...row, title: editTitle.trim(), description: editDescription } : row;
+      setDay((current) => current ? { ...current, tasks: current.tasks.map((row) => patch(row as Record<string, any>)) } : current);
+      setTaskDetails((current) => current ? { ...current, task: patch(current.task), subtasks: current.subtasks.map(patch) } : current);
+      setEditRequest(null);
+      notifications.success(actionSuccessMessages["task.update"]);
+      return;
+    }
     const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
     void act("task.update", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ name: editTitle.trim(), description: editDescription }) });
@@ -612,6 +687,13 @@ export default function App() {
 
   function submitInlineSubtask() {
     if (!taskDetails || !subtaskTitle.trim()) return;
+    if (syncBypassRef.current) {
+      const subtaskId = `debug-subtask-${Date.now()}`;
+      setTaskDetails((current) => current ? { ...current, subtasks: [...current.subtasks, { id: subtaskId, provider_task_id: subtaskId, title: subtaskTitle.trim(), description: subtaskDescription.trim() || "", completed: false }] } : current);
+      setSubtaskTitle(""); setSubtaskDescription("");
+      notifications.success(actionSuccessMessages["task.subtask_create"]);
+      return;
+    }
     const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
     void act("task.subtask_create", async () => {
       await apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: subtaskTitle.trim(), description: subtaskDescription.trim() || undefined, parent_task_id: parentId, assignee_person_ids: [] }) });
@@ -625,6 +707,16 @@ export default function App() {
 
   function confirmTaskRemoval() {
     if (!deleteRequest) return;
+    if (syncBypassRef.current) {
+      const { task, closeParent, mode } = deleteRequest;
+      const removedId = String(task.provider_task_id || task.id);
+      setDay((current) => current ? { ...current, tasks: current.tasks.filter((row) => String(row.provider_task_id || row.id) !== removedId) } : current);
+      setTaskDetails((current) => current ? { ...current, subtasks: current.subtasks.filter((row) => String(row.provider_task_id || row.id) !== removedId) } : current);
+      if (closeParent) setTaskDetails(null);
+      setDeleteRequest(null);
+      notifications.success(actionSuccessMessages[mode === "delete" ? "task.delete" : "task.archive"]);
+      return;
+    }
     const { task, closeParent, mode } = deleteRequest;
     const taskId = String(task.provider_task_id || task.id);
     void act(mode === "delete" ? "task.delete" : "task.archive", async () => {
@@ -637,6 +729,13 @@ export default function App() {
 
   function moveSubtask(subtask: Record<string, any>, target: Record<string, any>) {
     if (!taskDetails) return;
+    if (syncBypassRef.current) {
+      const movingId = String(subtask.provider_task_id || subtask.id);
+      setTaskDetails((current) => current ? { ...current, subtasks: current.subtasks.filter((row) => String(row.provider_task_id || row.id) !== movingId) } : current);
+      setSubtaskMenuId(null); setMoveMenuId(null);
+      notifications.success(actionSuccessMessages["task.subtask_move"]);
+      return;
+    }
     const subtaskId = String(subtask.provider_task_id || subtask.id);
     const targetId = String(target.provider_task_id || target.id);
     const currentParentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
@@ -673,11 +772,17 @@ export default function App() {
       setClockInConfirmation({ kind: "late", reason: "Starting after the scheduled shift time" });
       return;
     }
+    if (syncBypassRef.current) { bypassAct("shift.clock_in", (base) => ({ ...base, session: { id: base.session?.id ?? "debug-local", state: "active", scheduled_starts_at: base.shift?.startsAt ?? null, scheduled_ends_at: base.shift?.endsAt ?? null, clocked_in_at: new Date().toISOString(), clocked_out_at: null, paused_seconds: 0 } as DayData["session"] })); return; }
     void act("shift.clock_in", () => sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop" }));
   }
 
   function confirmClockIn() {
     if (!clockInConfirmation) return;
+    if (syncBypassRef.current) {
+      setClockInConfirmation(null);
+      bypassAct("shift.clock_in", (base) => ({ ...base, session: { id: base.session?.id ?? "debug-local", state: "active", scheduled_starts_at: base.shift?.startsAt ?? null, scheduled_ends_at: base.shift?.endsAt ?? null, clocked_in_at: new Date().toISOString(), clocked_out_at: null, paused_seconds: 0 } as DayData["session"] }));
+      return;
+    }
     if (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim()) return;
     const confirmation = clockInConfirmation;
     setClockInConfirmation(null);
@@ -688,6 +793,7 @@ export default function App() {
 
   function confirmClockOut() {
     setClockOutConfirmation(false);
+    if (syncBypassRef.current) { bypassAct("shift.clock_out", (base) => ({ ...base, session: base.session ? { ...base.session, state: "clocked_out", clocked_out_at: new Date().toISOString() } : null })); return; }
     void act("shift.clock_out", () => sendOrQueue("/api/work-os/me/workday", "PATCH", {
       action: "clock_out",
       ...(extendedClockOut ? { extended_acknowledged: true } : {}),
@@ -726,6 +832,15 @@ export default function App() {
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
     const text = pendingProgressUpdate.trim();
     if (!text) return;
+    if (syncBypassRef.current) {
+      const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
+      setProgressReceipt({
+        kind, text, queued: false,
+        message: kind === "new_task" ? `Added “${text}” to today’s tasks.` : `Recorded “${text}” as ${label} for today.`,
+      });
+      setPendingProgressUpdate("");
+      return;
+    }
     void act("check_in.classify", async () => {
       if (kind === "new_task") {
         const title = text.replace(/\s+/g, " ").slice(0, 240);
@@ -783,7 +898,7 @@ export default function App() {
     </aside>
     <section className="stage">
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><span className="provider" title={visibleDay?.niftySync?.error || `Nifty is authoritative · last synced ${visibleDay?.niftySync?.syncedAt ? formatWorkOsDateTime(visibleDay.niftySync.syncedAt, visibleDay.shift?.timezone) : "never"}`}><PlugZap size={14} /> Nifty {visibleDay?.niftySync?.fresh ? `source · ${openTasks.length} open` : visibleDay?.niftySync?.syncing ? "refreshing" : "delayed"}</span><button className="icon" title="Refresh Nifty, Worktivity, and the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
-      {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> Scenario mode is active. Writes are disabled.<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
+      {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
           <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Activity is syncing." : "Ready to start."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Worktivity activity is syncing. Your Work OS session remains separate and ready when you need it." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "No scheduled shift is active. Starting work creates an exception session without an inferred end time."}</p>
@@ -822,7 +937,10 @@ export default function App() {
         onEditTask={editTask}
         onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")}
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
-        onPause={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}
+        onPause={() => {
+          if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" : "paused", paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
+          void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
+        }}
         onClockOut={() => setClockOutConfirmation(true)}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openGoalComposer} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}

@@ -97,6 +97,11 @@ export default function DebugWindow() {
         <p className="debug-help">Clears the local form fixture and requires the employee-owned details again. Server data is unchanged.</p>
       </section>
       <section className="debug-section">
+        <h2>Backend</h2>
+        <label className="toggle-row"><span><strong>Offline sync bypass</strong><small>Never contact the backend; writes stay on this device</small></span><input type="checkbox" checked={scenario.syncBypass} onChange={(event) => update({ enabled: true, syncBypass: event.target.checked })} /></label>
+        <p className="debug-help">Launches the workspace from local fixtures even when the server is unreachable (quota-restricted, offline, or not yet signed in). Task, composer, and shift actions are simulated locally, so full workflows — including the update classification flow — can be exercised end to end. No server data is changed.</p>
+      </section>
+      <section className="debug-section">
         <h2>Missing details</h2>
         <div className="debug-checks">{ALL_ONBOARDING_DETAILS.map((item) => <label key={item.key}><input type="checkbox" checked={scenario.missingDetails.includes(item.key)} onChange={() => update({ missingDetails: scenario.missingDetails.includes(item.key) ? scenario.missingDetails.filter((entry) => entry !== item.key) : [...scenario.missingDetails, item.key] })} /><span>{item.label}<small>{item.owner}</small></span></label>)}</div>
       </section>
