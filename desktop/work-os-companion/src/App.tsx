@@ -226,12 +226,20 @@ export default function App() {
     if (syncBypassRef.current) return null;
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
-      apiRequest<DayData>(`/api/work-os/me/day${options.refreshProviders ? "?refreshProviders=true" : ""}`),
+      apiRequest<DayData>(`/api/work-os/me/day${options.refreshProviders ? "?refreshProviders=true" : ""}`, {
+        // Provider refreshes run two external syncs server-side; the 20s
+        // default aborted them mid-flight ("signal timed out") before the
+        // Worktivity observation could land.
+        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 20_000),
+      }),
     ]);
     if (onboardingResult.status === "rejected") throw onboardingResult.reason;
     if (onboardingResult.value) setOnboarding(onboardingResult.value);
     if (dayResult.status === "rejected") {
-      const message = errorMessage(dayResult.reason, "Your profile loaded, but the workday could not be refreshed.");
+      const rawMessage = errorMessage(dayResult.reason, "Your profile loaded, but the workday could not be refreshed.");
+      const message = /timed out|abort/i.test(rawMessage)
+        ? "The provider sync is taking longer than usual. Give it a moment and retry — nothing was lost."
+        : rawMessage;
       diagnostics.warn("bootstrap.day.degraded", message);
       showError(message, message, "Workday refresh failed");
       return null;
@@ -382,7 +390,13 @@ export default function App() {
           const nextDay = await refresh({ dayOnly: true, refreshProviders: true });
           if (nextDay && sessionGate(nextDay).worktivitySynced) {
             diagnostics.info("ui.action.recovered", "Fresh Worktivity activity replaced a stale closed-workday view.", { action: label, activeView: view });
-            notifications.info("Worktivity activity is active. The focused workday view is now synchronized.", "Activity synchronized");
+            notifications.info("Worktivity activity is active. Retrying your clock-in.", "Activity synchronized");
+            await sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop" });
+            const queuedAfter = await secureState.queue();
+            setQueueCount(queuedAfter.length);
+            setQueueAttentionCount(queuedAfter.filter((item) => item.status === "needs_attention").length);
+            await refresh();
+            notifications.success(actionSuccessMessages["shift.clock_in"]);
             return;
           }
         } catch {
@@ -887,7 +901,12 @@ export default function App() {
   }
 
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
-  if (!visibleOnboarding) return <LoadingScreen failed={!!error} retry={() => void refresh()} />;
+  if (!visibleOnboarding) return <LoadingScreen
+      failed={!!error}
+      retry={() => void refresh()}
+      onDebug={() => void openDebugger()}
+      onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
+    />;
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   return <div className="workspace">
@@ -982,7 +1001,7 @@ export default function App() {
 }
 
 function ConnectScreen({ apiBase, setApiBase, connecting, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}><LogIn size={17} /> {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
-function LoadingScreen({ failed, retry }: { failed: boolean; retry: () => void }) { return <main className="loading"><img src={assetUrl(wordmark)} alt="" /><h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1><p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>{failed && <button className="primary" onClick={retry}>Retry</button>}</main>; }
+function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) { return <main className="loading"><img src={assetUrl(wordmark)} alt="" /><h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1><p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>{failed && <><button className="primary" onClick={retry}>Retry</button><div className="loading-alternatives"><button onClick={onOffline}>Continue offline</button><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></div><small>Offline mode uses local fixtures only — nothing reaches the server.</small></>}</main>; }
 function Empty({ title, body }: { title: string; body: string }) { return <div className="empty"><Sparkles size={20} /><strong>{title}</strong><p>{body}</p></div>; }
 function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) { return <header className="page-intro"><span>{eyebrow}</span><h2>{title}</h2><p>{body}</p></header>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
