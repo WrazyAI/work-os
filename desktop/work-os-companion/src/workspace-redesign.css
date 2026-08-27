@@ -3439,3 +3439,114 @@ button:not(:disabled):active {
   font-size: 10px;
   font-weight: 720;
 }
+
+/* EOD composer — Slice C */
+.eod-composer {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.eod-composer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eod-composer-header span {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.eod-composer-header h2 {
+  margin: 5px 0 0;
+  font: 650 20px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.eod-composer-header small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.eod-composer-header button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border: 1px solid #cbd7c3;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #40543a;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.eod-composer-header button:not(:disabled):hover {
+  border-color: #91c568;
+  background: #edf6e4;
+}
+
+.eod-markdown-label,
+.eod-bottleneck-label {
+  display: grid;
+  gap: 6px;
+}
+
+.eod-markdown-label > span,
+.eod-bottleneck-label > span {
+  color: #666a61;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eod-markdown-label textarea,
+.eod-bottleneck-label textarea {
+  width: 100%;
+  border: 1px solid #d3d3ca;
+  border-radius: 11px;
+  background: #fffef8;
+  color: var(--ink);
+  padding: 12px;
+  font: 400 11px/1.6 ui-monospace, Consolas, monospace;
+  resize: vertical;
+}
+
+.eod-bottleneck-label textarea {
+  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.eod-markdown-label textarea:focus,
+.eod-bottleneck-label textarea:focus {
+  outline: none;
+  border-color: #a7c982;
+  box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
+}
+
+.eod-bottleneck-label small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.eod-composer > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.eod-composer > footer small {
+  color: var(--muted);
+  font-size: 9px;
+}

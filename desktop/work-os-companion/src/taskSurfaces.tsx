@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { createPortal } from "react-dom";
 import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
+import { BOTTLENECK_QUESTION, composeEodMarkdown, hasBottleneckAnswer } from "./interpretation";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
 
@@ -286,3 +287,33 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 }
 
 export { sentence, taskKind };
+
+export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, busy, onRedraft, onSubmit }: {
+  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | null; suggestedBottleneck: string | null;
+  redrafting: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
+}) {
+  const [markdown, setMarkdown] = useState(initialMarkdown);
+  const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
+  // A redraft replaces the buffer (and any in-progress edits) by design.
+  useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
+  const canSubmit = hasBottleneckAnswer(bottleneck) && markdown.trim() && !busy && !redrafting;
+  const submit = () => {
+    if (!canSubmit) return;
+    onSubmit(composeEodMarkdown(markdown, bottleneck), crypto.randomUUID());
+  };
+  return <section className="panel eod-composer" aria-label="End-of-day report">
+    <header className="eod-composer-header">
+      <div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
+      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div>
+      <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? "Drafting…" : "Draft with AI"}</button>
+    </header>
+    <label className="eod-markdown-label"><span>Report</span>
+      <textarea value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />
+    </label>
+    <label className="eod-bottleneck-label"><span>Bottleneck — required</span>
+      <textarea value={bottleneck} rows={2} maxLength={2000} placeholder={BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={BOTTLENECK_QUESTION} />
+      <small>What prevented you from completing your task list? This goes to your manager with the report.</small>
+    </label>
+    <footer><small>Nothing is filed until you submit.</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
+  </section>;
+}

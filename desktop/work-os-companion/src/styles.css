@@ -3584,3 +3584,11 @@ body.modal-open { overflow: hidden; }
   .task-view-tabs button { min-width: 74px; min-height: 38px; }
   .workspace-task small { font-size: 10px; }
 }
+
+.notification-flyout.warning {
+  border-color: #e4cf9c;
+  background: #fff9e9;
+}
+.notification-flyout.warning .notification-icon {
+  color: #9b6611;
+}

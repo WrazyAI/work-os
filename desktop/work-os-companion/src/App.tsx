@@ -16,8 +16,8 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } fro
 import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation } from "./taskSurfaces";
-import { interpretationFallbackReason, normalizeInterpretation, operationLabel, type ProposedOperation } from "./interpretation";
+import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
+import { interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState } from "./vault";
@@ -71,6 +71,7 @@ const actionSuccessMessages: Record<string, string> = {
   "shift.clock_out": "Your workday was closed.",
   "shift.pause_toggle": "Your session status was updated.",
   "shift.resolve_missed_clock_out": "The missed clock-out was corrected.",
+  "report.submit": "Your EOD was submitted for review.",
   "task.create": "The task was created.",
   "task.complete": "The task was marked complete.",
   "task.reopen": "The task was reopened.",
@@ -97,6 +98,9 @@ export default function App() {
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }> } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
+  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" } | null>(null);
+  const [eodRedrafting, setEodRedrafting] = useState(false);
+  const [eodSubmitted, setEodSubmitted] = useState(false);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
     return rows.map((task) => ({ id: String(task.provider_task_id || task.id), title: String(task.title ?? "Untitled task") }));
@@ -152,12 +156,19 @@ export default function App() {
   const [debugScenario, setDebugScenario] = useState<DebugScenario>(() => {
     // Dev-only bootstrap: /?offline boots straight into the offline playground
     // (same scenario the debugger's "Offline playground" preset applies).
-    if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("ai")) {
+    const devParams = import.meta.env.DEV ? new URLSearchParams(window.location.search) : null;
+    if (devParams?.has("ai")) {
       return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: false, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
     }
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
       const params = new URLSearchParams(window.location.search);
-      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", companionForce: params.get("companion") };
+      const dayState = devParams?.get("day");
+      const allowedDayStates = ["no_shift", "scheduled", "shift_start", "clocked_in", "paused", "catch_up", "optional", "final_hour", "eod_due", "eod", "clocked_out"];
+      return {
+        ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real",
+        onboardingState: "complete", dayState: allowedDayStates.includes(dayState ?? "") ? dayState as DebugScenario["dayState"] : "clocked_in",
+        companionForce: params.get("companion"),
+      };
     }
     return DEFAULT_DEBUG_SCENARIO;
   });
@@ -311,6 +322,44 @@ export default function App() {
     setError("");
     setDay((current) => current ?? (applyDayScenario(null, debugScenario) as DayData));
   }, [debugScenario, syncBypass]);
+
+const redraftEod = async () => {
+    if (!visibleDay?.report) return;
+    if (syncBypassRef.current) {
+      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "ai" });
+      notifications.success("Simulated an assistant draft on-device — nothing reached the server.", "AI draft (playground)");
+      return;
+    }
+    setEodRedrafting(true);
+    try {
+      const result = await apiRequest<{ markdown: string; model: string }>("/api/work-os/me/eod/ai-draft", {
+        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate }),
+      });
+      setEodDraft({ markdown: result.markdown, source: "ai" });
+      notifications.success("The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
+    } catch (value) {
+      setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
+      notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
+    } finally { setEodRedrafting(false); }
+  };
+
+  function submitEod(markdown: string, idempotencyKey: string) {
+    const reportId = String(visibleDay?.report?.id ?? "");
+    if (!reportId) return;
+    const finish = () => {
+      setEodSubmitted(true);
+      lastResponseAtRef.current = new Date().toISOString();
+    };
+    if (syncBypassRef.current || debugRef.current.enabled) {
+      finish();
+      notifications.success("Your EOD was submitted (offline playground — nothing reached the server).", "EOD submitted");
+      return;
+    }
+    void act("report.submit", async () => {
+      await sendOrQueue(`/api/work-os/reports/${encodeURIComponent(reportId)}/submit`, "PATCH", { markdown, submission_idempotency_key: idempotencyKey });
+      finish();
+    });
+  }
 
   function bypassAct(label: string, mutator?: (day: DayData) => DayData) {
     diagnostics.info("ui.action.bypass", label, { activeView: view });
@@ -1108,6 +1157,17 @@ export default function App() {
         onClockOut={() => setClockOutConfirmation(true)}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openGoalComposer} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
+      {view === "review" && visibleDay?.report && !eodSubmitted && <EodComposer
+          reportId={String(visibleDay.report.id ?? "unknown")}
+          initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
+          source={eodDraft?.source ?? "deterministic"}
+          suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
+          redrafting={eodRedrafting}
+          busy={busy}
+          onRedraft={() => void redraftEod()}
+          onSubmit={submitEod}
+        />}
+      {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
       {view === "review" && <ReviewWorkspace proposals={visibleDay?.proposals ?? []} busy={busy} onReject={(id) => void act("proposal.reject", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "reject" }))} onApprove={(id) => void act("proposal.accept", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "accept" }))} />}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}

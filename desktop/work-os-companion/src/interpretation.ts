@@ -67,3 +67,44 @@ export function interpretationFallbackReason(error: unknown): string {
       ? "You appear to be offline."
       : "The assistant couldn't read that update.";
 }
+
+// ── EOD composer helpers ──────────────────────────────────────────────────
+
+export const BOTTLENECK_QUESTION = "What prevented you from completing your task list?";
+
+/** Removes any existing Bottleneck section so the employee's answer is authoritative. */
+export function stripBottleneckSection(markdown: string): string {
+  return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
+}
+
+export function hasBottleneckAnswer(answer: string): boolean {
+  return typeof answer === "string" && answer.trim().length >= 3;
+}
+
+/** Final submitted markdown: the narrative (placeholder-free) plus the employee's bottleneck answer. */
+export function composeEodMarkdown(markdown: string, bottleneck: string): string {
+  return `${stripBottleneckSection(markdown)}\n\n## Bottleneck\n${bottleneck.trim()}`;
+}
+
+/** Offline playground stand-in for the AI EOD draft — device-only, clearly labeled. */
+export function simulateAiEod(day: { tasks: Array<Record<string, unknown>>; plan?: { freeform_intent?: string | null } | null; shiftDate: string }): string {
+  const title = (task: Record<string, unknown>) => safeTaskText(task.title, "a task");
+  const completed = day.tasks.filter((task) => task.completed === true).map((task) => `- ${title(task)}`);
+  const open = day.tasks.filter((task) => task.completed !== true).map((task) => `- ${title(task)}`);
+  const intent = day.plan?.freeform_intent?.trim();
+  return [
+    `# EOD Report (offline playground) — ${day.shiftDate}`,
+    "",
+    "## Summary",
+    `Drafted on-device from the scenario record — nothing reached the server.${intent ? ` The stated goal was: ${intent}` : ""}`,
+    "",
+    "## Completed",
+    ...(completed.length ? completed : ["- Nothing completed yet"]),
+    "",
+    "## Carried forward",
+    ...(open.length ? open : ["- Nothing pending"]),
+    "",
+    "## Bottleneck",
+    "(needs your input — what prevented you from completing your task list?)",
+  ].join("\n");
+}

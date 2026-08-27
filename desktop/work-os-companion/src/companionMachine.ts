@@ -112,11 +112,34 @@ function backoffRemainingMs(cause: string, record: CompanionRecord, now: Date): 
   return remaining > 0 ? remaining : 0;
 }
 
-function alreadyReminded(record: CompanionRecord, cause: string, answeredAfter: string | null): boolean {
+function answeredSinceFire(record: CompanionRecord, cause: string, firedAt: string, lastResponseAt: string | null): boolean {
+  const answeredAt = record.answered[cause];
+  if (answeredAt && Date.parse(answeredAt) > Date.parse(firedAt)) return true;
+  return !!lastResponseAt && Date.parse(lastResponseAt) > Date.parse(firedAt);
+}
+
+/**
+ * Dedupe + backoff for ordinary prompts in one window: after firing, a prompt
+ * stays silent for its current backoff window, which escalates with each
+ * ignore; once the window passes it may fire again — an ignored prompt
+ * re-surfaces with escalating spacing instead of disappearing forever. A
+ * response recorded after the fire re-arms the cause immediately (markResponded
+ * also resets its ignore count).
+ */
+function ordinarySuppressed(record: CompanionRecord, cause: string, lastResponseAt: string | null, now: Date): boolean {
   const firedAt = record.fired[cause];
   if (!firedAt) return false;
-  if (!answeredAfter) return true;
-  return Date.parse(answeredAfter) < Date.parse(firedAt);
+  if (answeredSinceFire(record, cause, firedAt, lastResponseAt)) return false;
+  const ignored = record.ignored[cause] ?? 0;
+  const window = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** ignored);
+  return now.getTime() < Date.parse(firedAt) + window;
+}
+
+/** The EOD prompt deduplicates but does not back off: it fires once per cause until answered. */
+function eodAlreadyReminded(record: CompanionRecord, cause: string, lastResponseAt: string | null): boolean {
+  const firedAt = record.fired[cause];
+  if (!firedAt) return false;
+  return !answeredSinceFire(record, cause, firedAt, lastResponseAt);
 }
 
 /**

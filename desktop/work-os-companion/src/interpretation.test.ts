@@ -48,3 +48,25 @@ describe("normalizeInterpretation", () => {
     expect(interpretationFallbackReason(new Error("The assistant couldn't read that update."))).toContain("couldn't");
   });
 });
+
+import { composeEodMarkdown, hasBottleneckAnswer, stripBottleneckSection } from "./interpretation";
+
+describe("EOD composer helpers", () => {
+  it("strips any existing bottleneck section before the employee answers", () => {
+    const stripped = stripBottleneckSection("## Summary\nA day.\n## Bottleneck\n(needs your input — what prevented you from completing your task list?)");
+    expect(stripped).toBe("## Summary\nA day.");
+  });
+
+  it("requires a real bottleneck answer before submission", () => {
+    expect(hasBottleneckAnswer("  ")).toBe(false);
+    expect(hasBottleneckAnswer("no")).toBe(false);
+    expect(hasBottleneckAnswer("The signing certificate is still pending.")).toBe(true);
+  });
+
+  it("composes the final markdown with the employee's bottleneck answer", () => {
+    const final = composeEodMarkdown("## Summary\nA day.\n## Bottleneck\n(placeholder)", "The certificate was pending.");
+    expect(final).toContain("## Summary\nA day.");
+    expect(final).toContain("## Bottleneck\nThe certificate was pending.");
+    expect(final).not.toContain("(placeholder)");
+  });
+});
