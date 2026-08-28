@@ -75,6 +75,11 @@ describe("offline action replay", () => {
     expect(await flushQueue()).toEqual({ sent: 1, remaining: 1, needsAttention: 0 });
     expect(mockState.queue[0]).toMatchObject({ path: "/api/work-os/me/interpret", status: "ready_for_review" });
     expect(readyInterpretations(mockState.queue)).toHaveLength(1);
+
+    const noReplay = vi.fn();
+    vi.stubGlobal("fetch", noReplay);
+    expect(await flushQueue()).toEqual({ sent: 0, remaining: 1, needsAttention: 0 });
+    expect(noReplay).not.toHaveBeenCalled();
   });
 
   it("sends authenticated proposal decisions even when no work session is active", async () => {

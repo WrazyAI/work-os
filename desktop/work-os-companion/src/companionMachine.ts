@@ -172,10 +172,6 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
     }
   }
 
-  const sessionState = day?.session?.state;
-  if (sessionState === "clocked_out") return { state: "idle", prompt: null, suppressReason: "clocked-out" };
-  if (!gate.active) return { state: "idle", prompt: null, suppressReason: "off-shift" };
-
   const sessionId = day?.session?.id ?? day?.shiftDate ?? "unknown";
   const lastResponseAt = input.lastResponseAt;
   const shiftEnd = day?.shift?.endsAt ?? null;
@@ -245,7 +241,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   // Blocker follow-up: an open blocker unaddressed for 45+ minutes.
   if (blocker && (!lastResponseAt || now.getTime() - Date.parse(lastResponseAt) > BLOCKER_FOLLOW_UP_MS)) {
     const cause = `blocker:${sessionId}:${blocker}`;
-    const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
+    const suppressed = ordinarySuppression;
     const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
     if (backoff > 0 || suppressed) {
       return { state: "blocker_follow_up", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
@@ -417,6 +413,14 @@ export function markResponded(record: CompanionRecord, now: Date): CompanionReco
     }
   }
   return { ...record, answered, ignored };
+}
+
+/** Removes all reminder bookkeeping for a finished session, preserving later sessions. */
+export function clearSessionReminders(record: CompanionRecord, sessionId: string): CompanionRecord {
+  const keep = <T>(entries: Record<string, T>) => Object.fromEntries(
+    Object.entries(entries).filter(([cause]) => cause.split(":")[1] !== sessionId),
+  ) as Record<string, T>;
+  return { ...record, fired: keep(record.fired), answered: keep(record.answered), ignored: keep(record.ignored), ignoredAt: keep(record.ignoredAt) };
 }
 
 /** Drops bookkeeping older than the retention window so persisted state stays bounded. */

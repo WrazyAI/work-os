@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { applyApprovedWorkUpdate } from "@/lib/work-os-companion";
+import { applyApprovedWorkUpdate } from "@/lib/work-os-approved-update";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";

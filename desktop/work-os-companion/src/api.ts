@@ -207,7 +207,7 @@ export async function flushQueue(now = Date.now()) {
       return { remaining: queue.length, needsAttention: queue.filter((action) => action.status === "needs_attention").length };
     }
     const due = queue.filter((action) =>
-      action.status !== "needs_attention"
+      action.status === "pending"
       && (!action.nextAttemptAt || Date.parse(action.nextAttemptAt) <= now)
     );
     if (!due.length) {

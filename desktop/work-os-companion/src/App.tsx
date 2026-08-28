@@ -5,8 +5,8 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
-import { apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
-import { evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, markResponded, pruneRecord, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
+import { apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { clearSessionReminders, evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, markResponded, pruneRecord, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { FEATURES } from "./features";
@@ -18,7 +18,7 @@ import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
+import { interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
 import { secureState } from "./vault";
@@ -193,14 +193,6 @@ export default function App() {
     setCompanionRecord((current) => markResponded(current, now));
   }
   const lastResponseAtRef = useRef<string | null>(null);
-  const acknowledgeCompanionResponse = useCallback(() => {
-    const now = new Date();
-    lastResponseAtRef.current = now.toISOString();
-    setCompanionRecord((current) => Object.keys(current.fired).reduce(
-      (next, cause) => markAnswered(next, cause, now),
-      current,
-    ));
-  }, []);
   const clearClosedSessionReminders = useCallback((sessionId: string | null | undefined) => {
     if (sessionId) setCompanionRecord((current) => clearSessionReminders(current, sessionId));
   }, []);
@@ -371,7 +363,7 @@ const redraftEod = async () => {
     if (!reportId) return;
     const finish = () => {
       setEodSubmitted(true);
-      acknowledgeCompanionResponse();
+      recordResponse();
     };
     if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
       finish();
@@ -548,7 +540,7 @@ const redraftEod = async () => {
       prompt.title,
       prompt.severity === "attention" ? "warning" : "info",
       { label: actionLabel, onClick: () => {
-        acknowledgeCompanionResponse();
+        recordResponse();
         if (prompt.action === "open_eod") setView("review");
         else if (prompt.action === "open_plan") { setView("tasks"); openGoalComposer(); }
         else if (prompt.action === "open_tasks") setView("tasks");
@@ -1093,36 +1085,14 @@ const redraftEod = async () => {
       notifications.success(`${enabled.length} update${enabled.length === 1 ? "" : "s"} saved on this device.`, "Offline playground");
       return;
     }
-    setBusy(true); setError("");
-    diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
-    (async () => {
-      const outcome = await fileApprovedOperations(enabled, {
-        shiftDate: visibleDay?.shiftDate ?? null,
-        personId: visibleDay?.access?.personId ?? null,
-        promptKind: visibleDay?.prompt.kind || "optional",
-      }, {
-        completeTask: (taskId, completed) => updateTaskCompletion(taskId, completed),
-        createTask: (taskInput) => sendOrQueue("/api/work-os/me/tasks", "POST", {
-          name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [],
-        }),
-        fileCheckIn: (checkIn) => sendOrQueue("/api/work-os/check-ins", "POST", {
-          source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text,
-        }),
-      });
-      recordResponse();
-      const parts: string[] = [];
-      if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
-      if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
-      if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
-      close();
-      if (outcome.failed.length) {
-        notifications.error(`${parts.join(" · ")}. First failure: ${outcome.failed[0]!.message}`, "Some updates did not file");
-      } else {
-        notifications.success(parts.join(" · "), "Updates filed");
-      }
-    })().catch((value) => {
-      showError(value, "Your approved updates could not be filed.", "Filing failed");
-    }).finally(() => setBusy(false));
+    void act("check_in.create", async () => {
+      const result = await sendOrQueue("/api/work-os/me/interpret/apply", "POST", {
+        originalInput: text,
+        shiftDate: visibleDay?.shiftDate,
+        operations: enabled.map(({ op, statement, taskId, taskTitle }) => ({ op, statement, taskId, taskTitle })),
+      }) as { queued?: boolean; status?: string };
+      close(result);
+    });
   }
 
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
@@ -1140,7 +1110,7 @@ const redraftEod = async () => {
         message: kind === "new_task" ? `Added “${text}” to today’s tasks.` : `Recorded “${text}” as ${label} for today.`,
       });
       setPendingProgressUpdate("");
-      acknowledgeCompanionResponse();
+      recordResponse();
       return;
     }
     void act("check_in.classify", async () => {
@@ -1185,7 +1155,7 @@ const redraftEod = async () => {
         });
       }
       setPendingProgressUpdate("");
-      acknowledgeCompanionResponse();
+      recordResponse();
     });
   }
 

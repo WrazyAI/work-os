@@ -164,6 +164,14 @@ describe("quality controls", () => {
     expect(eod.state).toBe("eod_due");
   });
 
+  it("suppresses blocker follow-ups in the final hour", () => {
+    const at = new Date("2026-08-27T17:30:00Z");
+    const d = day({ plan: { id: "p", shift_date: "2026-08-27", revision: 1, status: "confirmed", freeform_intent: "ship", suggestion_task_ids: [], items: [{ id: "i1", task_id: "t1", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Task one", blocker: "signing certificate", item_kind: "nifty_task", completion_state: "open" }] } });
+    const decision = evaluateCompanion(base({ day: d, now: at, lastResponseAt: new Date(at.getTime() - 50 * 60_000).toISOString() }));
+    expect(decision.prompt).toBeNull();
+    expect(decision.suppressReason).toBe("final-hour");
+  });
+
   it("EOD pierces quiet mode and snooze", () => {
     const at = new Date("2026-08-27T17:53:00Z");
     const quietRecord = setQuietMode(EMPTY_COMPANION_RECORD, true);
@@ -210,6 +218,21 @@ describe("quality controls", () => {
     let record = markIgnored(EMPTY_COMPANION_RECORD, "c", NOW);
     record = markIgnored(record, "c", NOW);
     expect((record.ignored.c ?? 0)).toBe(2);
+  });
+
+  it("prunes every reminder from a closed session without affecting the next session", () => {
+    const record = {
+      ...EMPTY_COMPANION_RECORD,
+      fired: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+      answered: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+      ignored: { "progress:session-1:due": 2, "progress:session-2:due": 1 },
+      ignoredAt: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+    } satisfies CompanionRecord;
+    expect(clearSessionReminders(record, "session-1")).toMatchObject({
+      fired: { "progress:session-2:due": NOW.toISOString() },
+      answered: { "progress:session-2:due": NOW.toISOString() },
+      ignored: { "progress:session-2:due": 1 },
+    });
   });
 
 });
