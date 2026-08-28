@@ -14,7 +14,10 @@ export const ALL_ONBOARDING_DETAILS: Array<{ key: DebugOnboardingDetail; label: 
 ];
 
 export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
+  liveWrites: false,
   enabled: false,
+  syncBypass: false,
+  companionForce: null,
   authState: "real",
   onboardingState: "real",
   invalidateOnboardingData: false,
@@ -34,6 +37,7 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; scenario: Partial
   { id: "explicit_clock_in", label: "Explicit clock-in", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "scheduled" } },
   { id: "provider_failure", label: "Provider outage", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
+  { id: "offline_playground", label: "Offline playground (no backend)", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in" } },
 ];
 
 function onboardingFixture(): OnboardingData {
@@ -97,6 +101,7 @@ function dayFixture(): DayData {
     tasks: [
       { id: "debug-task-1", title: "Complete the Work OS Phase 1 runtime", completed: false },
       { id: "debug-task-2", title: "Review desktop recovery states", completed: false },
+      { id: "debug-task-overdue", title: "Fix the flaky screenshot upload", completed: false, due_date: "2026-08-26" },
     ],
     evidence: [{ id: "debug-evidence", source: "github", title: "Desktop build verified", summary: "Windows GUI artifact passed packaging checks.", occurred_at: now.toISOString() }],
     proposals: [{ id: "debug-proposal", operation: "progress_update", proposed_change: { summary: "Phase 1 runtime is ready for review" }, input_text: "Finished the runtime flow.", status: "pending" }],
@@ -185,5 +190,78 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
       prompt: kind === "clocked_out" ? { kind: null, required: false, reason: "Shift ended.", nextPromptAt: null } : { ...prompt, nextPromptAt: null },
     };
   }
+  if (scenario.dayState === "eod" || scenario.dayState === "eod_due") {
+    result = {
+      ...result,
+      report: {
+        id: "debug-report-eod", status: "draft", report_date: result.shiftDate,
+        markdown: ["# EOD Report: David Z (scenario)", "", "## Summary", "Worked on the debugger fix and desktop recovery states.", "", "## Completed", "- Reviewed desktop recovery states", "", "## Carried forward", "- Complete the Work OS Phase 1 runtime", "", "## Bottleneck", "(needs your input — what prevented you from completing your task list?)"].join("\n"),
+      },
+    };
+  }
   return result;
+}
+
+/**
+ * Offline insights record: computed from the scenario day fixture so the
+ * Insights page never dead-ends without a backend (phase plan §7). The
+ * brief is explicitly labeled as an on-device fallback — the server's
+ * deterministic brief replaces it the moment a real fetch succeeds.
+ */
+export function insightsFixture(day: DayData, range: "day" | "7d" | "30d"): import("./types").InsightsData {
+  const shiftDate = day.shiftDate;
+  const session = day.session;
+  const clockedIn = session?.clocked_in_at ? Date.parse(session.clocked_in_at) : Number.NaN;
+  const clockedOut = session?.clocked_out_at ? Date.parse(session.clocked_out_at) : Number.NaN;
+  const end = Number.isFinite(clockedOut) ? clockedOut : Number.isFinite(clockedIn) ? Date.now() : Number.NaN;
+  const observedSeconds = Number.isFinite(clockedIn) && Number.isFinite(end) ? Math.max(0, Math.floor((end - clockedIn) / 1000)) : 0;
+  const tasks = day.tasks ?? [];
+  const plannedCompleted = tasks.filter((task) => task.completed === true).length;
+  const planned = tasks.length;
+  const open = planned - plannedCompleted;
+  const summary = `On-device record for ${shiftDate}: ${plannedCompleted} of ${planned} tasks completed, ${Math.round(observedSeconds / 360) / 10}h observed. The server brief replaces this when the connection returns.`;
+  return {
+    range,
+    from: shiftDate,
+    through: shiftDate,
+    days: [{
+      date: shiftDate,
+      observedSeconds,
+      pausedSeconds: session?.paused_seconds ?? 0,
+      planStatus: (day.plan?.status as "none" | "draft" | "confirmed" | "closed") ?? "none",
+      planned,
+      plannedCompleted,
+      carryOver: 0,
+      overdue: 0,
+      updates: 0,
+      outputEvidence: day.evidence?.length ?? 0,
+      activityContext: day.attendance ? 1 : 0,
+      tasksCompleted: plannedCompleted,
+      tasksOpen: open,
+      goal: { text: day.plan?.freeform_intent ?? null, provenance: day.plan?.goal_provenance ?? null },
+      references: [],
+    }],
+    totals: {
+      observedSeconds,
+      pausedSeconds: session?.paused_seconds ?? 0,
+      planned,
+      plannedCompleted,
+      carryOver: 0,
+      overdue: 0,
+      updates: 0,
+      outputEvidence: day.evidence?.length ?? 0,
+      activityContext: day.attendance ? 1 : 0,
+      tasksCompleted: plannedCompleted,
+      tasksOpen: open,
+    },
+    brief: {
+      generated: false,
+      summary: `Offline record — ${open ? `${open} task${open === 1 ? "" : "s"} still open.` : "Everything on today's plate is complete."}`,
+      wins: plannedCompleted ? [`${plannedCompleted} task${plannedCompleted === 1 ? "" : "s"} completed today.`] : [],
+      attention: open ? [`${open} open task${open === 1 ? "" : "s"} carry forward.`] : [],
+      nextFocus: open ? ["Close out the remaining tasks when you are back online."] : [],
+      referenceIds: [],
+    },
+    freshness: { niftySyncedAt: null, worktivityObservedAt: null, stale: true, staleAt: new Date().toISOString(), error: "Offline playground — on-device record" },
+  };
 }

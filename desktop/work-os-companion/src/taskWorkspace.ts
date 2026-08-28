@@ -3,9 +3,49 @@ import type { DailyPlanItem } from "./types";
 export type TaskRow = Record<string, any>;
 export type GoalSuggestion = { text: string; taskIds: string[] } | null;
 export type TaskDateReason = "due" | "created" | "surfaced" | "carried" | "unknown";
+export type TaskSection = { id: "overdue" | "open" | "completed"; label: string; note: string; tasks: TaskRow[] };
 
 const taskId = (task: TaskRow) => String(task.id ?? task.provider_task_id ?? "");
 const dateOnly = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+
+const providerErrorText = /(?:failed to fetch|fetch failed|networkerror|unexpected token|<!doctype|<html|\[object object\]|internal server error)/i;
+
+export function safeTaskText(value: unknown, fallback: string) {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized && !providerErrorText.test(normalized) ? normalized : fallback;
+}
+
+function timestamp(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function recency(task: TaskRow) {
+  const candidates = task.completed === true
+    ? [task.completed_at, task.provider_updated_at, task.updated_at, task.provider_created_at, task.created_at]
+    : [task.provider_updated_at, task.updated_at, task.provider_created_at, task.created_at];
+  return Math.max(0, ...candidates.map(timestamp));
+}
+
+export function orderTasksByRecency(tasks: TaskRow[]) {
+  return [...tasks].sort((left, right) => recency(right) - recency(left)
+    || safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task")));
+}
+
+export function organizeTaskSections(tasks: TaskRow[], currentDate: string): TaskSection[] {
+  const overdue = tasks.filter((task) => task.completed !== true && Boolean(dateOnly(task.due_date)) && String(dateOnly(task.due_date)) < currentDate)
+    .sort((left, right) => String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date))) || recency(right) - recency(left));
+  const overdueIds = new Set(overdue.map(taskId));
+  const open = orderTasksByRecency(tasks.filter((task) => task.completed !== true && !overdueIds.has(taskId(task))));
+  const completed = orderTasksByRecency(tasks.filter((task) => task.completed === true));
+  return [
+    { id: "overdue", label: "Overdue", note: "Oldest due first", tasks: overdue },
+    { id: "open", label: "Recent tasks", note: "Latest activity first", tasks: open },
+    { id: "completed", label: "Recently completed", note: "Latest completion first", tasks: completed },
+  ].filter((section) => section.tasks.length > 0) as TaskSection[];
+}
 
 function priorityRank(value: unknown) {
   const normalized = String(value ?? "").toLowerCase();
@@ -86,6 +126,21 @@ export function tasksForDate(tasks: TaskRow[], date: string, surfacedTaskIds: st
     const id = taskId(task);
     const providerId = String(task.provider_task_id ?? "");
     return surfaced.has(id) || surfaced.has(providerId) || taskDateAttribution(task, date).date === date;
+  });
+}
+
+export function filterWorkspaceTasks(tasks: TaskRow[], currentDate: string, filters: { query?: string; from?: string; to?: string }) {
+  const query = filters.query?.trim().toLowerCase() ?? "";
+  return tasks.filter((task) => {
+    const searchable = [task.title, task.description, task.project?.name, task.milestone?.name]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .join(" ")
+      .toLowerCase();
+    if (query && !searchable.includes(query)) return false;
+    const attributedDate = taskDateAttribution(task, currentDate).date;
+    if (filters.from && (!attributedDate || attributedDate < filters.from)) return false;
+    if (filters.to && (!attributedDate || attributedDate > filters.to)) return false;
+    return true;
   });
 }
 

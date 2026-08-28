@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: { dedupe: ["react", "react-dom"] },
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   envPrefix: ["VITE_", "TAURI_"],

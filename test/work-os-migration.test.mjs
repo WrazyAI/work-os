@@ -27,6 +27,8 @@ const migrations = [
   "supabase/migrations/0023_work_os_task_event_sync_repair.sql",
   "supabase/migrations/0024_work_os_phase1_ledger_closure.sql",
   "supabase/migrations/0025_work_os_phase1_pilot_corrections.sql",
+  "supabase/migrations/0026_work_os_pilot_schedule_correction.sql",
+  "supabase/migrations/0027_work_os_multiple_daily_sessions.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -171,6 +173,11 @@ test("Work OS companion migration is complete and idempotent", async () => {
     insert into work_sessions(organization_id,person_id,schedule_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clocked_in_at,clocked_out_at,clock_in_idempotency_key)
     values ($1,$2,$3,'2026-08-10','clocked_out','UTC','2026-08-10T09:00:00Z','2026-08-10T17:00:00Z','2026-08-10T09:03:00Z','2026-08-10T17:00:00Z','clock-prior') returning id
   `, [orgA, personA, scheduleA]);
+  const restartedSession = await db.query(`
+    insert into work_sessions(organization_id,person_id,schedule_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clocked_in_at,clocked_out_at,clock_in_idempotency_key)
+    values ($1,$2,$3,'2026-08-10','clocked_out','UTC','2026-08-10T09:00:00Z','2026-08-10T17:00:00Z','2026-08-10T18:00:00Z','2026-08-10T19:00:00Z','clock-restarted') returning id
+  `, [orgA, personA, scheduleA]);
+  assert.ok(restartedSession.rows[0].id, "a second closed interval on the same local day is retained");
   await assert.rejects(() => db.query(`
     insert into work_sessions(organization_id,person_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at)
     values ($1,$2,'2026-08-11','clocked_in','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z')
@@ -320,7 +327,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
       (select count(*) from work_audit_log where organization_id=$1)::int as audit_rows
   `, [orgA]));
   assert.deepEqual(employeeAVisibility.rows[0], {
-    people: 1, schedules: 1, check_ins: 1, sessions: 2, daily_plans: 3, proposals: 1, evidence_events: 1, screenshots: 1,
+    people: 1, schedules: 1, check_ins: 1, sessions: 3, daily_plans: 3, proposals: 1, evidence_events: 1, screenshots: 1,
     reports: 1, report_versions: 1, provider_connections: 0, provider_credentials: 0,
     source_accounts: 0, audit_rows: 0,
   });

@@ -35,9 +35,9 @@ export function projectWorktivityAttendance(statistics: { Status?: number; Clock
     clockedOutAt: statistics?.ClockOut ?? null,
     stale: false,
   };
-  if (["clock_in", "working", "idle"].includes(status)) return { ...base, state: "active", fallbackAllowed: false, message: "Worktivity activity observed; Work OS clock-in remains explicit." };
-  if (status === "break") return { ...base, state: "paused", fallbackAllowed: false, message: "Worktivity OnBreak observed; only provider break duration is synchronized." };
-  if (["clock_out", "yet_to_start"].includes(status)) return { ...base, state: "off_shift", fallbackAllowed: false, message: status === "clock_out" ? "Worktivity clock-out observed; Work OS clock-out remains explicit." : "Worktivity reports no active attendance; Work OS attendance remains explicit." };
+  if (["clock_in", "working", "idle"].includes(status)) return { ...base, state: "active", fallbackAllowed: false, message: "Worktivity activity observed; the Work OS workday is synchronized." };
+  if (status === "break") return { ...base, state: "paused", fallbackAllowed: false, message: "Worktivity OnBreak observed; the workday and provider break duration are synchronized." };
+  if (["clock_out", "yet_to_start"].includes(status)) return { ...base, state: "off_shift", fallbackAllowed: false, message: status === "clock_out" ? "Worktivity clock-out observed; the provider-owned interval is closed." : "Worktivity reports no active attendance." };
   return { ...base, state: "unknown", fallbackAllowed: true, message: "Worktivity attendance is currently unavailable." };
 }
 
