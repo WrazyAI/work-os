@@ -135,11 +135,11 @@ function ordinarySuppressed(record: CompanionRecord, cause: string, lastResponse
   return now.getTime() < Date.parse(firedAt) + window;
 }
 
-/** The EOD prompt deduplicates but does not back off: it fires once per cause until answered. */
-function eodAlreadyReminded(record: CompanionRecord, cause: string, lastResponseAt: string | null): boolean {
+/** The EOD prompt deduplicates but does not back off: it fires once per session/schedule cause. */
+function eodReminderStatus(record: CompanionRecord, cause: string, lastResponseAt: string | null): "already-reminded" | "acknowledged" | null {
   const firedAt = record.fired[cause];
-  if (!firedAt) return false;
-  return !answeredSinceFire(record, cause, firedAt, lastResponseAt);
+  if (!firedAt) return null;
+  return answeredSinceFire(record, cause, firedAt, lastResponseAt) ? "acknowledged" : "already-reminded";
 }
 
 /**
@@ -155,6 +155,10 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   const { now, gate, day, record } = input;
   if (!input.online) return { state: "offline", prompt: null, suppressReason: "offline" };
 
+  const sessionState = day?.session?.state;
+  if (sessionState === "clocked_out") return { state: "idle", prompt: null, suppressReason: "clocked-out" };
+  if (!gate.active) return { state: "idle", prompt: null, suppressReason: "off-shift" };
+
   if (input.force) {
     const forced = forcedDecision(input, input.force);
     if (forced) {
@@ -168,10 +172,6 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
     }
   }
 
-  const sessionState = day?.session?.state;
-  if (sessionState === "clocked_out") return { state: "idle", prompt: null, suppressReason: "clocked-out" };
-  if (!gate.active) return { state: "idle", prompt: null, suppressReason: "off-shift" };
-
   const sessionId = day?.session?.id ?? day?.shiftDate ?? "unknown";
   const lastResponseAt = input.lastResponseAt;
   const shiftEnd = day?.shift?.endsAt ?? null;
@@ -183,7 +183,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   // deduplicated until a response lands.
   const eodWindow = minutesLeft !== null && minutesLeft <= EOD_WINDOW_MS / 60_000 && minutesLeft > -15;
   if (day?.prompt.kind === "eod" || eodWindow) {
-    const cause = `eod:${sessionId}`;
+    const cause = `eod:${sessionId}:${shiftEnd ?? "unscheduled"}`;
     const minutes = minutesLeft === null ? null : Math.max(0, minutesLeft);
     const prompt: CompanionPrompt = {
       id: cause,
@@ -196,8 +196,9 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
       action: "open_eod",
       severity: "attention",
     };
-    if (eodAlreadyReminded(record, cause, lastResponseAt)) {
-      return { state: "eod_due", prompt: null, suppressReason: "already-reminded" };
+    const eodStatus = eodReminderStatus(record, cause, lastResponseAt);
+    if (eodStatus) {
+      return { state: "eod_due", prompt: null, suppressReason: eodStatus };
     }
     return { state: "eod_due", prompt, suppressReason: null };
   }
@@ -240,7 +241,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   // Blocker follow-up: an open blocker unaddressed for 45+ minutes.
   if (blocker && (!lastResponseAt || now.getTime() - Date.parse(lastResponseAt) > BLOCKER_FOLLOW_UP_MS)) {
     const cause = `blocker:${sessionId}:${blocker}`;
-    const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
+    const suppressed = ordinarySuppression;
     const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
     if (backoff > 0 || suppressed) {
       return { state: "blocker_follow_up", prompt: null, suppressReason: backoff > 0 ? "backoff" : suppressed };
@@ -412,6 +413,14 @@ export function markResponded(record: CompanionRecord, now: Date): CompanionReco
     }
   }
   return { ...record, answered, ignored };
+}
+
+/** Removes all reminder bookkeeping for a finished session, preserving later sessions. */
+export function clearSessionReminders(record: CompanionRecord, sessionId: string): CompanionRecord {
+  const keep = <T>(entries: Record<string, T>) => Object.fromEntries(
+    Object.entries(entries).filter(([cause]) => cause.split(":")[1] !== sessionId),
+  ) as Record<string, T>;
+  return { ...record, fired: keep(record.fired), answered: keep(record.answered), ignored: keep(record.ignored), ignoredAt: keep(record.ignoredAt) };
 }
 
 /** Drops bookkeeping older than the retention window so persisted state stays bounded. */

@@ -20,7 +20,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "input is required" }, { status: 400 });
     }
     const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
-    const tasks = await loadInterpretationTasks(ownerId, auth.access.personId as string);
+    let tasks;
+    try {
+      tasks = await loadInterpretationTasks(ownerId, auth.access.personId as string);
+    } catch (error) {
+      return NextResponse.json({
+        error: "Nifty tasks could not be loaded. You can still record this update manually.",
+        reason: "nifty_failure",
+      }, { status: 502 });
+    }
     const result = await interpretWorkUpdate(body, tasks);
     if (!result.ok) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;

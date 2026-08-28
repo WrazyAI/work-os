@@ -19,35 +19,96 @@ export interface EodGrounding {
 
 const BOTTLENECK_PLACEHOLDER = "(needs your input — what prevented you from completing your task list?)";
 
+export interface EodSelection {
+  summaryFactIds: string[];
+  completedFactIds: string[];
+  carriedFactIds: string[];
+  blockerFactIds: string[];
+}
+
+const EOD_SELECTION_SCHEMA = {
+  name: "work_os_eod_selection",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["summaryFactIds", "completedFactIds", "carriedFactIds", "blockerFactIds"],
+    properties: {
+      summaryFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+      completedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
+      carriedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
+      blockerFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+    },
+  },
+} as const;
+
+function eodFacts(grounding: EodGrounding) {
+  return {
+    summary: grounding.updates.map((update, index) => ({ id: `update:${index}`, text: `[${update.kind}] ${update.text}` })),
+    completed: grounding.completed.map((text, index) => ({ id: `completed:${index}`, text })),
+    carried: grounding.carried.map((text, index) => ({ id: `carried:${index}`, text })),
+    blocker: grounding.blockers.map((text, index) => ({ id: `blocker:${index}`, text })),
+  };
+}
+
+function selectedFactIds(value: unknown, prefix: string, allowed: Set<string>): string[] | null {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) return null;
+  return [...new Set(value.filter((id): id is string => typeof id === "string" && id.startsWith(prefix) && allowed.has(id)))];
+}
+
+/** Rejects model prose and unknown/foreign IDs; only record facts can be selected. */
+export function parseEodSelection(raw: unknown, grounding: EodGrounding): EodSelection | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const facts = eodFacts(grounding);
+  const summaryFactIds = selectedFactIds(value.summaryFactIds, "update:", new Set(facts.summary.map((fact) => fact.id)));
+  const completedFactIds = selectedFactIds(value.completedFactIds, "completed:", new Set(facts.completed.map((fact) => fact.id)));
+  const carriedFactIds = selectedFactIds(value.carriedFactIds, "carried:", new Set(facts.carried.map((fact) => fact.id)));
+  const blockerFactIds = selectedFactIds(value.blockerFactIds, "blocker:", new Set(facts.blocker.map((fact) => fact.id)));
+  return summaryFactIds && completedFactIds && carriedFactIds && blockerFactIds
+    ? { summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds }
+    : null;
+}
+
+/** Renders only the exact grounded facts selected by the model. */
+export function renderEodSelection(selection: EodSelection, grounding: EodGrounding): string {
+  const facts = eodFacts(grounding);
+  const selected = (ids: string[], group: Array<{ id: string; text: string }>) => ids
+    .map((id) => group.find((fact) => fact.id === id)?.text)
+    .filter((text): text is string => Boolean(text));
+  const summary = selected(selection.summaryFactIds, facts.summary);
+  const completed = selected(selection.completedFactIds, facts.completed);
+  const carried = selected(selection.carriedFactIds, facts.carried);
+  const blockers = selected(selection.blockerFactIds, facts.blocker);
+  return [
+    "## Summary", ...(summary.length ? summary.map((text) => `- ${text}`) : ["- No recorded progress update."]),
+    "", "## Completed", ...(completed.length ? completed.map((text) => `- ${text}`) : ["- Nothing completed yet"]),
+    "", "## Carried forward", ...(carried.length ? carried.map((text) => `- ${text}`) : ["- Nothing pending"]),
+    "", "## Bottleneck", ...(blockers.length ? blockers.map((text) => `- ${text}`) : [BOTTLENECK_PLACEHOLDER]),
+  ].join("\n");
+}
+
 export function buildEodPrompt(grounding: EodGrounding): string {
-  const fmt = (list: string[], empty: string) => list.length ? list.map((item) => `- ${item}`).join("\n") : `- ${empty}`;
+  const facts = eodFacts(grounding);
+  const fmt = (list: Array<{ id: string; text: string }>, empty: string) => list.length ? list.map((item) => `- ${item.id}: ${item.text}`).join("\n") : `- ${empty}`;
   return [
     `Write the end-of-day report for ${grounding.personName}, ${grounding.date}. Plain language for a manager — no jargon, no productivity scores, no invention.`,
     `Session: ${grounding.clockedInAt ?? "not clocked in"} → ${grounding.clockedOutAt ?? "still open"}.`,
     "",
     "Updates recorded through the day:",
-    fmt(grounding.updates.map((update) => `[${update.kind}] ${update.text}`), "none"),
+    fmt(facts.summary, "none"),
     "",
     "Tasks completed today:",
-    fmt(grounding.completed, "none"),
+    fmt(facts.completed, "none"),
     "",
     "Carried over to tomorrow:",
-    fmt(grounding.carried, "none"),
+    fmt(facts.carried, "none"),
     "",
-    "Recorded blockers:",
-    fmt(grounding.blockers, "none"),
+    "Bottleneck facts (recorded blockers):",
+    fmt(facts.blocker, "none"),
     "",
-    "Write ONLY markdown with these sections in order:",
-    "## Summary",
-    "A 2-4 sentence human narrative of the day based only on the record above.",
-    "## Completed",
-    "Bullet list from the completed tasks and completion updates.",
-    "## Carried forward",
-    "Bullet list; say clearly if nothing carried.",
-    "## Bottleneck",
-    "If blockers were recorded, describe them in one or two sentences. Otherwise write exactly:",
-    BOTTLENECK_PLACEHOLDER,
-    "Never invent work, numbers, times, or blockers that are not in the record.",
+    "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, and blockerFactIds.",
+    "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");
 }
 
@@ -118,20 +179,26 @@ export async function draftEodNarrative(grounding: EodGrounding): Promise<EodDra
       body: JSON.stringify({
         model: EOD_MODEL,
         messages: [
-          { role: "system", content: "You are the Work OS assistant. You write honest, plain-language end-of-day reports strictly from the recorded facts. You never invent work, times, or blockers. You output only markdown." },
+          { role: "system", content: "You are the Work OS assistant. Select only verified Work OS fact IDs. You never write report prose or invent facts." },
           { role: "user", content: buildEodPrompt(grounding) },
         ],
         temperature: 0.3,
         max_tokens: 1400,
+        response_format: { type: "json_schema", json_schema: EOD_SELECTION_SCHEMA },
       }),
       signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
     });
     if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const markdown = ensureBottleneckSection(payload.choices?.[0]?.message?.content);
-    if (!markdown) return { ok: false, reason: "ai_malformed", detail: "empty narrative" };
-    return { ok: true, markdown, model: EOD_MODEL };
+    const content = payload.choices?.[0]?.message?.content ?? "";
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+    if (start < 0 || end <= start) return { ok: false, reason: "ai_malformed", detail: "no selection JSON" };
+    const selection = parseEodSelection(JSON.parse(content.slice(start, end + 1)), grounding);
+    if (!selection) return { ok: false, reason: "ai_malformed", detail: "selection referenced invalid facts" };
+    return { ok: true, markdown: renderEodSelection(selection, grounding), model: EOD_MODEL };
   } catch (error) {
+    if (error instanceof SyntaxError) return { ok: false, reason: "ai_malformed", detail: "invalid selection JSON" };
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
   }
 }
