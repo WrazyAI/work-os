@@ -59,7 +59,7 @@ async function mappedSemanticFields(userId: string, fields: string[]) {
   const { data, error } = await db().from("work_provider_field_mappings").select("semantic_field")
     .eq("organization_id", organization.id).eq("provider", "nifty").in("semantic_field", fields);
   if (error) throw new Error(`load Nifty field mappings: ${error.message}`);
-  return new Set((data ?? []).map((mapping) => mapping.semantic_field as string));
+  return new Set((data ?? []).map((mapping: any) => mapping.semantic_field as string));
 }
 
 async function mirrorExtendedTaskFields(taskId: string, values: Json) {

@@ -93,24 +93,24 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
 
   const days = dates.map((date, index) => {
     const workspace = workspaces[index];
-    const daySessions = sessions.filter((item) => item.shift_date === date);
-    const plan = plans.find((item) => item.shift_date === date) as Json | undefined;
+    const daySessions = sessions.filter((item: any) => item.shift_date === date);
+    const plan = plans.find((item: any) => item.shift_date === date) as Json | undefined;
     const items = Array.isArray(plan?.items) ? (plan.items as Json[]) : [];
-    const dayCheckIns = checkIns.filter((item) => item.shift_date === date && item.substantive === true);
-    const dayEvidence = evidence.filter((item) => item.evidence_date === date);
+    const dayCheckIns = checkIns.filter((item: any) => item.shift_date === date && item.substantive === true);
+    const dayEvidence = evidence.filter((item: any) => item.evidence_date === date);
     const references = [
       ...(plan ? [{ type: "plan", id: plan.id, date, label: `Goal for ${date}`, target: `/work-os?view=tasks&date=${date}` }] : []),
       ...workspace.tasks.map((item) => ({ type: "task", id: item.id, date, label: item.title, target: `/work-os?view=tasks&date=${date}&task=${item.provider_task_id}` })),
-      ...dayCheckIns.map((item) => ({ type: "check_in", id: item.id, date, label: String(item.input_text ?? "Employee update").slice(0, 100), target: `/work-os?view=insights&date=${date}&update=${item.id}` })),
-      ...dayEvidence.map((item) => ({ type: "evidence", id: item.id, date, label: item.title, target: `/work-os?view=evidence&date=${date}&evidence=${item.id}` })),
+      ...dayCheckIns.map((item: any) => ({ type: "check_in", id: item.id, date, label: String(item.input_text ?? "Employee update").slice(0, 100), target: `/work-os?view=insights&date=${date}&update=${item.id}` })),
+      ...dayEvidence.map((item: any) => ({ type: "evidence", id: item.id, date, label: item.title, target: `/work-os?view=evidence&date=${date}&evidence=${item.id}` })),
     ];
     allReferences.push(...references);
-    const breakStates = daySessions.map((item) => effectiveBreakObservation(item, now, authoritativeBreaks).freshness);
+    const breakStates = daySessions.map((item: any) => effectiveBreakObservation(item, now, authoritativeBreaks).freshness);
     return {
       date,
       goal: { text: workspace.goal.text, provenance: workspace.goal.provenance },
-      observedSeconds: daySessions.reduce((sum, item) => sum + reliableElapsedSeconds(item, now, through, authoritativeBreaks), 0),
-      pausedSeconds: daySessions.reduce((sum, item) => sum + effectiveBreakObservation(item, now, authoritativeBreaks).seconds, 0),
+      observedSeconds: daySessions.reduce((sum: any, item: any) => sum + reliableElapsedSeconds(item, now, through, authoritativeBreaks), 0),
+      pausedSeconds: daySessions.reduce((sum: any, item: any) => sum + effectiveBreakObservation(item, now, authoritativeBreaks).seconds, 0),
       breakFreshness: authoritativeBreaks
         ? breakStates.includes("unknown") ? "unknown" : breakStates.includes("stale") ? "stale" : "observed"
         : "manual",
@@ -119,15 +119,15 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       planned: workspace.commitmentTotal,
       plannedCompleted: workspace.commitmentCompleted,
       completed: workspace.tasks.filter((task) => task.dayAttribution.reason === "completed").length,
-      progressed: dayCheckIns.filter((item) => ["continuing", "material_progress"].includes(String(item.update_kind))).length,
+      progressed: dayCheckIns.filter((item: any) => ["continuing", "material_progress"].includes(String(item.update_kind))).length,
       deferred: items.filter((item) => item.disposition === "deferred" && !["archived", "deleted"].includes(String(item.task?.status))).length,
       carried: workspace.carryOverGroups.reduce((sum, group) => sum + group.tasks.length, 0),
       unplanned: workspace.tasks.filter((task) => task.dayAttribution.reason === "creation_observed" && !task.due_date).length,
       carryOver: workspace.carryOverGroups.reduce((sum, group) => sum + group.tasks.length, 0),
       overdue: workspace.overdueCount,
       updates: dayCheckIns.length,
-      outputEvidence: dayEvidence.filter((item) => item.source !== "worktivity").length,
-      activityContext: dayEvidence.filter((item) => item.source === "worktivity").length,
+      outputEvidence: dayEvidence.filter((item: any) => item.source !== "worktivity").length,
+      activityContext: dayEvidence.filter((item: any) => item.source === "worktivity").length,
       tasksCompleted: workspace.completed,
       tasksOpen: Math.max(0, workspace.total - workspace.completed),
       references,
@@ -135,7 +135,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   });
   const numericKeys = ["observedSeconds", "pausedSeconds", "planned", "plannedCompleted", "completed", "progressed", "deferred", "carried", "unplanned", "carryOver", "overdue", "updates", "outputEvidence", "activityContext", "tasksCompleted", "tasksOpen"] as const;
   const totals = Object.fromEntries(numericKeys.map((key) => [key, days.reduce((sum, day) => sum + Number(day[key]), 0)]));
-  const observed = sessions.map((item) => item.attendance_observed_at).filter(Boolean).sort().at(-1) ?? null;
+  const observed = sessions.map((item: any) => item.attendance_observed_at).filter(Boolean).sort().at(-1) ?? null;
   const niftySyncedAt = orgResult.data?.nifty_synced_at ?? null;
   const stale = !!orgResult.data?.nifty_sync_error || !niftySyncedAt || now.getTime() - Date.parse(niftySyncedAt) > 10 * 60_000;
   return {

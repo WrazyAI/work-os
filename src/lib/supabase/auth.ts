@@ -1,8 +1,11 @@
 // Server helpers for reading the current user in Server Components / Route
-// Handlers. The proxy already gates routes, but use requireUser() in API routes
-// and Server Actions to get the verified user id for RLS-scoped writes.
+// Handlers. Sessions are Better Auth cookie sessions (neon_auth tables).
+// Use requireUser() in API routes and Server Actions to get the verified user
+// id for scoped writes. See docs/NEON-MIGRATION-PLAN.md.
 import { redirect } from "next/navigation";
-import { createClient } from "./server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { createAdminClient } from "./admin";
 import { isAdminDbRole, type DbUserRole } from "@/lib/userRoles";
 
 export interface AppProfile {
@@ -33,8 +36,8 @@ function toProfile(row: {
 }
 
 async function getProfileById(userId: string): Promise<AppProfile | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const db = createAdminClient();
+  const { data, error } = await db
     .from("profiles")
     .select("id, email, display_name, avatar_url, role, created_at")
     .eq("id", userId)
@@ -46,11 +49,8 @@ async function getProfileById(userId: string): Promise<AppProfile | null> {
 }
 
 export async function getUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  const session = await auth.api.getSession({ headers: await headers() });
+  return session?.user ?? null;
 }
 
 export async function getCurrentProfile() {

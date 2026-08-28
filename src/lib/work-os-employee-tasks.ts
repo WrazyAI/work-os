@@ -29,13 +29,13 @@ export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
   ]);
   if (peopleResult.error) throw new Error(`load assignable task people: ${peopleResult.error.message}`);
   if (adminResult.error) throw new Error(`load task administrators: ${adminResult.error.message}`);
-  const adminPersonIds = new Set((adminResult.data ?? []).map((item) => String(item.person_id)));
+  const adminPersonIds = new Set((adminResult.data ?? []).map((item: any) => String(item.person_id)));
   return {
-    people: filterAssignableTaskPeople(
-      (peopleResult.data ?? []).map((person) => ({ ...person, id: String(person.id) })),
+    people: (filterAssignableTaskPeople(
+      (peopleResult.data ?? []).map((person: Record<string, unknown>) => ({ ...person, id: String(person.id) })),
       adminPersonIds,
       access.personId,
-    ).map((person) => ({
+    ) as Array<Record<string, unknown> & { id: string }>).map((person) => ({
       id: person.id as string,
       displayName: person.display_name as string,
       email: person.email as string | null,
@@ -170,7 +170,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   if (requestedPersonIds.length) {
     const { data, error } = await db().from("work_people").select("id,nifty_member_id").eq("organization_id", access.organizationId).in("id", requestedPersonIds);
     if (error) throw new Error(`resolve Nifty task assignees: ${error.message}`);
-    assignees = (data ?? []).map((person) => String(person.nifty_member_id)).filter(Boolean);
+    assignees = (data ?? []).map((person: any) => String(person.nifty_member_id)).filter(Boolean);
     if (assignees.length !== requestedPersonIds.length) throw new Error("Every assignee must have a Nifty member mapping");
   }
 

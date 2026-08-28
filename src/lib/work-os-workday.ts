@@ -150,7 +150,7 @@ async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
     .eq("organization_id", access.organizationId).eq("plan_id", previousPlan.data.id)
     .in("disposition", ["selected", "deferred"]).not("task_id", "is", null).order("rank", { ascending: true });
   if (items.error) throw new Error(`load prior plan items: ${items.error.message}`);
-  return new Map((items.data ?? []).map((item) => [String(item.task_id), {
+  return new Map((items.data ?? []).map((item: any) => [String(item.task_id), {
     disposition: item.disposition === "deferred" ? "deferred" as const : "selected" as const,
     rank: Number(item.rank ?? 0),
   }]));

@@ -184,7 +184,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
   if (teamIds.length) {
     const { data: managerLinks, error: managerLinkError } = await supabase.from("work_team_members").select("person_id").in("team_id", teamIds).eq("is_manager", true);
     if (managerLinkError) throw new Error(`load onboarding managers: ${managerLinkError.message}`);
-    const managerIds = [...new Set((managerLinks ?? []).map((row) => row.person_id as string).filter((id) => id !== access.personId))];
+    const managerIds = [...new Set((managerLinks ?? []).map((row: any) => row.person_id as string).filter((id: any) => id !== access.personId))];
     if (managerIds.length) {
       const { data, error } = await supabase.from("work_people").select("id,display_name").eq("organization_id", access.organizationId).in("id", managerIds);
       if (error) throw new Error(`load onboarding manager people: ${error.message}`);

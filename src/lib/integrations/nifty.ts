@@ -121,7 +121,7 @@ export async function niftyOrganizationConfigStatus(organizationId: string): Pro
     if (orgError) throw new Error(`validate legacy Nifty status: ${orgError.message}`);
     const configuredOwner = env("WORK_OS_LEGACY_NIFTY_OWNER_USER_ID");
     const allowed = configuredOwner
-      ? organizations?.some((item) => item.id === organizationId && item.legacy_owner_id === configuredOwner)
+      ? organizations?.some((item: any) => item.id === organizationId && item.legacy_owner_id === configuredOwner)
       : organizations?.length === 1 && organizations[0].id === organizationId;
     return allowed ? base : { ...base, hasAccessToken: false, hasRefreshToken: false, canCallApi: false };
   }
@@ -149,7 +149,7 @@ async function loadOrganizationToken(organizationId: string): Promise<CachedToke
   const { data: organizations, error: organizationError } = await createAdminClient().from("work_organizations").select("id,legacy_owner_id");
   if (organizationError) throw new Error(`validate legacy Nifty credential scope: ${organizationError.message}`);
   const allowed = configuredOwner
-    ? organizations?.some((item) => item.id === organizationId && item.legacy_owner_id === configuredOwner)
+    ? organizations?.some((item: any) => item.id === organizationId && item.legacy_owner_id === configuredOwner)
     : organizations?.length === 1 && organizations[0].id === organizationId;
   if (!allowed) throw new Error("This organization needs its own Nifty connection before provider data can be accessed");
   return null;

@@ -134,9 +134,9 @@ export async function getWorkOsDay(
   const historyRows = taskHistory ?? [];
   const evidenceRows = evidence ?? [];
   const signals = {
-    employeeUpdates: (checkIns ?? []).filter((item) => item.substantive === true).length,
-    outputEvidence: evidenceRows.filter((item) => item.source !== "worktivity").length,
-    activityContext: evidenceRows.filter((item) => item.source === "worktivity").length || (attendance.attendance.state === "active" || attendance.attendance.state === "paused" ? 1 : 0),
+    employeeUpdates: (checkIns ?? []).filter((item: any) => item.substantive === true).length,
+    outputEvidence: evidenceRows.filter((item: any) => item.source !== "worktivity").length,
+    activityContext: evidenceRows.filter((item: any) => item.source === "worktivity").length || (attendance.attendance.state === "active" || attendance.attendance.state === "paused" ? 1 : 0),
     completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };

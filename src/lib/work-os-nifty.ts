@@ -264,7 +264,7 @@ export async function syncNifty(userId: string) {
       .eq("user_id", userId).eq("provider", "nifty").in("provider_task_id", task.dependencyIds);
     if (dependencyError) throw new Error(`map Nifty task dependencies: ${dependencyError.message}`);
     const { error: taskError } = await db().from("work_tasks").update({
-      dependency_task_ids: (dependencies ?? []).map((dependency) => dependency.id),
+      dependency_task_ids: (dependencies ?? []).map((dependency: any) => dependency.id),
       updated_at: new Date().toISOString(),
     }).eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.id);
     if (taskError) throw new Error(`mirror Nifty task dependencies: ${taskError.message}`);
