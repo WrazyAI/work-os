@@ -164,12 +164,24 @@ describe("quality controls", () => {
     expect(eod.state).toBe("eod_due");
   });
 
-  it("suppresses blocker follow-ups in the final hour", () => {
-    const at = new Date("2026-08-27T17:30:00Z");
-    const d = day({ plan: { id: "p", shift_date: "2026-08-27", revision: 1, status: "confirmed", freeform_intent: "ship", suggestion_task_ids: [], items: [{ id: "i1", task_id: "t1", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Task one", blocker: "signing certificate", item_kind: "nifty_task", completion_state: "open" }] } });
-    const decision = evaluateCompanion(base({ day: d, now: at, lastResponseAt: new Date(at.getTime() - 50 * 60_000).toISOString() }));
-    expect(decision.prompt).toBeNull();
-    expect(decision.suppressReason).toBe("final-hour");
+  it("EOD pierces quiet mode and snooze", () => {
+    const at = new Date("2026-08-27T17:53:00Z");
+    const quietRecord = setQuietMode(EMPTY_COMPANION_RECORD, true);
+    const quietDecision = evaluateCompanion(base({ now: at, record: quietRecord }));
+    expect(quietDecision.state).toBe("eod_due");
+    expect(quietDecision.prompt).not.toBeNull();
+    const snoozedRecord = snooze(EMPTY_COMPANION_RECORD, "eod:session-1", new Date(at.getTime() + 60 * 60_000));
+    const snoozedDecision = evaluateCompanion(base({ now: at, record: snoozedRecord }));
+    expect(snoozedDecision.state).toBe("eod_due");
+  });
+
+  it("EOD window boundaries: silent at 11 minutes, active at exactly 10", () => {
+    const day11 = day({ prompt: { kind: null, nextPromptAt: null as unknown as string, required: false, reason: "" } });
+    const at11 = evaluateCompanion(base({ now: new Date("2026-08-27T17:49:00Z"), day: day11 }));
+    expect(at11.state).not.toBe("eod_due");
+    const at10 = evaluateCompanion(base({ now: new Date("2026-08-27T17:50:00Z"), day: day11 }));
+    expect(at10.state).toBe("eod_due");
+    expect(at10.prompt).not.toBeNull();
   });
 
   it("enforces the rolling-hour frequency cap, EOD exempt", () => {
@@ -182,15 +194,16 @@ describe("quality controls", () => {
     expect(decision.suppressReason).toBe("frequency-cap");
   });
 
-  it("escalates the quiet window with each ignored prompt", () => {
+  it("backs off after ignored prompts and clears on an answer", () => {
     const d = day();
     const cause = `progress:session-1:${d.prompt.nextPromptAt}`;
-    let record = markFired(EMPTY_COMPANION_RECORD, cause, NOW);
-    record = markIgnored(record, cause, NOW);
-    const fiveMinLater = new Date(NOW.getTime() + 5 * 60_000);
-    expect(evaluateCompanion(base({ day: d, record, now: fiveMinLater })).prompt).toBeNull();
-    const elevenMinLater = evaluateCompanion(base({ day: d, record, now: new Date(NOW.getTime() + 11 * 60_000) }));
-    expect(elevenMinLater.prompt).not.toBeNull();
+    let record = markIgnored(EMPTY_COMPANION_RECORD, cause, NOW);
+    const backedOff = evaluateCompanion(base({ day: d, record }));
+    expect(backedOff.prompt).toBeNull();
+    expect(backedOff.suppressReason).toBe("backoff");
+    record = markAnswered(record, cause, NOW);
+    const afterAnswer = evaluateCompanion(base({ day: d, record, lastResponseAt: NOW.toISOString() }));
+    expect(afterAnswer.prompt).not.toBeNull();
   });
 
   it("applies escalating backoff windows", () => {
@@ -199,34 +212,6 @@ describe("quality controls", () => {
     expect((record.ignored.c ?? 0)).toBe(2);
   });
 
-  it("re-surfaces an ignored prompt after its backoff window, re-armed by an answer", () => {
-    const d = day();
-    const cause = `progress:session-1:${d.prompt.nextPromptAt}`;
-    const record = markFired(EMPTY_COMPANION_RECORD, cause, NOW);
-    const justFired = evaluateCompanion(base({ day: d, record }));
-    expect(justFired.prompt).toBeNull();
-    expect(justFired.suppressReason).toBe("backoff");
-    const afterWindow = evaluateCompanion(base({ day: d, record, now: new Date(NOW.getTime() + 6 * 60_000) }));
-    expect(afterWindow.prompt).not.toBeNull();
-    const answered = markAnswered(record, cause, NOW);
-    expect(evaluateCompanion(base({ day: d, record: answered, lastResponseAt: NOW.toISOString(), now: new Date(NOW.getTime() + 60_000) })).prompt).not.toBeNull();
-  });
-
-  it("prunes every reminder from a closed session without affecting the next session", () => {
-    const record = {
-      ...EMPTY_COMPANION_RECORD,
-      fired: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
-      answered: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
-      ignored: { "progress:session-1:due": 2, "progress:session-2:due": 1 },
-      ignoredAt: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
-    } satisfies CompanionRecord;
-
-    expect(clearSessionReminders(record, "session-1")).toMatchObject({
-      fired: { "progress:session-2:due": NOW.toISOString() },
-      answered: { "progress:session-2:due": NOW.toISOString() },
-      ignored: { "progress:session-2:due": 1 },
-    });
-  });
 });
 
 describe("debugger force", () => {

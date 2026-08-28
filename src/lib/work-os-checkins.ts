@@ -1,0 +1,223 @@
+import { createHash } from "node:crypto";
+import { listPersonTasks } from "@/lib/work-os";
+import { localDateForTimezone, resolveShiftWindow } from "@/modules/work-os/companion";
+import { saveDailyPlan } from "@/lib/work-os-workday";
+import {
+  OPERATIONS,
+  audit,
+  db,
+  loadShiftData,
+  nonEmptyString as text,
+  organizationOwnerId,
+  type Json,
+  type ProposalOperation,
+} from "@/lib/work-os-internal";
+import type { WorkOsAccess } from "@/lib/work-os-api";
+
+const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
+const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
+
+interface ParsedProposal {
+  operation: ProposalOperation;
+  task_id?: string | null;
+  change: Json;
+}
+
+async function parseCheckIn(input: string, tasks: Json[]): Promise<{ model: string; proposals: ParsedProposal[] }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is required to turn a check-in into task proposals");
+  const taskContext = tasks.map((task) => ({
+    id: task.id,
+    providerTaskId: task.provider_task_id,
+    title: task.title,
+    description: task.description,
+    dueDate: task.due_date,
+    status: task.status,
+    expectedOutcome: task.expected_outcome,
+    definitionOfDone: task.definition_of_done,
+  }));
+  const tool = {
+    type: "function",
+    function: {
+      name: "proposeWorkChanges",
+      description: "Convert an employee check-in into reviewable Work OS task operations without inventing work or completion.",
+      parameters: {
+        type: "object",
+        properties: {
+          proposals: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                operation: { type: "string", enum: [...OPERATIONS] },
+                task_id: { type: ["string", "null"], description: "Existing local Work OS task ID, or null only for create_task." },
+                change: { type: "object", additionalProperties: true },
+              },
+              required: ["operation", "task_id", "change"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["proposals"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: CHECK_IN_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "You produce proposals for human review. Nifty is authoritative for tasks.",
+            "Use an existing task when the text refers to one. Do not claim work, status, output, blockers, or completion unless the employee explicitly states it.",
+            "Use complete_task only for explicit completion language. Activity alone never proves completion.",
+            "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
+          ].join("\n"),
+        },
+        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext }) },
+      ],
+      tools: [tool],
+      tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
+    }),
+  });
+  if (!response.ok) throw new Error(`Work OS proposal AI failed (${response.status}): ${(await response.text()).slice(0, 180)}`);
+  const json = await response.json() as Json;
+  const choices = json.choices as Array<{ message?: { tool_calls?: Array<{ function?: { arguments?: string } }> } }> | undefined;
+  const rawArgs = choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "{}";
+  let args: Json;
+  try {
+    args = JSON.parse(rawArgs) as Json;
+  } catch {
+    throw new Error("Work OS proposal AI returned invalid structured output");
+  }
+  const tasksById = new Map(tasks.flatMap((task) => [
+    [String(task.id), task],
+    [String(task.provider_task_id), task],
+  ]));
+  const explicitCompletion = /\b(done|completed|finished|shipped|resolved|fixed|delivered)\b/i.test(input);
+  const proposals: ParsedProposal[] = [];
+  const seen = new Set<string>();
+  for (const candidate of Array.isArray(args.proposals) ? args.proposals as Json[] : []) {
+    let operation = text(candidate.operation) as ProposalOperation | null;
+    if (!operation || !OPERATIONS.has(operation)) continue;
+    const taskId = text(candidate.task_id);
+    const matchedTask = taskId ? tasksById.get(taskId) : null;
+    if (operation !== "create_task" && !matchedTask) continue;
+    if (operation === "complete_task" && !explicitCompletion) operation = "log_progress";
+    const change = candidate.change && typeof candidate.change === "object" ? candidate.change as Json : {};
+    if (operation === "create_task" && !text(change.name)) continue;
+    if (operation === "remove_from_plan" && !text(change.plan_item_id)) continue;
+    const localTaskId = matchedTask ? String(matchedTask.id) : null;
+    const signature = JSON.stringify([operation, localTaskId, change]);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    proposals.push({ operation, task_id: localTaskId, change });
+  }
+  return { model: CHECK_IN_MODEL, proposals };
+}
+
+export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
+  const personId = access.personId as string;
+  const input = text(body.input_text) ?? "";
+  const confirmedExisting = body.confirmed_existing_tasks === true;
+  const now = new Date();
+  const requestedSnooze = text(body.snoozed_until);
+  let snoozedUntil: string | null = null;
+  if (requestedSnooze) {
+    const parsed = new Date(requestedSnooze);
+    if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= now.getTime()) throw new Error("snoozed_until must be a future timestamp");
+    if (parsed.getTime() > now.getTime() + 60 * 60_000) throw new Error("check-ins can be snoozed for at most 60 minutes");
+    snoozedUntil = parsed.toISOString();
+  }
+  if (!input && !confirmedExisting && !snoozedUntil) throw new Error("input_text, confirmed_existing_tasks, or snoozed_until is required");
+  const { rules, exceptions, timezone } = await loadShiftData(access, personId, now);
+  const shift = resolveShiftWindow(rules, exceptions, now);
+  const shiftDate = shift?.shiftDate ?? localDateForTimezone(now, timezone);
+  const kind = text(body.kind) ?? (shift && now.getTime() >= new Date(shift.endsAt).getTime() - 15 * 60_000 ? "eod" : "plan");
+  if (!["plan", "catch_up", "optional", "eod"].includes(kind)) throw new Error("invalid check-in kind");
+  const source = ["web", "desktop", "agent"].includes(text(body.source) ?? "") ? text(body.source) : "web";
+  const ownerId = await organizationOwnerId(access.organizationId);
+  const clientRequestId = text(body.client_request_id);
+  const updateKind = text(body.update_kind);
+  const allowedUpdateKinds = ["starting", "continuing", "material_progress", "completion_claim", "blocked", "priority_change", "unplanned_work"];
+  if (updateKind && !allowedUpdateKinds.includes(updateKind)) throw new Error("invalid progress update kind");
+  const { data: activeSession, error: activeSessionError } = await db().from("work_sessions").select("id")
+    .eq("organization_id", access.organizationId).eq("person_id", personId)
+    .in("state", ["clocked_in", "active", "paused", "eod_due"]).maybeSingle();
+  if (activeSessionError) throw new Error(`load active work session: ${activeSessionError.message}`);
+  if (clientRequestId) {
+    const { data: existing, error: existingError } = await db().from("work_check_ins").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("client_request_id", clientRequestId).maybeSingle();
+    if (existingError) throw new Error(`load idempotent Work OS check-in: ${existingError.message}`);
+    if (existing) {
+      const { data: existingProposals } = await db().from("work_task_proposals").select("*").eq("check_in_id", existing.id);
+      return { checkIn: existing, proposals: existingProposals ?? [] };
+    }
+  }
+  const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
+  if (confirmedExisting && !tasks.length) throw new Error("there are no existing Nifty tasks to confirm as the current plan");
+  const parsed = input ? await parseCheckIn(input, tasks) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
+  const { data: checkIn, error: checkInError } = await db().from("work_check_ins").insert({
+    organization_id: access.organizationId,
+    person_id: personId,
+    shift_date: shiftDate,
+    kind,
+    source,
+    input_text: input,
+    substantive: confirmedExisting,
+    confirmed_existing_tasks: confirmedExisting,
+    snoozed_until: snoozedUntil,
+    client_request_id: clientRequestId,
+    session_id: activeSession?.id ?? null,
+    update_kind: updateKind,
+    structured_claims: body.structured_claims && typeof body.structured_claims === "object" ? body.structured_claims : {},
+    inference_metadata: {},
+    created_by: access.ctx.user.id,
+  }).select("*").single();
+  if (checkInError) throw new Error(`create Work OS check-in: ${checkInError.message}`);
+
+  const rows = parsed.proposals.map((proposal, index) => ({
+    organization_id: access.organizationId,
+    person_id: personId,
+    check_in_id: checkIn.id,
+    task_id: proposal.task_id && tasks.some((task) => task.id === proposal.task_id) ? proposal.task_id : null,
+    operation: proposal.operation,
+    input_text: input,
+    before_state: proposal.task_id ? tasks.find((task) => task.id === proposal.task_id || task.provider_task_id === proposal.task_id) ?? {} : {},
+    proposed_change: proposal.change,
+    model: parsed.model,
+    prompt_version: CHECK_IN_PROMPT_VERSION,
+    idempotency_key: createHash("sha256").update(`${checkIn.id}:${index}:${JSON.stringify(proposal)}`).digest("hex"),
+    created_by: access.ctx.user.id,
+  }));
+  let proposals: Json[] = [];
+  if (rows.length) {
+    const { data, error } = await db().from("work_task_proposals").insert(rows).select("*");
+    if (error) throw new Error(`create Work OS proposals: ${error.message}`);
+    proposals = data ?? [];
+  }
+  await audit(access, "check_in.created", "check_in", checkIn.id as string, { kind, proposalCount: proposals.length });
+  if (activeSession?.id && confirmedExisting) {
+    const { data: currentPlan, error: currentPlanError } = await db().from("work_daily_plans")
+      .select("id,status,confirmed_at,confirmation_idempotency_key,freeform_intent,items:work_daily_plan_items(id,disposition)")
+      .eq("organization_id", access.organizationId).eq("session_id", activeSession.id).maybeSingle();
+    if (currentPlanError) throw new Error(`load plan confirmation state: ${currentPlanError.message}`);
+    if (currentPlan && currentPlan.status !== "confirmed") {
+      const planItems = Array.isArray(currentPlan.items) ? currentPlan.items as Array<{ id: string; disposition: string }> : [];
+      await saveDailyPlan(access, {
+        confirm: true,
+        item_ids: planItems.filter((item) => item.disposition === "selected").map((item) => item.id),
+        deferred_ids: planItems.filter((item) => item.disposition === "deferred").map((item) => item.id),
+        freeform_intent: currentPlan.freeform_intent,
+      }, `check-in:${checkIn.id}`);
+    }
+  }
+  if (activeSession?.id && (input || confirmedExisting)) {
+    await db().from("work_sessions").update({ state: "active", last_substantive_update_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", activeSession.id);
+  }
+  return { checkIn, proposals };
+}

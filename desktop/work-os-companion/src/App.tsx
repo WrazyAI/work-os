@@ -5,8 +5,8 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
-import { apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
-import { clearSessionReminders, evaluateCompanion, EMPTY_COMPANION_RECORD, markAnswered, markFired, markIgnored, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
+import { apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, markResponded, pruneRecord, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
 import { FEATURES } from "./features";
@@ -18,7 +18,7 @@ import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
 import { secureState } from "./vault";
@@ -160,7 +160,7 @@ export default function App() {
     // (same scenario the debugger's "Offline playground" preset applies).
     const devParams = import.meta.env.DEV ? new URLSearchParams(window.location.search) : null;
     if (devParams?.has("ai")) {
-      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: false, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
+      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: false, liveWrites: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
     }
     if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("offline")) {
       const params = new URLSearchParams(window.location.search);
@@ -182,11 +182,16 @@ export default function App() {
   const [companionRecord, setCompanionRecord] = useState<CompanionRecord>(() => {
     try {
       const stored = window.localStorage.getItem("work-os.companion.v1");
-      return stored ? { ...EMPTY_COMPANION_RECORD, ...JSON.parse(stored) } : EMPTY_COMPANION_RECORD;
+      return stored ? pruneRecord({ ...EMPTY_COMPANION_RECORD, ...JSON.parse(stored) }, new Date()) : EMPTY_COMPANION_RECORD;
     } catch { return EMPTY_COMPANION_RECORD; }
   });
   const companionRecordRef = useRef(companionRecord);
   companionRecordRef.current = companionRecord;
+  function recordResponse() {
+    const now = new Date();
+    lastResponseAtRef.current = now.toISOString();
+    setCompanionRecord((current) => markResponded(current, now));
+  }
   const lastResponseAtRef = useRef<string | null>(null);
   const acknowledgeCompanionResponse = useCallback(() => {
     const now = new Date();
@@ -368,7 +373,7 @@ const redraftEod = async () => {
       setEodSubmitted(true);
       acknowledgeCompanionResponse();
     };
-    if (syncBypassRef.current || debugRef.current.enabled) {
+    if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
       finish();
       notifications.success("Your EOD was submitted (offline playground — nothing reached the server).", "EOD submitted");
       return;
@@ -477,8 +482,14 @@ const redraftEod = async () => {
       notifications.success(actionSuccessMessages[label] ?? "The change was saved on this device.");
       return;
     }
-    if (debugRef.current.enabled) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
-      await action(); const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); await refresh();
+    if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
+      await action(); const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
+      // A failed refresh after a committed write must not present the action
+      // as failed — the write is done; surface success and refresh lazily.
+      await refresh().catch((refreshError) => {
+        diagnostics.warn("ui.action.refresh_after_action", refreshError instanceof Error ? refreshError.message : "post-action refresh failed", { action: label, activeView: view });
+        return null;
+      });
       diagnostics.info("ui.action.completed", label, { activeView: view });
       notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
     }
@@ -508,7 +519,7 @@ const redraftEod = async () => {
     finally { setBusy(false); }
   }
   const runCompanionTick = async (refreshFirst = false) => {
-    if (busy) return;
+    if (busy || modalOpen) return;
     if (!visibleSession) return;
     const dayNow = refreshFirst ? await refresh({ dayOnly: true }).catch(() => null) : visibleDay;
     const target = dayNow ?? visibleDay;
@@ -535,7 +546,7 @@ const redraftEod = async () => {
       `companion:${prompt.id}`,
       prompt.body,
       prompt.title,
-      prompt.severity === "attention" ? "info" : "info",
+      prompt.severity === "attention" ? "warning" : "info",
       { label: actionLabel, onClick: () => {
         acknowledgeCompanionResponse();
         if (prompt.action === "open_eod") setView("review");
@@ -1075,28 +1086,47 @@ const redraftEod = async () => {
       });
       setInterpretation(null);
       setPendingProgressUpdate("");
-      if (queuedInterpretationId) {
-        void discardReadyInterpretation(queuedInterpretationId);
-        setQueuedInterpretationId(null);
-      }
-      acknowledgeCompanionResponse();
+      recordResponse();
     };
-    if (syncBypassRef.current || debugRef.current.enabled) {
+    if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
       close();
       notifications.success(`${enabled.length} update${enabled.length === 1 ? "" : "s"} saved on this device.`, "Offline playground");
       return;
     }
-    void act("check_in.create", async () => {
-      const result = await sendOrQueue("/api/work-os/me/interpret/apply", "POST", {
-        originalInput: text,
-        shiftDate: visibleDay?.shiftDate,
-        operations: enabled.map(({ op, statement, taskId, taskTitle }) => ({ op, statement, taskId, taskTitle })),
-      }) as { queued?: boolean; status?: string };
-      close(result);
-    });
+    setBusy(true); setError("");
+    diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
+    (async () => {
+      const outcome = await fileApprovedOperations(enabled, {
+        shiftDate: visibleDay?.shiftDate ?? null,
+        personId: visibleDay?.access?.personId ?? null,
+        promptKind: visibleDay?.prompt.kind || "optional",
+      }, {
+        completeTask: (taskId, completed) => updateTaskCompletion(taskId, completed),
+        createTask: (taskInput) => sendOrQueue("/api/work-os/me/tasks", "POST", {
+          name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [],
+        }),
+        fileCheckIn: (checkIn) => sendOrQueue("/api/work-os/check-ins", "POST", {
+          source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text,
+        }),
+      });
+      recordResponse();
+      const parts: string[] = [];
+      if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
+      if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
+      if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
+      close();
+      if (outcome.failed.length) {
+        notifications.error(`${parts.join(" · ")}. First failure: ${outcome.failed[0]!.message}`, "Some updates did not file");
+      } else {
+        notifications.success(parts.join(" · "), "Updates filed");
+      }
+    })().catch((value) => {
+      showError(value, "Your approved updates could not be filed.", "Filing failed");
+    }).finally(() => setBusy(false));
   }
 
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
+    recordResponse();
     const text = pendingProgressUpdate.trim();
     if (!text) return;
     if (queuedInterpretationId) {
@@ -1176,7 +1206,7 @@ const redraftEod = async () => {
     </aside>
     <section className="stage">
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><button className="icon" title="Refresh the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
-      {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
+      {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
           <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Activity is syncing." : "Ready to start."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Worktivity activity is syncing. Your Work OS session remains separate and ready when you need it." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "No scheduled shift is active. Starting work creates an exception session without an inferred end time."}</p>

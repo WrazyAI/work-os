@@ -184,7 +184,8 @@ assert.match(read("src-tauri/capabilities/debug.json"), /allow-debug-commands/);
 assert.match(read("src-tauri/capabilities/default.json"), /allow-app-commands/);
 assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /open_debug_window/);
 
-const companionServer = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-companion.ts"), "utf8");
+const companionModules = ["day-view", "checkins", "proposals", "eod", "employee-tasks", "schedules"];
+const companionServer = companionModules.map((m) => readFileSync(resolve(import.meta.dirname, `../src/lib/work-os-${m}.ts`), "utf8")).join("\n");
 assert.match(companionServer, /refreshNiftyMirror/);
 assert.match(companionServer, /syncing: !niftyFresh/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);

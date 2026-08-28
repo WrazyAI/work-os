@@ -220,6 +220,7 @@ export type DebugDayState = "real" | "no_shift" | "scheduled" | "shift_start" | 
 
 export interface DebugScenario {
   enabled: boolean;
+  liveWrites?: boolean;
   syncBypass: boolean;
   companionForce?: string | null;
   authState: "real" | "unauthenticated";

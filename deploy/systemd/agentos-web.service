@@ -1,0 +1,19 @@
+[Unit]
+Description=Agentic OS — production web server (next start)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dev/agent-os
+# next start auto-loads .env.local / .env from WorkingDirectory.
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# node/npm + local agent CLIs on PATH so config auto-detection works.
+Environment=PATH=/home/dev/.hermes/node/bin:/home/dev/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/dev/.hermes/node/bin/npm run start
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

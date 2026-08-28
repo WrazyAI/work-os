@@ -116,3 +116,59 @@ export function simulateAiEod(day: { tasks: Array<Record<string, unknown>>; plan
     "(needs your input — what prevented you from completing your task list?)",
   ].join("\n");
 }
+
+export interface ApprovedOpContext {
+  shiftDate: string | null;
+  personId: string | null;
+  promptKind: string;
+}
+
+export interface ApprovalTransport {
+  completeTask(taskId: string, completed: boolean): Promise<unknown>;
+  createTask(input: { name: string; description: string; dueDate: string | null; personId: string | null }): Promise<unknown>;
+  fileCheckIn(input: { kind: string; updateKind: string; text: string }): Promise<unknown>;
+}
+
+export interface ApprovalOutcome {
+  recorded: number;
+  queued: number;
+  failed: Array<{ op: ProposedOperation; message: string }>;
+}
+
+/**
+ * Files approved operations one at a time through the offline-capable
+ * transports. Writes go through sendOrQueue (idempotency key + offline queue
+ * replay), so a transport failure never loses an approved operation — it is
+ * reported per operation and the receipt states recorded vs queued vs failed
+ * instead of claiming a provider confirmation that did not happen.
+ */
+export async function fileApprovedOperations(
+  operations: ProposedOperation[],
+  context: ApprovedOpContext,
+  transport: ApprovalTransport,
+): Promise<ApprovalOutcome> {
+  const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [] };
+  for (const op of operations) {
+    try {
+      const result = op.op === "complete_task" || op.op === "reopen_task"
+        ? await transport.completeTask(op.taskId!, op.op === "complete_task")
+        : op.op === "create_task"
+          ? await transport.createTask({
+              name: (op.taskTitle || op.statement).slice(0, 240),
+              description: op.statement,
+              dueDate: context.shiftDate,
+              personId: context.personId,
+            })
+          : await transport.fileCheckIn({
+              kind: context.promptKind || "optional",
+              updateKind: op.op === "record_blocker" ? "blocked" : "material_progress",
+              text: op.statement,
+            });
+      if ((result as { queued?: boolean } | undefined)?.queued === true) outcome.queued += 1;
+      else outcome.recorded += 1;
+    } catch (error) {
+      outcome.failed.push({ op, message: error instanceof Error ? error.message : "The change could not be filed." });
+    }
+  }
+  return outcome;
+}
