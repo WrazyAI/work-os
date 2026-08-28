@@ -289,7 +289,7 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 export { sentence, taskKind };
 
 export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, busy, onRedraft, onSubmit }: {
-  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | null; suggestedBottleneck: string | null;
+  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
   redrafting: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
@@ -304,7 +304,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
       <div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
-      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div>
+      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? "Drafting…" : "Draft with AI"}</button>
     </header>
     <label className="eod-markdown-label"><span>Report</span>

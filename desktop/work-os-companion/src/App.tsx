@@ -13,7 +13,7 @@ import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
-import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
+import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
@@ -99,7 +99,7 @@ export default function App() {
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }> } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
-  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" } | null>(null);
+  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated" } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const interpretationTaskOptions = () => {
@@ -337,7 +337,7 @@ export default function App() {
 const redraftEod = async () => {
     if (!visibleDay?.report) return;
     if (syncBypassRef.current) {
-      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "ai" });
+      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
       notifications.success("Simulated an assistant draft on-device — nothing reached the server.", "AI draft (playground)");
       return;
     }
@@ -415,7 +415,14 @@ const redraftEod = async () => {
   }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, showError, suggestionTaskIds]);
 
   useEffect(() => {
-    if (view !== "insights" || !session || debugRef.current.enabled) return;
+    if (view !== "insights" || debugRef.current.enabled) {
+    if (syncBypassRef.current && visibleDay) {
+      setInsights(insightsFixture(visibleDay, insightRange));
+      setInsightsLoading(false);
+    }
+    return;
+  }
+  if (!session) return;
     let cancelled = false;
     setInsightsLoading(true);
     void apiRequest<InsightsData>(`/api/work-os/me/insights?range=${insightRange}${day?.shiftDate ? `&through=${encodeURIComponent(day.shiftDate)}` : ""}`)
@@ -710,6 +717,7 @@ const redraftEod = async () => {
       if (reference.type === "task") await openTaskDetails({ id: reference.id, title: reference.label }, reference.date !== visibleDay?.shiftDate);
       return;
     }
+    if (reference.type === "evidence" && !FEATURES.evidence) { setView("day"); return; }
     setView(reference.type === "evidence" ? "evidence" : "day");
   }
 
@@ -1179,7 +1187,7 @@ const redraftEod = async () => {
         canClockOut={sessionActive}
         onEditFocus={openGoalComposer}
         onAddTask={() => void openTaskComposer()}
-        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }}
+        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
         onToggleTask={setTaskCompletion}
         onEditTask={editTask}
@@ -1290,11 +1298,11 @@ function TaskLifecycleMenu({ task, busy, initialOpen = false, onEdit, onArchive,
   </EllipsisMenu></div>;
 }
 
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
+export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
   focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number; nextPrompt: string;
   shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number; reviews: number;
   initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; initialTaskMenuId?: string | null; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
-  onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
+  onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; currentDate?: string; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
@@ -1302,7 +1310,8 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
   const [detailView, setDetailView] = useState<"shift" | "worktivity" | null>(initialDetailView);
   const displayed = tab === "today" ? tasks : tab === "previous" ? previousTasks : otherTasks;
   const completed = tasks.filter((task) => task.completed === true).length;
-  const overdueCount = otherTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) < (new Date().toISOString().slice(0, 10))).length + previousTasks.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < (new Date().toISOString().slice(0, 10))).length;
+  const today = currentDate || new Date().toISOString().slice(0, 10);
+  const overdueCount = otherTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length + previousTasks.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length;
   const pendingPrevious = previousTasks.filter((task) => task.completed !== true).length;
   const observedStart = attendance?.clockedInAt ? Date.parse(attendance.clockedInAt) : Number.NaN;
   const observedEnd = attendance?.clockedOutAt ? Date.parse(attendance.clockedOutAt) : attendance?.observedAt ? Date.parse(attendance.observedAt) : Number.NaN;
@@ -1315,7 +1324,7 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
         <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{observedOnly ? paused ? "Worktivity break" : "Activity observed" : paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div><span><small>Next update</small><strong>{observedOnly ? "Syncing" : nextPrompt}</strong></span></div>
         <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open workday details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close workday details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} nextPrompt={nextPrompt} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Workday status</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
       </header>
-      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show the overdue filter in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />tasks</em></button>}</div>
+      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show the overdue filter in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
         <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={tasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
       <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
       {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
