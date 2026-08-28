@@ -34,6 +34,7 @@ export class ApiRequestError extends Error {
     readonly status: number | null,
     readonly retryable: boolean,
     readonly conflict = false,
+    readonly reason?: string,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -109,7 +110,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const result = response.status === 204 ? undefined : await response.json().catch(() => ({}));
     if (!response.ok) {
       const message = (result as { error?: string } | undefined)?.error || `Work OS request failed (${response.status})`;
-      throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status), response.status === 409);
+      const reason = typeof (result as { reason?: unknown } | undefined)?.reason === "string"
+        ? (result as { reason: string }).reason
+        : undefined;
+      throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status), response.status === 409, reason);
     }
     return result as T;
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
@@ -186,6 +190,16 @@ export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH"
   }
 }
 
+export function readyInterpretations(queue: OfflineAction[]): OfflineAction[] {
+  return queue.filter((action) => action.path === "/api/work-os/me/interpret" && action.status === "ready_for_review");
+}
+
+/** The manual classifier is an explicit choice, so it cancels a stale queued proposal. */
+export async function discardReadyInterpretation(id: string) {
+  const queue = await secureState.queue();
+  await secureState.saveQueue(queue.filter((action) => action.id !== id || action.status !== "ready_for_review"));
+}
+
 export async function flushQueue(now = Date.now()) {
   return diagnostics.withSpan("offline_queue.flush", async () => {
     const queue = await secureState.queue();
@@ -225,12 +239,15 @@ export async function flushQueue(now = Date.now()) {
     let sent = 0;
     for (const action of due) {
       try {
-        await apiRequest(action.path, {
+        const result = await apiRequest(action.path, {
           method: action.method,
           headers: { "Idempotency-Key": action.id },
           body: JSON.stringify(action.body),
         });
         sent += 1;
+        if (action.path === "/api/work-os/me/interpret") {
+          remaining.push({ ...action, status: "ready_for_review", result, nextAttemptAt: undefined, lastError: undefined });
+        }
       } catch (error) {
         const next = reschedule(action, error, now);
         diagnostics.warn(

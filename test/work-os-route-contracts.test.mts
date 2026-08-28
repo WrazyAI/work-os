@@ -18,6 +18,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const insights = await source("src/app/api/work-os/me/insights/route.ts");
   const tasks = await source("src/app/api/work-os/me/tasks/route.ts");
   const taskDetails = await source("src/app/api/work-os/me/tasks/[taskId]/route.ts");
+  const applyInterpretation = await source("src/app/api/work-os/me/interpret/apply/route.ts");
   const attendance = await source("src/lib/work-os-attendance.ts");
   const attendanceProjection = await source("src/modules/work-os/attendance.ts");
   const workdayService = await source("src/lib/work-os-workday.ts");
@@ -55,6 +56,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(taskDetails, /setWorkOsEmployeeTaskCompletion/);
   assert.match(taskDetails, /typeof body\.completed === "boolean"/);
   assert.match(taskDetails, /requirePerson: true/);
+  assert.match(applyInterpretation, /Idempotency-Key is required/);
+  assert.match(applyInterpretation, /requirePerson: true/);
+  assert.match(applyInterpretation, /applyApprovedWorkUpdate/);
   assert.match(nifty, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/assignees/);
   assert.match(nifty, /method: "DELETE"/);
   assert.match(workOs, /Nifty did not confirm.*requested assignee/);

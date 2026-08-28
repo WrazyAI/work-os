@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server";
+import { applyApprovedWorkUpdate } from "@/lib/work-os-companion";
+import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function POST(req: Request) {
+  try {
+    const auth = await requireWorkOsAccess({
+      organizationId: req.headers.get("x-work-os-organization-id"),
+      authorization: req.headers.get("authorization"),
+      requirePerson: true,
+      feature: "employee_companion",
+    });
+    if (auth.response) return auth.response;
+    const key = req.headers.get("idempotency-key");
+    if (!key) return NextResponse.json({ error: "Idempotency-Key is required" }, { status: 400 });
+    return NextResponse.json(await applyApprovedWorkUpdate(auth.access, await req.json(), key));
+  } catch (error) {
+    return jsonError(error);
+  }
+}

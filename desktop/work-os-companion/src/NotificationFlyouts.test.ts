@@ -57,4 +57,11 @@ describe("application notification flyouts", () => {
     expect(app).toContain("notifications.success");
     expect(app).toContain("notifications.error");
   });
+
+  it("keeps compact rail navigation named when its text labels are visually hidden", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    expect(app).toContain("aria-label={label}");
+    expect(app).toContain('aria-current={view === id ? "page" : undefined}');
+    expect(app).toContain("title={label}");
+  });
 });

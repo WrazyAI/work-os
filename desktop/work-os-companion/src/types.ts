@@ -243,7 +243,9 @@ export interface OfflineAction {
   attempts: number;
   lastError?: string;
   nextAttemptAt?: string;
-  status?: "pending" | "needs_attention";
+  /** Interpretation responses are preserved locally until the employee reviews them. */
+  status?: "pending" | "ready_for_review" | "needs_attention";
+  result?: unknown;
   failureKind?: "conflict" | "permanent" | "retry_exhausted";
   statusCode?: number;
 }
