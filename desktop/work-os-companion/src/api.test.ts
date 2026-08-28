@@ -23,7 +23,7 @@ vi.mock("./diagnostics", () => ({
   diagnostics: { withSpan: vi.fn(async (_category: string, action: () => Promise<unknown>) => action()), warn: vi.fn() },
 }));
 
-import { apiRequest, flushQueue, sendOrQueue, updateTaskCompletion } from "./api";
+import { apiRequest, flushQueue, readyInterpretations, sendOrQueue, updateTaskCompletion } from "./api";
 
 describe("offline action replay", () => {
   beforeEach(() => {
@@ -60,6 +60,26 @@ describe("offline action replay", () => {
 
     expect(mockState.queue).toHaveLength(1);
     expect(mockState.queue[0].body).toMatchObject({ revision: 1, successful_day_intent: "Latest draft" });
+  });
+
+  it("retains a replayed interpretation as ready for explicit review", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+    const queued = await sendOrQueue("/api/work-os/me/interpret", "POST", { input: "Finished the release notes" });
+    expect(queued).toEqual({ queued: true });
+
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ interpretation: { operations: [{ op: "record_progress" }] } }), { status: 200, headers: { "content-type": "application/json" } })));
+
+    expect(await flushQueue()).toEqual({ sent: 1, remaining: 1, needsAttention: 0 });
+    expect(mockState.queue[0]).toMatchObject({ path: "/api/work-os/me/interpret", status: "ready_for_review" });
+    expect(readyInterpretations(mockState.queue)).toHaveLength(1);
+
+    const noReplay = vi.fn();
+    vi.stubGlobal("fetch", noReplay);
+    expect(await flushQueue()).toEqual({ sent: 0, remaining: 1, needsAttention: 0 });
+    expect(noReplay).not.toHaveBeenCalled();
   });
 
   it("sends authenticated proposal decisions even when no work session is active", async () => {
