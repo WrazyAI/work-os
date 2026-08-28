@@ -14,6 +14,9 @@ let debugSession: import("./types").DesktopSession | null = null;
 export function setDebugSession(session: import("./types").DesktopSession | null) {
   debugSession = import.meta.env && import.meta.env.DEV ? session : null;
 }
+export function isSyncBypassActive() {
+  return syncBypassActive;
+}
 export function setSyncBypass(active: boolean) {
   syncBypassActive = active;
 }
