@@ -6,6 +6,8 @@ import OnboardingPreview from "./OnboardingPreview";
 import TasksPreview from "./TasksPreview";
 import TodayPreview from "./TodayPreview";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
+import { queryClient } from "./queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { NotificationProvider } from "./NotificationFlyouts";
 import "./styles.css";
 import "./sessionGate.css";
@@ -20,4 +22,4 @@ const Root = import.meta.env.DEV && params.has("preview-onboarding") ? Onboardin
     : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
       : App;
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><NotificationProvider><ErrorBoundary><Root /></ErrorBoundary></NotificationProvider></React.StrictMode>);
+ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={queryClient}><NotificationProvider><ErrorBoundary><Root /></ErrorBoundary></NotificationProvider></QueryClientProvider></React.StrictMode>);

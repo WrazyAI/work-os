@@ -91,7 +91,7 @@ function onboardingFixture(): OnboardingData {
   };
 }
 
-function dayFixture(): DayData {
+export function dayFixture(): DayData {
   const now = new Date();
   const shift = debugShift("clocked_in");
   return {
