@@ -8,6 +8,7 @@ const read = (relativePath: string) => readFileSync(resolve(root, relativePath),
 const queryClient = read("src/queryClient.ts");
 const main = read("src/main.tsx");
 const app = read("src/App.tsx");
+const apiSrc = read("src/api.ts");
 const pkg = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
 
 // Provider wiring
@@ -36,6 +37,8 @@ assert.match(app, /queryKey: queryKeys\.day/);
 assert.match(app, /queryKey: queryKeys\.onboarding/);
 assert.match(app, /queryKey: queryKeys\.insights\(/);
 assert.match(app, /queryKey: queryKeys\.taskHistory/);
+assert.match(app, /queryKey: queryKeys\.taskDetails\(/);
+assert.match(app, /queryKey: queryKeys\.planHistory\(/);
 assert.match(app, /queryKey: queryKeys\.options/);
 assert.match(app, /useInfiniteQuery/);
 // The only ad-hoc root key allowed is the logout cache wipe; queries use the helpers
@@ -60,6 +63,20 @@ assert.doesNotMatch(actBody, /await refresh\(\)/);
 
 // User-initiated provider sync keeps parallel refetches
 assert.match(app, /Promise\.allSettled/);
+
+// Task details come from the per-id cache and are invalidated per-id on task
+// mutations — no imperative details fetcher remains
+assert.doesNotMatch(app, /loadTaskDetails/);
+assert.match(app, /invalidateQueries\(\{ queryKey: queryKeys\.taskDetails\(/);
+assert.match(app, /staleTime: staleTimes\.taskDetails/);
+assert.match(app, /staleTime: staleTimes\.planHistory/);
+
+// SyncBypassError is explicitly classified non-retryable (plan requirement)
+assert.match(apiSrc, /if \(error instanceof SyncBypassError\)/);
+
+// Boot and sign-in fetch through the queries, not a manual refresh()
+const mountSlice = app.slice(app.indexOf("void Promise.all([secureState.session()"), app.indexOf("void Promise.all([secureState.session()") + 1400);
+assert.doesNotMatch(mountSlice, /void refresh\(\)/);
 
 // Dependency is declared
 assert.ok(pkg.dependencies["@tanstack/react-query"]);

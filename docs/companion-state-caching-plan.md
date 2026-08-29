@@ -79,16 +79,16 @@ The revision-based autosave keeps its own flow; its success response updates the
 ## Acceptance criteria (verify each before done)
 
 - [x] AC1 — all companion tests pass, including new caching tests
-      · 65/65 across the battery; new `test/work-os-desktop-caching.test.mts` (23 static assertions on provider defaults, key discipline, bypass fetchers, mutation cache writes).
+      · 65/65 across the battery; `test/work-os-desktop-caching.test.mts` (40 static assertions on provider defaults, key discipline, bypass fetchers, mutation cache writes, per-id details invalidation, SyncBypassError classification).
 - [x] AC2 — `?offline` audits **zero external requests** across launch, task complete,
       classify update, clock transitions, insights view
       · Playwright audit: 67 requests at launch/day/tasks/insights, all localhost — zero external. Bypass mutations run through the on-device interceptors (never network) by construction.
 - [x] AC3 — task completion invalidates the day cache (subsequent read reflects it) and
       does NOT refetch insights
-      · Completion writes the day cache via `setDayCache` and the post-action path invalidates only `queryKeys.day`; no insights invalidation exists anywhere on that path (static-tested).
+      · Completion writes the day cache via `setDayCache` (stronger than invalidate — the next read reflects it immediately) and the post-action path invalidates only `queryKeys.day`; no insights invalidation exists anywhere on that path (static-tested).
 - [x] AC4 — cache windows: a second read within staleTime serves cache (no fetch);
       past staleTime triggers a background refetch
-      · staleTimes table matches the plan (static-tested); within-window serving / past-window background refetch are TanStack semantics given `staleTime` + `refetchOnWindowFocus`.
+      · staleTimes table matches the plan (static-tested); `task-details` and `plan-history` are proper keyed queries (2min/5min windows) so a second read within staleTime serves cache; past-window background refetch is TanStack semantics given `staleTime` + `refetchOnWindowFocus`.
 - [x] AC5 — EOD composer flow unchanged: fixture draft → bottleneck gate → submit → terminal state
       · Composer buffer remains local state; redraft one-shot POST intact; EOD flow tests in the battery pass.
 - [x] AC6 — plan autosave still works offline/online without clobbering focus edits
@@ -102,6 +102,21 @@ The revision-based autosave keeps its own flow; its success response updates the
 - [x] AC10 — no `refresh()`-style full refetch remains on the mutation path (grep-verifiable)
       · Static test asserts `act()` contains no `await refresh()`; success path = targeted `invalidateQueries(day)` + active refetch; `refresh()` remains only for the explicit user Refresh button and bootstrap/recovery paths.
 - [x] AC11 — reduced-motion/visual behavior unchanged (no UI redesign)
+
+### Plan-fidelity pass (post-implementation audit)
+
+A second audit against this document found and fixed four inconsistencies:
+
+1. `task-details` and `plan-history` existed only as table rows — task details were
+   fetched imperatively and plan history kept raw local state. Both are now keyed
+   queries; the five manual details-refetch sites invalidate
+   `queryKeys.taskDetails(parentId)` and the modal mirrors the cache.
+2. `SyncBypassError` was only implicitly non-retryable; `classifyRequestFailure`
+   now has an explicit branch.
+3. Boot and sign-in still called `refresh()`; the queries own the initial fetch
+   and sign-in invalidates the root instead.
+4. The scheduler's `refreshFirst` path invalidated nothing; it now invalidates
+   `queryKeys.day` per this document's trigger #4.
       · No markup, styling, or motion code touched — data layer only.
 
 ## Out of scope (deferred per phase plan)

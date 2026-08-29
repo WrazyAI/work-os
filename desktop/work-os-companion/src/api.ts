@@ -45,6 +45,9 @@ export class ApiRequestError extends Error {
 }
 
 export function classifyRequestFailure(error: unknown) {
+  if (error instanceof SyncBypassError) {
+    return { retryable: false, conflict: false, status: null, message: "Sync bypass is active" };
+  }
   if (error instanceof ApiRequestError) {
     return {
       retryable: error.retryable,

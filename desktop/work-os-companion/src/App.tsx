@@ -114,7 +114,6 @@ export default function App() {
   const [planDirty, setPlanDirty] = useState(false);
   const [planSaveState, setPlanSaveState] = useState<"saved" | "saving" | "offline" | "conflict">("saved");
   const [planHistoryDate, setPlanHistoryDate] = useState("");
-  const [historicalTasks, setHistoricalTasks] = useState<Array<Record<string, any>>>([]);
   const [taskView, setTaskView] = useState<TaskView>("today");
   const [carryOverOpen, setCarryOverOpen] = useState(false);
   const [insightRange, setInsightRange] = useState<"day" | "7d" | "30d">("7d");
@@ -131,7 +130,7 @@ export default function App() {
   const [taskComposerDescription, setTaskComposerDescription] = useState("");
   const [taskComposerAssignees, setTaskComposerAssignees] = useState<string[]>([]);
   const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
-  const [historicalPlan, setHistoricalPlan] = useState<DailyPlan | null>(null);
+  const [taskDetailsId, setTaskDetailsId] = useState<string | null>(null);
   const [taskDetailsReadOnly, setTaskDetailsReadOnly] = useState(false);
   const [taskDetailsLoading, setTaskDetailsLoading] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
@@ -215,7 +214,7 @@ export default function App() {
     if (editRequest) { setEditRequest(null); return; }
     if (clockInConfirmation) { setClockInConfirmation(null); return; }
     if (missedClockOut) { setMissedClockOut(null); return; }
-    if (taskDetails) { setTaskDetails(null); return; }
+    if (taskDetails) { setTaskDetails(null); setTaskDetailsId(null); return; }
     if (taskComposerOpen) { setTaskComposerOpen(false); return; }
     if (carryOverOpen) setCarryOverOpen(false);
   }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, subtaskMenuId, taskComposerOpen, taskDetails]);
@@ -271,9 +270,8 @@ export default function App() {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
-      if (current) void refresh().catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
-    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void refresh(); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); queryClient.invalidateQueries(); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
 
@@ -330,6 +328,20 @@ export default function App() {
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
 
   const onboarding = onboardingQuery.data ?? null;
+  const planHistoryQuery = useQuery({
+    queryKey: queryKeys.planHistory(planHistoryDate || "none"),
+    staleTime: staleTimes.planHistory,
+    enabled: !!planHistoryDate && planHistoryDate !== (visibleDay?.shiftDate ?? "") && !syncBypass,
+    queryFn: async () => {
+      const [planResult, taskResult] = await Promise.all([
+        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(planHistoryDate)}`),
+        apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(planHistoryDate)}&limit=100`),
+      ]);
+      return { plan: planResult.plan, tasks: taskResult.tasks };
+    },
+  });
+  const historicalPlan = planHistoryQuery.data?.plan ?? null;
+  const historicalTasks = planHistoryQuery.data?.tasks ?? [];
 
   const insightsQuery = useQuery({
     queryKey: queryKeys.insights(insightRange, visibleDay?.shiftDate ?? null),
@@ -361,6 +373,13 @@ export default function App() {
       return result.people;
     },
   });
+  const taskDetailsQuery = useQuery({
+    queryKey: queryKeys.taskDetails(taskDetailsId ?? "none"),
+    staleTime: staleTimes.taskDetails,
+    enabled: !!taskDetailsId && !syncBypass,
+    queryFn: async (): Promise<TaskDetails> => apiRequest<TaskDetails>(`/api/work-os/me/tasks/${encodeURIComponent(taskDetailsId!)}`),
+  });
+
 
   const insights = insightsQuery.data ?? null;
   const insightsLoading = insightsQuery.isFetching;
@@ -383,6 +402,28 @@ export default function App() {
   const report = day?.report?.markdown ?? "";
 
 
+  // Mirror the task-details cache into the modal buffer; per-id invalidation
+  // on task mutations lands here as a fresh server read.
+  const subtaskSyncNotifiedAt = useRef(0);
+  useEffect(() => {
+    if (taskDetailsQuery.data) {
+      setTaskDetails(taskDetailsQuery.data);
+      setTaskDetailsLoading(false);
+      if (taskDetailsQuery.data.subtaskSync?.error && taskDetailsQuery.dataUpdatedAt !== subtaskSyncNotifiedAt.current) {
+        subtaskSyncNotifiedAt.current = taskDetailsQuery.dataUpdatedAt;
+        notifications.error("Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.", "Subtasks may be stale");
+      }
+    }
+  }, [taskDetailsQuery.data, taskDetailsQuery.dataUpdatedAt, notifications]);
+  useEffect(() => {
+    if (!taskDetailsQuery.isError) return;
+    setTaskDetails(null); setTaskDetailsId(null); setTaskDetailsLoading(false);
+    showError(taskDetailsQuery.error, "Could not open this task.", "Task unavailable");
+  }, [taskDetailsQuery.isError, taskDetailsQuery.error, showError]);
+  useEffect(() => {
+    if (!planHistoryQuery.isError) return;
+    showError(planHistoryQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
+  }, [planHistoryQuery.isError, planHistoryQuery.error, showError]);
   useEffect(() => {
     if (!dayQuery.isError || (!session && !debugScenario.enabled)) return;
     const rawMessage = errorMessage(dayQuery.error, "Your profile loaded, but the workday could not be refreshed.");
@@ -562,7 +603,8 @@ const redraftEod = async () => {
   const runCompanionTick = async (refreshFirst = false) => {
     if (busy || modalOpen) return;
     if (!visibleSession) return;
-    const dayNow = refreshFirst ? await refresh({ dayOnly: true }).catch(() => null) : visibleDay;
+    if (refreshFirst) queryClient.invalidateQueries({ queryKey: queryKeys.day });
+    const dayNow = visibleDay;
     const target = dayNow ?? visibleDay;
     if (!target) return;
     const currentGate = sessionGate(target);
@@ -769,18 +811,6 @@ const redraftEod = async () => {
 
   async function loadPlanHistory(date: string) {
     setPlanHistoryDate(date);
-    if (syncBypassRef.current) return;
-    if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
-    try {
-      const [planResult, taskResult] = await Promise.all([
-        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
-        apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
-      ]);
-      setHistoricalPlan(planResult.plan);
-      setHistoricalTasks(taskResult.tasks);
-    } catch (value) {
-      showError(value, "Daily workspace history could not be loaded.", "History unavailable");
-    }
   }
 
   async function openInsightReference(reference: InsightDay["references"][number]) {
@@ -809,25 +839,15 @@ const redraftEod = async () => {
     setTaskComposerOpen(true);
   }
 
-  async function loadTaskDetails(taskId: string) {
-    return apiRequest<TaskDetails>(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`);
-  }
-
   async function openTaskDetails(task: Record<string, any>, readOnly = false) {
     if (syncBypassRef.current) {
-      setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(false);
+      setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(false); setTaskDetailsId(null);
       setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
       return;
     }
     const taskId = String(task.provider_task_id || task.id);
     setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(true); setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
-    try {
-      const details = await loadTaskDetails(taskId);
-      setTaskDetails(details);
-      if (details.subtaskSync?.error) notifications.error("Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.", "Subtasks may be stale");
-    }
-    catch (value) { setTaskDetails(null); showError(value, "Could not open this task.", "Task unavailable"); }
-    finally { setTaskDetailsLoading(false); }
+    setTaskDetailsId(taskId);
   }
 
   function submitTaskFromDesktop() {
@@ -876,7 +896,7 @@ const redraftEod = async () => {
       await updateTaskCompletion(taskId, completed);
       if (refreshDetails && taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
-        setTaskDetails(await loadTaskDetails(parentId));
+        queryClient.invalidateQueries({ queryKey: queryKeys.taskDetails(parentId) });
       }
     });
   }
@@ -905,7 +925,7 @@ const redraftEod = async () => {
       setEditRequest(null);
       if (taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
-        setTaskDetails(await loadTaskDetails(parentId));
+        queryClient.invalidateQueries({ queryKey: queryKeys.taskDetails(parentId) });
       }
     });
   }
@@ -922,7 +942,8 @@ const redraftEod = async () => {
     const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
     void act("task.subtask_create", async () => {
       await apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: subtaskTitle.trim(), description: subtaskDescription.trim() || undefined, parent_task_id: parentId, assignee_person_ids: [] }) });
-      setSubtaskTitle(""); setSubtaskDescription(""); setTaskDetails(await loadTaskDetails(parentId));
+      setSubtaskTitle(""); setSubtaskDescription("");
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskDetails(parentId) });
     });
   }
 
@@ -947,8 +968,8 @@ const redraftEod = async () => {
     void act(mode === "delete" ? "task.delete" : "task.archive", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}?mode=${mode}`, { method: "DELETE" });
       setDeleteRequest(null);
-      if (closeParent) setTaskDetails(null);
-      else if (taskDetails) setTaskDetails(await loadTaskDetails(String(taskDetails.task.provider_task_id || taskDetails.task.id)));
+      if (closeParent) { setTaskDetails(null); setTaskDetailsId(null); }
+      else if (taskDetails) queryClient.invalidateQueries({ queryKey: queryKeys.taskDetails(String(taskDetails.task.provider_task_id || taskDetails.task.id)) });
     });
   }
 
@@ -967,7 +988,7 @@ const redraftEod = async () => {
     void act("task.subtask_move", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(subtaskId)}`, { method: "PATCH", body: JSON.stringify({ parent_task_id: targetId }) });
       setSubtaskMenuId(null); setMoveMenuId(null);
-      setTaskDetails(await loadTaskDetails(currentParentId));
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskDetails(currentParentId) });
     });
   }
 
@@ -1300,7 +1321,7 @@ const redraftEod = async () => {
       />}
     </section>
     {taskComposerOpen && <TaskComposerModal busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={() => setTaskComposerOpen(false)} onSubmit={submitTaskFromDesktop} />}
-        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => { setTaskDetails(null); setTaskDetailsId(null); }} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
