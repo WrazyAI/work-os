@@ -1074,6 +1074,9 @@ const redraftEod = async () => {
       } else {
         notifications.success(parts.join(" · "), "Updates filed");
       }
+      // Filed changes (new tasks, completions) only become visible once the
+      // workday payload is refetched — don't make the employee refresh by hand.
+      void refresh();
     })().catch((value) => {
       showError(value, "Your approved updates could not be filed.", "Filing failed");
     }).finally(() => setBusy(false));
