@@ -1,0 +1,246 @@
+/* Floating avatar companion — frameless always-on-top window */
+
+:root {
+  --avatar-ink: #171914;
+  --avatar-signal: #8bc34a;
+  --avatar-surface: #fbfaf5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: transparent;
+  font-family: Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+.avatar-shell {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+/* ── Collapsed orb ─────────────────────────────────────────────── */
+
+.avatar-orb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--avatar-ink);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.avatar-orb:hover { transform: scale(1.06); }
+.avatar-orb:active { transform: scale(0.96); }
+.avatar-orb.pulse { animation: avatarPulse 1.8s ease-in-out infinite; }
+
+@keyframes avatarPulse {
+  0%, 100% { box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35), 0 0 0 0 rgba(139, 195, 74, 0.55); }
+  50% { box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35), 0 0 0 14px rgba(139, 195, 74, 0); }
+}
+
+.avatar-ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  transform: rotate(-90deg);
+}
+.avatar-ring circle { fill: none; stroke-width: 3.5; }
+.avatar-ring .ring-track { stroke: rgba(255, 255, 255, 0.14); }
+.avatar-ring .ring-fill {
+  stroke: var(--avatar-signal);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease;
+}
+.avatar-orb.off .ring-fill { stroke: #5a5d55; }
+.avatar-orb.paused .ring-fill { stroke: #d9a441; }
+.avatar-orb.due .ring-fill { stroke: #ff9d5c; }
+
+.avatar-face {
+  font: 700 13px/1 Manrope, Inter, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.avatar-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff9d5c;
+  border: 2px solid var(--avatar-ink);
+}
+
+/* ── Expanded panel ────────────────────────────────────────────── */
+
+.avatar-panel {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--avatar-surface);
+  border: 1px solid rgba(23, 25, 20, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(13, 15, 12, 0.28);
+  overflow: hidden;
+  animation: panelIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.avatar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(23, 25, 20, 0.08);
+  cursor: grab;
+}
+.avatar-head strong { display: block; font-size: 13px; color: var(--avatar-ink); }
+.avatar-head small { font-size: 10.5px; color: #8f9289; }
+.avatar-close {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  color: #6a6d64;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.avatar-close:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
+
+.avatar-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: text;
+}
+
+.chat-entry { display: flex; }
+.chat-entry.user { justify-content: flex-end; }
+.chat-entry.user p {
+  margin: 0;
+  max-width: 84%;
+  background: var(--avatar-ink);
+  color: #f3f1e8;
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.chat-entry.assistant p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--avatar-ink); }
+.chat-entry.assistant { max-width: 96%; }
+.chat-system p {
+  margin: 0;
+  font-size: 11px;
+  color: #8a6d3b;
+  background: #fdf3e0;
+  border: 1px solid #f0dcb4;
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+.chat-receipt p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3f7d20;
+  background: #eef7e6;
+  border: 1px solid #d3ecc0;
+  border-radius: 10px;
+  padding: 8px 11px;
+}
+.chat-thinking { color: #8f9289; font-style: italic; }
+
+.chat-operations {
+  margin-top: 6px;
+  display: grid;
+  gap: 5px;
+}
+.op-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--avatar-ink);
+  background: #fff;
+  border: 1px solid rgba(23, 25, 20, 0.12);
+  border-radius: 9px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+.op-row.off { opacity: 0.45; text-decoration: line-through; }
+.op-row input { accent-color: var(--avatar-signal); margin: 0; }
+.op-approve {
+  border: 0;
+  border-radius: 9px;
+  background: var(--avatar-signal);
+  color: #171914;
+  font: 600 11.5px/1 Manrope, Inter, sans-serif;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.op-approve:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Composer ──────────────────────────────────────────────────── */
+
+.avatar-composer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(23, 25, 20, 0.08);
+  background: #fff;
+}
+.avatar-composer input {
+  flex: 1;
+  border: 1px solid rgba(23, 25, 20, 0.16);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font: 400 12.5px/1.4 Manrope, Inter, sans-serif;
+  color: var(--avatar-ink);
+  outline: none;
+  user-select: text;
+}
+.avatar-composer input:focus { border-color: var(--avatar-signal); box-shadow: 0 0 0 3px rgba(139, 195, 74, 0.18); }
+.avatar-send {
+  width: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--avatar-ink);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+.avatar-send:disabled { opacity: 0.4; cursor: default; }
+
+.avatar-snooze {
+  border: 0;
+  background: transparent;
+  color: #8f9289;
+  font: 500 11px/1 Manrope, Inter, sans-serif;
+  padding: 6px 12px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.avatar-snooze:hover { color: var(--avatar-ink); }
+
+.avatar-empty { padding: 14px; font-size: 12px; color: #6a6d64; }
