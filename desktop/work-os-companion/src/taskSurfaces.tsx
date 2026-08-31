@@ -290,9 +290,9 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
-export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, busy, onRedraft, onSubmit }: {
+export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, clockedOut = false, busy, onRedraft, onSubmit }: {
   reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
-  redrafting: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
+  redrafting: boolean; clockedOut?: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
@@ -306,6 +306,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
       <div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
+      {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
       <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? "Drafting…" : "Draft with AI"}</button>
     </header>

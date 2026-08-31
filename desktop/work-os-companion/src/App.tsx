@@ -5,7 +5,7 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
-import { apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { ApiRequestError, apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, markResponded, pruneRecord, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
@@ -106,6 +106,9 @@ export default function App() {
   const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated" } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
   const [eodSubmitted, setEodSubmitted] = useState(false);
+  const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
+  const [eodClockedOut, setEodClockedOut] = useState(false);
+  const eodAutoDraftedFor = useRef<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
     return rows.map((task) => ({ id: String(task.provider_task_id || task.id), title: String(task.title ?? "Untitled task") }));
@@ -347,16 +350,26 @@ const redraftEod = async () => {
     }
     setEodRedrafting(true);
     try {
-      const result = await apiRequest<{ markdown: string; model: string }>("/api/work-os/me/eod/ai-draft", {
+      const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean }>("/api/work-os/me/eod/ai-draft", {
         method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate }),
       });
+      setEodGate(null);
+      setEodClockedOut(result.clockedOut === true);
       setEodDraft({ markdown: result.markdown, source: "ai" });
-      notifications.success("The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
+      notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
     } catch (value) {
+      if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
+        const message = value instanceof Error ? value.message : "EOD drafting is gated";
+        setEodGate({ gate: /no tasks/i.test(message) ? "no_tasks" : "no_activity", detail: message });
+        setEodDraft(null);
+        return;
+      }
       setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
       notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
     } finally { setEodRedrafting(false); }
   };
+
+
 
   function submitEod(markdown: string, idempotencyKey: string) {
     const reportId = String(visibleDay?.report?.id ?? "");
@@ -659,6 +672,18 @@ const redraftEod = async () => {
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  // Entering the EOD review checks the gates and drafts automatically: the
+  // day must have recorded work activity and at least one submitted or
+  // checked-off task, and drafting clock-outs the shift.
+  useEffect(() => {
+    if (view !== "review" || !visibleDay?.report || eodSubmitted || eodDraft || eodGate || eodRedrafting) return;
+    const stamp = `${visibleDay.shiftDate}:${visibleDay.report.id}`;
+    if (eodAutoDraftedFor.current === stamp) return;
+    eodAutoDraftedFor.current = stamp;
+    void redraftEod();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, visibleDay?.report?.id, eodSubmitted]);
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
@@ -1166,7 +1191,7 @@ const redraftEod = async () => {
   return <div className="workspace">
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
-      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals?.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
+      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
@@ -1217,18 +1242,23 @@ const redraftEod = async () => {
         onClockOut={() => setClockOutConfirmation(true)}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openGoalComposer} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
-      {view === "review" && visibleDay?.report && !eodSubmitted && <EodComposer
+      {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
+          title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
+          body={eodGate.detail}
+        /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); eodAutoDraftedFor.current = null; void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking your shift, closing it out if it's still open, and writing the report from today's record." /></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
           reportId={String(visibleDay.report.id ?? "unknown")}
           initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
           source={eodDraft?.source ?? "deterministic"}
           suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
           redrafting={eodRedrafting}
+          clockedOut={eodClockedOut}
           busy={busy}
           onRedraft={() => void redraftEod()}
           onSubmit={submitEod}
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
-      {view === "review" && <ReviewWorkspace proposals={visibleDay?.proposals ?? []} busy={busy} onReject={(id) => void act("proposal.reject", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "reject" }))} onApprove={(id) => void act("proposal.accept", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "accept" }))} />}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Quiet mode" detail={companionRecord.quiet.active ? "Companion reminders are paused" : "Reminders follow the normal schedule"}><button disabled={busy} onClick={() => setCompanionRecord((current) => setMachineQuiet(current, !current.quiet.active))}>{companionRecord.quiet.active ? "Resume reminders" : "Pause reminders"}</button></Setting><Setting title="Snooze reminders" detail={companionRecord.snooze.until ? `Until ${new Date(companionRecord.snooze.until).toLocaleTimeString()}` : "Silence the companion for one hour"}><button disabled={busy} onClick={() => { setCompanionRecord((current) => snoozeMachine(current, null, new Date(Date.now() + 60 * 60_000))); notifications.info("Companion reminders are snoozed for one hour.", "Snoozed"); }}><CirclePause size={15} /> Snooze 1h</button></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}

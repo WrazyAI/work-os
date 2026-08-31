@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:event:default",
+    "allow-app-commands",
     "core:path:default",
     "core:window:allow-set-position",
     "core:window:allow-set-size",

@@ -343,11 +343,18 @@ export default function AvatarApp(): React.ReactElement {
   if (connected === false) {
     return (
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
-        <button className="avatar-orb off" onClick={() => void toggleExpanded(!expanded)} title="Connect Work OS from the main window">
-          <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" /></svg>
-          <span className="avatar-face">zZ</span>
-        </button>
-        {expanded && <div className="avatar-panel"><p className="avatar-empty">Not connected. Open the Work OS main window and connect this device.</p></div>}
+        {!expanded && (
+          <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
+            <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
+            <span className="avatar-face">zZ</span>
+          </button>
+        )}
+        {expanded && (
+          <div className="avatar-panel">
+            <header className="avatar-head"><div><strong>Work OS companion</strong><small>Not connected</small></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
+            <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
+          </div>
+        )}
       </div>
     );
   }
