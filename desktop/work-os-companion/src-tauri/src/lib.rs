@@ -89,7 +89,7 @@ fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: Stri
     {
         let app_handle = app.clone();
         let window_target = target.clone();
-        tauri_winrt_notification::Toast::new()
+        tauri_winrt_notification::Toast::new("com.wrazy.workos.pilot")
             .title(&title)
             .text1(&body)
             .on_activated(move || {
