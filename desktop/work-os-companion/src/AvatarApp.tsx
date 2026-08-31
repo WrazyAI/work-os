@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
@@ -61,7 +63,19 @@ async function requestNotificationPermissionOnce(): Promise<boolean> {
 
 function fireNotification(nudge: CompanionNudge, permission: boolean): void {
   if (!permission) return;
-  try { sendNotification({ title: nudge.title, body: nudge.body }); } catch { /* best effort */ }
+  try {
+    if (navigator.userAgent.includes("Windows")) {
+      // Windows toasts support click-to-focus through the local notify_focus
+      // command; hourly nudges open the companion, clock-in/EOD open the app.
+      void invoke("notify_focus", {
+        title: nudge.title,
+        body: nudge.body,
+        target: nudge.kind === "hourly" ? "avatar" : "main",
+      }).catch(() => { sendNotification({ title: nudge.title, body: nudge.body }); });
+      return;
+    }
+    sendNotification({ title: nudge.title, body: nudge.body });
+  } catch { /* best effort */ }
 }
 
 export default function AvatarApp(): React.ReactElement {
@@ -90,6 +104,15 @@ export default function AvatarApp(): React.ReactElement {
   const dayRef = useRef<DayFacts>(facts);
 
   useEffect(() => { dayRef.current = facts; }, [facts]);
+
+  // ── Toast activation (Windows): expand the composer when clicked ──
+  useEffect(() => {
+    const unlisten = listen("avatar://expand", () => {
+      setMissed(false);
+      void toggleExpanded(true);
+    });
+    return () => { unlisten.then((fn) => fn()).catch(() => { /* noop */ }); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Boot: session + saved position + notifications ──
   useEffect(() => {

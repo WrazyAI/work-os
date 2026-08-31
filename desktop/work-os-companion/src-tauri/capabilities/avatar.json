@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "avatar",
   "description": "Capabilities for the floating companion window: position/size control, notifications, and secure session access.",
-  "windows": ["avatar"],
+  "windows": [
+    "avatar"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -15,6 +17,7 @@
     "core:window:allow-current-monitor",
     "notification:default",
     "stronghold:default",
-    "stronghold:allow-remove-store-record"
+    "stronghold:allow-remove-store-record",
+    "allow-avatar-commands"
   ]
 }

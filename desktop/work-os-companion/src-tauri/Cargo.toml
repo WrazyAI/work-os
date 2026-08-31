@@ -35,5 +35,8 @@ uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 work-os-diagnostics-core = { path = "diagnostics-core" }
 
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.2"
+
 [profile.dev.package.scrypt]
 opt-level = 3
