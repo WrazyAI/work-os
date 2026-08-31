@@ -14,11 +14,20 @@
 * {
   box-sizing: border-box;
 }
+html {
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
   min-width: 360px;
   min-height: 100vh;
   background: #e9e8e1;
+  overscroll-behavior: none;
+}
+/* Reaching the edge of any inner scroller must stop there — no chaining to
+   the page, no rubber-band jump. */
+* {
+  overscroll-behavior: contain;
 }
 button,
 input,
@@ -1084,6 +1093,31 @@ button:disabled {
   .rail nav button.active:before {
     left: -10px;
     height: 18px;
+  }
+  .rail nav button {
+    position: relative;
+  }
+  .rail nav button::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--ink);
+    color: #f3f1e8;
+    font: 600 11.5px/1 Manrope, Inter, "Segoe UI", sans-serif;
+    padding: 7px 11px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    box-shadow: 0 6px 18px rgba(13, 15, 12, 0.3);
+  }
+  .rail nav button:hover::after,
+  .rail nav button:focus-visible::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
   }
   .rail nav em {
     position: absolute;

@@ -47,7 +47,7 @@ describe("companion launch window", () => {
     const mainWindow = config.app.windows.find((window: { label?: string }) => window.label === "main");
 
     expect(mainWindow).toMatchObject({
-      width: 1440,
+      width: 1000,
       height: 960,
       center: true,
       resizable: true,

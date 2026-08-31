@@ -8,7 +8,9 @@
 
 * { box-sizing: border-box; }
 
-body {
+/* Scoped to the avatar window only — a bare body rule here leaked into the
+   main window and disabled scrolling app-wide (0.2.31 regression). */
+body.avatar-window {
   margin: 0;
   background: transparent;
   font-family: Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
