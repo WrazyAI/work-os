@@ -88,6 +88,15 @@ export function taskDateAttribution(task: TaskRow, currentDate: string, surfaced
     return { date: String(task.dayAttribution.date), reason: reason as TaskDateReason };
   }
   const due = dateOnly(task.due_date);
+  // A completed task belongs to the day the work actually happened: finished
+  // after its logged-for date, it carries into the completion day while the
+  // logged and completed dates stay visible on the task itself.
+  const done = task.completed === true ? dateOnly(task.completed_at) : null;
+  if (done && done <= currentDate) {
+    if (due && done > due) return { date: done, reason: "carried" as const };
+    if (due) return { date: due, reason: "due" as const };
+    return { date: done, reason: "surfaced" as const };
+  }
   if (due && due <= currentDate) return { date: due, reason: "due" as const };
   if (surfacedDate && surfacedDate <= currentDate) return { date: surfacedDate, reason: "surfaced" as const };
   const created = dateOnly(task.provider_created_at ?? task.created_at);
