@@ -97,6 +97,10 @@ export default function App() {
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
   const [pendingProgressUpdate, setPendingProgressUpdate] = useState("");
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
+  // Full composer conversation. Persists for the app session until the user
+  // explicitly clears it (trash) or starts a new chat (plus) — closing the
+  // flyout intentionally keeps it.
+  const [composerHistory, setComposerHistory] = useState<Array<{ role: "user" | "assistant"; text: string; meta?: string }>>([]);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated" } | null>(null);
@@ -989,6 +993,7 @@ const redraftEod = async () => {
   function startProgressUpdate() {
     const text = input.trim();
     if (!text) return;
+    setComposerHistory((current) => [...current, { role: "user" as const, text }]);
     setPendingProgressUpdate(text);
     setProgressReceipt(null);
     setProgressPanel("update");
@@ -1005,11 +1010,20 @@ const redraftEod = async () => {
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
       if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
       setInterpretation({ status: "ready", operations: review.operations, taskOptions, reply: review.reply });
+      setComposerHistory((current) => [...current, { role: "assistant" as const, text: review.reply || "Here's what I understood.", meta: review.operations.length ? `${review.operations.length} proposed update${review.operations.length === 1 ? "" : "s"}` : undefined }]);
     }).catch((value) => {
       setInterpretation(null);
       setAiUnavailable(true);
       diagnostics.info("composer.ai_fallback", value instanceof Error ? value.message : "interpretation failed", { activeView: view });
     });
+  }
+
+  function clearComposerChat() {
+    setComposerHistory([]);
+    setProgressReceipt(null);
+    setInterpretation(null);
+    setPendingProgressUpdate("");
+    setInput("");
   }
 
   function toggleOperation(index: number) {
@@ -1032,12 +1046,11 @@ const redraftEod = async () => {
       : enabled.some((op) => op.op === "complete_task") ? "completion_claim"
       : enabled.some((op) => op.op === "create_task") ? "new_task" : "material_progress";
     const close = () => {
-      setProgressReceipt({
-        kind: dominant, text, queued: false,
-        message: enabled.length === 1
-          ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
-          : `Recorded ${enabled.length} updates on your behalf.`,
-      });
+      const message = enabled.length === 1
+        ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
+        : `Recorded ${enabled.length} updates on your behalf.`;
+      setProgressReceipt({ kind: dominant, text, queued: false, message });
+      setComposerHistory((current) => [...current, { role: "assistant" as const, text: message, meta: "recorded" }]);
       setInterpretation(null);
       setPendingProgressUpdate("");
       recordResponse();
@@ -1086,6 +1099,7 @@ const redraftEod = async () => {
     recordResponse();
     const text = pendingProgressUpdate.trim();
     if (!text) return;
+    setComposerHistory((current) => [...current, { role: "assistant" as const, text: `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.`, meta: "recorded" }]);
     if (syncBypassRef.current) {
       const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
       setProgressReceipt({
@@ -1225,6 +1239,8 @@ const redraftEod = async () => {
         panel={progressPanel}
         pending={pendingProgressUpdate}
         receipt={progressReceipt}
+        history={composerHistory}
+        onClearChat={clearComposerChat}
         busy={busy}
         required={sessionActive && view === "day" && !!visibleDay?.prompt.required}
         goal={planIntent}
@@ -1341,9 +1357,9 @@ export function PreShiftAgendaSummary({ todayCount, yesterdayDueCount, onToday, 
   return <div className="pre-shift-agenda-summary" aria-label="Agenda summary"><button onClick={onToday}><span>{todayCount}</span><div><strong>{todayCount === 1 ? "Task" : "Tasks"} scheduled for today</strong><small>Open today’s agenda</small></div><ChevronRight size={15} /></button><button className={yesterdayDueCount ? "has-due" : ""} disabled={!yesterdayDueCount} onClick={onYesterday}><span>{yesterdayDueCount}</span><div><strong>{yesterdayDueCount === 1 ? "Task" : "Tasks"} due from yesterday</strong><small>{yesterdayDueCount ? "Needs your attention" : "Nothing carried forward"}</small></div>{yesterdayDueCount > 0 && <ChevronRight size={15} />}</button></div>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
   mode?: ComposerMode;
-  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; busy: boolean; required: boolean; goal: string;
+  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: Array<{ role: "user" | "assistant"; text: string; meta?: string }>; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
   interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null;
@@ -1357,11 +1373,16 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose, open]);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history.length, interpretation, pending, receipt, open]);
   useEffect(() => {
     const el = composerInputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 118)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
   }, [input]);
   const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
     { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },
@@ -1374,11 +1395,13 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     : receipt?.queued ? "Update queued" : "Update recorded";
   return <div className={`progress-dock ${agendaMode ? "agenda-dock" : "progress-mode"} ${open ? "open" : ""}`}>
     {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
-      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><button aria-label="Close composer" onClick={onClose}><X size={16} /></button></header>
-      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation">{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
+      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><span className="progress-header-actions">{panel !== "goal" && <><button aria-label="Clear conversation" title="Clear conversation" onClick={onClearChat}><Trash2 size={15} /></button><button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button></>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
+      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation" ref={conversationRef}>{history.length > 0 && <div className="progress-history">{history.map((turn, index) => turn.role === "user"
+        ? <div className="progress-message user" key={index}><p>{turn.text}</p></div>
+        : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
   : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><p>{interpretation.reply}</p><small>Share an update below and I’ll turn it into records.</small></div></div>
   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Here’s what I understood.</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>Untick anything you don’t want, edit the wording, and approve — nothing is filed until you do.</p><div className="interpretation-list">{interpretation.operations.map((op, index) => <label className={op.enabled ? "interpretation-row" : "interpretation-row off"} key={index}><input type="checkbox" checked={op.enabled} onChange={() => onToggleOperation?.(index)} /><span>{operationLabel(op.op)}{op.taskId ? ` ${interpretation.taskOptions.find((task) => task.id === op.taskId)?.title ?? op.taskTitle ?? ""}` : op.op === "create_task" ? ` ${op.taskTitle ?? ""}` : ""}</span><input className="interpretation-statement" value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{(op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</label>)}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} update{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
-  : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
+  : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
     <div className="progress-input-shell"><button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button><textarea ref={composerInputRef} rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder={open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} aria-label="Share an update or add a task" /><span className={required ? "composer-hint due" : "composer-hint"}>{required ? "Update due" : <><kbd>Enter</kbd> to send</>}</span><button className={input.trim() ? "progress-send ready" : "progress-send"} aria-label="Review update type" aria-keyshortcuts="Enter" disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>
   </div>;
