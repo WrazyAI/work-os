@@ -15,6 +15,8 @@ export interface ProposedOperation {
 export interface CandidateReview {
   originalInput: string;
   operations: ProposedOperation[];
+  /** Assistant's conversational reply — present for chat messages and work updates alike. */
+  reply?: string;
 }
 
 const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
@@ -41,9 +43,13 @@ export function normalizeInterpretation(
   tasks: Array<{ id: string; title: string }>,
 ): CandidateReview | null {
   if (!raw || typeof raw !== "object") return null;
-  const source = raw as { operations?: unknown };
+  const source = raw as { operations?: unknown; reply?: unknown };
   const allowed = new Set(tasks.map((task) => task.id));
-  if (!Array.isArray(source.operations)) return null;
+  const reply = typeof source.reply === "string" && source.reply.trim() ? source.reply.replace(/\s+/g, " ").trim().slice(0, 600) : undefined;
+  if (!Array.isArray(source.operations)) {
+    // A conversational reply with nothing to record is a valid assistant turn.
+    return reply ? { originalInput, operations: [], reply } : null;
+  }
 
   const operations: ProposedOperation[] = [];
   for (const entry of source.operations.slice(0, 20)) {
@@ -57,7 +63,8 @@ export function normalizeInterpretation(
     const taskTitle = typeof candidate.taskTitle === "string" && candidate.taskTitle.trim() ? safeTaskText(candidate.taskTitle, "") || undefined : undefined;
     operations.push({ op, statement, taskId, taskTitle, enabled: true });
   }
-  return { originalInput, operations };
+  if (!operations.length && !reply) return null;
+  return { originalInput, operations, reply };
 }
 
 export function interpretationFallbackReason(error: unknown): string {

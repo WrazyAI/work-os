@@ -33,7 +33,9 @@ describe("normalizeInterpretation", () => {
     const review = normalizeInterpretation({
       operations: [{ op: "create_task", statement: { evil: true }, taskTitle: "[object Object]" }],
     }, "update", TASKS);
-    expect(review?.operations).toHaveLength(0);
+    // Nothing usable survived sanitizing and there is no chat reply either,
+    // so the caller falls back to the manual classifier.
+    expect(review).toBeNull();
   });
 
   it("returns null for non-object payloads so the UI falls back to manual", () => {

@@ -170,7 +170,7 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
     </div>, document.body)}
     {moveOpen && createPortal(<div className="move-target-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
       <span>Move to task</span>
-      {moveTargets.length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
+      {(moveTargets || []).length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
     </div>, document.body)}
   </div>;
 }
@@ -186,6 +186,8 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
 }) {
   const task = details.task;
   const state = task.completed ? "complete" as const : typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
+  const subtasks = Array.isArray(details.subtasks) ? details.subtasks : [];
+  const moveTargets = Array.isArray(details.moveTargets) ? details.moveTargets : [];
   const sync = details.subtaskSync;
   return <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
     <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
@@ -194,9 +196,9 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
         {loading ? <p className="task-loading">Loading task details…</p> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
           <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, "Nifty")}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{details.subtasks.length}</strong></div>{details.subtasks.length > 0 && <CompletionRingInline completed={details.subtasks.filter((subtask) => subtask.completed === true).length} total={details.subtasks.length} />}</header>
+          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <CompletionRingInline completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} />}</header>
             {sync?.error && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
-            <div className="subtask-list">{details.subtasks.length ? details.subtasks.map((subtask) => {
+            <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
               return <article key={subtask.id} className={subtask.completed ? "completed" : ""}><div><strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong><p>{safeTaskText(subtask.description, "No description")}</p><AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
@@ -209,7 +211,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
                 onMove={(target) => onMoveSubtask(subtask, target)}
                 onArchive={() => onArchiveSubtask(subtask)}
                 onDelete={() => onDeleteSubtask(subtask)}
-                moveTargets={details.moveTargets}
+                moveTargets={moveTargets}
               />}</article>;
             }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
             {!readOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => onSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => onSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={onSubtaskCreate}><Plus size={14} /> Add subtask</button></div>}
