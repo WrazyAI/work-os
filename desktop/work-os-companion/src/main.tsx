@@ -17,7 +17,10 @@ installDiagnosticErrorHandlers();
 diagnostics.info("app.webview.start", "WebView booting", { search: window.location.search, userAgent: navigator.userAgent });
 
 const params = new URLSearchParams(window.location.search);
-if (params.get("window") === "avatar") document.body.classList.add("avatar-window");
+if (params.get("window") === "avatar") {
+  document.documentElement.classList.add("avatar-window");
+  document.body.classList.add("avatar-window");
+}
 const Root = params.get("window") === "avatar" ? AvatarApp
   : import.meta.env.DEV && params.has("preview-onboarding") ? OnboardingPreview
     : import.meta.env.DEV && params.has("preview-tasks") ? TasksPreview

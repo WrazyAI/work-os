@@ -1,5 +1,16 @@
 /* Floating avatar companion — frameless always-on-top window */
 
+html.avatar-window,
+body.avatar-window,
+body.avatar-window #root {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
 :root {
   --avatar-ink: #171914;
   --avatar-signal: #8bc34a;
@@ -28,18 +39,24 @@ body.avatar-window {
   justify-content: flex-start;
 }
 
+.avatar-compact {
+  position: relative;
+  width: 88px;
+  height: 88px;
+}
+
 /* ── Collapsed orb ─────────────────────────────────────────────── */
 
 .avatar-orb {
   position: relative;
   isolation: isolate;
-  width: 68px;
-  height: 68px;
-  margin: 4px;
-  border: 2px solid #e7eedc;
-  outline: 1px solid var(--avatar-console-edge);
-  outline-offset: -5px;
-  border-radius: 12px;
+  width: 76px;
+  height: 76px;
+  margin: 6px;
+  border: 1px solid #516650;
+  outline: 1px solid rgba(214, 244, 184, 0.22);
+  outline-offset: -6px;
+  border-radius: 16px;
   background:
     linear-gradient(rgba(214, 244, 184, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(214, 244, 184, 0.05) 1px, transparent 1px),
@@ -49,11 +66,11 @@ body.avatar-window {
   cursor: pointer;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 0 #101510, 0 14px 26px rgba(13, 15, 12, 0.28);
+  box-shadow: 0 5px 12px rgba(13, 15, 12, 0.34);
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
-.avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 9px 0 #101510, 0 16px 30px rgba(13, 15, 12, 0.3); }
-.avatar-orb:active { transform: translateY(2px); box-shadow: 0 5px 0 #101510, 0 8px 16px rgba(13, 15, 12, 0.25); }
+.avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 7px 16px rgba(13, 15, 12, 0.38); }
+.avatar-orb:active { transform: translateY(1px) scale(0.985); box-shadow: 0 3px 8px rgba(13, 15, 12, 0.3); }
 .avatar-orb.pulse { animation: avatarPulse 1.8s ease-in-out infinite; }
 
 @keyframes avatarPulse {
@@ -81,15 +98,18 @@ body.avatar-window {
 
 .avatar-pet { position: relative; z-index: 1; width: 53px; height: 53px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 
-.avatar-orb::after {
-  content: "DRAG";
+.avatar-drag-handle {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  right: 9px;
+  bottom: 9px;
+  z-index: 2;
   color: rgba(231, 247, 202, 0.58);
   font: 700 5.5px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
   letter-spacing: 0.13em;
+  cursor: grab;
+  user-select: none;
 }
+.avatar-drag-handle:active { cursor: grabbing; }
 
 .avatar-badge {
   position: absolute;
@@ -133,8 +153,10 @@ body.avatar-window {
   min-height: 58px;
   padding: 11px 12px;
   border-bottom: 1px solid rgba(23, 25, 20, 0.08);
-  cursor: grab;
 }
+.avatar-drag-zone { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: grab; user-select: none; }
+.avatar-drag-zone:active { cursor: grabbing; }
+.avatar-drag-zone > span:last-child { color: var(--avatar-console-edge); font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .08em; }
 .avatar-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .avatar-head-mark {
   display: grid;

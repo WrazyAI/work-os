@@ -5,7 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
-import { normalizeInterpretation, fileApprovedOperations, operationLabel, type ProposedOperation } from "./interpretation";
+import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { ToolApprovalCard } from "./ToolApprovalCard";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
@@ -35,12 +36,13 @@ interface ChatEntry {
   role: "user" | "assistant" | "system";
   text: string;
   operations?: ProposedOperation[];
+  toolResults?: ToolCallResult[];
   taskOptions?: Array<{ id: string; title: string }>;
   receipt?: string | null;
   createdAt?: string;
 }
 
-const AVATAR_COLLAPSED = { width: 76, height: 76 };
+const AVATAR_COLLAPSED = { width: 88, height: 88 };
 const AVATAR_EXPANDED = { width: 380, height: 560 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
@@ -150,7 +152,7 @@ export default function AvatarApp(): React.ReactElement {
     if (dayLoadInFlight.current) return;
     dayLoadInFlight.current = true;
     try {
-      const day = await apiRequest<Record<string, any>>("/api/work-os/me/day");
+      const day = await apiRequest<Record<string, any>>("/api/work-os/me/day?compact=true", { signal: AbortSignal.timeout(35_000) });
       const session = (day?.session ?? {}) as Record<string, any>;
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
@@ -370,7 +372,7 @@ export default function AvatarApp(): React.ReactElement {
         promptKind: "optional",
       }, {
         completeTask: (taskId, completed) => apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ completed }) }),
-        createTask: (taskInput) => apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate }) }),
+        createTask: (taskInput) => apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [] }) }),
         fileCheckIn: (checkIn) => apiRequest("/api/work-os/check-ins", { method: "POST", body: JSON.stringify({ source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text }) }),
       });
       const summary = [
@@ -379,7 +381,7 @@ export default function AvatarApp(): React.ReactElement {
         outcome.failed.length ? `${outcome.failed.length} failed` : null,
       ].filter(Boolean).join(" · ") || "Nothing to record";
       setChat((current) => current.map((entry) => entry.id === entryId
-        ? { ...entry, operations: undefined, receipt: summary }
+        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: outcome.results, receipt: null }
         : entry));
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
@@ -424,7 +426,7 @@ export default function AvatarApp(): React.ReactElement {
   const petPose = agendaDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : facts.promptRequired ? "alert" : "focus";
   const lastEntry = chat[chat.length - 1];
   const statusText = !facts.loaded
-    ? daySyncState === "error" ? "Could not load today" : "Loading today…"
+    ? daySyncState === "error" ? "Today is syncing" : "Loading today…"
     : facts.niftySyncError ? "Nifty sync delayed"
       : facts.niftySyncing ? "Nifty syncing…"
         : daySyncState === "stale" ? "Showing last update"
@@ -447,14 +449,17 @@ export default function AvatarApp(): React.ReactElement {
     return (
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
+          <div className="avatar-compact">
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
             <CompanionPet pose="sleep" className="avatar-pet" />
           </button>
+          <span className="avatar-drag-handle" data-tauri-drag-region aria-hidden="true">Move</span>
+          </div>
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
+            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -465,9 +470,9 @@ export default function AvatarApp(): React.ReactElement {
   return (
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
+        <div className="avatar-compact">
         <button
           className={`avatar-orb ${ringClass} ${facts.promptRequired ? "pulse" : ""}`}
-          data-tauri-drag-region
           onClick={() => void toggleExpanded(true)}
           title={onShift ? `On shift · ${label}` : "Work OS companion"}
         >
@@ -478,11 +483,13 @@ export default function AvatarApp(): React.ReactElement {
           <CompanionPet pose={petPose} className="avatar-pet" />
           {facts.promptRequired && !missed && <span className="avatar-badge" />}
         </button>
+        <span className="avatar-drag-handle" data-tauri-drag-region aria-hidden="true">Move</span>
+        </div>
       )}
       {expanded && (
         <div className="avatar-panel">
-          <header className="avatar-head" data-tauri-drag-region>
-            <div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div>
+          <header className="avatar-head">
+            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
             {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
@@ -504,17 +511,15 @@ export default function AvatarApp(): React.ReactElement {
                         {entry.operations && (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => (
-                              <label key={index} className={op.enabled ? "op-row" : "op-row off"}>
-                                <input type="checkbox" checked={op.enabled} onChange={() => {
+                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={entry.toolResults?.find((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement)} onToggle={() => {
+                                if (entry.toolResults?.some((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement)) return;
                                   const next = entry.operations!.map((candidate, i) => i === index ? { ...candidate, enabled: !candidate.enabled } : candidate);
                                   setChat((current) => current.map((e) => e.id === entry.id ? { ...e, operations: next } : e));
                                 }} />
-                                <span>{operationLabel(op.op)} {op.taskTitle ?? ""}</span>
-                              </label>
                             ))}
-                            <button className="op-approve" disabled={filing || !entry.operations.some((op) => op.enabled)}
+                            <button className="op-approve" disabled={filing || !!entry.toolResults || !entry.operations.some((op) => op.enabled)}
                               onClick={() => void approveOperations(entry.id, entry.operations!)}>
-                              {filing ? "Filing…" : `Approve & record ${entry.operations.filter((op) => op.enabled).length}`}
+                              {filing ? "Filing…" : `Approve & record ${entry.operations.filter((op) => op.enabled).length} tool call${entry.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}`}
                             </button>
                           </div>
                         )}

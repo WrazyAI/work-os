@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, operationToolCall } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -112,6 +112,7 @@ describe("fileApprovedOperations", () => {
     expect(outcome.recorded).toBe(2);
     expect(outcome.queued).toBe(1);
     expect(outcome.failed).toHaveLength(0);
+    expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "queued", "recorded"]);
   });
 
   it("never loses an approved operation to a mid-loop failure and reports per-op", async () => {
@@ -129,5 +130,22 @@ describe("fileApprovedOperations", () => {
     expect(outcome.failed).toHaveLength(2);
     expect(outcome.failed[0]?.message).toBe("Nifty is unreachable");
     expect(outcome.failed[1]?.op.op).toBe("record_blocker");
+    expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "failed", "failed"]);
+  });
+});
+
+describe("operationToolCall", () => {
+  const context = { shiftDate: "2026-08-27", personId: "person-1", promptKind: "optional" };
+
+  it("shows the exact request before approval", () => {
+    expect(operationToolCall({ op: "complete_task", statement: "Finished", taskId: "task-1", enabled: true }, context)).toEqual({
+      tool: "work_os.tasks.update_completion",
+      command: 'PATCH /api/work-os/me/tasks/task-1 {"completed":true}',
+    });
+    expect(operationToolCall({ op: "create_task", statement: "Write release notes", enabled: true }, context).command).toContain('"assignee_person_ids":["person-1"]');
+    expect(operationToolCall({ op: "record_blocker", statement: "Waiting for access", enabled: true }, context)).toEqual({
+      tool: "work_os.check_ins.create",
+      command: 'POST /api/work-os/check-ins {"source":"desktop","kind":"optional","update_kind":"blocked","input_text":"Waiting for access"}',
+    });
   });
 });

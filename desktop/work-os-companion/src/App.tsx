@@ -18,7 +18,8 @@ import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, simulateAiEod, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { ToolApprovalCard } from "./ToolApprovalCard";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
@@ -32,6 +33,7 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "overdue" | "completed" | "all";
+type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDetails = {
   task: Record<string, any>;
@@ -103,9 +105,9 @@ export default function App() {
   // flyout intentionally keeps it.
   const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
   const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
-  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null>(null);
+  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
-  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated" } | null>(null);
+  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
@@ -366,12 +368,12 @@ const redraftEod = async () => {
     }
     setEodRedrafting(true);
     try {
-      const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean }>("/api/work-os/me/eod/ai-draft", {
+      const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
         method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate }),
       });
       setEodGate(null);
       setEodClockedOut(result.clockedOut === true);
-      setEodDraft({ markdown: result.markdown, source: "ai" });
+      setEodDraft({ markdown: result.markdown, source: "ai", screenshots: result.screenshots ?? null, screenshotSyncUnavailable: result.screenshotSyncUnavailable === true });
       notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
     } catch (value) {
       if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
@@ -1113,14 +1115,15 @@ const redraftEod = async () => {
     const dominant: ProgressUpdateKind = enabled.some((op) => op.op === "record_blocker") ? "blocked"
       : enabled.some((op) => op.op === "complete_task") ? "completion_claim"
       : enabled.some((op) => op.op === "create_task") ? "new_task" : "material_progress";
-    const close = () => {
+    const close = (results?: ToolCallResult[]) => {
       const message = enabled.length === 1
         ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
         : `Recorded ${enabled.length} updates on your behalf.`;
-      setProgressReceipt({ kind: dominant, text, queued: false, message });
+      if (results) setProgressReceipt(null);
+      else setProgressReceipt({ kind: dominant, text, queued: false, message });
       setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: message, meta: "recorded", createdAt: new Date().toISOString() }]);
-      setInterpretation(null);
-      setPendingProgressUpdate("");
+      setInterpretation((current) => current ? { ...current, operations: current.operations.map((op) => ({ ...op, enabled: false })), results } : current);
+      setPendingProgressUpdate(results ? "tool calls reviewed" : "");
       recordResponse();
     };
     if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
@@ -1149,7 +1152,7 @@ const redraftEod = async () => {
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
       if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
-      close();
+      close(outcome.results);
       if (outcome.failed.length) {
         notifications.error(`${parts.join(" · ")}. First failure: ${outcome.failed[0]!.message}`, "Some updates did not file");
       } else {
@@ -1289,7 +1292,7 @@ const redraftEod = async () => {
           title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
           body={eodGate.detail}
         /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); eodAutoDraftedFor.current = null; void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
-      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking your shift, closing it out if it's still open, and writing the report from today's record." /></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking today’s recorded work and writing a draft for you to review." /></section></main>}
       {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
           reportId={String(visibleDay.report.id ?? "unknown")}
           initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
@@ -1297,11 +1300,14 @@ const redraftEod = async () => {
           suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
           redrafting={eodRedrafting}
           clockedOut={eodClockedOut}
+          screenshotContext={eodDraft?.screenshots ?? null}
+          screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
           busy={busy}
           onRedraft={() => void redraftEod()}
           onSubmit={submitEod}
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
+      {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD review is not ready yet" body="Your EOD becomes available during the wrap-up window after work has been recorded. Nothing is missing from this page." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button onClick={() => void refresh({ refreshProviders: true })}>Refresh workday</button></div></section></main>}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Quiet mode" detail={companionRecord.quiet.active ? "Companion reminders are paused" : "Reminders follow the normal schedule"}><button disabled={busy} onClick={() => setCompanionRecord((current) => setMachineQuiet(current, !current.quiet.active))}>{companionRecord.quiet.active ? "Resume reminders" : "Pause reminders"}</button></Setting><Setting title="Snooze reminders" detail={companionRecord.snooze.until ? `Until ${new Date(companionRecord.snooze.until).toLocaleTimeString()}` : "Silence the companion for one hour"}><button disabled={busy} onClick={() => { setCompanionRecord((current) => snoozeMachine(current, null, new Date(Date.now() + 60 * 60_000))); notifications.info("Companion reminders are snoozed for one hour.", "Snoozed"); }}><CirclePause size={15} /> Snooze 1h</button></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
@@ -1326,6 +1332,7 @@ const redraftEod = async () => {
         onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setProgressReceipt(null); setInterpretation(null); }}
         onSubmit={startProgressUpdate}
         interpretation={interpretation}
+        toolContext={{ shiftDate: visibleDay?.shiftDate ?? null, personId: visibleDay?.access?.personId ?? null, promptKind: visibleDay?.prompt.kind || "optional" }}
         aiUnavailable={aiUnavailable}
         onToggleOperation={toggleOperation}
         onEditOperation={editOperation}
@@ -1336,6 +1343,10 @@ const redraftEod = async () => {
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
       />}
     </section>
+    <button className="status-update-bubble" onClick={() => { setView("day"); setProgressPanel("update"); setProgressComposerOpen(true); }} aria-label="Open status update composer">
+      <MessageSquareText size={18} aria-hidden="true" />
+      <span><small>Working on today</small><strong>{planIntent || "Share a status update"}</strong></span>
+    </button>
     {taskComposerOpen && <TaskComposerModal busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={() => setTaskComposerOpen(false)} onSubmit={submitTaskFromDesktop} />}
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
@@ -1430,12 +1441,13 @@ export function PreShiftAgendaSummary({ todayCount, yesterdayDueCount, onToday, 
   return <div className="pre-shift-agenda-summary" aria-label="Agenda summary"><button onClick={onToday}><span>{todayCount}</span><div><strong>{todayCount === 1 ? "Task" : "Tasks"} scheduled for today</strong><small>Open today’s agenda</small></div><ChevronRight size={15} /></button><button className={yesterdayDueCount ? "has-due" : ""} disabled={!yesterdayDueCount} onClick={onYesterday}><span>{yesterdayDueCount}</span><div><strong>{yesterdayDueCount === 1 ? "Task" : "Tasks"} due from yesterday</strong><small>{yesterdayDueCount ? "Needs your attention" : "Nothing carried forward"}</small></div>{yesterdayDueCount > 0 && <ChevronRight size={15} />}</button></div>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
-  interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null;
+  interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
+  toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: boolean;
   onToggleOperation?: (index: number) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onApproveOperations?: (operations: Array<import("./interpretation").ProposedOperation>) => void;
 }) {
@@ -1473,7 +1485,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
         ? <div className="progress-message user" key={index}><p>{turn.text}</p></div>
         : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
   : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><p>{interpretation.reply}</p><small>Share an update below and I’ll turn it into records.</small></div></div>
-  : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Here’s what I understood.</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>Untick anything you don’t want, edit the wording, and approve — nothing is filed until you do.</p><div className="interpretation-list">{interpretation.operations.map((op, index) => <label className={op.enabled ? "interpretation-row" : "interpretation-row off"} key={index}><input type="checkbox" checked={op.enabled} onChange={() => onToggleOperation?.(index)} /><span>{operationLabel(op.op)}{op.taskId ? ` ${interpretation.taskOptions.find((task) => task.id === op.taskId)?.title ?? op.taskTitle ?? ""}` : op.op === "create_task" ? ` ${op.taskTitle ?? ""}` : ""}</span><input className="interpretation-statement" value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{(op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</label>)}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} update{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
+   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.results ? "Tool call results" : "Review assistant tool calls"}</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>{interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement); return <ToolApprovalCard key={index} op={op} context={toolContext} result={result} onToggle={() => onToggleOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>; })}</div><button className="primary approve-interpretation" disabled={busy || !!interpretation.results || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} tool call{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
   : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
     <div className="progress-input-shell"><button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button><textarea ref={composerInputRef} rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder={open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} aria-label="Share an update or add a task" /><span className={required ? "composer-hint due" : "composer-hint"}>{required ? "Update due" : <><kbd>Enter</kbd> to send</>}</span><button className={input.trim() ? "progress-send ready" : "progress-send"} aria-label="Review update type" aria-keyshortcuts="Enter" disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>
