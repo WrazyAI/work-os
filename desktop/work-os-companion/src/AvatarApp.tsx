@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
@@ -14,6 +14,7 @@ import {
 import "./avatar.css";
 
 type SessionInfo = { apiBase: string; token: string; organizationId: string; expiresAt: string };
+type DaySyncState = "loading" | "ready" | "stale" | "error";
 
 interface DayFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -21,6 +22,8 @@ interface DayFacts extends CompanionDayFacts {
   planIntent: string | null;
   timezone: string | null;
   displayName: string | null;
+  niftySyncing: boolean;
+  niftySyncError: string | null;
 }
 
 interface ChatEntry {
@@ -86,8 +89,9 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, personId: null, planIntent: null,
-    timezone: null, displayName: null,
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null,
   });
+  const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
   const [now, setNow] = useState(() => Date.now());
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
@@ -135,10 +139,7 @@ export default function AvatarApp(): React.ReactElement {
   // ── Day poll: the single source of shift/prompt facts ──
   const loadDay = useCallback(async () => {
     try {
-      const day = await apiRequest<Record<string, any>>("/api/work-os/me/day", { method: "POST", body: JSON.stringify({}) }).catch(async () => {
-        // The day route may be GET-only in some deployments; try GET before giving up.
-        return apiRequest<Record<string, any>>("/api/work-os/me/day");
-      });
+      const day = await apiRequest<Record<string, any>>("/api/work-os/me/day");
       const session = (day?.session ?? {}) as Record<string, any>;
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
@@ -156,11 +157,15 @@ export default function AvatarApp(): React.ReactElement {
         planIntent: day?.plan?.freeform_intent ?? null,
         timezone: day?.shift?.timezone ?? null,
         displayName: day?.access?.displayName ?? null,
+        niftySyncing: day?.niftySync?.syncing === true,
+        niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null,
       });
       setConnected(true);
+      setDaySyncState("ready");
     } catch (value) {
       if (value instanceof ApiRequestError && value.status === 401) setConnected(false);
-      // transient failures keep the last known facts
+      // Retain usable facts but make the stale/failure boundary explicit.
+      setDaySyncState(dayRef.current.loaded ? "stale" : "error");
     }
   }, []);
 
@@ -168,6 +173,21 @@ export default function AvatarApp(): React.ReactElement {
     void loadDay();
     const poll = setInterval(() => { void loadDay(); }, DAY_POLL_MS);
     return () => clearInterval(poll);
+  }, [loadDay]);
+
+  // The main and companion windows own separate React trees. Refresh promptly
+  // after a main-window write or sign-in instead of waiting for the minute poll.
+  useEffect(() => {
+    let unlistenDay: (() => void) | undefined;
+    let unlistenSession: (() => void) | undefined;
+    void listen("work-os://main-day-changed", () => { void loadDay(); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
+    void listen("work-os://main-session-changed", () => {
+      void secureState.session().then((session) => {
+        setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
+        void loadDay();
+      }).catch(() => undefined);
+    }).then((fn) => { unlistenSession = fn; }).catch(() => undefined);
+    return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
 
   // ── Tick ──
@@ -318,7 +338,8 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
       setMissed(false);
-      void loadDay();
+      await loadDay();
+      void emit("work-os://avatar-day-changed");
       setTimeout(() => { void toggleExpanded(false); }, 2_200);
     } catch (value) {
       setChat((current) => [...current, {
@@ -335,6 +356,12 @@ export default function AvatarApp(): React.ReactElement {
   const { fraction, label } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : facts.promptRequired ? "due" : "live";
   const lastEntry = chat[chat.length - 1];
+  const statusText = !facts.loaded
+    ? daySyncState === "error" ? "Could not load today" : "Loading today…"
+    : facts.niftySyncError ? "Nifty sync delayed"
+      : facts.niftySyncing ? "Nifty syncing…"
+        : daySyncState === "stale" ? "Showing last update"
+          : formatWorkOsDate(facts.shiftDate);
 
   useEffect(() => {
     chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
@@ -351,7 +378,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div><strong>Work OS companion</strong><small>Not connected</small></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
+            <header className="avatar-head"><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -379,10 +406,8 @@ export default function AvatarApp(): React.ReactElement {
       {expanded && (
         <div className="avatar-panel">
           <header className="avatar-head" data-tauri-drag-region>
-            <div>
-              <strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong>
-              <small>{facts.loaded ? formatWorkOsDate(facts.shiftDate) : "Syncing…"}</small>
-            </div>
+            <div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div>
+            {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
           <div className="avatar-chat" ref={chatScroll}>

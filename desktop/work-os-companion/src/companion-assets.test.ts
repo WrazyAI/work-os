@@ -54,3 +54,15 @@ describe("companion launch window", () => {
     });
   });
 });
+
+describe("floating companion integration", () => {
+  it("permits native dragging and uses direct day reads", () => {
+    const capability = JSON.parse(readFileSync(resolve(root, "src-tauri/capabilities/avatar.json"), "utf8"));
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+
+    expect(capability.permissions).toContain("core:window:allow-start-dragging");
+    expect(avatar).toContain('apiRequest<Record<string, any>>("/api/work-os/me/day")');
+    expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
+    expect(avatar).toContain('"work-os://main-day-changed"');
+  });
+});

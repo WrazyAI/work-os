@@ -4,6 +4,8 @@
   --avatar-ink: #171914;
   --avatar-signal: #8bc34a;
   --avatar-surface: #fbfaf5;
+  --avatar-console: #1b241b;
+  --avatar-console-edge: #77966c;
 }
 
 * { box-sizing: border-box; }
@@ -30,21 +32,28 @@ body.avatar-window {
 
 .avatar-orb {
   position: relative;
-  width: 64px;
-  height: 64px;
-  margin: 6px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--avatar-ink);
-  color: #fff;
+  isolation: isolate;
+  width: 68px;
+  height: 68px;
+  margin: 4px;
+  border: 2px solid #e7eedc;
+  outline: 1px solid var(--avatar-console-edge);
+  outline-offset: -5px;
+  border-radius: 12px;
+  background:
+    linear-gradient(rgba(214, 244, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(214, 244, 184, 0.05) 1px, transparent 1px),
+    radial-gradient(circle at 50% 42%, #303d2f, var(--avatar-console) 64%);
+  background-size: 5px 5px, 5px 5px, auto;
+  color: #e7f7ca;
   cursor: pointer;
   display: grid;
   place-items: center;
-  box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35);
+  box-shadow: 0 8px 0 #101510, 0 14px 26px rgba(13, 15, 12, 0.28);
   transition: transform 0.16s ease, box-shadow 0.16s ease;
 }
-.avatar-orb:hover { transform: scale(1.06); }
-.avatar-orb:active { transform: scale(0.96); }
+.avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 9px 0 #101510, 0 16px 30px rgba(13, 15, 12, 0.3); }
+.avatar-orb:active { transform: translateY(2px); box-shadow: 0 5px 0 #101510, 0 8px 16px rgba(13, 15, 12, 0.25); }
 .avatar-orb.pulse { animation: avatarPulse 1.8s ease-in-out infinite; }
 
 @keyframes avatarPulse {
@@ -54,9 +63,9 @@ body.avatar-window {
 
 .avatar-ring {
   position: absolute;
-  inset: -4px;
-  width: calc(100% + 8px);
-  height: calc(100% + 8px);
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
   transform: rotate(-90deg);
 }
 .avatar-ring circle { fill: none; stroke-width: 3.5; }
@@ -71,8 +80,20 @@ body.avatar-window {
 .avatar-orb.due .ring-fill { stroke: #ff9d5c; }
 
 .avatar-face {
-  font: 700 13px/1 Manrope, Inter, sans-serif;
-  letter-spacing: 0.02em;
+  z-index: 1;
+  font: 700 11px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(183, 255, 105, 0.55);
+}
+
+.avatar-orb::after {
+  content: "WO";
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  color: rgba(231, 247, 202, 0.58);
+  font: 700 7px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.13em;
 }
 
 .avatar-badge {
@@ -94,8 +115,10 @@ body.avatar-window {
   display: flex;
   flex-direction: column;
   background:
+    linear-gradient(rgba(36, 54, 31, 0.025) 1px, transparent 1px),
     radial-gradient(circle at 82% -14%, rgba(139, 195, 74, 0.14), transparent 38%),
     var(--avatar-surface);
+  background-size: 100% 5px, auto, auto;
   border: 1px solid rgba(23, 25, 20, 0.12);
   border-radius: 16px;
   box-shadow: 0 18px 48px rgba(13, 15, 12, 0.28);
@@ -112,12 +135,38 @@ body.avatar-window {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 10px;
+  min-height: 58px;
+  padding: 11px 12px;
   border-bottom: 1px solid rgba(23, 25, 20, 0.08);
   cursor: grab;
 }
+.avatar-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.avatar-head-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #71856a;
+  border-radius: 7px;
+  background: var(--avatar-console);
+  color: #d6f4b8;
+  font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.08em;
+}
 .avatar-head strong { display: block; font-size: 13px; color: var(--avatar-ink); letter-spacing: 0.01em; }
 .avatar-head small { font-size: 10.5px; color: #8f9289; }
+.avatar-retry {
+  margin-left: auto;
+  border: 1px solid #cad6b8;
+  border-radius: 7px;
+  background: #f4f8ed;
+  color: #42563c;
+  font: 700 10px/1 Manrope, Inter, sans-serif;
+  padding: 6px 7px;
+  cursor: pointer;
+}
+.avatar-retry:hover, .avatar-retry:focus-visible { background: #e7f1d8; }
 .avatar-close {
   border: 0;
   background: transparent;
@@ -260,3 +309,7 @@ body.avatar-window {
 .avatar-snooze:hover { color: var(--avatar-ink); }
 
 .avatar-empty { padding: 14px; font-size: 12px; color: #6a6d64; }
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-orb, .avatar-panel, .avatar-orb.pulse { animation: none; transition: none; }
+}
