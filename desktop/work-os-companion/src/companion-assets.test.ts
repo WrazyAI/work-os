@@ -64,5 +64,17 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('apiRequest<Record<string, any>>("/api/work-os/me/day")');
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
+    expect(avatar).toContain("facts.taskOptions");
+  });
+
+  it("stores main and avatar conversations in the encrypted vault", () => {
+    const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
+    const main = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+
+    expect(vault).toContain("saveConversation");
+    expect(vault).toContain("clearConversation");
+    expect(main).toContain("composerConversationScope");
+    expect(avatar).toContain("avatarConversationScope");
   });
 });

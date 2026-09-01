@@ -17,6 +17,23 @@ describe("normalizeInterpretation", () => {
     expect(operationLabel("complete_task")).toBe("Mark done:");
   });
 
+  it("keeps every supported AI operation reviewable before filing", () => {
+    const review = normalizeInterpretation({
+      operations: [
+        { op: "record_progress", statement: "Continued the debugger fix.", taskId: "t-1" },
+        { op: "record_blocker", statement: "Waiting for the signing certificate.", taskId: "t-1" },
+        { op: "complete_task", statement: "Finished the debugger fix.", taskId: "t-1" },
+        { op: "reopen_task", statement: "Reopened the debugger fix.", taskId: "t-1" },
+        { op: "create_task", statement: "Package the release.", taskTitle: "Package the release" },
+      ],
+    }, "Update my work", TASKS);
+
+    expect(review?.operations.map((operation) => operation.op)).toEqual([
+      "record_progress", "record_blocker", "complete_task", "reopen_task", "create_task",
+    ]);
+    expect(review?.operations.every((operation) => operation.enabled)).toBe(true);
+  });
+
   it("drops operations with unknown task ids and structural surprises", () => {
     const review = normalizeInterpretation({
       operations: [

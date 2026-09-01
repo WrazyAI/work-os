@@ -21,7 +21,7 @@ import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal,
 import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
-import { secureState } from "./vault";
+import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
 import "./plan-insights.css";
@@ -100,7 +100,8 @@ export default function App() {
   // Full composer conversation. Persists for the app session until the user
   // explicitly clears it (trash) or starts a new chat (plus) — closing the
   // flyout intentionally keeps it.
-  const [composerHistory, setComposerHistory] = useState<Array<{ role: "user" | "assistant"; text: string; meta?: string }>>([]);
+  const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
+  const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated" } | null>(null);
@@ -111,7 +112,9 @@ export default function App() {
   const eodAutoDraftedFor = useRef<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
-    return rows.map((task) => ({ id: String(task.provider_task_id || task.id), title: String(task.title ?? "Untitled task") }));
+    // The interpreter returns Work OS local IDs. Keep that canonical identifier
+    // through review and approval so completion proposals are never dropped.
+    return rows.map((task) => ({ id: String(task.id), title: String(task.title ?? "Untitled task") }));
   };
   const [planIntent, setPlanIntent] = useState("");
   const [goalProvenance, setGoalProvenance] = useState<"employee" | "accepted_suggestion" | null>(null);
@@ -698,6 +701,28 @@ const redraftEod = async () => {
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
+  const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId
+    ? `main:${visibleSession.organizationId}:${visibleDay.access.personId}`
+    : null;
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedComposerConversation(null);
+    setComposerHistory([]);
+    if (!composerConversationScope) return () => { cancelled = true; };
+    void secureState.conversation(composerConversationScope).then((turns) => {
+      if (!cancelled) {
+        setComposerHistory(turns);
+        setLoadedComposerConversation(composerConversationScope);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadedComposerConversation(composerConversationScope);
+    });
+    return () => { cancelled = true; };
+  }, [composerConversationScope]);
+  useEffect(() => {
+    if (!composerConversationScope || loadedComposerConversation !== composerConversationScope) return;
+    void secureState.saveConversation(composerConversationScope, composerHistory);
+  }, [composerConversationScope, composerHistory, loadedComposerConversation]);
   useEffect(() => {
     if (debugScenario.enabled && visibleDay?.plan) {
       setPlanIntent(visibleDay.plan.freeform_intent ?? "");
@@ -1029,7 +1054,9 @@ const redraftEod = async () => {
   function startProgressUpdate() {
     const text = input.trim();
     if (!text) return;
-    setComposerHistory((current) => [...current, { role: "user" as const, text }]);
+    const userTurn: WorkOsConversationTurn = { id: crypto.randomUUID(), role: "user", text, createdAt: new Date().toISOString() };
+    const history = [...composerHistory, userTurn];
+    setComposerHistory(history);
     setPendingProgressUpdate(text);
     setProgressReceipt(null);
     setProgressPanel("update");
@@ -1041,12 +1068,12 @@ const redraftEod = async () => {
     setAiUnavailable(false);
     void apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
       method: "POST",
-      body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null }),
+      body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
     }).then((result) => {
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
       if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
       setInterpretation({ status: "ready", operations: review.operations, taskOptions, reply: review.reply });
-      setComposerHistory((current) => [...current, { role: "assistant" as const, text: review.reply || "Here's what I understood.", meta: review.operations.length ? `${review.operations.length} proposed update${review.operations.length === 1 ? "" : "s"}` : undefined }]);
+      setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: review.reply || "Here's what I understood.", meta: review.operations.length ? `${review.operations.length} proposed update${review.operations.length === 1 ? "" : "s"}` : undefined, createdAt: new Date().toISOString() }]);
     }).catch((value) => {
       setInterpretation(null);
       setAiUnavailable(true);
@@ -1056,6 +1083,7 @@ const redraftEod = async () => {
 
   function clearComposerChat() {
     setComposerHistory([]);
+    if (composerConversationScope) void secureState.clearConversation(composerConversationScope);
     setProgressReceipt(null);
     setInterpretation(null);
     setPendingProgressUpdate("");
@@ -1086,7 +1114,7 @@ const redraftEod = async () => {
         ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
         : `Recorded ${enabled.length} updates on your behalf.`;
       setProgressReceipt({ kind: dominant, text, queued: false, message });
-      setComposerHistory((current) => [...current, { role: "assistant" as const, text: message, meta: "recorded" }]);
+      setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: message, meta: "recorded", createdAt: new Date().toISOString() }]);
       setInterpretation(null);
       setPendingProgressUpdate("");
       recordResponse();
@@ -1135,7 +1163,7 @@ const redraftEod = async () => {
     recordResponse();
     const text = pendingProgressUpdate.trim();
     if (!text) return;
-    setComposerHistory((current) => [...current, { role: "assistant" as const, text: `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.`, meta: "recorded" }]);
+    setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.`, meta: "recorded", createdAt: new Date().toISOString() }]);
     if (syncBypassRef.current) {
       const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
       setProgressReceipt({
@@ -1400,7 +1428,7 @@ export function PreShiftAgendaSummary({ todayCount, yesterdayDueCount, onToday, 
 
 export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
   mode?: ComposerMode;
-  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: Array<{ role: "user" | "assistant"; text: string; meta?: string }>; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
+  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
   interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string } | null;
@@ -1439,7 +1467,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
       <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><span className="progress-header-actions">{panel !== "goal" && <><button aria-label="Clear conversation" title="Clear conversation" onClick={onClearChat}><Trash2 size={15} /></button><button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button></>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation" ref={conversationRef}>{history.length > 0 && <div className="progress-history">{history.map((turn, index) => turn.role === "user"
         ? <div className="progress-message user" key={index}><p>{turn.text}</p></div>
-        : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
+        : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
   : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><p>{interpretation.reply}</p><small>Share an update below and I’ll turn it into records.</small></div></div>
   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Here’s what I understood.</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>Untick anything you don’t want, edit the wording, and approve — nothing is filed until you do.</p><div className="interpretation-list">{interpretation.operations.map((op, index) => <label className={op.enabled ? "interpretation-row" : "interpretation-row off"} key={index}><input type="checkbox" checked={op.enabled} onChange={() => onToggleOperation?.(index)} /><span>{operationLabel(op.op)}{op.taskId ? ` ${interpretation.taskOptions.find((task) => task.id === op.taskId)?.title ?? op.taskTitle ?? ""}` : op.op === "create_task" ? ` ${op.taskTitle ?? ""}` : ""}</span><input className="interpretation-statement" value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{(op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</label>)}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} update{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
   : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}

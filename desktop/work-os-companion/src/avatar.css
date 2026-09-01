@@ -167,6 +167,18 @@ body.avatar-window {
   cursor: pointer;
 }
 .avatar-retry:hover, .avatar-retry:focus-visible { background: #e7f1d8; }
+.avatar-clear {
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #64705e;
+  font: 700 10px/1 Manrope, Inter, sans-serif;
+  padding: 6px 7px;
+  cursor: pointer;
+}
+.avatar-retry + .avatar-clear { margin-left: 0; }
+.avatar-clear:hover, .avatar-clear:focus-visible { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
 .avatar-close {
   border: 0;
   background: transparent;

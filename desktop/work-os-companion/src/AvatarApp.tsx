@@ -3,7 +3,7 @@ import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { secureState } from "./vault";
+import { secureState, type WorkOsConversationTurn } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, operationLabel, type ProposedOperation } from "./interpretation";
 import { formatWorkOsDate } from "./dateFormat";
@@ -24,6 +24,7 @@ interface DayFacts extends CompanionDayFacts {
   displayName: string | null;
   niftySyncing: boolean;
   niftySyncError: string | null;
+  taskOptions: Array<{ id: string; title: string }>;
 }
 
 interface ChatEntry {
@@ -33,6 +34,7 @@ interface ChatEntry {
   operations?: ProposedOperation[];
   taskOptions?: Array<{ id: string; title: string }>;
   receipt?: string | null;
+  createdAt?: string;
 }
 
 const AVATAR_COLLAPSED = { width: 76, height: 76 };
@@ -89,11 +91,13 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, personId: null, planIntent: null,
-    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null,
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [],
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
+  const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [chat, setChat] = useState<ChatEntry[]>([]);
+  const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [filing, setFiling] = useState(false);
@@ -122,6 +126,7 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     (async () => {
       const session = (await secureState.session().catch(() => null)) as SessionInfo | null;
+      setDesktopSession(session);
       setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
       notificationPermission.current = await requestNotificationPermissionOnce();
       try {
@@ -159,6 +164,10 @@ export default function AvatarApp(): React.ReactElement {
         displayName: day?.access?.displayName ?? null,
         niftySyncing: day?.niftySync?.syncing === true,
         niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null,
+        taskOptions: Array.isArray(day?.tasks) ? day.tasks
+          .filter((task: unknown): task is Record<string, unknown> => !!task && typeof task === "object" && typeof (task as Record<string, unknown>).id === "string")
+          .map((task: Record<string, unknown>) => ({ id: String(task.id), title: typeof task.title === "string" ? task.title : "Untitled task" }))
+          .slice(0, 200) : [],
       });
       setConnected(true);
       setDaySyncState("ready");
@@ -183,12 +192,39 @@ export default function AvatarApp(): React.ReactElement {
     void listen("work-os://main-day-changed", () => { void loadDay(); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       void secureState.session().then((session) => {
+        setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
         void loadDay();
       }).catch(() => undefined);
     }).then((fn) => { unlistenSession = fn; }).catch(() => undefined);
     return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
+
+  const avatarConversationScope = desktopSession?.organizationId && facts.personId
+    ? `avatar:${desktopSession.organizationId}:${facts.personId}`
+    : null;
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedChatConversation(null);
+    setChat([]);
+    if (!avatarConversationScope) return () => { cancelled = true; };
+    void secureState.conversation(avatarConversationScope).then((turns) => {
+      if (!cancelled) {
+        setChat(turns.map((turn) => ({ ...turn, role: turn.role as ChatEntry["role"] })));
+        setLoadedChatConversation(avatarConversationScope);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadedChatConversation(avatarConversationScope);
+    });
+    return () => { cancelled = true; };
+  }, [avatarConversationScope]);
+  useEffect(() => {
+    if (!avatarConversationScope || loadedChatConversation !== avatarConversationScope) return;
+    const turns: WorkOsConversationTurn[] = chat
+      .filter((entry): entry is ChatEntry & { role: "user" | "assistant" } => entry.role === "user" || entry.role === "assistant")
+      .map((entry) => ({ id: entry.id, role: entry.role, text: entry.text, ...(entry.receipt ? { meta: entry.receipt } : {}), createdAt: entry.createdAt ?? new Date().toISOString() }));
+    void secureState.saveConversation(avatarConversationScope, turns);
+  }, [avatarConversationScope, chat, loadedChatConversation]);
 
   // ── Tick ──
   useEffect(() => {
@@ -291,9 +327,9 @@ export default function AvatarApp(): React.ReactElement {
     try {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
-        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null }),
+        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: chat.filter((entry) => entry.role === "user" || entry.role === "assistant").slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
-      const review = normalizeInterpretation(result.interpretation, text, []);
+      const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
       if (!review.operations.length) {
         setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted." }]);
@@ -363,6 +399,11 @@ export default function AvatarApp(): React.ReactElement {
         : daySyncState === "stale" ? "Showing last update"
           : formatWorkOsDate(facts.shiftDate);
 
+  function clearAvatarConversation() {
+    setChat([]);
+    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope);
+  }
+
   useEffect(() => {
     chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
   }, [chat.length, thinking]);
@@ -408,6 +449,7 @@ export default function AvatarApp(): React.ReactElement {
           <header className="avatar-head" data-tauri-drag-region>
             <div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div>
             {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
+            {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
           <div className="avatar-chat" ref={chatScroll}>
