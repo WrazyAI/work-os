@@ -460,6 +460,11 @@ composer remains a warm, accessible Work OS surface with standard controls and
 plain-language status. The console is draggable from its compact body and expanded
 header, with a visible keyboard-operable composer once opened.
 
+The `CompanionPet` is the reusable visual identity for that console: a compact,
+friendly retro desk robot with state-specific poses. It may appear as a small quiet cue
+beside the Today, Tasks, and EOD contexts, but never replaces a status label,
+becomes a dashboard card, or competes with a page's primary task action.
+
 ## 9. Navigation and tabs
 
 ### 9.1 Primary navigation

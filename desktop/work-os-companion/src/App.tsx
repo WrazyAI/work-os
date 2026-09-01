@@ -24,6 +24,7 @@ import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, 
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
+import { CompanionPet } from "./CompanionPet";
 import "./plan-insights.css";
 
 type AssetSource = string | { src: string };
@@ -273,15 +274,18 @@ export default function App() {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [moveMenuId, subtaskMenuId]);
 
-  const refresh = useCallback(async (options: { refreshProviders?: boolean; dayOnly?: boolean } = {}) => {
+  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean } = {}) => {
     if (syncBypassRef.current) return null;
+    const dayQuery = new URLSearchParams();
+    if (options.refreshProviders) dayQuery.set("refreshProviders", "true");
+    if (options.refreshAttendance) dayQuery.set("refreshAttendance", "true");
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
-      apiRequest<DayData>(`/api/work-os/me/day${options.refreshProviders ? "?refreshProviders=true" : ""}`, {
+      apiRequest<DayData>(`/api/work-os/me/day${dayQuery.size ? `?${dayQuery}` : ""}`, {
         // Provider refreshes run two external syncs server-side; the 20s
         // default aborted them mid-flight ("signal timed out") before the
         // Worktivity observation could land.
-        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 20_000),
+        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : options.refreshAttendance ? 35_000 : 20_000),
       }),
     ]);
     if (onboardingResult.status === "rejected") throw onboardingResult.reason;
@@ -311,9 +315,9 @@ export default function App() {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
-      if (current) void refresh().catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
+      if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
-    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh(); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
 
@@ -765,10 +769,10 @@ const redraftEod = async () => {
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
     try {
       const [planResult, taskResult] = await Promise.all([
-        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
+        apiRequest<DailyPlan | null>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
         apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
       ]);
-      setHistoricalPlan(planResult.plan);
+      setHistoricalPlan(planResult);
       setHistoricalTasks(taskResult.tasks);
     } catch (value) {
       showError(value, "Daily workspace history could not be loaded.", "History unavailable");
@@ -1238,10 +1242,10 @@ const redraftEod = async () => {
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Activity is syncing." : "Ready to start."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Worktivity activity is syncing. Your Work OS session remains separate and ready when you need it." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "No scheduled shift is active. Starting work creates an exception session without an inferred end time."}</p>
+          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Workday syncing." : "Ready when Worktivity is."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Fresh Worktivity activity starts and updates your Work OS workday automatically." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <>{!visibleDay?.breakPolicy?.worktivityAuthoritative && <button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button>}<button disabled={busy} onClick={() => setClockOutConfirmation(true)}>Clock out</button></>}</div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
-          </div><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" />
+          </div><div className="hero-companion-art"><CompanionPet pose={active ? paused ? "rest" : "focus" : "sleep"} className="companion-pet-inline" /><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
         <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Focus and tasks</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Focus note</small><strong>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Derived from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Nifty is the task record"}</span></div><PreShiftAgendaSummary todayCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} onToday={() => setView("tasks")} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} />{openTasks.length ? <>{openTasks.slice(0, 3).map((task, index) => { const state = taskState(task, visibleDay?.shiftDate ?? ""); return <div className="focus-row dashboard-focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><button className="focus-task-copy" onClick={() => void openTaskDetails(task)}><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></button><span className={`task-state ${state}`}>{sentence(state)}</span><TaskLifecycleMenu task={task} busy={busy} onEdit={editTask} onArchive={(item) => requestTaskRemoval(item, true, "archive")} onDelete={(item) => requestTaskRemoval(item, true, "delete")} /></div>; })}</> : <div className="pre-shift-empty-tasks"><span><Plus size={18} /></span><div><strong>Your agenda is open</strong><small>{yesterdayDueTasks.length ? "Add today’s priorities or review yesterday’s due work before you clock in." : "Add your first priority before you clock in."}</small></div></div>}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Detailed Task</button><button onClick={openGoalComposer}>Update Focus</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
@@ -1654,6 +1658,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   return <main className="page tasks-workspace">
     <div className="tasks-heading"><PageIntro eyebrow="Tasks workspace" title={historical ? "Workday history" : "Today’s tasks"} body="Plan today’s work and keep the history behind it." /><div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div></div>
+    <div className="tasks-companion-cue"><CompanionPet pose={historical ? "sleep" : "focus"} className="companion-pet-inline" /><span>{historical ? "Reviewing a past workday" : "Your desk companion is keeping today’s agenda close."}</span></div>
     <section className={`panel task-agenda-hero ${historical ? "historical" : ""}`}>
       <div className="agenda-hero-today"><header><span>{historical ? `Agenda · ${formatWorkOsDate(selectedDate)}` : "Today’s agenda"}</span>{!historical && <button className="agenda-edit-button" onClick={onEditFocus}><Pencil size={14} /> Edit focus</button>}</header><h2>{agendaText}</h2><footer><span><ListChecks size={14} /> {historical ? `${datedTasks.length} task${datedTasks.length === 1 ? "" : "s"} surfaced` : `${current.length} task${current.length === 1 ? "" : "s"} scheduled`}</span><small>{provenance}{!historical ? ` · ${saveLabel}` : ""}</small></footer></div>
       {!historical && <button className={`unfinished-work-hero ${carryOver.length ? "attention" : "clear"}`} disabled={!carryOver.length} onClick={() => onCarryOverOpen(true)}><span className="unfinished-work-icon">{carryOver.length ? <AlertTriangle size={19} /> : <Check size={19} />}</span><span className="unfinished-work-copy"><small>From previous days</small><strong>{carryOver.length ? `${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}` : "Nothing left behind"}</strong><em>{carryOver.length ? `${previousDays} previous workday${previousDays === 1 ? "" : "s"} need attention` : "All earlier work is clear"}</em></span><span className="unfinished-work-action">Review unfinished work <ChevronRight size={15} /></span></button>}

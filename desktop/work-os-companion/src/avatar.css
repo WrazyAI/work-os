@@ -79,20 +79,15 @@ body.avatar-window {
 .avatar-orb.paused .ring-fill { stroke: #d9a441; }
 .avatar-orb.due .ring-fill { stroke: #ff9d5c; }
 
-.avatar-face {
-  z-index: 1;
-  font: 700 11px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
-  letter-spacing: 0.08em;
-  text-shadow: 0 0 8px rgba(183, 255, 105, 0.55);
-}
+.avatar-pet { position: relative; z-index: 1; width: 53px; height: 53px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
 
 .avatar-orb::after {
-  content: "WO";
+  content: "DRAG";
   position: absolute;
-  right: 7px;
+  right: 6px;
   bottom: 6px;
   color: rgba(231, 247, 202, 0.58);
-  font: 700 7px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  font: 700 5.5px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
   letter-spacing: 0.13em;
 }
 
@@ -201,6 +196,16 @@ body.avatar-window {
   user-select: text;
   scrollbar-width: thin;
 }
+
+.avatar-agenda {
+  margin: 10px 14px 0;
+  padding: 11px;
+  border: 1px solid #b8d692;
+  border-radius: 11px;
+  background: #eff8e6;
+}
+.avatar-agenda strong { display: block; color: #24331e; font-size: 12px; }
+.avatar-agenda small { display: block; margin-top: 3px; color: #58704d; font-size: 10.5px; line-height: 1.35; }
 
 .chat-entry { display: flex; }
 .chat-entry.user { justify-content: flex-end; }

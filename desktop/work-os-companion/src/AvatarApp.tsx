@@ -7,6 +7,7 @@ import { secureState, type WorkOsConversationTurn } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, operationLabel, type ProposedOperation } from "./interpretation";
 import { formatWorkOsDate } from "./dateFormat";
+import { CompanionPet } from "./CompanionPet";
 import {
   collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts, type CompanionNudge,
@@ -25,6 +26,8 @@ interface DayFacts extends CompanionDayFacts {
   niftySyncing: boolean;
   niftySyncError: string | null;
   taskOptions: Array<{ id: string; title: string }>;
+  planStatus: string | null;
+  planItemIds: string[];
 }
 
 interface ChatEntry {
@@ -91,7 +94,7 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, personId: null, planIntent: null,
-    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [],
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItemIds: [],
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
@@ -110,6 +113,7 @@ export default function AvatarApp(): React.ReactElement {
   const notificationPermission = useRef(false);
   const chatScroll = useRef<HTMLDivElement | null>(null);
   const dayRef = useRef<DayFacts>(facts);
+  const dayLoadInFlight = useRef(false);
 
   useEffect(() => { dayRef.current = facts; }, [facts]);
 
@@ -143,6 +147,8 @@ export default function AvatarApp(): React.ReactElement {
 
   // ── Day poll: the single source of shift/prompt facts ──
   const loadDay = useCallback(async () => {
+    if (dayLoadInFlight.current) return;
+    dayLoadInFlight.current = true;
     try {
       const day = await apiRequest<Record<string, any>>("/api/work-os/me/day");
       const session = (day?.session ?? {}) as Record<string, any>;
@@ -168,6 +174,10 @@ export default function AvatarApp(): React.ReactElement {
           .filter((task: unknown): task is Record<string, unknown> => !!task && typeof task === "object" && typeof (task as Record<string, unknown>).id === "string")
           .map((task: Record<string, unknown>) => ({ id: String(task.id), title: typeof task.title === "string" ? task.title : "Untitled task" }))
           .slice(0, 200) : [],
+        planStatus: typeof day?.plan?.status === "string" ? day.plan.status : null,
+        planItemIds: Array.isArray(day?.plan?.items) ? day.plan.items
+          .filter((item: unknown): item is Record<string, unknown> => !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string")
+          .map((item: Record<string, unknown>) => String(item.id)) : [],
       });
       setConnected(true);
       setDaySyncState("ready");
@@ -175,7 +185,7 @@ export default function AvatarApp(): React.ReactElement {
       if (value instanceof ApiRequestError && value.status === 401) setConnected(false);
       // Retain usable facts but make the stale/failure boundary explicit.
       setDaySyncState(dayRef.current.loaded ? "stale" : "error");
-    }
+    } finally { dayLoadInFlight.current = false; }
   }, []);
 
   useEffect(() => {
@@ -387,10 +397,31 @@ export default function AvatarApp(): React.ReactElement {
     }
   }, [facts.shiftDate, facts.personId, filing, loadDay, toggleExpanded]);
 
+  const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
+  const submitAgenda = useCallback(async () => {
+    const goal = input.trim();
+    if (!goal || filing) return;
+    setFiling(true);
+    try {
+      await apiRequest("/api/work-os/me/plan", {
+        method: "PATCH",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ confirm: true, freeform_intent: goal, item_ids: facts.planItemIds, deferred_ids: [] }),
+      });
+      setInput("");
+      setChat((current) => [...current, { id: `agenda-${Date.now()}`, role: "assistant", text: "Today's agenda is set. I’ll check in again after you’ve had time to make progress.", receipt: "Agenda confirmed" }]);
+      await loadDay();
+      void emit("work-os://avatar-day-changed");
+    } catch (value) {
+      setChat((current) => [...current, { id: `agenda-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Your agenda could not be confirmed." }]);
+    } finally { setFiling(false); }
+  }, [facts.planItemIds, filing, input, loadDay]);
+
   // ── Derived render state ──
   const onShift = isOnShift(facts, now);
   const { fraction, label } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : facts.promptRequired ? "due" : "live";
+  const petPose = agendaDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : facts.promptRequired ? "alert" : "focus";
   const lastEntry = chat[chat.length - 1];
   const statusText = !facts.loaded
     ? daySyncState === "error" ? "Could not load today" : "Loading today…"
@@ -398,6 +429,10 @@ export default function AvatarApp(): React.ReactElement {
       : facts.niftySyncing ? "Nifty syncing…"
         : daySyncState === "stale" ? "Showing last update"
           : formatWorkOsDate(facts.shiftDate);
+
+  useEffect(() => {
+    if (agendaDue && !expanded) void toggleExpanded(true);
+  }, [agendaDue, expanded, toggleExpanded]);
 
   function clearAvatarConversation() {
     setChat([]);
@@ -414,7 +449,7 @@ export default function AvatarApp(): React.ReactElement {
         {!expanded && (
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
-            <span className="avatar-face">zZ</span>
+            <CompanionPet pose="sleep" className="avatar-pet" />
           </button>
         )}
         {expanded && (
@@ -440,7 +475,7 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-track" />
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
-          <span className="avatar-face">{onShift ? label || "0m" : "◦"}</span>
+          <CompanionPet pose={petPose} className="avatar-pet" />
           {facts.promptRequired && !missed && <span className="avatar-badge" />}
         </button>
       )}
@@ -452,6 +487,7 @@ export default function AvatarApp(): React.ReactElement {
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
+          {agendaDue && <div className="avatar-agenda"><strong>What are you working on today?</strong><small>Set today’s goal, then we’ll keep the rest of the check-ins out of your way.</small></div>}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
               <div className="chat-entry assistant"><p>{facts.promptRequired
@@ -492,12 +528,12 @@ export default function AvatarApp(): React.ReactElement {
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendUpdate(); } }}
-              placeholder={facts.promptRequired && !missed ? "Hourly update — what's happening?" : "Share an update or instruct the assistant…"}
+              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void (agendaDue ? submitAgenda() : sendUpdate()); } }}
+              placeholder={agendaDue ? "Describe your goal for today…" : facts.promptRequired && !missed ? "Hourly update — what's happening?" : "Share an update or instruct the assistant…"}
               autoFocus
               maxLength={4000}
             />
-            <button className="avatar-send" disabled={!input.trim() || thinking || filing} onClick={() => void sendUpdate()} aria-label="Send update">↑</button>
+            <button className="avatar-send" disabled={!input.trim() || thinking || filing} onClick={() => void (agendaDue ? submitAgenda() : sendUpdate())} aria-label={agendaDue ? "Confirm today’s agenda" : "Send update"}>{agendaDue ? "✓" : "↑"}</button>
           </footer>
           {facts.promptRequired && !missed && !lastEntry?.receipt && (
             <button className="avatar-snooze" onClick={() => {
