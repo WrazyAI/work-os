@@ -11,7 +11,7 @@ import {
   type WorkOsCheckInState,
 } from "@/modules/work-os/companion";
 import { getWorkday } from "@/lib/work-os-workday";
-import { observeWorktivityAttendance } from "@/lib/work-os-attendance";
+import { loadPersistedWorktivityAttendance, observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { db, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
@@ -46,14 +46,16 @@ export async function getWorkOsDay(
   access: WorkOsAccess,
   personId: string,
   at = new Date(),
-  options: { refreshNifty?: boolean } = {},
+  options: { refreshNifty?: boolean; refreshAttendance?: boolean } = {},
 ) {
   // The provider refreshes are independent external calls: start them (and
   // the owner lookup the Nifty sync depends on) immediately and in parallel
   // so refreshProviders=true costs max(worktivity, nifty) rather than the
   // sum. Each is still awaited at its original point, so error and ordering
   // behavior are unchanged.
-  const attendancePromise = observeWorktivityAttendance(access, at);
+  const attendancePromise = options.refreshAttendance
+    ? observeWorktivityAttendance(access, at)
+    : loadPersistedWorktivityAttendance(access, at).then((attendance) => ({ attendance, session: null }));
   const ownerIdPromise = organizationOwnerId(access.organizationId);
   const niftySyncPromise = ownerIdPromise.then((ownerId) =>
     options.refreshNifty ? syncNiftyPersonTasks(ownerId, personId) : Promise.resolve(null),

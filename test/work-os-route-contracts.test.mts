@@ -21,6 +21,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const applyInterpretation = await source("src/app/api/work-os/me/interpret/apply/route.ts");
   const attendance = await source("src/lib/work-os-attendance.ts");
   const attendanceProjection = await source("src/modules/work-os/attendance.ts");
+  const attendanceSync = await source("src/app/api/work-os/attendance/sync-due/route.ts");
   const workdayService = await source("src/lib/work-os-workday.ts");
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
   const nifty = await source("src/lib/integrations/nifty.ts");
@@ -64,12 +65,17 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(workOs, /Nifty did not confirm.*requested assignee/);
   assert.match(workOs, /status: "deleted"/);
   assert.match(workday, /clockIn\(auth\.access/);
+  assert.match(workday, /loadPersistedWorktivityAttendance/);
+  assert.doesNotMatch(workday, /observeWorktivityAttendance/);
   assert.doesNotMatch(workday, /work_os_fallback/);
   assert.match(attendance, /observeWorktivityAttendance/);
   assert.match(attendance, /\/ActivityLogs\/List/);
   assert.match(attendance, /EmployeeId: employeeId/);
   assert.match(attendance, /normalizeWorktivityActivityLogs/);
   assert.match(attendance, /syncWorktivitySession/);
+  assert.match(attendance, /loadPersistedWorktivityAttendance/);
+  assert.match(attendanceSync, /CRON_SECRET/);
+  assert.match(attendanceSync, /syncDueWorktivityAttendance/);
   assert.doesNotMatch(attendance, /\.from\("work_sessions"\)\.insert/);
   assert.doesNotMatch(attendance, /state:\s*desiredState/);
   assert.match(attendanceProjection, /observed/i);

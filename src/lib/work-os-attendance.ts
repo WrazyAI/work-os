@@ -7,6 +7,8 @@ import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/comp
 
 const CACHE_MS = 55_000;
 const ATTENDANCE_PROVIDER_TIMEOUT_MS = 12_000;
+const STALE_OBSERVATION_MS = 6 * 60_000;
+const POLL_INTERVAL_MS = 5 * 60_000;
 const cache = new Map<string, { fetchedAt: number; projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }>();
 const db = () => createAdminClient();
 
@@ -192,6 +194,58 @@ async function persistProviderBreaks(access: WorkOsAccess, session: Record<strin
   return data;
 }
 
+async function persistAttendanceObservation(access: WorkOsAccess, timezone: string, projection: AttendanceProjection) {
+  if (projection.source !== "worktivity" || projection.stale) return;
+  const { error } = await db().from("work_attendance_observations").upsert({
+    organization_id: access.organizationId,
+    person_id: access.personId as string,
+    provider: "worktivity",
+    local_date: localDateForTimezone(new Date(projection.observedAt), timezone),
+    observed_at: projection.observedAt,
+    status: projection.status,
+    state: projection.state,
+    clocked_in_at: projection.clockedInAt,
+    clocked_out_at: projection.clockedOutAt,
+    activity_observed_at: projection.activityObservedAt ?? null,
+    provider_break_seconds: projection.providerBreakSeconds ?? 0,
+    raw: { source: "worktivity" },
+  }, { onConflict: "organization_id,person_id,provider,observed_at" });
+  if (error) throw new Error(`persist Worktivity attendance observation: ${error.message}`);
+}
+
+/** Reads the latest durable provider observation. This is intentionally free of
+ * provider I/O so an employee's Work OS view stays available during an outage. */
+export async function loadPersistedWorktivityAttendance(access: WorkOsAccess, at = new Date()) {
+  if (!access.personId) throw new Error("Work OS person mapping required");
+  const { data: onboarding, error: onboardingError } = await db().from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle();
+  if (onboardingError) throw new Error(`load Worktivity employee timezone: ${onboardingError.message}`);
+  const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
+  const localDate = localDateForTimezone(at, timezone);
+  const { data, error } = await db().from("work_attendance_observations")
+    .select("status,state,observed_at,clocked_in_at,clocked_out_at,activity_observed_at,provider_break_seconds")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId).eq("provider", "worktivity")
+    .eq("local_date", localDate).order("observed_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Error(`load persisted Worktivity attendance: ${error.message}`);
+  if (!data) return unknownAttendance("No Worktivity observation has been received for this workday.", at.toISOString());
+  const stale = at.getTime() - Date.parse(data.observed_at) > STALE_OBSERVATION_MS;
+  const status = data.status as AttendanceProjection["status"];
+  const state = data.state as AttendanceProjection["state"];
+  return {
+    source: "worktivity" as const,
+    status,
+    state,
+    observedAt: data.observed_at,
+    clockedInAt: data.clocked_in_at,
+    clockedOutAt: data.clocked_out_at,
+    activityObservedAt: data.activity_observed_at,
+    providerBreakSeconds: data.provider_break_seconds ?? 0,
+    stale,
+    fallbackAllowed: stale,
+    message: stale ? "Worktivity has not refreshed recently; showing the last observed status." : "Worktivity status is current.",
+  } satisfies AttendanceProjection;
+}
+
 /** Fresh Worktivity attendance converges into the Work OS interval ledger.
  * Provider facts retain their provenance, while stale or unknown observations
  * never create or transition a session. */
@@ -214,6 +268,7 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
   void sessionStartAt;
   let session = existing;
   if (projection.source === "worktivity" && !projection.stale) {
+    await persistAttendanceObservation(access, timezone, projection);
     session = await syncWorktivitySession(access, projection);
     session = await persistProviderBreaks(access, session, activityLogs, projection.observedAt, false);
     if (projection.status === "break") projection.message = "Worktivity OnBreak observed; the active workday and provider break time are synchronized.";
@@ -235,6 +290,58 @@ export async function refreshWorktivityProviderBreaks(access: WorkOsAccess, sess
   const result = await employeeAttendance(String(person.worktivity_employee_id), timezone, at.toISOString());
   if (result.projection.stale || result.projection.source !== "worktivity") return session;
   return persistProviderBreaks(access, session, result.activityLogs, result.projection.observedAt, false);
+}
+
+/** Reconcile a bounded set of overdue mapped employees. This runs behind the
+ * scheduler; reads in the employee app consume the durable observations above. */
+export async function syncDueWorktivityAttendance(limit = 8) {
+  if (!worktivityConfigured()) return { attempted: 0, synced: 0, failed: 0, skipped: true };
+  const now = new Date();
+  const { data: people, error: peopleError } = await db().from("work_people")
+    .select("id,organization_id").eq("active", true).not("worktivity_employee_id", "is", null).limit(Math.max(limit * 4, limit));
+  if (peopleError) throw new Error(`load Worktivity attendance candidates: ${peopleError.message}`);
+  const candidates = people ?? [];
+  if (!candidates.length) return { attempted: 0, synced: 0, failed: 0, skipped: false };
+  const personIds = candidates.map((person) => person.id);
+  const { data: observations, error: observationsError } = await db().from("work_attendance_observations")
+    .select("person_id,observed_at").eq("provider", "worktivity").in("person_id", personIds)
+    .order("observed_at", { ascending: false });
+  if (observationsError) throw new Error(`load Worktivity attendance freshness: ${observationsError.message}`);
+  const latestByPerson = new Map<string, string>();
+  for (const observation of observations ?? []) if (!latestByPerson.has(observation.person_id)) latestByPerson.set(observation.person_id, observation.observed_at);
+  const due = candidates.filter((person) => {
+    const observedAt = latestByPerson.get(person.id);
+    return !observedAt || now.getTime() - Date.parse(observedAt) >= POLL_INTERVAL_MS;
+  }).slice(0, limit);
+  if (!due.length) return { attempted: 0, synced: 0, failed: 0, skipped: false };
+  const organizationIds = [...new Set(due.map((person) => person.organization_id))];
+  const { data: organizations, error: organizationsError } = await db().from("work_organizations")
+    .select("id,legacy_owner_id,created_by").in("id", organizationIds);
+  if (organizationsError) throw new Error(`load Worktivity attendance organizations: ${organizationsError.message}`);
+  const actorByOrganization = new Map((organizations ?? []).map((organization) => [organization.id, organization.legacy_owner_id || organization.created_by]));
+  let synced = 0;
+  let failed = 0;
+  for (const person of due) {
+    const actorId = actorByOrganization.get(person.organization_id);
+    if (!actorId) { failed += 1; continue; }
+    const access = {
+      ctx: { user: { id: actorId }, profile: { id: actorId } },
+      organizationId: person.organization_id,
+      organizationOwnerId: actorId,
+      role: "admin",
+      personId: person.id,
+      membershipId: `system-worktivity:${person.id}`,
+      featureFlags: {},
+    } as unknown as WorkOsAccess;
+    try {
+      await observeWorktivityAttendance(access, now);
+      synced += 1;
+    } catch (error) {
+      failed += 1;
+      console.error("[work-os] background Worktivity attendance sync failed", { organizationId: person.organization_id, personId: person.id, message: error instanceof Error ? error.message : "unknown" });
+    }
+  }
+  return { attempted: due.length, synced, failed, skipped: false };
 }
 
 // Keep the old name for callers outside the focused checkout.
