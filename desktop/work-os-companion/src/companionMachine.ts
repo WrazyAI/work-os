@@ -77,7 +77,7 @@ function openBlocker(day: DayData | null): string | null {
 }
 
 function planConfirmed(day: DayData | null): boolean {
-  return !!day?.plan && day.plan.items.length > 0 && day.plan.status === "confirmed";
+  return !!day?.plan && Array.isArray(day.plan.items) && day.plan.items.length > 0 && day.plan.status === "confirmed";
 }
 
 function minutesUntil(shiftEnd: string | null, now: Date): number | null {

@@ -107,14 +107,14 @@ body.avatar-window {
 .avatar-drag-surface {
   position: absolute;
   top: 4px;
-  left: 18px;
-  right: 18px;
-  height: 36px;
+  left: 49px;
+  width: 66px;
+  height: 28px;
   z-index: 2;
   display: grid;
   place-items: center;
   border: 1px solid rgba(214, 244, 184, 0.28);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(27, 36, 27, 0.88);
   color: rgba(231, 247, 202, 0.82);
   font: 800 13px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -143,8 +143,22 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 10px; line-height: 1.25; }
 .avatar-prompt-bubble span { margin-top: 3px; color: #b7beb2; font-size: 8.5px; line-height: 1.35; }
-.avatar-prompt-bubble + .avatar-drag-surface { top: 64px; height: 22px; left: 38px; right: 38px; border: 0; background: transparent; font-size: 8px; }
-.avatar-day-time { position: absolute; right: 7px; bottom: 3px; color: #d6f4b8; font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .04em; }
+.avatar-prompt-bubble + .avatar-drag-surface { top: 64px; left: 53px; width: 58px; height: 22px; border: 0; background: transparent; font-size: 8px; }
+.avatar-day-time {
+  position: absolute;
+  right: 50%;
+  bottom: 3px;
+  transform: translateX(50%);
+  padding: 3px 6px;
+  border: 1px solid rgba(214, 244, 184, 0.4);
+  border-radius: 7px;
+  background: rgba(17, 24, 17, 0.94);
+  color: #efffd6;
+  font: 800 10px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
 
 .avatar-badge {
   position: absolute;

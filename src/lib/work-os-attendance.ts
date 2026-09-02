@@ -6,6 +6,7 @@ import { projectWorktivityAttendanceWithActivity, unknownAttendance, type Attend
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 const CACHE_MS = 55_000;
+const ATTENDANCE_PROVIDER_TIMEOUT_MS = 12_000;
 const cache = new Map<string, { fetchedAt: number; projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }>();
 const db = () => createAdminClient();
 
@@ -59,11 +60,11 @@ export function deriveWorktivityLastActivityAt(logs: Pick<WtActivityLog, "Status
     .sort((left, right) => Date.parse(right.CreateDate) - Date.parse(left.CreateDate))[0]?.CreateDate ?? null;
 }
 
-async function loadActivityHistory(employeeId: string, startDate: string, endDate: string) {
-  const first = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page: 1, pageSize: 200 });
+async function loadActivityHistory(employeeId: string, startDate: string, endDate: string, signal?: AbortSignal) {
+  const first = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page: 1, pageSize: 200 }, { signal });
   const items = [...(first.Items ?? [])];
   for (let page = 2; page <= (first.PageCount ?? 1); page += 1) {
-    const next = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page, pageSize: 200 });
+    const next = await wtPost<WtPaged<WtActivityLog>>("/ActivityLogs/List", { EmployeeId: employeeId, startDate, endDate, page, pageSize: 200 }, { signal });
     items.push(...(next.Items ?? []));
   }
   return items;
@@ -136,9 +137,10 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
   try {
     // Fetch the full employee-local day (including periods before Work OS
     // launched), with real UTC boundaries and unbounded provider pagination.
+    const signal = AbortSignal.timeout(ATTENDANCE_PROVIDER_TIMEOUT_MS);
     const [data, activityItems] = await Promise.all([
-      wtPost<WtPaged<WtEmployee>>("/Employee/List", { page: 1, pageSize: 200 }),
-      loadActivityHistory(employeeId, bounds.start, bounds.end),
+      wtPost<WtPaged<WtEmployee>>("/Employee/List", { page: 1, pageSize: 200 }, { signal }),
+      loadActivityHistory(employeeId, bounds.start, bounds.end, signal),
     ]);
     const employee = (data.Items ?? []).find((candidate) => candidate.ID === employeeId) ?? null;
     const activityLogs = normalizeWorktivityActivityLogs(activityItems, employeeId);

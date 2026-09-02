@@ -290,10 +290,9 @@ export default function App() {
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
       apiRequest<DayData>(`/api/work-os/me/day${dayQuery.size ? `?${dayQuery}` : ""}`, {
-        // Provider refreshes run two external syncs server-side; the 20s
-        // default aborted them mid-flight ("signal timed out") before the
-        // Worktivity observation could land.
-        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : options.refreshAttendance ? 35_000 : 20_000),
+        // A normal day read includes the current Worktivity observation, which
+        // can use its bounded server-side retry window before it degrades.
+        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 35_000),
       }),
     ]);
     if (onboardingResult.status === "rejected") throw onboardingResult.reason;
@@ -307,7 +306,21 @@ export default function App() {
       showError(message, message, "Workday refresh failed");
       return null;
     }
-    const nextDay = { ...dayResult.value, prompt: dayResult.value.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" } };
+    const rawDay = dayResult.value;
+    const plan = rawDay.plan && typeof rawDay.plan === "object"
+      ? { ...rawDay.plan, items: Array.isArray(rawDay.plan.items) ? rawDay.plan.items : [] }
+      : null;
+    // Provider sync can return a partial but otherwise usable day. Keep that
+    // response renderable instead of letting a missing collection trip React.
+    const nextDay: DayData = {
+      ...rawDay,
+      tasks: Array.isArray(rawDay.tasks) ? rawDay.tasks : [],
+      taskHistory: Array.isArray(rawDay.taskHistory) ? rawDay.taskHistory : [],
+      evidence: Array.isArray(rawDay.evidence) ? rawDay.evidence : [],
+      proposals: Array.isArray(rawDay.proposals) ? rawDay.proposals : [],
+      plan,
+      prompt: rawDay.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" },
+    };
     setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
     const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
     setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);

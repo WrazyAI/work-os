@@ -62,6 +62,11 @@ describe("companion state ladder", () => {
     expect(() => evaluateCompanion(base({ day: degraded }))).not.toThrow();
   });
 
+  it("tolerates a partial plan without an items collection", () => {
+    const degraded = { ...day(), plan: { ...day().plan, items: undefined } } as unknown as DayData;
+    expect(() => evaluateCompanion(base({ day: degraded }))).not.toThrow();
+  });
+
   it("stays idle off shift", () => {
     const decision = evaluateCompanion(base({ gate: gate({ active: false, canClockIn: true, message: "off shift" }) }));
     expect(decision.state).toBe("idle");

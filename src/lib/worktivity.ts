@@ -36,21 +36,24 @@ interface WtEnvelope<T> {
 }
 
 /** POST to a Worktivity endpoint and return the unwrapped `Data` field. */
-export async function wtPost<T = unknown>(path: string, body: unknown = {}): Promise<T> {
+export async function wtPost<T = unknown>(path: string, body: unknown = {}, init: { signal?: AbortSignal } = {}): Promise<T> {
   const key = process.env.WORKTIVITY_API_KEY;
   if (!key) throw new Error("WORKTIVITY_API_KEY not configured");
 
   const url = `${BASE}${path}?x_api_key=${encodeURIComponent(key)}`;
   let r: Response | null = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (init.signal?.aborted) throw init.signal.reason;
     try {
       r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body ?? {}),
         cache: "no-store",
+        signal: init.signal,
       });
     } catch (error) {
+      if (init.signal?.aborted) throw error;
       if (attempt < MAX_RETRIES) { await sleep(Math.min(10_000, 500 * 2 ** attempt)); continue; }
       throw error;
     }

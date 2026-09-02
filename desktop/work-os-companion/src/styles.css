@@ -48,18 +48,19 @@ select:focus-visible {
 }
 .workspace {
   display: grid;
-  grid-template-columns: 176px 1fr;
+  grid-template-columns: 68px 1fr;
   min-height: 100vh;
 }
 .rail {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 176px;
+  width: 68px;
   background: var(--ink);
   color: #f3f1e8;
-  padding: 24px 14px;
+  padding: 18px 10px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   z-index: 3;
 }
 .wordmark {
@@ -69,6 +70,10 @@ select:focus-visible {
   font: 600 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   letter-spacing: 0.12em;
 }
+.wordmark { justify-content: center; }
+.wordmark span,
+.rail nav span,
+.rail-foot div { display: none; }
 .wordmark img {
   width: 28px;
   height: 28px;
@@ -78,7 +83,8 @@ select:focus-visible {
   color: var(--signal);
 }
 .rail nav {
-  margin-top: 54px;
+  width: 100%;
+  margin-top: 28px;
   display: grid;
   gap: 5px;
 }
@@ -86,11 +92,14 @@ select:focus-visible {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 42px;
+  justify-content: center;
+  width: 48px;
+  height: 44px;
+  min-height: 44px;
   border: 0;
   border-radius: 10px;
-  padding: 0 12px;
+  padding: 0;
+  margin: 0 auto;
   background: transparent;
   color: #a8aaa2;
   text-align: left;
@@ -113,31 +122,64 @@ select:focus-visible {
 .rail nav button.active:before {
   content: "";
   position: absolute;
-  left: -14px;
+  left: -10px;
   width: 3px;
-  height: 20px;
+  height: 18px;
   border-radius: 0 3px 3px 0;
   background: var(--signal);
 }
 .rail nav em {
-  margin-left: auto;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  margin: 0;
+  min-width: 15px;
+  height: 15px;
   background: var(--signal);
   color: #171914;
   border-radius: 9px;
-  padding: 1px 6px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
   font-style: normal;
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.rail nav button::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: var(--ink);
+  color: #f3f1e8;
+  font: 600 11.5px/1 Manrope, Inter, "Segoe UI", sans-serif;
+  padding: 7px 11px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  box-shadow: 0 6px 18px rgba(13, 15, 12, 0.3);
+}
+.rail nav button:hover::after,
+.rail nav button:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 .rail-foot {
   margin-top: auto;
-  border-top: 1px solid #30322c;
-  padding: 18px 8px 2px;
+  width: 100%;
+  justify-content: center;
+  border-top: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   gap: 9px;
 }
 .rail-foot div {
-  display: grid;
+  display: none;
 }
 .rail-foot strong {
   font-size: 12px;
