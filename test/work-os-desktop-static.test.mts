@@ -102,7 +102,7 @@ assert.match(app, /ui\.action\.requested/);
 assert.match(app, /ui\.action\.failed/);
 assert.match(app, /shiftPulse/);
 assert.match(app, /Clock in when you begin. Activity observation stays separate/);
-assert.match(app, /refreshProviders=true/);
+assert.match(app, /dayQuery\.set\("refreshProviders", "true"\)/);
 assert.match(app, /updater\.check_failed/);
 assert.match(app, /pulse-provider-popover/);
 assert.match(app, /Shift pulse options/);
