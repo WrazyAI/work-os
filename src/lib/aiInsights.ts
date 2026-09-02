@@ -39,6 +39,17 @@ export function buildInsightSynthesisPrompt(data: {
   ].filter(Boolean).join("\n");
 }
 
+/**
+ * Every integer the model writes must appear somewhere in the grounding text
+ * (the deterministic brief, totals, and daily record). Catches invented
+ * figures while tolerating restated ones; years in grounding dates keep the
+ * check honest for dated summaries.
+ */
+export function numbersGroundedIn(synthesis: string, groundingText: string): boolean {
+  const mentioned = synthesis.match(/(?<![\w.])(19|20)?\d{1,4}(?![\w.])/g) ?? [];
+  return mentioned.every((token) => groundingText.includes(token));
+}
+
 /** Normalizes the model output into a bounded plain-text synthesis. */
 export function normalizeSynthesis(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -57,7 +68,7 @@ export interface SynthesisResult {
 
 export async function synthesizeInsights(access: WorkOsAccess, range: InsightRange, through: string | null): Promise<SynthesisResult> {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
+  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "AI synthesis is not configured on this server" };
   const data = await getPersonalInsights(access, range, through);
   const prompt = buildInsightSynthesisPrompt({
     range: data.range ?? range,
@@ -92,6 +103,9 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const synthesis = normalizeSynthesis(payload.choices?.[0]?.message?.content);
     if (!synthesis) return { ok: false, reason: "ai_malformed", detail: "empty or invalid synthesis" };
+    if (!numbersGroundedIn(synthesis, prompt)) {
+      return { ok: false, reason: "ai_malformed", detail: "synthesis referenced numbers absent from the record" };
+    }
     return { ok: true, synthesis, model: INSIGHTS_MODEL };
   } catch (error) {
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };

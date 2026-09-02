@@ -47,10 +47,39 @@ describe("companion launch window", () => {
     const mainWindow = config.app.windows.find((window: { label?: string }) => window.label === "main");
 
     expect(mainWindow).toMatchObject({
-      width: 1440,
+      width: 1000,
       height: 960,
       center: true,
       resizable: true,
     });
+  });
+});
+
+describe("floating companion integration", () => {
+  it("permits native dragging and uses direct day reads", () => {
+    const capability = JSON.parse(readFileSync(resolve(root, "src-tauri/capabilities/avatar.json"), "utf8"));
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+
+    expect(capability.permissions).toContain("core:window:allow-start-dragging");
+    expect(avatar).toContain('apiRequest<Record<string, any>>("/api/work-os/me/day?compact=true"');
+    expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
+    expect(avatar).toContain('"work-os://main-day-changed"');
+    expect(avatar).toContain("facts.taskOptions");
+    expect(avatar).toContain("ToolApprovalCard");
+    expect(avatar).toContain("avatar-drag-surface");
+    expect(avatar).toContain("/api/work-os/me/proposals");
+    expect(avatar).toContain("denyOperation");
+  });
+
+  it("stores main and avatar conversations in the encrypted vault", () => {
+    const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
+    const main = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+
+    expect(vault).toContain("saveConversation");
+    expect(vault).toContain("clearConversation");
+    expect(main).toContain("composerConversationScope");
+    expect(main).toContain("ToolApprovalCard");
+    expect(avatar).toContain("avatarConversationScope");
   });
 });

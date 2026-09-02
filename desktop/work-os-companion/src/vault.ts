@@ -4,6 +4,14 @@ import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DesktopSession, OfflineAction } from "./types";
 
+export interface WorkOsConversationTurn {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  meta?: string;
+  createdAt: string;
+}
+
 let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
 const defaultApiBase = import.meta.env.VITE_WORK_OS_API_URL || "https://app.wrazyos.com";
 
@@ -69,6 +77,11 @@ export const secureState = {
   },
   queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
   saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),
+  conversation: async (scope: string) => isTauri() ? (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [] : [],
+  saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => isTauri()
+    ? set(`conversation:${scope}`, turns.slice(-60))
+    : Promise.resolve(),
+  clearConversation: (scope: string) => isTauri() ? remove(`conversation:${scope}`) : Promise.resolve(),
   pendingAuth: async () => {
     if (!isTauri()) return null;
     const pending = await get<{ verifier: string; state: string; apiBase: string }>("pending-auth");

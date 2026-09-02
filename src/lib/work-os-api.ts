@@ -203,14 +203,14 @@ export async function accessibleWorkOsPersonIds(access: WorkOsAccess): Promise<s
     .eq("person_id", access.personId)
     .eq("is_manager", true);
   if (managerError) throw new Error(`load managed Work OS teams: ${managerError.message}`);
-  const teamIds = (managedTeams ?? []).map((row) => row.team_id as string);
+  const teamIds = (managedTeams ?? []).map((row: any) => row.team_id as string);
   if (!teamIds.length) return [access.personId];
   const { data: members, error: targetError } = await supabase
     .from("work_team_members")
     .select("person_id")
     .in("team_id", teamIds);
   if (targetError) throw new Error(`check Work OS team access: ${targetError.message}`);
-  return [...new Set([access.personId, ...(members ?? []).map((row) => row.person_id as string)])];
+  return [...new Set([access.personId, ...(members ?? []).map((row: any) => row.person_id as string)])];
 }
 
 export async function canAccessWorkOsPerson(access: WorkOsAccess, personId: string) {

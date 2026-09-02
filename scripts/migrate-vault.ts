@@ -1,28 +1,24 @@
 /**
- * One-time data migration: local stores → Supabase Postgres (spec §8).
+ * One-time data migration: local stores → Postgres (Neon). (spec §8)
  * Migrates goals, journal entries, and ultracode runs to the given owner user.
  * Idempotent-ish: re-runs append goals/journal again, so run once per store.
  *
  * Usage:  node --import tsx scripts/migrate-vault.ts <ownerUserId>
- * Env:    NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * Env:    DATABASE_URL
  */
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "../src/lib/supabase/admin";
 import { readGoals, listJournalDays, readJournal } from "../src/lib/vaultWriter";
 import { listRuns, getRun } from "../src/lib/ultracodeRuns";
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ownerId = process.argv[2];
 
-if (!URL || !KEY || !ownerId) {
+if (!ownerId || !process.env.DATABASE_URL) {
   console.error("Usage: node --import tsx scripts/migrate-vault.ts <ownerUserId>");
-  console.error("(NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY required)");
+  console.error("(DATABASE_URL required)");
   process.exit(1);
 }
 
-const admin = createClient(URL, KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const admin = createAdminClient();
 
 async function migrateGoals() {
   const goals = await readGoals();

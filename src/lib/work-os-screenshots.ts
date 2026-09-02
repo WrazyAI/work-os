@@ -1,5 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { mkdir as fsMkdir } from "node:fs/promises";
+import path from "node:path";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getStorageBackend } from "@/lib/db/storage";
 import { fetchAllLogs } from "@/lib/worktivityAudit";
 import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -86,21 +89,13 @@ async function mirrorSummary(access: ScreenshotScope, personId: string, eventId:
 let ensureBucketPromise: Promise<void> | null = null;
 
 async function ensureBucketOnce() {
-  const supabase = db();
-  const { data, error } = await supabase.storage.getBucket(BUCKET);
-  if (!error && data) {
-    const updated = await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: 10 * 1024 * 1024, allowedMimeTypes: ["application/octet-stream"] });
-    if (updated.error) throw new Error(`harden screenshot bucket: ${updated.error.message}`);
-    return;
+  // With the object-storage adapter the bucket is provisioned outside the app
+  // (R2 bucket via wrangler/dashboard; local driver just needs its directory).
+  const backend = getStorageBackend();
+  if (process.env.OBJECT_STORAGE_DRIVER === "local" || !process.env.R2_ACCOUNT_ID) {
+    await fsMkdir(path.join(".storage-data", BUCKET), { recursive: true });
   }
-  const created = await supabase.storage.createBucket(BUCKET, {
-    public: false,
-    fileSizeLimit: 10 * 1024 * 1024,
-    allowedMimeTypes: ["application/octet-stream"],
-  });
-  if (created.error && !/already exists/i.test(created.error.message)) {
-    throw new Error(`create screenshot bucket: ${created.error.message}`);
-  }
+  void backend;
 }
 
 function ensureBucket() {
@@ -299,13 +294,13 @@ export async function summarizeWorktivityScreenshots(
     const digest = createHash("sha256").update(bytes).digest("hex");
     const storagePath = `${access.organizationId}/${personId}/${date}/${log.ID}-${digest.slice(0, 12)}.enc`;
     const encrypted = encryptScreenshot(bytes);
-    const uploaded = await db().storage.from(BUCKET).upload(storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
+    const uploaded = await getStorageBackend().upload(BUCKET, storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
     if (uploaded.error) throw new Error(`store Worktivity screenshot: ${uploaded.error.message}`);
     let storageRetained = true;
     try {
       const observation = await neutralSummary(log.Screenshot as string, log);
       if (observation.containsSensitiveContent) {
-        const removed = await db().storage.from(BUCKET).remove([storagePath]);
+        const removed = await getStorageBackend().remove(BUCKET, [storagePath]);
         if (removed.error) throw new Error(`remove sensitive screenshot: ${removed.error.message}`);
         storageRetained = false;
         const { data, error } = await db().from("work_screenshot_summaries").upsert({
@@ -375,7 +370,7 @@ export async function summarizeWorktivityScreenshots(
         updated_at: new Date().toISOString(),
       }, { onConflict: "evidence_event_id" }).select("*").single();
       if (failureRecordError || !data) {
-        if (storageRetained) await db().storage.from(BUCKET).remove([storagePath]);
+        if (storageRetained) await getStorageBackend().remove(BUCKET, [storagePath]);
         throw new Error(`record screenshot processing failure: ${failureRecordError?.message ?? "no row returned"}`);
       }
       results.push(data);
@@ -440,17 +435,17 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
   ]);
   if (clockedOutError) throw new Error(`load clocked-out screenshot candidates: ${clockedOutError.message}`);
   if (completedDaysError) throw new Error(`load completed-workday screenshot candidates: ${completedDaysError.message}`);
-  const completedPersonIds = [...new Set((completedDays ?? []).map((row) => String(row.person_id)))];
-  const completedOrganizationIds = [...new Set((completedDays ?? []).map((row) => String(row.organization_id)))];
+  const completedPersonIds = [...new Set((completedDays ?? []).map((row: any) => String(row.person_id)))];
+  const completedOrganizationIds = [...new Set((completedDays ?? []).map((row: any) => String(row.organization_id)))];
   const { data: onboardingRows, error: onboardingError } = completedPersonIds.length
     ? await supabase.from("work_employee_onboarding").select("organization_id,person_id,timezone")
       .in("person_id", completedPersonIds).in("organization_id", completedOrganizationIds)
     : { data: [], error: null };
   if (onboardingError) throw new Error(`load completed-workday timezones: ${onboardingError.message}`);
-  const timezoneByPerson = new Map((onboardingRows ?? []).map((row) => [`${row.organization_id}:${row.person_id}`, row.timezone]));
+  const timezoneByPerson = new Map((onboardingRows ?? []).map((row: any) => [`${row.organization_id}:${row.person_id}`, row.timezone]));
   const candidates = [
-    ...(clockedOut ?? []).map((row) => ({ ...row, candidateSource: "clocked_out" })),
-    ...(completedDays ?? []).map((row) => ({ ...row, timezone: timezoneByPerson.get(`${row.organization_id}:${row.person_id}`) ?? "UTC", candidateSource: "completed_workday" })),
+    ...(clockedOut ?? []).map((row: any) => ({ ...row, candidateSource: "clocked_out" })),
+    ...(completedDays ?? []).map((row: any) => ({ ...row, timezone: timezoneByPerson.get(`${row.organization_id}:${row.person_id}`) ?? "UTC", candidateSource: "completed_workday" })),
   ].sort((left, right) => String(right.shift_date).localeCompare(String(left.shift_date)));
   const results: Array<{ organizationId: string; personId: string; date: string; status: string }> = [];
   const seenCandidates = new Set<string>();
@@ -519,9 +514,9 @@ export async function accessWorkOsScreenshot(access: WorkOsAccess, summaryId: st
   if (!isRetainedScreenshotAvailable(summary)) {
     throw new Error("retained screenshot is no longer available");
   }
-  const { data: encrypted, error: downloadError } = await db().storage.from(BUCKET).download(summary.storage_path);
-  if (downloadError) throw new Error(`load retained screenshot: ${downloadError.message}`);
-  const plaintext = decryptScreenshot(new Uint8Array(await encrypted.arrayBuffer()));
+  const { data: encrypted, error: downloadError } = await getStorageBackend().download(BUCKET, summary.storage_path);
+  if (downloadError || !encrypted) throw new Error(`load retained screenshot: ${downloadError?.message ?? "not found"}`);
+  const plaintext = decryptScreenshot(new Uint8Array(encrypted.arrayBuffer));
   const contentType = String((summary.encryption_metadata as Json | null)?.contentType || "image/jpeg");
   const { error: logError } = await db().from("work_screenshot_access_log").insert({
     organization_id: access.organizationId,
@@ -540,12 +535,12 @@ export async function deleteExpiredWorkOsScreenshots() {
     .lte("expires_at", new Date().toISOString())
     .limit(500);
   if (error) throw new Error(`load expired screenshots: ${error.message}`);
-  const paths = (expired ?? []).map((item) => item.storage_path).filter(Boolean) as string[];
+  const paths = (expired ?? []).map((item: any) => item.storage_path).filter(Boolean) as string[];
   if (paths.length) {
-    const removed = await db().storage.from(BUCKET).remove(paths);
+    const removed = await getStorageBackend().remove(BUCKET, paths);
     if (removed.error) throw new Error(`delete expired screenshots: ${removed.error.message}`);
   }
-  const ids = (expired ?? []).map((item) => item.id);
+  const ids = (expired ?? []).map((item: any) => item.id);
   if (ids.length) {
     const { error: updateError } = await db().from("work_screenshot_summaries")
       .update({ storage_path: null, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })

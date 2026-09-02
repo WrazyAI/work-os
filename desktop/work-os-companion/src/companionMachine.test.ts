@@ -56,6 +56,11 @@ describe("companion state ladder", () => {
     expect(decision.prompt).toBeNull();
   });
 
+  it("tolerates a degraded day response without a prompt object", () => {
+    const degraded = { ...day(), prompt: undefined } as unknown as DayData;
+    expect(() => evaluateCompanion(base({ day: degraded }))).not.toThrow();
+  });
+
   it("stays idle off shift", () => {
     const decision = evaluateCompanion(base({ gate: gate({ active: false, canClockIn: true, message: "off shift" }) }));
     expect(decision.state).toBe("idle");

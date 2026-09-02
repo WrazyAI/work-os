@@ -79,6 +79,39 @@ fn open_https_url_windows(url: &str) -> Result<(), String> {
     }
 }
 
+
+/// Windows toast with click-to-focus: activating the notification focuses the
+/// target window (avatar -> also emits the expand event; main -> show+focus).
+/// Other platforms keep the JS notification plugin, which handles clicks there.
+#[tauri::command]
+fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let app_handle = app.clone();
+        let window_target = target.clone();
+        tauri_winrt_notification::Toast::new("com.wrazy.workos.pilot")
+            .title(&title)
+            .text1(&body)
+            .on_activated(move || {
+                if let Some(window) = app_handle.get_webview_window(&window_target) {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                if window_target == "avatar" {
+                    let _ = app_handle.emit_to("avatar", "avatar://expand", ());
+                }
+                Ok(())
+            })
+            .show()
+            .map_err(|error| error.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, title, body, target);
+        Err("click-to-focus notifications are only implemented for Windows".into())
+    }
+}
 #[tauri::command]
 fn open_work_os_auth(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let parsed = allowed_desktop_connect_url(&url)?;
@@ -126,6 +159,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
+            notify_focus,
             open_work_os_auth,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,

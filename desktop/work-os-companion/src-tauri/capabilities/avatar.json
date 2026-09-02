@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "avatar",
+  "description": "Capabilities for the floating companion window: position/size control, notifications, and secure session access.",
+  "windows": [
+    "avatar"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "allow-app-commands",
+    "core:path:default",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "core:window:allow-outer-position",
+    "core:window:allow-scale-factor",
+    "core:window:allow-current-monitor",
+    "notification:default",
+    "stronghold:default",
+    "stronghold:allow-remove-store-record",
+    "allow-avatar-commands"
+  ]
+}

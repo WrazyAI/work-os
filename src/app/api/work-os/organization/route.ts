@@ -30,12 +30,12 @@ export async function GET() {
       db.from("work_team_members").select("team_id,person_id,is_manager,person:work_people(id,display_name,email)"),
     ]);
     for (const result of [organization, memberships, teams, teamMembers]) if (result.error) throw result.error;
-    const teamIds = new Set((teams.data ?? []).map((team) => team.id));
+    const teamIds = new Set((teams.data ?? []).map((team: any) => team.id));
     return NextResponse.json({
       organization: organization.data,
       memberships: memberships.data ?? [],
       teams: teams.data ?? [],
-      teamMembers: (teamMembers.data ?? []).filter((member) => teamIds.has(member.team_id)),
+      teamMembers: (teamMembers.data ?? []).filter((member: any) => teamIds.has(member.team_id)),
     });
   } catch (error) {
     return jsonError(error);

@@ -8,13 +8,22 @@ export interface ProposedOperation {
   statement: string;
   taskId?: string;
   taskTitle?: string;
+  proposalId?: string;
   /** Employee inclusion toggle — nothing files without this. */
   enabled: boolean;
+}
+
+export interface ToolCallResult {
+  op: ProposedOperation;
+  status: "recorded" | "queued" | "failed" | "denied";
+  message: string;
 }
 
 export interface CandidateReview {
   originalInput: string;
   operations: ProposedOperation[];
+  /** Assistant's conversational reply — present for chat messages and work updates alike. */
+  reply?: string;
 }
 
 const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
@@ -29,6 +38,30 @@ export function operationLabel(op: CandidateOperationKind): string {
   return OPERATION_LABELS[op] ?? "Update:";
 }
 
+/** The exact Work OS request an approved assistant proposal will make. */
+export function operationToolCall(op: ProposedOperation, context: ApprovedOpContext): { tool: string; command: string } {
+  if (op.op === "complete_task" || op.op === "reopen_task") {
+    return {
+      tool: "work_os.tasks.update_completion",
+      command: `PATCH /api/work-os/me/tasks/${op.taskId ?? "<select-task>"} ${JSON.stringify({ completed: op.op === "complete_task" })}`,
+    };
+  }
+  if (op.op === "create_task") {
+    return {
+      tool: "work_os.tasks.create",
+      command: `POST /api/work-os/me/tasks ${JSON.stringify({ name: (op.taskTitle || op.statement).slice(0, 240), description: op.statement, due_date: context.shiftDate, assignee_person_ids: context.personId ? [context.personId] : [] })}`,
+    };
+  }
+  return {
+    tool: "work_os.check_ins.create",
+    command: `POST /api/work-os/check-ins ${JSON.stringify({ source: "desktop", kind: context.promptKind || "optional", update_kind: op.op === "record_blocker" ? "blocked" : "material_progress", input_text: op.statement })}`,
+  };
+}
+
+export function proposalApprovalCommand(op: ProposedOperation): string | null {
+  return op.proposalId ? `PATCH /api/work-os/proposals/${op.proposalId} ${JSON.stringify({ decision: "accept" })}` : null;
+}
+
 /**
  * Defensively normalizes an interpretation response. Malformed provider data
  * must never render as task content: every string passes safeTaskText, ids
@@ -41,9 +74,13 @@ export function normalizeInterpretation(
   tasks: Array<{ id: string; title: string }>,
 ): CandidateReview | null {
   if (!raw || typeof raw !== "object") return null;
-  const source = raw as { operations?: unknown };
+  const source = raw as { operations?: unknown; reply?: unknown };
   const allowed = new Set(tasks.map((task) => task.id));
-  if (!Array.isArray(source.operations)) return null;
+  const reply = typeof source.reply === "string" && source.reply.trim() ? source.reply.replace(/\s+/g, " ").trim().slice(0, 600) : undefined;
+  if (!Array.isArray(source.operations)) {
+    // A conversational reply with nothing to record is a valid assistant turn.
+    return reply ? { originalInput, operations: [], reply } : null;
+  }
 
   const operations: ProposedOperation[] = [];
   for (const entry of source.operations.slice(0, 20)) {
@@ -57,7 +94,8 @@ export function normalizeInterpretation(
     const taskTitle = typeof candidate.taskTitle === "string" && candidate.taskTitle.trim() ? safeTaskText(candidate.taskTitle, "") || undefined : undefined;
     operations.push({ op, statement, taskId, taskTitle, enabled: true });
   }
-  return { originalInput, operations };
+  if (!operations.length && !reply) return null;
+  return { originalInput, operations, reply };
 }
 
 export function interpretationFallbackReason(error: unknown): string {
@@ -116,6 +154,7 @@ export interface ApprovedOpContext {
 }
 
 export interface ApprovalTransport {
+  reviewProposal?(proposalId: string): Promise<unknown>;
   completeTask(taskId: string, completed: boolean): Promise<unknown>;
   createTask(input: { name: string; description: string; dueDate: string | null; personId: string | null }): Promise<unknown>;
   fileCheckIn(input: { kind: string; updateKind: string; text: string }): Promise<unknown>;
@@ -125,6 +164,7 @@ export interface ApprovalOutcome {
   recorded: number;
   queued: number;
   failed: Array<{ op: ProposedOperation; message: string }>;
+  results: ToolCallResult[];
 }
 
 /**
@@ -139,10 +179,12 @@ export async function fileApprovedOperations(
   context: ApprovedOpContext,
   transport: ApprovalTransport,
 ): Promise<ApprovalOutcome> {
-  const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [] };
+  const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
-      const result = op.op === "complete_task" || op.op === "reopen_task"
+      const result = op.proposalId && transport.reviewProposal
+        ? await transport.reviewProposal(op.proposalId)
+        : op.op === "complete_task" || op.op === "reopen_task"
         ? await transport.completeTask(op.taskId!, op.op === "complete_task")
         : op.op === "create_task"
           ? await transport.createTask({
@@ -156,10 +198,17 @@ export async function fileApprovedOperations(
               updateKind: op.op === "record_blocker" ? "blocked" : "material_progress",
               text: op.statement,
             });
-      if ((result as { queued?: boolean } | undefined)?.queued === true) outcome.queued += 1;
-      else outcome.recorded += 1;
+      if ((result as { queued?: boolean } | undefined)?.queued === true) {
+        outcome.queued += 1;
+        outcome.results.push({ op, status: "queued", message: "Queued locally for a later sync." });
+      } else {
+        outcome.recorded += 1;
+        outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state." });
+      }
     } catch (error) {
-      outcome.failed.push({ op, message: error instanceof Error ? error.message : "The change could not be filed." });
+      const message = error instanceof Error ? error.message : "The change could not be filed.";
+      outcome.failed.push({ op, message });
+      outcome.results.push({ op, status: "failed", message });
     }
   }
   return outcome;

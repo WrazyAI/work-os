@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, operationToolCall, proposalApprovalCommand } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -15,6 +15,23 @@ describe("normalizeInterpretation", () => {
     expect(review?.operations[0]).toMatchObject({ op: "complete_task", taskId: "t-1", enabled: true });
     expect(review?.operations[1]?.taskTitle).toBe("Package the signed installer");
     expect(operationLabel("complete_task")).toBe("Mark done:");
+  });
+
+  it("keeps every supported AI operation reviewable before filing", () => {
+    const review = normalizeInterpretation({
+      operations: [
+        { op: "record_progress", statement: "Continued the debugger fix.", taskId: "t-1" },
+        { op: "record_blocker", statement: "Waiting for the signing certificate.", taskId: "t-1" },
+        { op: "complete_task", statement: "Finished the debugger fix.", taskId: "t-1" },
+        { op: "reopen_task", statement: "Reopened the debugger fix.", taskId: "t-1" },
+        { op: "create_task", statement: "Package the release.", taskTitle: "Package the release" },
+      ],
+    }, "Update my work", TASKS);
+
+    expect(review?.operations.map((operation) => operation.op)).toEqual([
+      "record_progress", "record_blocker", "complete_task", "reopen_task", "create_task",
+    ]);
+    expect(review?.operations.every((operation) => operation.enabled)).toBe(true);
   });
 
   it("drops operations with unknown task ids and structural surprises", () => {
@@ -33,7 +50,9 @@ describe("normalizeInterpretation", () => {
     const review = normalizeInterpretation({
       operations: [{ op: "create_task", statement: { evil: true }, taskTitle: "[object Object]" }],
     }, "update", TASKS);
-    expect(review?.operations).toHaveLength(0);
+    // Nothing usable survived sanitizing and there is no chat reply either,
+    // so the caller falls back to the manual classifier.
+    expect(review).toBeNull();
   });
 
   it("returns null for non-object payloads so the UI falls back to manual", () => {
@@ -93,6 +112,7 @@ describe("fileApprovedOperations", () => {
     expect(outcome.recorded).toBe(2);
     expect(outcome.queued).toBe(1);
     expect(outcome.failed).toHaveLength(0);
+    expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "queued", "recorded"]);
   });
 
   it("never loses an approved operation to a mid-loop failure and reports per-op", async () => {
@@ -110,5 +130,25 @@ describe("fileApprovedOperations", () => {
     expect(outcome.failed).toHaveLength(2);
     expect(outcome.failed[0]?.message).toBe("Nifty is unreachable");
     expect(outcome.failed[1]?.op.op).toBe("record_blocker");
+    expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "failed", "failed"]);
+  });
+});
+
+describe("operationToolCall", () => {
+  const context = { shiftDate: "2026-08-27", personId: "person-1", promptKind: "optional" };
+
+  it("shows the exact request before approval", () => {
+    expect(operationToolCall({ op: "complete_task", statement: "Finished", taskId: "task-1", enabled: true }, context)).toEqual({
+      tool: "work_os.tasks.update_completion",
+      command: 'PATCH /api/work-os/me/tasks/task-1 {"completed":true}',
+    });
+    expect(operationToolCall({ op: "create_task", statement: "Write release notes", enabled: true }, context).command).toContain('"assignee_person_ids":["person-1"]');
+    expect(operationToolCall({ op: "record_blocker", statement: "Waiting for access", enabled: true }, context)).toEqual({
+      tool: "work_os.check_ins.create",
+      command: 'POST /api/work-os/check-ins {"source":"desktop","kind":"optional","update_kind":"blocked","input_text":"Waiting for access"}',
+    });
+    const proposal = { op: "create_task" as const, statement: "Write release notes", proposalId: "proposal-1", enabled: true };
+    expect(operationToolCall(proposal, context).tool).toBe("work_os.tasks.create");
+    expect(proposalApprovalCommand(proposal)).toBe('PATCH /api/work-os/proposals/proposal-1 {"decision":"accept"}');
   });
 });

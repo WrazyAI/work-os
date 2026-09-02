@@ -14,11 +14,20 @@
 * {
   box-sizing: border-box;
 }
+html {
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
   min-width: 360px;
   min-height: 100vh;
   background: #e9e8e1;
+  overscroll-behavior: none;
+}
+/* Reaching the edge of any inner scroller must stop there — no chaining to
+   the page, no rubber-band jump. */
+* {
+  overscroll-behavior: contain;
 }
 button,
 input,
@@ -1058,6 +1067,10 @@ button:disabled {
   .rail {
     width: 68px;
     padding: 18px 10px;
+    align-items: center;
+  }
+  .wordmark {
+    justify-content: center;
   }
   .wordmark span,
   .rail nav span,
@@ -1065,10 +1078,70 @@ button:disabled {
     display: none;
   }
   .rail nav {
-    margin-top: 40px;
+    margin-top: 28px;
+    gap: 6px;
+    width: 100%;
   }
   .rail nav button {
     justify-content: center;
+    width: 48px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    margin: 0 auto;
+  }
+  .rail nav button.active:before {
+    left: -10px;
+    height: 18px;
+  }
+  .rail nav button {
+    position: relative;
+  }
+  .rail nav button::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--ink);
+    color: #f3f1e8;
+    font: 600 11.5px/1 Manrope, Inter, "Segoe UI", sans-serif;
+    padding: 7px 11px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    box-shadow: 0 6px 18px rgba(13, 15, 12, 0.3);
+  }
+  .rail nav button:hover::after,
+  .rail nav button:focus-visible::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+  .rail nav em {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    margin: 0;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--ink);
+  }
+  .rail-foot {
+    width: 100%;
+    justify-content: center;
+    border-top: 0;
+    padding: 0;
+  }
+  .rail-foot .presence {
+    width: 10px;
+    height: 10px;
   }
   .stage {
     padding: 0 18px 40px;
@@ -3592,3 +3665,20 @@ body.modal-open { overflow: hidden; }
 .notification-flyout.warning .notification-icon {
   color: #9b6611;
 }
+/* Companion pet: reused as a quiet state cue, never a second dashboard card. */
+.companion-pet { width: 48px; height: 48px; color: var(--ink); }
+.companion-pet path, .companion-pet circle { vector-effect: non-scaling-stroke; }
+.companion-pet .pet-shadow { fill: rgba(24, 32, 24, .12); stroke: none; }
+.companion-pet .pet-body, .companion-pet .pet-ear { fill: #273526; stroke: #182018; stroke-width: 2.5; stroke-linejoin: round; }
+.companion-pet .pet-arm { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }
+.companion-pet .pet-panel { fill: #d8f5a9; stroke: #182018; stroke-width: 2; stroke-linejoin: round; }
+.companion-pet .pet-screen { fill: #d8f5a9; stroke: #182018; stroke-width: 2.5; }
+.companion-pet .pet-tail, .companion-pet .pet-badge, .companion-pet .pet-focus { fill: none; stroke: #182018; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.companion-pet .pet-face { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }
+.companion-pet .pet-face circle { fill: #182018; stroke: none; }
+.companion-pet .pet-spark { fill: #a8f15b; stroke: #182018; stroke-width: 1.5; stroke-linejoin: round; }
+.companion-pet.pose-sleep { opacity: .72; }
+.companion-pet.pose-alert .pet-screen { fill: #ffdf8f; }
+.companion-pet.pose-rest .pet-screen { fill: #c9e1f2; }
+.companion-pet.pose-eod .pet-screen { fill: #efc7ba; }
+.companion-pet-inline { width: 42px; height: 42px; flex: 0 0 auto; }

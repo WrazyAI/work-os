@@ -165,7 +165,7 @@ export async function resolveDailyWorkspace(
     || isNiftyTaskAttributableToMember(task, context.niftyMemberId)
   );
   const attributableIds = new Set(attributable.map((task) => String(task.id)));
-  const events = (eventsResult.data ?? []).filter((event) =>
+  const events = (eventsResult.data ?? []).filter((event: any) =>
     event.person_id === access.personId || attributableIds.has(String(event.task_id))
   ) as Json[];
   const eventsByTask = new Map<string, Json[]>();

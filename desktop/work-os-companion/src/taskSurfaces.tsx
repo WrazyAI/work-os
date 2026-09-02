@@ -5,6 +5,7 @@ import { computeMenuPlacement } from "./menuPlacement";
 import { BOTTLENECK_QUESTION, composeEodMarkdown, hasBottleneckAnswer } from "./interpretation";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
+import { CompanionPet } from "./CompanionPet";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 
@@ -170,7 +171,7 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
     </div>, document.body)}
     {moveOpen && createPortal(<div className="move-target-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
       <span>Move to task</span>
-      {moveTargets.length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
+      {(moveTargets || []).length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
     </div>, document.body)}
   </div>;
 }
@@ -186,6 +187,8 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
 }) {
   const task = details.task;
   const state = task.completed ? "complete" as const : typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
+  const subtasks = Array.isArray(details.subtasks) ? details.subtasks : [];
+  const moveTargets = Array.isArray(details.moveTargets) ? details.moveTargets : [];
   const sync = details.subtaskSync;
   return <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
     <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
@@ -193,10 +196,10 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
       <div className="task-modal-body">
         {loading ? <p className="task-loading">Loading task details…</p> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
-          <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, "Nifty")}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{details.subtasks.length}</strong></div>{details.subtasks.length > 0 && <CompletionRingInline completed={details.subtasks.filter((subtask) => subtask.completed === true).length} total={details.subtasks.length} />}</header>
+          <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, "Nifty")}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
+          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <CompletionRingInline completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} />}</header>
             {sync?.error && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
-            <div className="subtask-list">{details.subtasks.length ? details.subtasks.map((subtask) => {
+            <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
               return <article key={subtask.id} className={subtask.completed ? "completed" : ""}><div><strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong><p>{safeTaskText(subtask.description, "No description")}</p><AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
@@ -209,7 +212,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
                 onMove={(target) => onMoveSubtask(subtask, target)}
                 onArchive={() => onArchiveSubtask(subtask)}
                 onDelete={() => onDeleteSubtask(subtask)}
-                moveTargets={details.moveTargets}
+                moveTargets={moveTargets}
               />}</article>;
             }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
             {!readOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => onSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => onSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={onSubtaskCreate}><Plus size={14} /> Add subtask</button></div>}
@@ -288,9 +291,9 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
-export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, busy, onRedraft, onSubmit }: {
-  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | null; suggestedBottleneck: string | null;
-  redrafting: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
+export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onSubmit }: {
+  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
+  redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
@@ -303,10 +306,13 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
-      <div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
-      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div>
+      <div className="eod-title-with-pet"><CompanionPet pose="eod" className="companion-pet-inline" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
+      {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
+      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? "Drafting…" : "Draft with AI"}</button>
     </header>
+    {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</details>}
+    {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses today&apos;s recorded work only.</p>}
     <label className="eod-markdown-label"><span>Report</span>
       <textarea value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />
     </label>

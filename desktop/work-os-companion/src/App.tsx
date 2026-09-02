@@ -5,7 +5,7 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowUp, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
-import { apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { ApiRequestError, apiRequest, flushQueue, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { evaluateCompanion, EMPTY_COMPANION_RECORD, markFired, markIgnored, markResponded, pruneRecord, setQuietMode as setMachineQuiet, snooze as snoozeMachine, type CompanionRecord, type CompanionState } from "./companionMachine";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
@@ -13,17 +13,19 @@ import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
-import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
+import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { schedulePrompt, sendOSNotification } from "./scheduler";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, simulateAiEod, type ProposedOperation } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, simulateAiEod, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { ToolApprovalCard } from "./ToolApprovalCard";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OnboardingData } from "./types";
-import { secureState } from "./vault";
+import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
+import { CompanionPet } from "./CompanionPet";
 import "./plan-insights.css";
 
 type AssetSource = string | { src: string };
@@ -31,6 +33,7 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "overdue" | "completed" | "all";
+type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDetails = {
   task: Record<string, any>;
@@ -97,14 +100,24 @@ export default function App() {
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
   const [pendingProgressUpdate, setPendingProgressUpdate] = useState("");
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
-  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }> } | null>(null);
+  // Full composer conversation. Persists for the app session until the user
+  // explicitly clears it (trash) or starts a new chat (plus) — closing the
+  // flyout intentionally keeps it.
+  const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
+  const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
+  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
-  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" } | null>(null);
+  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
   const [eodSubmitted, setEodSubmitted] = useState(false);
+  const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
+  const [eodClockedOut, setEodClockedOut] = useState(false);
+  const eodAutoDraftedFor = useRef<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
-    return rows.map((task) => ({ id: String(task.provider_task_id || task.id), title: String(task.title ?? "Untitled task") }));
+    // The interpreter returns Work OS local IDs. Keep that canonical identifier
+    // through review and approval so completion proposals are never dropped.
+    return rows.map((task) => ({ id: String(task.id), title: String(task.title ?? "Untitled task") }));
   };
   const [planIntent, setPlanIntent] = useState("");
   const [goalProvenance, setGoalProvenance] = useState<"employee" | "accepted_suggestion" | null>(null);
@@ -130,7 +143,7 @@ export default function App() {
   const [updateStatus, setUpdateStatus] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
-  const [taskHistoryCursor, setTaskHistoryCursor] = useState<string | null>(null);
+  const [taskHistoryCursor, setTaskHistoryCursor] = useState<number | null>(null);
   const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [taskComposerTitle, setTaskComposerTitle] = useState("");
@@ -265,15 +278,18 @@ export default function App() {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [moveMenuId, subtaskMenuId]);
 
-  const refresh = useCallback(async (options: { refreshProviders?: boolean; dayOnly?: boolean } = {}) => {
+  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean } = {}) => {
     if (syncBypassRef.current) return null;
+    const dayQuery = new URLSearchParams();
+    if (options.refreshProviders) dayQuery.set("refreshProviders", "true");
+    if (options.refreshAttendance) dayQuery.set("refreshAttendance", "true");
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
-      apiRequest<DayData>(`/api/work-os/me/day${options.refreshProviders ? "?refreshProviders=true" : ""}`, {
+      apiRequest<DayData>(`/api/work-os/me/day${dayQuery.size ? `?${dayQuery}` : ""}`, {
         // Provider refreshes run two external syncs server-side; the 20s
         // default aborted them mid-flight ("signal timed out") before the
         // Worktivity observation could land.
-        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 20_000),
+        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : options.refreshAttendance ? 35_000 : 20_000),
       }),
     ]);
     if (onboardingResult.status === "rejected") throw onboardingResult.reason;
@@ -287,9 +303,10 @@ export default function App() {
       showError(message, message, "Workday refresh failed");
       return null;
     }
-    const nextDay = dayResult.value;
+    const nextDay = { ...dayResult.value, prompt: dayResult.value.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" } };
     setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
-    setTaskHistory(nextDay.tasks ?? []); setTaskHistoryCursor(nextDay.workspaceSummary?.cursor.next ?? null);
+    const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
+    setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);
     setPlanIntent(nextDay.plan?.freeform_intent ?? "");
     setGoalProvenance(nextDay.plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : nextDay.plan?.freeform_intent ? "employee" : null);
     setSuggestionTaskIds(nextDay.plan?.suggestion_task_ids ?? []);
@@ -303,9 +320,9 @@ export default function App() {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
-      if (current) void refresh().catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
+      if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
-    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void refresh(); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
 
@@ -315,6 +332,15 @@ export default function App() {
     window.addEventListener("online", recover); const timer = window.setInterval(() => void recover().catch(() => undefined), 60_000);
     return () => { window.removeEventListener("online", recover); clearInterval(timer); };
   }, [refresh, session]);
+
+  // The avatar is a separate window. Its confirmed writes should be visible in
+  // the main workspace immediately, not only after the next periodic refresh.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen("work-os://avatar-day-changed", () => { void refresh({ dayOnly: true }).catch(() => undefined); }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [refresh]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setPulseNow(new Date()), 30_000);
@@ -339,22 +365,32 @@ export default function App() {
 const redraftEod = async () => {
     if (!visibleDay?.report) return;
     if (syncBypassRef.current) {
-      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "ai" });
+      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
       notifications.success("Simulated an assistant draft on-device — nothing reached the server.", "AI draft (playground)");
       return;
     }
     setEodRedrafting(true);
     try {
-      const result = await apiRequest<{ markdown: string; model: string }>("/api/work-os/me/eod/ai-draft", {
+      const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
         method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate }),
       });
-      setEodDraft({ markdown: result.markdown, source: "ai" });
-      notifications.success("The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
+      setEodGate(null);
+      setEodClockedOut(result.clockedOut === true);
+      setEodDraft({ markdown: result.markdown, source: "ai", screenshots: result.screenshots ?? null, screenshotSyncUnavailable: result.screenshotSyncUnavailable === true });
+      notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
     } catch (value) {
+      if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
+        const message = value instanceof Error ? value.message : "EOD drafting is gated";
+        setEodGate({ gate: /no tasks/i.test(message) ? "no_tasks" : "no_activity", detail: message });
+        setEodDraft(null);
+        return;
+      }
       setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
       notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
     } finally { setEodRedrafting(false); }
   };
+
+
 
   function submitEod(markdown: string, idempotencyKey: string) {
     const reportId = String(visibleDay?.report?.id ?? "");
@@ -401,6 +437,7 @@ const redraftEod = async () => {
           return;
         }
         setDay((current) => current ? { ...current, plan: response } : current);
+        void emit("work-os://main-day-changed");
         if (planEditVersion.current === version) {
           setPlanItems([...response.items].sort((a, b) => a.rank - b.rank));
           setPlanDirty(false);
@@ -417,7 +454,14 @@ const redraftEod = async () => {
   }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, showError, suggestionTaskIds]);
 
   useEffect(() => {
-    if (view !== "insights" || !session || debugRef.current.enabled) return;
+    if (view !== "insights" || debugRef.current.enabled) {
+    if (syncBypassRef.current && visibleDay) {
+      setInsights(insightsFixture(visibleDay, insightRange));
+      setInsightsLoading(false);
+    }
+    return;
+  }
+  if (!session) return;
     let cancelled = false;
     setInsightsLoading(true);
     void apiRequest<InsightsData>(`/api/work-os/me/insights?range=${insightRange}${day?.shiftDate ? `&through=${encodeURIComponent(day.shiftDate)}` : ""}`)
@@ -473,6 +517,7 @@ const redraftEod = async () => {
         diagnostics.warn("ui.action.refresh_after_action", refreshError instanceof Error ? refreshError.message : "post-action refresh failed", { action: label, activeView: view });
         return null;
       });
+      void emit("work-os://main-day-changed");
       diagnostics.info("ui.action.completed", label, { activeView: view });
       notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
     }
@@ -650,9 +695,43 @@ const redraftEod = async () => {
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  // Entering the EOD review checks the gates and drafts automatically: the
+  // day must have recorded work activity and at least one submitted or
+  // checked-off task, and drafting clock-outs the shift.
+  useEffect(() => {
+    if (view !== "review" || !visibleDay?.report || eodSubmitted || eodDraft || eodGate || eodRedrafting) return;
+    const stamp = `${visibleDay.shiftDate}:${visibleDay.report.id}`;
+    if (eodAutoDraftedFor.current === stamp) return;
+    eodAutoDraftedFor.current = stamp;
+    void redraftEod();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, visibleDay?.report?.id, eodSubmitted]);
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
+  const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId
+    ? `main:${visibleSession.organizationId}:${visibleDay.access.personId}`
+    : null;
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedComposerConversation(null);
+    setComposerHistory([]);
+    if (!composerConversationScope) return () => { cancelled = true; };
+    void secureState.conversation(composerConversationScope).then((turns) => {
+      if (!cancelled) {
+        setComposerHistory(turns);
+        setLoadedComposerConversation(composerConversationScope);
+      }
+    }).catch(() => {
+      if (!cancelled) setLoadedComposerConversation(composerConversationScope);
+    });
+    return () => { cancelled = true; };
+  }, [composerConversationScope]);
+  useEffect(() => {
+    if (!composerConversationScope || loadedComposerConversation !== composerConversationScope) return;
+    void secureState.saveConversation(composerConversationScope, composerHistory);
+  }, [composerConversationScope, composerHistory, loadedComposerConversation]);
   useEffect(() => {
     if (debugScenario.enabled && visibleDay?.plan) {
       setPlanIntent(visibleDay.plan.freeform_intent ?? "");
@@ -695,10 +774,10 @@ const redraftEod = async () => {
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
     try {
       const [planResult, taskResult] = await Promise.all([
-        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
+        apiRequest<DailyPlan | null>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
         apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
       ]);
-      setHistoricalPlan(planResult.plan);
+      setHistoricalPlan(planResult);
       setHistoricalTasks(taskResult.tasks);
     } catch (value) {
       showError(value, "Daily workspace history could not be loaded.", "History unavailable");
@@ -712,6 +791,7 @@ const redraftEod = async () => {
       if (reference.type === "task") await openTaskDetails({ id: reference.id, title: reference.label }, reference.date !== visibleDay?.shiftDate);
       return;
     }
+    if (reference.type === "evidence" && !FEATURES.evidence) { setView("day"); return; }
     setView(reference.type === "evidence" ? "evidence" : "day");
   }
 
@@ -719,9 +799,9 @@ const redraftEod = async () => {
     if (syncBypassRef.current || taskHistoryCursor === null || !visibleDay || taskHistoryLoading) return;
     setTaskHistoryLoading(true);
     try {
-      const result = await apiRequest<{ tasks: Array<Record<string, any>>; cursor: { next: string | null } }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(visibleDay.shiftDate)}&cursor=${encodeURIComponent(taskHistoryCursor)}&limit=100`);
+      const result = await apiRequest<{ tasks: Array<Record<string, any>>; nextOffset: number | null }>(`/api/work-os/me/tasks?view=history&offset=${taskHistoryCursor}&limit=100`);
       setTaskHistory((current) => [...current, ...result.tasks.filter((item) => !current.some((existing) => existing.id === item.id))]);
-      setTaskHistoryCursor(result.cursor.next);
+      setTaskHistoryCursor(result.nextOffset);
     } catch (value) {
       showError(value, "More tasks could not be loaded.", "Task history unavailable");
     } finally { setTaskHistoryLoading(false); }
@@ -759,7 +839,7 @@ const redraftEod = async () => {
     setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(true); setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
     try {
       const details = await loadTaskDetails(taskId);
-      setTaskDetails(details);
+      setTaskDetails({ ...details, task: details.task ?? task, subtasks: Array.isArray(details.subtasks) ? details.subtasks : [], moveTargets: Array.isArray(details.moveTargets) ? details.moveTargets : [] });
       if (details.subtaskSync?.error) notifications.error("Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.", "Subtasks may be stale");
     }
     catch (value) { setTaskDetails(null); showError(value, "Could not open this task.", "Task unavailable"); }
@@ -983,6 +1063,9 @@ const redraftEod = async () => {
   function startProgressUpdate() {
     const text = input.trim();
     if (!text) return;
+    const userTurn: WorkOsConversationTurn = { id: crypto.randomUUID(), role: "user", text, createdAt: new Date().toISOString() };
+    const history = [...composerHistory, userTurn];
+    setComposerHistory(history);
     setPendingProgressUpdate(text);
     setProgressReceipt(null);
     setProgressPanel("update");
@@ -994,16 +1077,31 @@ const redraftEod = async () => {
     setAiUnavailable(false);
     void apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
       method: "POST",
-      body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null }),
-    }).then((result) => {
+      body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
+    }).then(async (result) => {
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
-      if (!review || !review.operations.length) throw new Error("The assistant couldn't map that to work yet.");
-      setInterpretation({ status: "ready", operations: review.operations, taskOptions });
+      if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
+      const proposals = review.operations.length ? await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+        method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle })) }),
+      }) : { proposals: [] };
+      const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
+      setInterpretation({ status: "ready", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions, reply: review.reply });
+      setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: review.reply || "Here's what I understood.", meta: review.operations.length ? `${review.operations.length} proposed update${review.operations.length === 1 ? "" : "s"}` : undefined, createdAt: new Date().toISOString() }]);
     }).catch((value) => {
       setInterpretation(null);
       setAiUnavailable(true);
       diagnostics.info("composer.ai_fallback", value instanceof Error ? value.message : "interpretation failed", { activeView: view });
     });
+  }
+
+  function clearComposerChat() {
+    setComposerHistory([]);
+    if (composerConversationScope) void secureState.clearConversation(composerConversationScope);
+    setProgressReceipt(null);
+    setInterpretation(null);
+    setPendingProgressUpdate("");
+    setInput("");
   }
 
   function toggleOperation(index: number) {
@@ -1018,6 +1116,18 @@ const redraftEod = async () => {
     setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? { ...op, taskId: taskId || undefined } : op) } : current);
   }
 
+  function denyInterpretationOperation(index: number) {
+    const operation = interpretation?.operations[index];
+    if (!operation?.proposalId) return;
+    void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
+      method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
+    }).then(() => setInterpretation((current) => current ? {
+      ...current,
+      operations: current.operations.map((op, currentIndex) => currentIndex === index ? { ...op, enabled: false } : op),
+      results: [...(current.results ?? []), { op: operation, status: "denied", message: "Denied. This tool call will not run." }],
+    } : current)).catch((value) => showError(value, "Could not deny this tool call.", "Approval update failed"));
+  }
+
   function approveInterpretation(operations: ProposedOperation[]) {
     const text = pendingProgressUpdate.trim();
     const enabled = operations.filter((op) => op.enabled);
@@ -1025,15 +1135,15 @@ const redraftEod = async () => {
     const dominant: ProgressUpdateKind = enabled.some((op) => op.op === "record_blocker") ? "blocked"
       : enabled.some((op) => op.op === "complete_task") ? "completion_claim"
       : enabled.some((op) => op.op === "create_task") ? "new_task" : "material_progress";
-    const close = () => {
-      setProgressReceipt({
-        kind: dominant, text, queued: false,
-        message: enabled.length === 1
-          ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
-          : `Recorded ${enabled.length} updates on your behalf.`,
-      });
-      setInterpretation(null);
-      setPendingProgressUpdate("");
+    const close = (results?: ToolCallResult[]) => {
+      const message = enabled.length === 1
+        ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
+        : `Recorded ${enabled.length} updates on your behalf.`;
+      if (results) setProgressReceipt(null);
+      else setProgressReceipt({ kind: dominant, text, queued: false, message });
+      setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: message, meta: "recorded", createdAt: new Date().toISOString() }]);
+      setInterpretation((current) => current ? { ...current, operations: current.operations.map((op) => ({ ...op, enabled: false })), results } : current);
+      setPendingProgressUpdate(results ? "tool calls reviewed" : "");
       recordResponse();
     };
     if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
@@ -1047,8 +1157,9 @@ const redraftEod = async () => {
       const outcome = await fileApprovedOperations(enabled, {
         shiftDate: visibleDay?.shiftDate ?? null,
         personId: visibleDay?.access?.personId ?? null,
-        promptKind: visibleDay?.prompt.kind || "optional",
+        promptKind: visibleDay?.prompt?.kind || "optional",
       }, {
+        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
         completeTask: (taskId, completed) => updateTaskCompletion(taskId, completed),
         createTask: (taskInput) => sendOrQueue("/api/work-os/me/tasks", "POST", {
           name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [],
@@ -1062,12 +1173,15 @@ const redraftEod = async () => {
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
       if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
-      close();
+      close(outcome.results);
       if (outcome.failed.length) {
         notifications.error(`${parts.join(" · ")}. First failure: ${outcome.failed[0]!.message}`, "Some updates did not file");
       } else {
         notifications.success(parts.join(" · "), "Updates filed");
       }
+      // Filed changes (new tasks, completions) only become visible once the
+      // workday payload is refetched — don't make the employee refresh by hand.
+      void refresh();
     })().catch((value) => {
       showError(value, "Your approved updates could not be filed.", "Filing failed");
     }).finally(() => setBusy(false));
@@ -1077,6 +1191,7 @@ const redraftEod = async () => {
     recordResponse();
     const text = pendingProgressUpdate.trim();
     if (!text) return;
+    setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.`, meta: "recorded", createdAt: new Date().toISOString() }]);
     if (syncBypassRef.current) {
       const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
       setProgressReceipt({
@@ -1097,7 +1212,7 @@ const redraftEod = async () => {
         }) as { queued?: boolean; providerStatus?: string; mirrorStatus?: string };
         const updateResult = await sendOrQueue("/api/work-os/check-ins", "POST", {
           source: "desktop",
-          kind: visibleDay?.prompt.kind || "optional",
+          kind: visibleDay?.prompt?.kind || "optional",
           update_kind: "unplanned_work",
           input_text: text,
         }) as { queued?: boolean };
@@ -1115,7 +1230,7 @@ const redraftEod = async () => {
       } else {
         const result = await sendOrQueue("/api/work-os/check-ins", "POST", {
           source: "desktop",
-          kind: visibleDay?.prompt.kind || "optional",
+          kind: visibleDay?.prompt?.kind || "optional",
           update_kind: kind,
           input_text: text,
         }) as { queued?: boolean };
@@ -1143,18 +1258,18 @@ const redraftEod = async () => {
   return <div className="workspace">
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
-      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
+      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions"><button className="icon" title="Refresh the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Activity is syncing." : "Ready to start."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Worktivity activity is syncing. Your Work OS session remains separate and ready when you need it." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "No scheduled shift is active. Starting work creates an exception session without an inferred end time."}</p>
+          <div className="hero-copy"><span className="kicker">{active ? `${sentence(workSession!.state)} · ${formatTime(workSession?.clocked_in_at, visibleDay?.shift?.timezone)}` : gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{active ? paused ? "Workday paused." : "Today, in motion." : gate.worktivitySynced ? "Workday syncing." : "Ready when Worktivity is."}</h2><p>{active ? visibleDay?.prompt.reason : gate.worktivitySynced ? "Fresh Worktivity activity starts and updates your Work OS workday automatically." : visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions">{!active ? <button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button> : <>{!visibleDay?.breakPolicy?.worktivityAuthoritative && <button className="primary" disabled={busy} onClick={() => void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }))}>{paused ? <CirclePlay size={17} /> : <CirclePause size={17} />}{paused ? "Resume" : "Pause"}</button>}<button disabled={busy} onClick={() => setClockOutConfirmation(true)}>Clock out</button></>}</div>
             {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
-          </div><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" />
+          </div><div className="hero-companion-art"><CompanionPet pose={active ? paused ? "rest" : "focus" : "sleep"} className="companion-pet-inline" /><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
         <section className="focus-card today-card"><div className="card-title"><span><BriefcaseBusiness size={17} /> Focus and tasks</span><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button></div><div className="today-goal"><small>Focus note</small><strong>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</strong><span>{planIntent ? goalProvenance === "accepted_suggestion" ? "Derived from your tasks" : "Written by you" : goalSuggestion ? "Suggested from your tasks" : "Nifty is the task record"}</span></div><PreShiftAgendaSummary todayCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} onToday={() => setView("tasks")} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} />{openTasks.length ? <>{openTasks.slice(0, 3).map((task, index) => { const state = taskState(task, visibleDay?.shiftDate ?? ""); return <div className="focus-row dashboard-focus-row" key={task.id}><b>{String(index + 1).padStart(2, "0")}</b><button className="focus-task-copy" onClick={() => void openTaskDetails(task)}><strong>{task.title}</strong><small>Nifty task · {task.due_date ? `due ${formatWorkOsDate(task.due_date)}` : "open"}</small></button><span className={`task-state ${state}`}>{sentence(state)}</span><TaskLifecycleMenu task={task} busy={busy} onEdit={editTask} onArchive={(item) => requestTaskRemoval(item, true, "archive")} onDelete={(item) => requestTaskRemoval(item, true, "delete")} /></div>; })}</> : <div className="pre-shift-empty-tasks"><span><Plus size={18} /></span><div><strong>Your agenda is open</strong><small>{yesterdayDueTasks.length ? "Add today’s priorities or review yesterday’s due work before you clock in." : "Add your first priority before you clock in."}</small></div></div>}<div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks</button><button onClick={() => void openTaskComposer()}>Detailed Task</button><button onClick={openGoalComposer}>Update Focus</button>{unfinishedCarryOver.length > 0 && <button onClick={() => { setCarryOverOpen(true); setView("tasks"); }}>Review Overdue</button>}</div></section>
@@ -1166,14 +1281,14 @@ const redraftEod = async () => {
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay?.shiftDate ?? "", -1)).map((item) => item.task)}
         elapsed={observedOnly ? pulse.observedElapsedLabel : pulse.elapsedLabel}
         progressPercent={pulse.progressPercent}
-        nextPrompt={formatTime(visibleDay?.prompt.nextPromptAt, visibleDay?.shift?.timezone)}
+        nextPrompt={formatTime(visibleDay?.prompt?.nextPromptAt, visibleDay?.shift?.timezone)}
         shiftStart={formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}
         shiftEnd={formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}
         remaining={timeRemaining(visibleDay?.shift?.endsAt)}
         timezone={visibleDay?.shift?.timezone}
         attendance={visibleDay?.attendance}
         providerBreakSeconds={workSession?.provider_break_seconds ?? visibleDay?.attendance?.providerBreakSeconds ?? 0}
-        reviews={visibleDay?.proposals.length ?? 0}
+        reviews={(visibleDay?.proposals ?? []).length ?? 0}
         paused={paused}
         busy={busy}
         observedOnly={observedOnly}
@@ -1181,7 +1296,7 @@ const redraftEod = async () => {
         canClockOut={sessionActive}
         onEditFocus={openGoalComposer}
         onAddTask={() => void openTaskComposer()}
-        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }}
+        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
         onToggleTask={setTaskCompletion}
         onEditTask={editTask}
@@ -1194,20 +1309,28 @@ const redraftEod = async () => {
         onClockOut={() => setClockOutConfirmation(true)}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openGoalComposer} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
-      {view === "review" && visibleDay?.report && !eodSubmitted && <EodComposer
+      {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
+          title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
+          body={eodGate.detail}
+        /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); eodAutoDraftedFor.current = null; void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking today’s recorded work and writing a draft for you to review." /></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
           reportId={String(visibleDay.report.id ?? "unknown")}
           initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
           source={eodDraft?.source ?? "deterministic"}
           suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
           redrafting={eodRedrafting}
+          clockedOut={eodClockedOut}
+          screenshotContext={eodDraft?.screenshots ?? null}
+          screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
           busy={busy}
           onRedraft={() => void redraftEod()}
           onSubmit={submitEod}
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
-      {view === "review" && <ReviewWorkspace proposals={visibleDay?.proposals ?? []} busy={busy} onReject={(id) => void act("proposal.reject", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "reject" }))} onApprove={(id) => void act("proposal.accept", () => sendOrQueue(`/api/work-os/proposals/${id}`, "PATCH", { decision: "accept" }))} />}
+      {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD review is not ready yet" body="Your EOD becomes available during the wrap-up window after work has been recorded. Nothing is missing from this page." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button onClick={() => void refresh({ refreshProviders: true })}>Refresh workday</button></div></section></main>}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
-      {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
+      {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Quiet mode" detail={companionRecord.quiet.active ? "Companion reminders are paused" : "Reminders follow the normal schedule"}><button disabled={busy} onClick={() => setCompanionRecord((current) => setMachineQuiet(current, !current.quiet.active))}>{companionRecord.quiet.active ? "Resume reminders" : "Pause reminders"}</button></Setting><Setting title="Snooze reminders" detail={companionRecord.snooze.until ? `Until ${new Date(companionRecord.snooze.until).toLocaleTimeString()}` : "Silence the companion for one hour"}><button disabled={busy} onClick={() => { setCompanionRecord((current) => snoozeMachine(current, null, new Date(Date.now() + 60 * 60_000))); notifications.info("Companion reminders are snoozed for one hour.", "Snoozed"); }}><CirclePause size={15} /> Snooze 1h</button></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}
       {(view === "day" || view === "tasks" && planHistoryDate === visibleDay?.shiftDate) && <ProgressComposer
         mode={sessionActive && view === "day" ? "progress" : "agenda"}
@@ -1216,6 +1339,8 @@ const redraftEod = async () => {
         panel={progressPanel}
         pending={pendingProgressUpdate}
         receipt={progressReceipt}
+        history={composerHistory}
+        onClearChat={clearComposerChat}
         busy={busy}
         required={sessionActive && view === "day" && !!visibleDay?.prompt.required}
         goal={planIntent}
@@ -1228,19 +1353,25 @@ const redraftEod = async () => {
         onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setProgressReceipt(null); setInterpretation(null); }}
         onSubmit={startProgressUpdate}
         interpretation={interpretation}
+        toolContext={{ shiftDate: visibleDay?.shiftDate ?? null, personId: visibleDay?.access?.personId ?? null, promptKind: visibleDay?.prompt?.kind || "optional" }}
         aiUnavailable={aiUnavailable}
         onToggleOperation={toggleOperation}
         onEditOperation={editOperation}
         onRemapOperation={remapOperation}
+        onDenyOperation={denyInterpretationOperation}
         onApproveOperations={approveInterpretation}
         onClassify={classifyProgressUpdate}
         onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })}
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
       />}
     </section>
+    <button className="status-update-bubble" onClick={() => { setView("day"); setProgressPanel("update"); setProgressComposerOpen(true); }} aria-label="Open status update composer">
+      <MessageSquareText size={18} aria-hidden="true" />
+      <span><small>Working on today</small><strong>{planIntent || "Share a status update"}</strong></span>
+    </button>
     {taskComposerOpen && <TaskComposerModal busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={() => setTaskComposerOpen(false)} onSubmit={submitTaskFromDesktop} />}
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
-    {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
+    {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
@@ -1292,11 +1423,11 @@ function TaskLifecycleMenu({ task, busy, initialOpen = false, onEdit, onArchive,
   </EllipsisMenu></div>;
 }
 
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
+export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, nextPrompt, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
   focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number; nextPrompt: string;
   shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number; reviews: number;
   initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; initialTaskMenuId?: string | null; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
-  onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
+  onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; currentDate?: string; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
@@ -1304,7 +1435,8 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
   const [detailView, setDetailView] = useState<"shift" | "worktivity" | null>(initialDetailView);
   const displayed = tab === "today" ? tasks : tab === "previous" ? previousTasks : otherTasks;
   const completed = tasks.filter((task) => task.completed === true).length;
-  const overdueCount = otherTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) < (new Date().toISOString().slice(0, 10))).length + previousTasks.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < (new Date().toISOString().slice(0, 10))).length;
+  const today = currentDate || new Date().toISOString().slice(0, 10);
+  const overdueCount = otherTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length + previousTasks.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length;
   const pendingPrevious = previousTasks.filter((task) => task.completed !== true).length;
   const observedStart = attendance?.clockedInAt ? Date.parse(attendance.clockedInAt) : Number.NaN;
   const observedEnd = attendance?.clockedOutAt ? Date.parse(attendance.clockedOutAt) : attendance?.observedAt ? Date.parse(attendance.observedAt) : Number.NaN;
@@ -1317,11 +1449,11 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
         <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{observedOnly ? paused ? "Worktivity break" : "Activity observed" : paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div><span><small>Next update</small><strong>{observedOnly ? "Syncing" : nextPrompt}</strong></span></div>
         <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open workday details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close workday details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} nextPrompt={nextPrompt} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Workday status</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
       </header>
-      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show the overdue filter in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />tasks</em></button>}</div>
+      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show the overdue filter in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
         <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={tasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
       <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
       {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
-      <div className="active-task-list">{displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); return <article className={task.completed ? "completed" : ""} key={taskId}><button className="task-check" aria-label={task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={busy} onClick={() => onToggleTask(task, !task.completed)}>{task.completed && <Check size={15} />}</button><button className="active-task-copy" onClick={() => onOpenTask(task)}><strong>{task.title}</strong><small>{task.completed ? "Completed" : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button><span className={`task-status ${task.completed ? "done" : "open"}`}>{task.completed ? "Done" : "Open"}</span><TaskLifecycleMenu task={task} busy={busy} initialOpen={initialTaskMenuId === taskId} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} /></article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
+      <div className="active-task-list">{displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); return <article className={task.completed ? "completed" : ""} key={taskId}><button className="task-check" aria-label={task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={busy} onClick={() => onToggleTask(task, !task.completed)}>{task.completed && <Check size={15} />}</button><button className="active-task-copy" onClick={() => onOpenTask(task)}><strong>{task.title}</strong><small>{task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button><span className={`task-status ${task.completed ? "done" : "open"}`}>{task.completed ? "Done" : "Open"}</span><TaskLifecycleMenu task={task} busy={busy} initialOpen={initialTaskMenuId === taskId} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} /></article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
       <footer className="active-day-footer"><span>Changes save to your workday record.</span><button className="workspace-link-button" onClick={onManageTasks}><span>Open full Tasks workspace</span><ChevronRight size={14} aria-hidden="true" /></button></footer>
     </section>
   </main>;
@@ -1331,14 +1463,15 @@ export function PreShiftAgendaSummary({ todayCount, yesterdayDueCount, onToday, 
   return <div className="pre-shift-agenda-summary" aria-label="Agenda summary"><button onClick={onToday}><span>{todayCount}</span><div><strong>{todayCount === 1 ? "Task" : "Tasks"} scheduled for today</strong><small>Open today’s agenda</small></div><ChevronRight size={15} /></button><button className={yesterdayDueCount ? "has-due" : ""} disabled={!yesterdayDueCount} onClick={onYesterday}><span>{yesterdayDueCount}</span><div><strong>{yesterdayDueCount === 1 ? "Task" : "Tasks"} due from yesterday</strong><small>{yesterdayDueCount ? "Needs your attention" : "Nothing carried forward"}</small></div>{yesterdayDueCount > 0 && <ChevronRight size={15} />}</button></div>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onDenyOperation, onApproveOperations }: {
   mode?: ComposerMode;
-  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; busy: boolean; required: boolean; goal: string;
+  input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
-  interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }> } | null;
+  interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
+  toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: boolean;
-  onToggleOperation?: (index: number) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onApproveOperations?: (operations: Array<import("./interpretation").ProposedOperation>) => void;
+  onToggleOperation?: (index: number) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onDenyOperation?: (index: number) => void; onApproveOperations?: (operations: Array<import("./interpretation").ProposedOperation>) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1347,11 +1480,16 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose, open]);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history.length, interpretation, pending, receipt, open]);
   useEffect(() => {
     const el = composerInputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 118)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 260)}px`;
   }, [input]);
   const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
     { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },
@@ -1364,10 +1502,13 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     : receipt?.queued ? "Update queued" : "Update recorded";
   return <div className={`progress-dock ${agendaMode ? "agenda-dock" : "progress-mode"} ${open ? "open" : ""}`}>
     {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
-      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><button aria-label="Close composer" onClick={onClose}><X size={16} /></button></header>
-      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation">{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <><div className="progress-message user"><p>{pending}</p></div>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
-  : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Here's what I understood.</strong><p>Untick anything you don't want, edit the wording, and approve — nothing is filed until you do.</p><div className="interpretation-list">{interpretation.operations.map((op, index) => <label className={op.enabled ? "interpretation-row" : "interpretation-row off"} key={index}><input type="checkbox" checked={op.enabled} onChange={() => onToggleOperation?.(index)} /><span>{operationLabel(op.op)}{op.taskId ? ` ${interpretation.taskOptions.find((task) => task.id === op.taskId)?.title ?? op.taskTitle ?? ""}` : op.op === "create_task" ? ` ${op.taskTitle ?? ""}` : ""}</span><input className="interpretation-statement" value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{(op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</label>)}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} update{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
-  : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
+      <header><div><span>{panel === "goal" ? <><Pencil size={14} /> Daily focus</> : <><MessageSquareText size={14} /> Daily update</>}</span><small>{panel === "goal" ? `${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}` : required ? "An update is due" : agendaMode ? "Record work or add a task · this does not clock you in" : "Today’s private work log"}</small></div><span className="progress-header-actions">{panel !== "goal" && <><button aria-label="Clear conversation" title="Clear conversation" onClick={onClearChat}><Trash2 size={15} /></button><button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button></>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
+      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation" ref={conversationRef}>{history.length > 0 && <div className="progress-history">{history.map((turn, index) => turn.role === "user"
+        ? <div className="progress-message user" key={index}><p>{turn.text}</p></div>
+        : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
+  : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><p>{interpretation.reply}</p><small>Share an update below and I’ll turn it into records.</small></div></div>
+   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.results ? "Tool call results" : "Review assistant tool calls"}</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>{interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op.proposalId === op.proposalId); return <ToolApprovalCard key={index} op={op} context={toolContext} result={result} onToggle={() => onToggleOperation?.(index)} onDeny={() => onDenyOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>; })}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId))} onClick={() => onApproveOperations?.(interpretation.operations.filter((op) => !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)))}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length} tool call{interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length === 1 ? "" : "s"}</button></div></div>
+  : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
     <div className="progress-input-shell"><button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button><textarea ref={composerInputRef} rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder={open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} aria-label="Share an update or add a task" /><span className={required ? "composer-hint due" : "composer-hint"}>{required ? "Update due" : <><kbd>Enter</kbd> to send</>}</span><button className={input.trim() ? "progress-send ready" : "progress-send"} aria-label="Review update type" aria-keyshortcuts="Enter" disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>
   </div>;
@@ -1551,6 +1692,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   return <main className="page tasks-workspace">
     <div className="tasks-heading"><PageIntro eyebrow="Tasks workspace" title={historical ? "Workday history" : "Today’s tasks"} body="Plan today’s work and keep the history behind it." /><div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div></div>
+    <div className="tasks-companion-cue"><CompanionPet pose={historical ? "sleep" : "focus"} className="companion-pet-inline" /><span>{historical ? "Reviewing a past workday" : "Your desk companion is keeping today’s agenda close."}</span></div>
     <section className={`panel task-agenda-hero ${historical ? "historical" : ""}`}>
       <div className="agenda-hero-today"><header><span>{historical ? `Agenda · ${formatWorkOsDate(selectedDate)}` : "Today’s agenda"}</span>{!historical && <button className="agenda-edit-button" onClick={onEditFocus}><Pencil size={14} /> Edit focus</button>}</header><h2>{agendaText}</h2><footer><span><ListChecks size={14} /> {historical ? `${datedTasks.length} task${datedTasks.length === 1 ? "" : "s"} surfaced` : `${current.length} task${current.length === 1 ? "" : "s"} scheduled`}</span><small>{provenance}{!historical ? ` · ${saveLabel}` : ""}</small></footer></div>
       {!historical && <button className={`unfinished-work-hero ${carryOver.length ? "attention" : "clear"}`} disabled={!carryOver.length} onClick={() => onCarryOverOpen(true)}><span className="unfinished-work-icon">{carryOver.length ? <AlertTriangle size={19} /> : <Check size={19} />}</span><span className="unfinished-work-copy"><small>From previous days</small><strong>{carryOver.length ? `${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}` : "Nothing left behind"}</strong><em>{carryOver.length ? `${previousDays} previous workday${previousDays === 1 ? "" : "s"} need attention` : "All earlier work is clear"}</em></span><span className="unfinished-work-action">Review unfinished work <ChevronRight size={15} /></span></button>}
@@ -1616,7 +1758,7 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
       <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>
          <div className="insight-table-wrap"><table><caption>Exact personal insight values</caption><thead><tr><th>Date</th><th>Observed</th><th>Paused</th><th>Daily tasks</th><th>Tasks done</th><th>Updates</th><th>Output evidence</th><th>Session quality</th></tr></thead><tbody>{data.days.map((day) => <tr key={day.date}><td>{formatWorkOsDate(day.date)}</td><td>{durationLabel(day.observedSeconds)}</td><td>{durationLabel(day.pausedSeconds)}</td><td>{day.plannedCompleted}/{day.planned}</td><td>{day.tasksCompleted}</td><td>{day.updates}</td><td>{day.outputEvidence}</td><td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td></tr>)}</tbody></table></div>
       </section>
-      <section className="panel insight-drilldown"><div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>{latest?.references.length ? <div>{latest.references.map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div> : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}<footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer></section>
+      <section className="panel insight-drilldown"><div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>{latest?.references?.length ? <div>{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div> : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}<footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer></section>
       <p className="insight-disclaimer">These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.</p>
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;
