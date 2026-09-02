@@ -29,7 +29,7 @@ concurrency:
 jobs:
   unsigned-windows-release:
     name: Build unsigned Windows packages with signed updater artifacts
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 60
     environment: windows-production-release
     permissions:
