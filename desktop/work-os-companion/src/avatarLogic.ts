@@ -21,6 +21,7 @@ export interface CompanionDayFacts {
   employeeUpdates?: number;
   completedTasks?: number;
   openTasks?: number;
+  eodSubmitted?: boolean;
 }
 
 export type CompanionNudgeKind = "hourly" | "clock_in" | "eod";
@@ -41,6 +42,12 @@ export interface AvatarPrompt {
   body: string;
   compact: string;
   action: "open_eod" | null;
+}
+
+/** Clears only the locally displayed due state after the server confirms an
+ * employee response. The next poll remains the authoritative schedule. */
+export function clearRecordedUpdatePrompt<T extends CompanionDayFacts>(facts: T): T {
+  return { ...facts, promptRequired: false, promptKind: null, nextPromptAt: null };
 }
 
 const SNOOZE_STEPS_MS = [10 * 60_000, 20 * 60_000];
@@ -93,7 +100,7 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
   const lastUpdate = timeLabel(facts.lastSubstantiveUpdateAt, facts.timezone);
   const tasks = taskContext(facts);
 
-  if (facts.promptKind === "eod" || facts.sessionState === "eod_due") {
+  if (!facts.eodSubmitted && (facts.promptKind === "eod" || facts.sessionState === "eod_due")) {
     const end = timeLabel(facts.shiftEndsAt, facts.timezone);
     return {
       kind: "eod",
@@ -147,6 +154,7 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
 
 /** Whether the employee is actively on the clock right now. */
 export function isOnShift(facts: CompanionDayFacts, now: number): boolean {
+  if (facts.eodSubmitted) return false;
   if (!facts.clockedInAt) return false;
   if (facts.sessionState === "paused") return false;
   if (facts.clockedOutAt) return false;
@@ -189,6 +197,7 @@ export function clockInNudge(facts: CompanionDayFacts, now: number, notifiedKeys
 /** EOD nudge: on shift and the scheduled end time passed within the last
  * 30 minutes, or the session state explicitly says eod_due. */
 export function eodNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {
+  if (facts.eodSubmitted) return null;
   if (!isOnShift(facts, now) && facts.sessionState !== "eod_due") return null;
   const sinceEnd = minutesSince(facts.shiftEndsAt, now);
   const dueByState = facts.sessionState === "eod_due";
@@ -226,7 +235,7 @@ export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { f
   const end = scheduledEnd && !Number.isNaN(scheduledEnd) && scheduledEnd > start ? scheduledEnd : now;
   const total = Math.max(60_000, end - start);
   const elapsed = Math.max(0, Math.min(total, now - start - pausedMs));
-  const minutes = Math.floor((now - start - pausedMs) / 60_000);
+  const minutes = Math.floor(Math.max(0, now - start - pausedMs) / 60_000);
   const hours = Math.floor(minutes / 60);
   const label = hours > 0 ? `${hours}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
   const remainingMinutes = Math.max(0, Math.ceil((end - now) / 60_000));

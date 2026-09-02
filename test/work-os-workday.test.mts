@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, nextSessionState } from "../src/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, nextSessionState, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -32,6 +32,16 @@ test("check-in cadence defaults to five minutes and accepts bounded configuratio
   assert.equal(checkInIntervalMs("15"), 15 * 60_000);
   assert.equal(checkInIntervalMs("0"), 5 * 60_000);
   assert.equal(checkInIntervalMs("241"), 5 * 60_000);
+});
+
+test("a submitted EOD suppresses any remaining workday prompt", () => {
+  const due = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:51:00.000Z" });
+  assert.deepEqual(suppressPromptForSubmittedEod(due, "2026-08-12T16:55:00.000Z"), {
+    kind: null,
+    nextPromptAt: null,
+    required: false,
+    reason: "EOD submitted.",
+  });
 });
 
 test("a substantive response schedules the next configured check-in", () => {

@@ -44,6 +44,13 @@ export interface WorkdayPrompt {
   reason: string;
 }
 
+/** An employee-submitted EOD is the terminal prompt state for that workday.
+ * A manager review is separate from asking the employee to submit again. */
+export function suppressPromptForSubmittedEod(prompt: WorkdayPrompt, submittedAt: string | null | undefined): WorkdayPrompt {
+  if (!submittedAt) return prompt;
+  return { kind: null, nextPromptAt: null, required: false, reason: "EOD submitted." };
+}
+
 const transitions: Record<WorkSessionAction, readonly WorkSessionState[]> = {
   clock_in: ["scheduled"],
   pause: ["clocked_in", "active"],
