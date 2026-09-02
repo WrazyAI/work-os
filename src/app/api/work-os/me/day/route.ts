@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "at must be a valid timestamp" }, { status: 400 });
     const day = await getWorkOsDay(auth.access, auth.access.personId as string, at, {
       refreshNifty: url.searchParams.get("refreshProviders") === "true",
+      refreshAttendance: url.searchParams.get("refreshAttendance") === "true",
     }) as Record<string, unknown>;
     const prompt = day.prompt as { kind?: string } | undefined;
     if (prompt?.kind === "eod" && !day.report) {

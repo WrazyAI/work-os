@@ -17,6 +17,7 @@ const migrations = [
   "supabase/migrations/0011_work_os_employee_onboarding.sql",
   "supabase/migrations/0014_work_tasks_milestone_id.sql",
   "supabase/migrations/0015_work_os_workday_foundation.sql",
+  "supabase/migrations/0030_work_os_attendance_observations.sql",
   "supabase/migrations/0016_work_os_guided_onboarding.sql",
   "supabase/migrations/0017_work_os_phase1_closure.sql",
   "supabase/migrations/0018_work_os_nifty_history.sql",
