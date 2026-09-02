@@ -113,7 +113,6 @@ export default function App() {
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
-  const eodAutoDraftedFor = useRef<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
     // The interpreter returns Work OS local IDs. Keep that canonical identifier
@@ -379,7 +378,7 @@ export default function App() {
     setDay((current) => current ?? (applyDayScenario(null, debugScenario) as DayData));
   }, [day, debugScenario, syncBypass]);
 
-const redraftEod = async () => {
+  const redraftEod = async () => {
     if (!visibleDay?.report) return;
     if (syncBypassRef.current) {
       setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
@@ -404,6 +403,28 @@ const redraftEod = async () => {
       }
       setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
       notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
+    } finally { setEodRedrafting(false); }
+  };
+
+  const createEodDraft = async () => {
+    if (!visibleDay) return;
+    if (syncBypassRef.current) {
+      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
+      return;
+    }
+    setEodRedrafting(true);
+    try {
+      const result = await apiRequest<{ report: NonNullable<DayData["report"]> }>("/api/work-os/reports/eod", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ date: visibleDay.shiftDate }),
+      });
+      setDay((current) => current ? { ...current, report: result.report } : current);
+      setEodDraft({ markdown: String(result.report.markdown ?? ""), source: "deterministic" });
+      setEodGate(null);
+      notifications.success("Your EOD draft is ready for review. Nothing has been submitted.", "EOD draft ready");
+    } catch (value) {
+      showError(value, "Your EOD draft could not be created.", "EOD draft failed");
     } finally { setEodRedrafting(false); }
   };
 
@@ -713,17 +734,6 @@ const redraftEod = async () => {
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
 
-  // Entering the EOD review checks the gates and drafts automatically: the
-  // day must have recorded work activity and at least one submitted or
-  // checked-off task, and drafting clock-outs the shift.
-  useEffect(() => {
-    if (view !== "review" || !visibleDay?.report || eodSubmitted || eodDraft || eodGate || eodRedrafting) return;
-    const stamp = `${visibleDay.shiftDate}:${visibleDay.report.id}`;
-    if (eodAutoDraftedFor.current === stamp) return;
-    eodAutoDraftedFor.current = stamp;
-    void redraftEod();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, visibleDay?.report?.id, eodSubmitted]);
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
@@ -1153,11 +1163,41 @@ const redraftEod = async () => {
   }
 
   function editOperation(index: number, statement: string) {
-    setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? { ...op, statement } : op) } : current);
+    const operation = interpretation?.operations[index];
+    if (!operation || !pendingProgressUpdate.trim() || syncBypassRef.current) return;
+    const revised = { ...operation, statement, proposalId: undefined };
+    setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? revised : op) } : current);
+    void apiRequest<{ proposals: Array<{ id: string }> }>("/api/work-os/me/proposals", {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ input_text: pendingProgressUpdate, operations: [{ op: revised.op, statement: revised.statement, task_id: revised.taskId, task_title: revised.taskTitle }] }),
+    }).then(({ proposals }) => {
+      const proposalId = proposals[0]?.id;
+      if (!proposalId) throw new Error("The revised proposal was not saved.");
+      setInterpretation((current) => current ? {
+        ...current,
+        operations: current.operations.map((op, i) => i === index && op.statement === revised.statement && op.taskId === revised.taskId ? { ...op, proposalId } : op),
+      } : current);
+    }).catch((value) => showError(value, "The revised proposal could not be saved. It cannot be approved.", "Proposal update failed"));
   }
 
   function remapOperation(index: number, taskId: string) {
-    setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? { ...op, taskId: taskId || undefined } : op) } : current);
+    const operation = interpretation?.operations[index];
+    if (!operation || !pendingProgressUpdate.trim() || syncBypassRef.current) return;
+    const revised = { ...operation, taskId: taskId || undefined, proposalId: undefined };
+    setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? revised : op) } : current);
+    void apiRequest<{ proposals: Array<{ id: string }> }>("/api/work-os/me/proposals", {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ input_text: pendingProgressUpdate, operations: [{ op: revised.op, statement: revised.statement, task_id: revised.taskId, task_title: revised.taskTitle }] }),
+    }).then(({ proposals }) => {
+      const proposalId = proposals[0]?.id;
+      if (!proposalId) throw new Error("The remapped proposal was not saved.");
+      setInterpretation((current) => current ? {
+        ...current,
+        operations: current.operations.map((op, i) => i === index && op.statement === revised.statement && op.taskId === revised.taskId ? { ...op, proposalId } : op),
+      } : current);
+    }).catch((value) => showError(value, "The remapped proposal could not be saved. It cannot be approved.", "Proposal update failed"));
   }
 
   function denyInterpretationOperation(index: number) {
@@ -1199,18 +1239,7 @@ const redraftEod = async () => {
     diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
     (async () => {
       const outcome = await fileApprovedOperations(enabled, {
-        shiftDate: visibleDay?.shiftDate ?? null,
-        personId: visibleDay?.access?.personId ?? null,
-        promptKind: visibleDay?.prompt?.kind || "optional",
-      }, {
         reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
-        completeTask: (taskId, completed) => updateTaskCompletion(taskId, completed),
-        createTask: (taskInput) => sendOrQueue("/api/work-os/me/tasks", "POST", {
-          name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [],
-        }),
-        fileCheckIn: (checkIn) => sendOrQueue("/api/work-os/check-ins", "POST", {
-          source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text,
-        }),
       });
       recordResponse();
       const parts: string[] = [];
@@ -1360,7 +1389,7 @@ const redraftEod = async () => {
       {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
           title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
           body={eodGate.detail}
-        /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); eodAutoDraftedFor.current = null; void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
+        /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
       {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking today’s recorded work and writing a draft for you to review." /></section></main>}
       {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
           reportId={String(visibleDay.report.id ?? "unknown")}
@@ -1376,7 +1405,7 @@ const redraftEod = async () => {
           onSubmit={submitEod}
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
-      {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD review is not ready yet" body="Your EOD becomes available during the wrap-up window after work has been recorded. Nothing is missing from this page." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button onClick={() => void refresh({ refreshProviders: true })}>Refresh workday</button></div></section></main>}
+      {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="Prepare your EOD for review" body="Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft()}>{eodRedrafting ? "Preparing…" : "Create EOD draft"}</button></div></section></main>}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && <main className="page"><PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." /><section className="settings-panel"><Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting><Setting title="Quiet mode" detail={companionRecord.quiet.active ? "Companion reminders are paused" : "Reminders follow the normal schedule"}><button disabled={busy} onClick={() => setCompanionRecord((current) => setMachineQuiet(current, !current.quiet.active))}>{companionRecord.quiet.active ? "Resume reminders" : "Pause reminders"}</button></Setting><Setting title="Snooze reminders" detail={companionRecord.snooze.until ? `Until ${new Date(companionRecord.snooze.until).toLocaleTimeString()}` : "Silence the companion for one hour"}><button disabled={busy} onClick={() => { setCompanionRecord((current) => snoozeMachine(current, null, new Date(Date.now() + 60 * 60_000))); notifications.info("Companion reminders are snoozed for one hour.", "Snoozed"); }}><CirclePause size={15} /> Snooze 1h</button></Setting><Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting><Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting><Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting><Setting title="Desktop updates" detail={updateStatus || "Internal update channel"}><button onClick={() => void checkForUpdates()}>Check</button></Setting><Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting><Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting><Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting></section></main>}

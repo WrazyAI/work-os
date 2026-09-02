@@ -6,6 +6,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # WrazyAI web platform — operations runbook
 
+## Task Synchronization
+
+Before starting each new task or agenda, sync the working branch with the latest
+`main` and resolve any conflicts before editing. When the task is verified,
+merge its completed work into `main` before starting another task or agenda.
+Do not carry unmerged completed work into unrelated follow-up work.
+
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
 

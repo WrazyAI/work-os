@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { draftWorkOsEod, getWorkOsDay } from "@/lib/work-os-companion";
+import { getWorkOsDay } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -22,13 +22,6 @@ export async function GET(req: Request) {
       refreshNifty: url.searchParams.get("refreshProviders") === "true",
       refreshAttendance: url.searchParams.get("refreshAttendance") === "true",
     }) as Record<string, unknown>;
-    const prompt = day.prompt as { kind?: string } | undefined;
-    if (prompt?.kind === "eod" && !day.report) {
-      day.report = await draftWorkOsEod(auth.access, auth.access.personId as string, {
-        date: day.shiftDate,
-        draft_idempotency_key: `automatic-eod:${auth.access.personId}:${day.shiftDate}`,
-      });
-    }
     return NextResponse.json({
       ...day,
       access: {

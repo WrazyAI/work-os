@@ -3,6 +3,7 @@ import {
   createEvidence,
   createTask,
   getTaskByLocalOrProviderId,
+  listPersonTasks,
   syncNifty,
   updateTask,
 } from "@/lib/work-os";
@@ -17,6 +18,26 @@ import {
 } from "@/lib/work-os-internal";
 import { completeWorkOsTask } from "@/lib/work-os-employee-tasks";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+
+type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task";
+
+function interpretedOperations(value: unknown) {
+  if (!Array.isArray(value) || !value.length || value.length > 20) throw new Error("Choose between 1 and 20 proposed updates");
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object") throw new Error(`Proposed update ${index + 1} is invalid`);
+    const row = entry as Json;
+    const op = text(row.op) as InterpretedOperation | null;
+    const statement = text(row.statement);
+    const taskId = text(row.task_id);
+    const taskTitle = text(row.task_title);
+    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task"].includes(op) || !statement || statement.length > 1000) {
+      throw new Error(`Proposed update ${index + 1} is invalid`);
+    }
+    if (op !== "create_task" && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
+    if (op === "create_task" && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
+    return { op, statement, taskId, taskTitle };
+  });
+}
 
 export async function listWorkOsProposals(access: WorkOsAccess, personId: string, status?: string | null) {
   let query = db()
@@ -136,7 +157,72 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
   if (operation === "complete_task") {
     return completeWorkOsTask(access, taskId, true);
   }
+  if (operation === "reopen_task") {
+    return completeWorkOsTask(access, taskId, false);
+  }
   throw new Error("unsupported proposal operation");
+}
+
+/** Stores an assistant interpretation for review. This endpoint creates no
+ * Nifty/task mutation; only a later accepted proposal can apply one. */
+export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: Json, idempotencyKey: string) {
+  const input = text(body.input_text);
+  if (!input || input.length > 4000) throw new Error("input_text is required");
+  const operations = interpretedOperations(body.operations);
+  const personId = access.personId as string;
+  const ownerId = await organizationOwnerId(access.organizationId);
+  await syncNifty(ownerId);
+  const available = await listPersonTasks(ownerId, personId, { includeLedgerHistory: true, limit: 500 }) as Json[];
+  const byId = new Map(available.flatMap((task) => [[String(task.id), task], [text(task.provider_task_id) ?? "", task]]));
+  const proposals: Array<Json & { client_operation_index: number }> = [];
+  for (const [index, operation] of operations.entries()) {
+    const operationKey = `${idempotencyKey}:${index}`;
+    const { data: existing, error: existingError } = await db().from("work_task_proposals").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("idempotency_key", operationKey).maybeSingle();
+    if (existingError) throw new Error(`load idempotent interpreted proposal: ${existingError.message}`);
+    if (existing) {
+      proposals.push({ ...(existing as Json), client_operation_index: index });
+      continue;
+    }
+    const task = operation.taskId ? byId.get(operation.taskId) : null;
+    if (operation.op !== "create_task" && !task) throw new Error(`The selected task is no longer available for proposed update ${index + 1}`);
+    const providerOperation: ProposalOperation = operation.op === "record_progress" ? "log_progress"
+      : operation.op === "record_blocker" ? "add_blocker"
+      : operation.op as ProposalOperation;
+    const beforeState = task ? {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      completed: task.completed,
+      due_date: task.due_date,
+      start_date: task.start_date,
+    } : {};
+    const proposedChange: Json = operation.op === "create_task"
+      ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement, task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5" }
+      : operation.op === "record_progress"
+        ? { summary: operation.statement }
+        : operation.op === "record_blocker"
+          ? { description: operation.statement }
+          : {};
+    const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
+      organization_id: access.organizationId,
+      person_id: personId,
+      task_id: task?.id ?? null,
+      operation: providerOperation,
+      input_text: input,
+      before_state: beforeState,
+      proposed_change: proposedChange,
+      model: "desktop_interpretation",
+      prompt_version: "desktop-interpretation-v1",
+      idempotency_key: operationKey,
+      created_by: access.ctx.user.id,
+    }).select("*").single();
+    if (proposalError) throw new Error(`create interpreted proposal: ${proposalError.message}`);
+    await audit(access, "proposal.interpreted", "task_proposal", proposal.id as string, { operation: providerOperation, clientOperationIndex: index });
+    proposals.push({ ...(proposal as Json), client_operation_index: index });
+  }
+  return { proposals };
 }
 
 async function restorePlanRemoval(access: WorkOsAccess, proposal: Json) {
@@ -259,9 +345,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     return data;
   }
   if (!["pending", "failed", "needs_review"].includes(proposal.status)) return proposal;
-  const proposedChange = body.proposed_change && typeof body.proposed_change === "object"
-    ? body.proposed_change as Json
-    : proposal.proposed_change as Json;
+  const proposedChange = proposal.proposed_change as Json;
   if (proposal.task_id && proposal.operation !== "remove_from_plan") {
     try {
       const ownerId = await organizationOwnerId(access.organizationId);
@@ -313,6 +397,15 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     if (error) throw new Error(`finalize Work OS proposal: ${error.message}`);
     if (proposal.check_in_id) {
       await db().from("work_check_ins").update({ substantive: true }).eq("id", proposal.check_in_id as string);
+    }
+    if (["log_progress", "add_blocker", "complete_task", "reopen_task", "create_task"].includes(String(proposal.operation))) {
+      const { error: sessionError } = await db().from("work_sessions").update({
+        state: "active",
+        last_substantive_update_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+        .in("state", ["clocked_in", "active", "paused", "eod_due"]);
+      if (sessionError) throw new Error(`record substantive proposal response: ${sessionError.message}`);
     }
     await audit(access, "proposal.applied", "task_proposal", proposalId, { operation: proposal.operation });
     return data;

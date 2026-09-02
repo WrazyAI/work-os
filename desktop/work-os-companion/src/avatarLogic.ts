@@ -57,6 +57,8 @@ export function isOnShift(facts: CompanionDayFacts, now: number): boolean {
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {
   if (!isOnShift(facts, now) || !facts.promptRequired) return null;
+  const dueAt = facts.nextPromptAt ? Date.parse(facts.nextPromptAt) : now;
+  if (!Number.isFinite(dueAt) || dueAt > now) return null;
   const key = `hourly:${facts.shiftDate}:${facts.nextPromptAt ?? "now"}`;
   if (notifiedKeys.has(key)) return null;
   return {

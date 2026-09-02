@@ -41,6 +41,10 @@ describe("hourly nudge", () => {
     const facts = { ...base, promptRequired: true, clockedInAt: null };
     expect(hourlyNudge(facts, NOW, new Set())).toBeNull();
   });
+  it("waits until the server-scheduled prompt time", () => {
+    const facts = { ...base, promptRequired: true, nextPromptAt: "2026-08-31T10:05:00Z" };
+    expect(hourlyNudge(facts, NOW, new Set())).toBeNull();
+  });
 });
 
 describe("clock-in nudge", () => {

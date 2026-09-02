@@ -19,6 +19,7 @@ export { getWorkOsDay } from "@/lib/work-os-day-view";
 export { createWorkOsCheckIn } from "@/lib/work-os-checkins";
 export {
   listWorkOsProposals,
+  proposeInterpretedWorkUpdate,
   proposeWorkOsPlanRemoval,
   reviewWorkOsProposal,
 } from "@/lib/work-os-proposals";
