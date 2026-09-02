@@ -45,6 +45,7 @@ describe("companion launch window", () => {
   it("opens at the polished desktop viewport instead of the compressed layout", () => {
     const config = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
     const mainWindow = config.app.windows.find((window: { label?: string }) => window.label === "main");
+    const avatarWindow = config.app.windows.find((window: { label?: string }) => window.label === "avatar");
 
     expect(mainWindow).toMatchObject({
       width: 1000,
@@ -52,6 +53,7 @@ describe("companion launch window", () => {
       center: true,
       resizable: true,
     });
+    expect(avatarWindow).toMatchObject({ width: 164, height: 188, resizable: false });
   });
 });
 

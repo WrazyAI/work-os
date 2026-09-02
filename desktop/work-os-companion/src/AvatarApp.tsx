@@ -112,6 +112,7 @@ export default function AvatarApp(): React.ReactElement {
   });
   const [missed, setMissed] = useState(false);
   const notifiedKeys = useRef<Set<string>>(new Set(readJson<string[]>(NOTIFIED_KEY, [])));
+  const deliveryKeys = useRef<Set<string>>(new Set());
   const notificationPermission = useRef(false);
   const chatScroll = useRef<HTMLDivElement | null>(null);
   const dayRef = useRef<DayFacts>(facts);
@@ -158,7 +159,7 @@ export default function AvatarApp(): React.ReactElement {
       setFacts({
         loaded: true,
         shiftDate: String(day?.shiftDate ?? ""),
-        promptRequired: prompt.required === true,
+        promptRequired: prompt.kind === "follow_up" || prompt.kind === "hourly_fallback",
         nextPromptAt: typeof prompt.nextPromptAt === "string" ? prompt.nextPromptAt : null,
         shiftStartsAt: day?.shift?.startsAt ?? session.scheduled_starts_at ?? null,
         shiftEndsAt: day?.shift?.endsAt ?? session.scheduled_ends_at ?? null,
@@ -249,17 +250,31 @@ export default function AvatarApp(): React.ReactElement {
     if (!facts.loaded || connected === false) return;
     const nudges = collectNudges(facts, Date.now(), notifiedKeys.current);
     for (const nudge of nudges) {
+      if (nudge.kind === "hourly") {
+        if (deliveryKeys.current.has(nudge.key)) continue;
+        deliveryKeys.current.add(nudge.key);
+        void apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
+          method: "POST",
+          headers: { "Idempotency-Key": nudge.key },
+          body: JSON.stringify({}),
+        }).then(({ delivered }) => {
+          if (!delivered || notifiedKeys.current.has(nudge.key)) return;
+          notifiedKeys.current.add(nudge.key);
+          writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
+          fireNotification(nudge, notificationPermission.current);
+          setMissed(false);
+          setExpanded((current) => {
+            if (!current) void toggleExpanded(true);
+            return true;
+          });
+          win.setFocus().catch(() => { /* best effort */ });
+          void loadDay();
+        }).catch(() => undefined).finally(() => deliveryKeys.current.delete(nudge.key));
+        continue;
+      }
       notifiedKeys.current.add(nudge.key);
       writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
       fireNotification(nudge, notificationPermission.current);
-      if (nudge.kind === "hourly") {
-        setMissed(false);
-        setExpanded((current) => {
-          if (!current) void toggleExpanded(true);
-          return true;
-        });
-        win.setFocus().catch(() => { /* best effort */ });
-      }
     }
   }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -372,14 +387,7 @@ export default function AvatarApp(): React.ReactElement {
     setFiling(true);
     try {
       const outcome = await fileApprovedOperations(enabled, {
-        shiftDate: facts.shiftDate || null,
-        personId: facts.personId,
-        promptKind: "optional",
-      }, {
         reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
-        completeTask: (taskId, completed) => apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ completed }) }),
-        createTask: (taskInput) => apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [] }) }),
-        fileCheckIn: (checkIn) => apiRequest("/api/work-os/check-ins", { method: "POST", body: JSON.stringify({ source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text }) }),
       });
       const summary = [
         outcome.recorded ? `Recorded ${outcome.recorded}` : null,

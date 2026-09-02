@@ -87,6 +87,7 @@ export type ProposalOperation =
   | "resolve_blocker"
   | "link_evidence"
   | "complete_task"
+  | "reopen_task"
   | "remove_from_plan";
 
 export const OPERATIONS = new Set<ProposalOperation>([
@@ -97,6 +98,7 @@ export const OPERATIONS = new Set<ProposalOperation>([
   "resolve_blocker",
   "link_evidence",
   "complete_task",
+  "reopen_task",
   "remove_from_plan",
 ]);
 

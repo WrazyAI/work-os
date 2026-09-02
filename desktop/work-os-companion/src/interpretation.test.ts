@@ -93,24 +93,21 @@ describe("EOD composer helpers", () => {
 });
 
 describe("fileApprovedOperations", () => {
-  const context = { shiftDate: "2026-08-27", personId: "person-1", promptKind: "plan" };
   const ops = (overrides: Array<Partial<import("./interpretation").ProposedOperation>>) => overrides.map((o) => ({
-    op: "record_progress" as const, statement: "Did the work.", enabled: true, ...o,
+    op: "record_progress" as const, statement: "Did the work.", enabled: true, proposalId: "proposal-1", ...o,
   })) as import("./interpretation").ProposedOperation[];
 
-  it("routes each operation through the right transport and counts receipts", async () => {
+  it("accepts only persisted proposals and counts receipts", async () => {
     const calls: string[] = [];
     const transport = {
-      completeTask: async () => { calls.push("complete"); return { providerStatus: "nifty_confirmed" }; },
-      createTask: async () => { calls.push("create"); return { queued: true }; },
-      fileCheckIn: async () => { calls.push("checkin"); return {}; },
+      reviewProposal: async (id: string) => { calls.push(id); return id === "proposal-2" ? { queued: true } : {}; },
     };
     const outcome = await fileApprovedOperations(ops([
-      { op: "complete_task", taskId: "t-1" },
-      { op: "create_task", taskTitle: "New work" },
-      { op: "record_progress", taskId: "t-1" },
-    ]), context, transport);
-    expect(calls).toEqual(["complete", "create", "checkin"]);
+      { op: "complete_task", taskId: "t-1", proposalId: "proposal-1" },
+      { op: "create_task", taskTitle: "New work", proposalId: "proposal-2" },
+      { op: "record_progress", taskId: "t-1", proposalId: "proposal-3" },
+    ]), transport);
+    expect(calls).toEqual(["proposal-1", "proposal-2", "proposal-3"]);
     expect(outcome.recorded).toBe(2);
     expect(outcome.queued).toBe(1);
     expect(outcome.failed).toHaveLength(0);
@@ -119,15 +116,17 @@ describe("fileApprovedOperations", () => {
 
   it("never loses an approved operation to a mid-loop failure and reports per-op", async () => {
     const transport = {
-      completeTask: async () => ({ providerStatus: "nifty_confirmed" }),
-      createTask: async () => { throw new Error("Nifty is unreachable"); },
-      fileCheckIn: async () => { throw new Error("offline"); },
+      reviewProposal: async (id: string) => {
+        if (id === "proposal-2") throw new Error("Nifty is unreachable");
+        if (id === "proposal-3") throw new Error("offline");
+        return {};
+      },
     };
     const outcome = await fileApprovedOperations(ops([
-      { op: "complete_task", taskId: "t-1" },
-      { op: "create_task", taskTitle: "New work" },
-      { op: "record_blocker", taskId: "t-2" },
-    ]), context, transport);
+      { op: "complete_task", taskId: "t-1", proposalId: "proposal-1" },
+      { op: "create_task", taskTitle: "New work", proposalId: "proposal-2" },
+      { op: "record_blocker", taskId: "t-2", proposalId: "proposal-3" },
+    ]), transport);
     expect(outcome.recorded).toBe(1);
     expect(outcome.failed).toHaveLength(2);
     expect(outcome.failed[0]?.message).toBe("Nifty is unreachable");
@@ -150,7 +149,7 @@ describe("operationToolCall", () => {
       command: 'POST /api/work-os/check-ins {"source":"desktop","kind":"optional","update_kind":"blocked","input_text":"Waiting for access"}',
     });
     const proposal = { op: "create_task" as const, statement: "Write release notes", proposalId: "proposal-1", enabled: true };
-    expect(operationToolCall(proposal, context).tool).toBe("work_os.tasks.create");
+    expect(operationToolCall(proposal, context).tool).toBe("work_os.proposals.review");
     expect(proposalApprovalCommand(proposal)).toBe('PATCH /api/work-os/proposals/proposal-1 {"decision":"accept"}');
   });
 });

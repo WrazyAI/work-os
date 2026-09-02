@@ -4,7 +4,7 @@ import { listPersonTasks } from "@/lib/work-os";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, HOURLY_FALLBACK_DELAY_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -126,18 +126,22 @@ async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string
 }
 
 async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date) {
-  if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return session;
+  if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);
-  if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return session;
-  const nextFallbackAt = new Date(scheduledAt + HOURLY_FALLBACK_DELAY_MS).toISOString();
-  const { data, error } = await db().from("work_sessions").update({
+  if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return { session, delivered: false };
+  const nextFallbackAt = new Date(scheduledAt + checkInIntervalMs()).toISOString();
+  let query = db().from("work_sessions").update({
     last_prompt_kind: prompt.kind,
     last_prompt_at: at.toISOString(),
     next_fallback_at: nextFallbackAt,
     updated_at: at.toISOString(),
-  }).eq("organization_id", access.organizationId).eq("id", session.id as string).in("state", ["clocked_in", "active", "paused", "eod_due"]).select("*").maybeSingle();
+  }).eq("organization_id", access.organizationId).eq("id", session.id as string).in("state", ["clocked_in", "active", "paused", "eod_due"]);
+  query = session.last_prompt_at
+    ? query.eq("last_prompt_at", session.last_prompt_at as string)
+    : query.is("last_prompt_at", null);
+  const { data, error } = await query.select("*").maybeSingle();
   if (error) throw new Error(`persist Work OS prompt schedule: ${error.message}`);
-  return data ?? session;
+  return { session: data ?? session, delivered: !!data };
 }
 
 async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
@@ -244,8 +248,15 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     lastPromptAt: session?.last_prompt_at as string | null,
     lastSubstantiveUpdateAt: session?.last_substantive_update_at as string | null, at: at.toISOString(),
   });
-  const persistedSession = await recordPromptDelivery(access, session, promptDecision, at);
-  return { session: persistedSession, plan, prompt: promptDecision };
+  return { session, plan, prompt: promptDecision };
+}
+
+/** Claims a due notification after a companion has decided to display it.
+ * Read-only day polling must never advance this cadence. */
+export async function deliverWorkdayPrompt(access: WorkOsAccess, at = new Date()) {
+  const workday = await getWorkday(access, at);
+  const delivery = await recordPromptDelivery(access, workday.session, workday.prompt, at);
+  return { ...workday, session: delivery.session, delivered: delivery.delivered };
 }
 
 export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: string) {

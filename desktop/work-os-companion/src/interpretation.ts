@@ -40,6 +40,12 @@ export function operationLabel(op: CandidateOperationKind): string {
 
 /** The exact Work OS request an approved assistant proposal will make. */
 export function operationToolCall(op: ProposedOperation, context: ApprovedOpContext): { tool: string; command: string } {
+  if (op.proposalId) {
+    return {
+      tool: "work_os.proposals.review",
+      command: `PATCH /api/work-os/proposals/${op.proposalId} ${JSON.stringify({ decision: "accept" })}`,
+    };
+  }
   if (op.op === "complete_task" || op.op === "reopen_task") {
     return {
       tool: "work_os.tasks.update_completion",
@@ -162,10 +168,7 @@ export interface ApprovedOpContext {
 }
 
 export interface ApprovalTransport {
-  reviewProposal?(proposalId: string): Promise<unknown>;
-  completeTask(taskId: string, completed: boolean): Promise<unknown>;
-  createTask(input: { name: string; description: string; dueDate: string | null; personId: string | null }): Promise<unknown>;
-  fileCheckIn(input: { kind: string; updateKind: string; text: string }): Promise<unknown>;
+  reviewProposal(proposalId: string): Promise<unknown>;
 }
 
 export interface ApprovalOutcome {
@@ -175,37 +178,17 @@ export interface ApprovalOutcome {
   results: ToolCallResult[];
 }
 
-/**
- * Files approved operations one at a time through the offline-capable
- * transports. Writes go through sendOrQueue (idempotency key + offline queue
- * replay), so a transport failure never loses an approved operation — it is
- * reported per operation and the receipt states recorded vs queued vs failed
- * instead of claiming a provider confirmation that did not happen.
- */
+/** Accepts stored proposals one at a time. An assistant result cannot mutate a
+ * task or Nifty until the exact persisted proposal receives this decision. */
 export async function fileApprovedOperations(
   operations: ProposedOperation[],
-  context: ApprovedOpContext,
   transport: ApprovalTransport,
 ): Promise<ApprovalOutcome> {
   const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
-      const result = op.proposalId && transport.reviewProposal
-        ? await transport.reviewProposal(op.proposalId)
-        : op.op === "complete_task" || op.op === "reopen_task"
-        ? await transport.completeTask(op.taskId!, op.op === "complete_task")
-        : op.op === "create_task"
-          ? await transport.createTask({
-              name: (op.taskTitle || op.statement).slice(0, 240),
-              description: op.statement,
-              dueDate: context.shiftDate,
-              personId: context.personId,
-            })
-          : await transport.fileCheckIn({
-              kind: context.promptKind || "optional",
-              updateKind: op.op === "record_blocker" ? "blocked" : "material_progress",
-              text: op.statement,
-            });
+      if (!op.proposalId) throw new Error("This update no longer has a server-side approval record. Interpret it again before filing.");
+      const result = await transport.reviewProposal(op.proposalId);
       if ((result as { queued?: boolean } | undefined)?.queued === true) {
         outcome.queued += 1;
         outcome.results.push({ op, status: "queued", message: "Queued locally for a later sync." });

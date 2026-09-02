@@ -1012,8 +1012,9 @@ Mandatory alignment rules:
 - The rail is one continuous light surface. Settings and connection/session state
   are quiet footer rows separated by rules, never dark inset cards.
 
-At `≤1120px`, the desktop rail collapses to `80px`, labels disappear, and the
-stage uses approximately `22px` side padding. At `≤560px`, content uses `14px`
+The installed companion uses a permanent `68px` icon rail so task space does not
+shift as the window changes width; every destination retains its accessible name
+and hover/focus tooltip. At `≤560px`, content uses `14px`
 side padding and reserves approximately `82px` for compact navigation/system UI.
 The compact shell must preserve an accessible name or tooltip for every icon-only
 destination.

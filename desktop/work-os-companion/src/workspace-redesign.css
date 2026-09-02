@@ -18,15 +18,16 @@ body {
 }
 
 .workspace {
-  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   background:
     radial-gradient(circle at 84% 0%, rgba(168, 241, 91, 0.055), transparent 26rem),
     #f3f5f1;
 }
 
 .rail {
-  width: 208px;
-  padding: 24px 16px 20px;
+  width: 68px;
+  padding: 18px 10px;
+  align-items: center;
   background: rgba(250, 251, 247, 0.96);
   color: var(--ink);
   border-right: 1px solid var(--line);
@@ -35,9 +36,16 @@ body {
 
 .wordmark {
   min-height: 36px;
-  padding: 0 8px;
+  justify-content: center;
+  padding: 0;
   font-size: 12px;
   color: var(--ink);
+}
+
+.wordmark span,
+.rail nav span,
+.rail-foot div {
+  display: none;
 }
 
 .wordmark img {
@@ -47,13 +55,18 @@ body {
 }
 
 .rail nav {
-  margin-top: 40px;
+  width: 100%;
+  margin-top: 28px;
   gap: 6px;
 }
 
 .rail nav button {
-  min-height: 46px;
-  padding: 0 13px;
+  justify-content: center;
+  width: 48px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0 auto;
   border-radius: 11px;
   color: #667064;
   font-size: 12px;
@@ -71,21 +84,19 @@ body {
 }
 
 .rail nav button.active::before {
-  left: -16px;
+  left: -10px;
   width: 4px;
-  height: 24px;
+  height: 18px;
   background: #75bb38;
 }
 
 .rail-foot {
-  width: auto;
-  min-height: 48px;
-  margin: 8px 4px 0;
-  padding: 12px 9px 0;
+  width: 100%;
+  min-height: 0;
+  margin: auto 0 0;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  justify-content: center;
 }
 
 .rail-foot small {
@@ -93,14 +104,14 @@ body {
 }
 
 .rail nav .nav-settings {
-  width: auto;
+  width: 100%;
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
 
 .rail nav .nav-settings button {
-  width: 100%;
+  width: 48px;
   min-height: 44px;
   border: 0;
   border-radius: 11px;
@@ -2418,12 +2429,12 @@ button:not(:disabled):active {
 
 @media (max-width: 1120px) {
   .workspace {
-    grid-template-columns: 80px minmax(0, 1fr);
+    grid-template-columns: 68px minmax(0, 1fr);
   }
 
   .rail {
-    width: 80px;
-    padding: 20px 12px;
+    width: 68px;
+    padding: 18px 10px;
   }
 
   .wordmark {
@@ -2443,7 +2454,7 @@ button:not(:disabled):active {
   }
 
   .rail nav button.active::before {
-    left: -12px;
+    left: -10px;
   }
 
   .stage {
