@@ -4,7 +4,7 @@ import { listPersonTasks } from "@/lib/work-os";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, HOURLY_FALLBACK_DELAY_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -129,7 +129,7 @@ async function recordPromptDelivery(access: WorkOsAccess, session: Record<string
   if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);
   if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return { session, delivered: false };
-  const nextFallbackAt = new Date(scheduledAt + HOURLY_FALLBACK_DELAY_MS).toISOString();
+  const nextFallbackAt = new Date(scheduledAt + checkInIntervalMs()).toISOString();
   let query = db().from("work_sessions").update({
     last_prompt_kind: prompt.kind,
     last_prompt_at: at.toISOString(),

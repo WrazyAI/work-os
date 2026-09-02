@@ -53,16 +53,25 @@ const transitions: Record<WorkSessionAction, readonly WorkSessionState[]> = {
   clock_out: ["clocked_in", "active", "paused", "eod_due"],
 };
 
-export const FIRST_FOLLOW_UP_DELAY_MS = 30 * 60_000;
-export const HOURLY_FALLBACK_DELAY_MS = 60 * 60_000;
+export const DEFAULT_CHECK_IN_INTERVAL_MINUTES = 5;
+const MIN_CHECK_IN_INTERVAL_MINUTES = 1;
+const MAX_CHECK_IN_INTERVAL_MINUTES = 240;
 export const EOD_LEAD_TIME_MS = 10 * 60_000;
+
+/** The cadence is deployment-configurable but bounded so a bad environment
+ * value cannot create a notification storm or silence a whole workday. */
+export function checkInIntervalMs(value = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): number {
+  const minutes = Number(value);
+  const valid = Number.isInteger(minutes) && minutes >= MIN_CHECK_IN_INTERVAL_MINUTES && minutes <= MAX_CHECK_IN_INTERVAL_MINUTES;
+  return (valid ? minutes : DEFAULT_CHECK_IN_INTERVAL_MINUTES) * 60_000;
+}
 
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "session" | "at">) {
   if (context.firstFollowUpAt) return context.firstFollowUpAt;
   const baseline = context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  return new Date(baselineAt + FIRST_FOLLOW_UP_DELAY_MS).toISOString();
+  return new Date(baselineAt + checkInIntervalMs()).toISOString();
 }
 
 export function eodDueAt(scheduledEndsAt: string | null | undefined) {
@@ -113,13 +122,13 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
 
   const lastPromptAt = context.lastPromptAt ? Date.parse(context.lastPromptAt) : null;
   const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : null;
-  if (lastPromptAt !== null && lastSubstantiveAt !== null && lastSubstantiveAt > lastPromptAt) {
-    return { kind: null, nextPromptAt: null, required: false, reason: "Substantive progress was recorded; no fallback prompt is needed." };
-  }
-  const fallbackAt = Date.parse(context.nextFallbackAt ?? new Date(firstAt + HOURLY_FALLBACK_DELAY_MS).toISOString());
+  const latestResponseAt = lastSubstantiveAt !== null && lastSubstantiveAt > (lastPromptAt ?? -Infinity) ? lastSubstantiveAt : null;
+  const fallbackAt = latestResponseAt !== null
+    ? latestResponseAt + checkInIntervalMs()
+    : Date.parse(context.nextFallbackAt ?? new Date(firstAt + checkInIntervalMs()).toISOString());
   if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  if (now >= fallbackAt) return { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "No substantive response was recorded after the follow-up." };
-  return { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Waiting for a substantive response before another prompt." };
+  if (now >= fallbackAt) return { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." };
+  return { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
 }
 
 export function dedupePlanCandidates<T extends { id?: string | null; provider_task_id?: string | null; title?: string | null }>(items: T[]): T[] {

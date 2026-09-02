@@ -13,6 +13,10 @@ Before starting each new task or agenda, sync the working branch with the latest
 merge its completed work into `main` before starting another task or agenda.
 Do not carry unmerged completed work into unrelated follow-up work.
 
+The active Work OS check-in cadence defaults to five minutes. Set
+`WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `1` through `240` to
+override it for a deployment; invalid values fall back to five minutes.
+
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
 
