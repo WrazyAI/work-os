@@ -3,6 +3,20 @@ import { listPersonTasks } from "@/lib/work-os";
 export const INTERPRET_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const INTERPRET_TIMEOUT_MS = 45_000;
+const INTERPRET_RESPONSE_SCHEMA = {
+  name: "work_os_candidate_update",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["taskMatches", "claims", "operations"],
+    properties: {
+      taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
+      claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" } } }, maxItems: 20 },
+      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" } } }, maxItems: 20 },
+    },
+  },
+} as const;
 
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
@@ -21,7 +35,7 @@ export interface CandidateWorkUpdate {
   operations: CandidateOperation[];
 }
 
-export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed";
+export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed" | "nifty_failure";
 
 const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task"];
 const CLAIM_KINDS: CandidateClaimKind[] = ["progress", "completion", "blocker", "priority_change", "new_work"];
@@ -139,6 +153,7 @@ export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: 
         ],
         temperature: 0.2,
         max_tokens: 1200,
+        response_format: { type: "json_schema", json_schema: INTERPRET_RESPONSE_SCHEMA },
       }),
       signal: AbortSignal.timeout(INTERPRET_TIMEOUT_MS),
     });
@@ -152,6 +167,7 @@ export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: 
     if (jsonStart < 0 || jsonEnd <= jsonStart) return { ok: false, reason: "ai_malformed", detail: "no JSON in response" };
     raw = JSON.parse(content.slice(jsonStart, jsonEnd + 1));
   } catch (error) {
+    if (error instanceof SyntaxError) return { ok: false, reason: "ai_malformed", detail: "invalid interpretation JSON" };
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
   }
 
@@ -167,4 +183,3 @@ export async function loadInterpretationTasks(ownerId: string, personId: string)
     .filter((row) => typeof row.id === "string" && typeof row.title === "string")
     .map((row) => ({ id: row.id as string, title: row.title as string, completed: row.completed === true }));
 }
-

@@ -6,6 +6,7 @@ import {
   markAnswered,
   markFired,
   markIgnored,
+  clearSessionReminders,
   setQuietMode,
   snooze,
   type CompanionRecord,
@@ -66,11 +67,20 @@ describe("companion state ladder", () => {
     expect(decision.state).toBe("idle");
   });
 
-  it("shows quiet mode and ignores every other cause", () => {
+  it("shows quiet mode for ordinary prompts", () => {
     const record = setQuietMode(EMPTY_COMPANION_RECORD, true);
     const decision = evaluateCompanion(base({ record }));
     expect(decision.state).toBe("quiet");
     expect(decision.suppressReason).toBe("quiet-mode");
+  });
+
+  it("does not let quiet mode or snooze suppress the required EOD prompt", () => {
+    const eod = day({ prompt: { kind: "eod", nextPromptAt: NOW.toISOString(), required: true, reason: "EOD due" } });
+    const quiet = setQuietMode(EMPTY_COMPANION_RECORD, true);
+    const snoozed = snooze(EMPTY_COMPANION_RECORD, "progress:session-1:due", new Date(NOW.getTime() + 30 * 60_000));
+
+    expect(evaluateCompanion(base({ day: eod, record: quiet })).state).toBe("eod_due");
+    expect(evaluateCompanion(base({ day: eod, record: snoozed })).state).toBe("eod_due");
   });
 
   it("suppresses while snoozed and wakes after expiry", () => {
@@ -102,6 +112,17 @@ describe("prompts", () => {
     const second = evaluateCompanion(base({ day: d, record }));
     expect(second.prompt).toBeNull();
     expect(second.suppressReason).toBe("already-reminded");
+  });
+
+  it("keeps an acknowledged EOD prompt deduplicated through the end of the session", () => {
+    const d = day({ prompt: { kind: "eod", nextPromptAt: NOW.toISOString(), required: true, reason: "EOD due" } });
+    const first = evaluateCompanion(base({ day: d }));
+    const fired = markFired(EMPTY_COMPANION_RECORD, first.prompt!.id, NOW);
+    const acknowledged = markAnswered(fired, first.prompt!.id, new Date(NOW.getTime() + 60_000));
+
+    const next = evaluateCompanion(base({ day: d, record: acknowledged, now: new Date(NOW.getTime() + 2 * 60_000) }));
+    expect(next.prompt).toBeNull();
+    expect(next.suppressReason).toBe("acknowledged");
   });
 
   it("asks for the plan when the server requires it and none is confirmed", () => {
@@ -146,6 +167,14 @@ describe("quality controls", () => {
     expect(ordinary.suppressReason).toBe("final-hour");
     const eod = evaluateCompanion(base({ now: new Date("2026-08-27T17:53:00Z") }));
     expect(eod.state).toBe("eod_due");
+  });
+
+  it("suppresses blocker follow-ups in the final hour", () => {
+    const at = new Date("2026-08-27T17:30:00Z");
+    const d = day({ plan: { id: "p", shift_date: "2026-08-27", revision: 1, status: "confirmed", freeform_intent: "ship", suggestion_task_ids: [], items: [{ id: "i1", task_id: "t1", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Task one", blocker: "signing certificate", item_kind: "nifty_task", completion_state: "open" }] } });
+    const decision = evaluateCompanion(base({ day: d, now: at, lastResponseAt: new Date(at.getTime() - 50 * 60_000).toISOString() }));
+    expect(decision.prompt).toBeNull();
+    expect(decision.suppressReason).toBe("final-hour");
   });
 
   it("EOD pierces quiet mode and snooze", () => {
@@ -194,6 +223,21 @@ describe("quality controls", () => {
     let record = markIgnored(EMPTY_COMPANION_RECORD, "c", NOW);
     record = markIgnored(record, "c", NOW);
     expect((record.ignored.c ?? 0)).toBe(2);
+  });
+
+  it("prunes every reminder from a closed session without affecting the next session", () => {
+    const record = {
+      ...EMPTY_COMPANION_RECORD,
+      fired: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+      answered: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+      ignored: { "progress:session-1:due": 2, "progress:session-2:due": 1 },
+      ignoredAt: { "progress:session-1:due": NOW.toISOString(), "progress:session-2:due": NOW.toISOString() },
+    } satisfies CompanionRecord;
+    expect(clearSessionReminders(record, "session-1")).toMatchObject({
+      fired: { "progress:session-2:due": NOW.toISOString() },
+      answered: { "progress:session-2:due": NOW.toISOString() },
+      ignored: { "progress:session-2:due": 1 },
+    });
   });
 
 });

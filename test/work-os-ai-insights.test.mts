@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildInsightSynthesisPrompt, normalizeSynthesis } from "../src/lib/aiInsights";
+import { buildInsightSynthesisPrompt, normalizeInsightSelection, normalizeSynthesis, renderInsightSelection } from "../src/lib/aiInsights";
 
 const DATA = {
   range: "7d" as const, from: "2026-08-21", through: "2026-08-27",
@@ -35,4 +35,23 @@ test("accepts synthesis numbers that trace to the grounding record", () => {
 test("rejects invented figures absent from the grounding record", () => {
   const grounding = "Totals: 2/3 planned tasks completed, 1 Nifty outcomes";
   assert.equal(numbersGroundedIn("You completed 2 of 47 planned tasks across 12 days.", grounding), false);
+});
+
+test("does not accept an invented count because its digit appears inside a date", () => {
+  const grounding = "Daily record: 2026-08-05: 0/0 planned tasks done, 0 Nifty outcomes";
+  assert.equal(numbersGroundedIn("You completed 5 tasks.", grounding), false);
+});
+
+test("renders insights only from selected, record-bound facts", () => {
+  const selection = normalizeInsightSelection({ winIds: ["win:0"], attentionIds: ["attention:0", "attention:9"], nextFocusIds: ["focus:0"] }, DATA);
+  assert.deepEqual(selection, { winIds: ["win:0"], attentionIds: ["attention:0"], nextFocusIds: ["focus:0"] });
+  const synthesis = renderInsightSelection(selection!, DATA);
+  assert.match(synthesis, /Shipped the debugger fix/);
+  assert.match(synthesis, /Packaging blocked/);
+  assert.doesNotMatch(synthesis, /attention:9/);
+});
+
+test("rejects malformed Insight selections instead of model prose", () => {
+  assert.equal(normalizeInsightSelection("A polished narrative", DATA), null);
+  assert.equal(normalizeInsightSelection({ winIds: "win:0" }, DATA), null);
 });

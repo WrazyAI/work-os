@@ -99,9 +99,17 @@ export function normalizeInterpretation(
 }
 
 export function interpretationFallbackReason(error: unknown): string {
-  return error instanceof Error && /ai_unavailable|ai_unconfigured|503|501/i.test(error.message)
+  const reason = error && typeof error === "object" && typeof (error as { reason?: unknown }).reason === "string"
+    ? (error as { reason: string }).reason
+    : "";
+  const message = error instanceof Error ? error.message : error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
+    ? (error as { message: string }).message
+    : "";
+  return reason === "nifty_failure"
+    ? "Your tasks could not be loaded from Nifty. Choose the update type instead."
+    : /ai_unavailable|ai_unconfigured|503|501/i.test(`${reason} ${message}`)
     ? "The assistant is unavailable right now."
-    : error instanceof Error && /offline|network|fetch/i.test(error.message)
+    : /offline|network|fetch/i.test(`${reason} ${message}`)
       ? "You appear to be offline."
       : "The assistant couldn't read that update.";
 }

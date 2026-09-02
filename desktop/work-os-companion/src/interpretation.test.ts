@@ -65,6 +65,8 @@ describe("normalizeInterpretation", () => {
     expect(interpretationFallbackReason(new Error("AI interpretation unavailable (503)"))).toContain("unavailable");
     expect(interpretationFallbackReason(new Error("fetch failed: offline"))).toContain("offline");
     expect(interpretationFallbackReason(new Error("The assistant couldn't read that update."))).toContain("couldn't");
+    expect(interpretationFallbackReason({ reason: "ai_malformed", message: "invalid response" })).toContain("couldn't");
+    expect(interpretationFallbackReason({ reason: "nifty_failure", message: "Nifty unavailable" })).toContain("tasks");
   });
 });
 
