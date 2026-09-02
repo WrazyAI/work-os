@@ -110,10 +110,13 @@ export function collectNudges(facts: CompanionDayFacts, now: number, notifiedKey
 /** Fraction of the scheduled shift elapsed, 0..1, for the avatar's timer ring.
  * Falls back to time since clock-in when no schedule exists. Paused time is
  * subtracted only via the session's paused_seconds snapshot. */
-export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { fraction: number; label: string } {
-  const start = facts.clockedInAt ? new Date(facts.clockedInAt).getTime() : facts.shiftStartsAt ? new Date(facts.shiftStartsAt).getTime() : null;
+export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { fraction: number; label: string; remaining: string } {
+  // The ring represents the scheduled workday, not attendance duration. A late
+  // clock-in must not make the day look longer than the actual shift window.
+  const scheduledStart = facts.shiftStartsAt ? new Date(facts.shiftStartsAt).getTime() : null;
+  const start = scheduledStart && !Number.isNaN(scheduledStart) ? scheduledStart : facts.clockedInAt ? new Date(facts.clockedInAt).getTime() : null;
   const scheduledEnd = facts.shiftEndsAt ? new Date(facts.shiftEndsAt).getTime() : null;
-  if (start === null || Number.isNaN(start)) return { fraction: 0, label: "" };
+  if (start === null || Number.isNaN(start)) return { fraction: 0, label: "", remaining: "" };
   const pausedMs = (facts.pausedSeconds || 0) * 1000;
   const end = scheduledEnd && !Number.isNaN(scheduledEnd) && scheduledEnd > start ? scheduledEnd : now;
   const total = Math.max(60_000, end - start);
@@ -121,7 +124,10 @@ export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { f
   const minutes = Math.floor((now - start - pausedMs) / 60_000);
   const hours = Math.floor(minutes / 60);
   const label = hours > 0 ? `${hours}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
-  return { fraction: Math.max(0, Math.min(1, elapsed / total)), label };
+  const remainingMinutes = Math.max(0, Math.ceil((end - now) / 60_000));
+  const remainingHours = Math.floor(remainingMinutes / 60);
+  const remaining = remainingHours > 0 ? `${remainingHours}h ${String(remainingMinutes % 60).padStart(2, "0")}m left` : `${remainingMinutes}m left`;
+  return { fraction: Math.max(0, Math.min(1, elapsed / total)), label, remaining };
 }
 
 /** Notification payload prefix per nudge kind (used by the scheduler tests). */

@@ -16,12 +16,16 @@
 .tool-approval-card header strong { display: block; overflow: hidden; font: 700 10px/1.35 ui-monospace, "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .tool-approval-choice { display: inline-flex; gap: 5px; align-items: center; color: #315f17; font-size: 10px; font-weight: 750; cursor: pointer; }
 .tool-approval-choice input { accent-color: #7cc936; }
+.tool-approval-actions { display: inline-flex; align-items: center; gap: 7px; }
+.tool-approval-actions button { border: 0; background: transparent; color: #9f3e37; font-size: 9px; font-weight: 750; cursor: pointer; }
 .tool-approval-card > p { margin: 0; color: #40503d; font-size: 10px; font-weight: 650; }
 .tool-approval-card > code { display: block; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: #182018; color: #e7f7ca; font: 9px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+.tool-approval-transport { margin: 2px 0 -4px; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .tool-approval-card > footer { display: flex; gap: 5px; align-items: center; color: #626a61; font-size: 9px; line-height: 1.35; }
 .tool-approval-card.is-recorded { border-color: #a8cf82; background: #f4faee; }
 .tool-approval-card.is-queued { border-color: #d8bb79; background: #fffaf0; }
 .tool-approval-card.is-failed { border-color: #e3aaa2; background: #fff6f4; }
+.tool-approval-card.is-denied { border-color: #d9ded5; background: #f7f8f5; }
 .tool-approval-state { display: inline-flex; gap: 4px; align-items: center; color: #3f7d20; font-size: 9px; font-weight: 750; }
 .tool-approval-card.is-failed .tool-approval-state { color: #af4138; }
 

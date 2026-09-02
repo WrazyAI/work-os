@@ -3670,6 +3670,8 @@ body.modal-open { overflow: hidden; }
 .companion-pet path, .companion-pet circle { vector-effect: non-scaling-stroke; }
 .companion-pet .pet-shadow { fill: rgba(24, 32, 24, .12); stroke: none; }
 .companion-pet .pet-body, .companion-pet .pet-ear { fill: #273526; stroke: #182018; stroke-width: 2.5; stroke-linejoin: round; }
+.companion-pet .pet-arm { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }
+.companion-pet .pet-panel { fill: #d8f5a9; stroke: #182018; stroke-width: 2; stroke-linejoin: round; }
 .companion-pet .pet-screen { fill: #d8f5a9; stroke: #182018; stroke-width: 2.5; }
 .companion-pet .pet-tail, .companion-pet .pet-badge, .companion-pet .pet-focus { fill: none; stroke: #182018; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .companion-pet .pet-face { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }

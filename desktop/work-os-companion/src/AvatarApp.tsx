@@ -42,7 +42,7 @@ interface ChatEntry {
   createdAt?: string;
 }
 
-const AVATAR_COLLAPSED = { width: 88, height: 88 };
+const AVATAR_COLLAPSED = { width: 164, height: 188 };
 const AVATAR_EXPANDED = { width: 380, height: 560 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
@@ -347,9 +347,14 @@ export default function AvatarApp(): React.ReactElement {
         setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted." }]);
         return;
       }
+      const proposals = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+        method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle })) }),
+      });
+      const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       setChat((current) => [
         ...current,
-        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations: review.operations, taskOptions: [] },
+        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions: [] },
       ]);
     } catch (value) {
       setChat((current) => [...current, {
@@ -371,6 +376,7 @@ export default function AvatarApp(): React.ReactElement {
         personId: facts.personId,
         promptKind: "optional",
       }, {
+        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
         completeTask: (taskId, completed) => apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ completed }) }),
         createTask: (taskInput) => apiRequest("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [] }) }),
         fileCheckIn: (checkIn) => apiRequest("/api/work-os/check-ins", { method: "POST", body: JSON.stringify({ source: "desktop", kind: checkIn.kind, update_kind: checkIn.updateKind, input_text: checkIn.text }) }),
@@ -399,6 +405,17 @@ export default function AvatarApp(): React.ReactElement {
     }
   }, [facts.shiftDate, facts.personId, filing, loadDay, toggleExpanded]);
 
+  const denyOperation = useCallback((entryId: string, operation: ProposedOperation) => {
+    if (!operation.proposalId) return;
+    void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
+      method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
+    }).then(() => setChat((current) => current.map((entry) => entry.id === entryId ? {
+      ...entry,
+      operations: entry.operations?.map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
+      toolResults: [...(entry.toolResults ?? []), { op: operation, status: "denied", message: "Denied. This tool call will not run." }],
+    } : entry))).catch((value) => setChat((current) => [...current, { id: `deny-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not deny this tool call." }]));
+  }, []);
+
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
   const submitAgenda = useCallback(async () => {
     const goal = input.trim();
@@ -421,7 +438,7 @@ export default function AvatarApp(): React.ReactElement {
 
   // ── Derived render state ──
   const onShift = isOnShift(facts, now);
-  const { fraction, label } = shiftElapsedFraction(facts, now);
+  const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : facts.promptRequired ? "due" : "live";
   const petPose = agendaDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : facts.promptRequired ? "alert" : "focus";
   const lastEntry = chat[chat.length - 1];
@@ -450,11 +467,11 @@ export default function AvatarApp(): React.ReactElement {
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
           <div className="avatar-compact">
+          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
             <CompanionPet pose="sleep" className="avatar-pet" />
           </button>
-          <span className="avatar-drag-handle" data-tauri-drag-region aria-hidden="true">Move</span>
           </div>
         )}
         {expanded && (
@@ -471,10 +488,12 @@ export default function AvatarApp(): React.ReactElement {
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
         <div className="avatar-compact">
+        {agendaDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>What are you working on today?</strong><span>Set your focus before the next check-in.</span></button>}
+        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
         <button
           className={`avatar-orb ${ringClass} ${facts.promptRequired ? "pulse" : ""}`}
           onClick={() => void toggleExpanded(true)}
-          title={onShift ? `On shift · ${label}` : "Work OS companion"}
+          title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
         >
           <svg viewBox="0 0 48 48" className="avatar-ring">
             <circle cx="24" cy="24" r="22" className="ring-track" />
@@ -483,7 +502,7 @@ export default function AvatarApp(): React.ReactElement {
           <CompanionPet pose={petPose} className="avatar-pet" />
           {facts.promptRequired && !missed && <span className="avatar-badge" />}
         </button>
-        <span className="avatar-drag-handle" data-tauri-drag-region aria-hidden="true">Move</span>
+        {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
         </div>
       )}
       {expanded && (
@@ -494,7 +513,7 @@ export default function AvatarApp(): React.ReactElement {
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
-          {agendaDue && <div className="avatar-agenda"><strong>What are you working on today?</strong><small>Set today’s goal, then we’ll keep the rest of the check-ins out of your way.</small></div>}
+          {agendaDue && <div className="avatar-agenda"><strong>What are you working on today?</strong><small>Set today’s focus here. This does not affect attendance.</small></div>}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
               <div className="chat-entry assistant"><p>{facts.promptRequired
@@ -511,11 +530,11 @@ export default function AvatarApp(): React.ReactElement {
                         {entry.operations && (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => (
-                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={entry.toolResults?.find((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement)} onToggle={() => {
-                                if (entry.toolResults?.some((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement)) return;
+                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={entry.toolResults?.find((item) => item.op.proposalId === op.proposalId)} onToggle={() => {
+                                if (entry.toolResults?.some((item) => item.op.proposalId === op.proposalId)) return;
                                   const next = entry.operations!.map((candidate, i) => i === index ? { ...candidate, enabled: !candidate.enabled } : candidate);
                                   setChat((current) => current.map((e) => e.id === entry.id ? { ...e, operations: next } : e));
-                                }} />
+                                }} onDeny={() => denyOperation(entry.id, op)} />
                             ))}
                             <button className="op-approve" disabled={filing || !!entry.toolResults || !entry.operations.some((op) => op.enabled)}
                               onClick={() => void approveOperations(entry.id, entry.operations!)}>

@@ -82,7 +82,12 @@ describe("shift elapsed fraction", () => {
     const { fraction, label } = shiftElapsedFraction(base, mid);
     expect(fraction).toBeGreaterThan(0.4);
     expect(fraction).toBeLessThan(0.6);
-    expect(label).toBe("4h 00m");
+    expect(label).toBe("4h 05m");
+    expect(shiftElapsedFraction(base, mid).remaining).toBe("3h 55m left");
+  });
+  it("anchors the ring to the scheduled day instead of a late clock-in", () => {
+    const lateClockIn = { ...base, clockedInAt: "2026-08-31T10:00:00Z" };
+    expect(shiftElapsedFraction(lateClockIn, NOW).fraction).toBeCloseTo(0.25);
   });
   it("clamps to 1 after the scheduled end", () => {
     const late = new Date("2026-08-31T20:00:00Z").getTime();

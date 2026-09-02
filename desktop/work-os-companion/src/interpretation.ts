@@ -8,13 +8,14 @@ export interface ProposedOperation {
   statement: string;
   taskId?: string;
   taskTitle?: string;
+  proposalId?: string;
   /** Employee inclusion toggle — nothing files without this. */
   enabled: boolean;
 }
 
 export interface ToolCallResult {
   op: ProposedOperation;
-  status: "recorded" | "queued" | "failed";
+  status: "recorded" | "queued" | "failed" | "denied";
   message: string;
 }
 
@@ -55,6 +56,10 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
     tool: "work_os.check_ins.create",
     command: `POST /api/work-os/check-ins ${JSON.stringify({ source: "desktop", kind: context.promptKind || "optional", update_kind: op.op === "record_blocker" ? "blocked" : "material_progress", input_text: op.statement })}`,
   };
+}
+
+export function proposalApprovalCommand(op: ProposedOperation): string | null {
+  return op.proposalId ? `PATCH /api/work-os/proposals/${op.proposalId} ${JSON.stringify({ decision: "accept" })}` : null;
 }
 
 /**
@@ -149,6 +154,7 @@ export interface ApprovedOpContext {
 }
 
 export interface ApprovalTransport {
+  reviewProposal?(proposalId: string): Promise<unknown>;
   completeTask(taskId: string, completed: boolean): Promise<unknown>;
   createTask(input: { name: string; description: string; dueDate: string | null; personId: string | null }): Promise<unknown>;
   fileCheckIn(input: { kind: string; updateKind: string; text: string }): Promise<unknown>;
@@ -176,7 +182,9 @@ export async function fileApprovedOperations(
   const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
-      const result = op.op === "complete_task" || op.op === "reopen_task"
+      const result = op.proposalId && transport.reviewProposal
+        ? await transport.reviewProposal(op.proposalId)
+        : op.op === "complete_task" || op.op === "reopen_task"
         ? await transport.completeTask(op.taskId!, op.op === "complete_task")
         : op.op === "create_task"
           ? await transport.createTask({

@@ -182,7 +182,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   // and snooze — the employee still gets their mandatory wrap-up — but it is
   // deduplicated until a response lands.
   const eodWindow = minutesLeft !== null && minutesLeft <= EOD_WINDOW_MS / 60_000 && minutesLeft > -15;
-  if (day?.prompt.kind === "eod" || eodWindow) {
+  if (day?.prompt?.kind === "eod" || eodWindow) {
     const cause = `eod:${sessionId}`;
     const minutes = minutesLeft === null ? null : Math.max(0, minutesLeft);
     const prompt: CompanionPrompt = {
@@ -214,7 +214,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   const ordinarySuppression: string | null = inFinalHour(input) ? "final-hour" : frequencyCount >= MAX_PROMPTS_PER_HOUR ? "frequency-cap" : null;
 
   // Plan confirmation prompt (required by the server, not an ordinary nudge).
-  if (day?.prompt.kind === "plan" && day.prompt.required && !planConfirmed(day)) {
+  if (day?.prompt?.kind === "plan" && day.prompt.required && !planConfirmed(day)) {
     const cause = `plan:${sessionId}`;
     const suppressed = ordinarySuppression === "final-hour" ? null : ordinarySuppression;
     const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
@@ -262,8 +262,8 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
   }
 
   // Hourly progress check (server-scheduled) with an overdue mention.
-  const nextPromptAt = day?.prompt.nextPromptAt ?? null;
-  if (day?.prompt.kind && nextPromptAt && now.getTime() >= Date.parse(nextPromptAt)) {
+  const nextPromptAt = day?.prompt?.nextPromptAt ?? null;
+  if (day?.prompt?.kind && nextPromptAt && now.getTime() >= Date.parse(nextPromptAt)) {
     const cause = `progress:${sessionId}:${nextPromptAt}`;
     const suppressed = ordinarySuppression;
     const backoff = suppressed ? 0 : backoffRemainingMs(cause, record, now);
@@ -278,7 +278,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
       state: "progress_check",
       prompt: {
         id: cause,
-        title: promptTitle(day.prompt.kind),
+        title: promptTitle(day.prompt?.kind ?? null),
         body: `${intent ? `You planned to ${intent.replace(/\.$/, "")}. ` : ""}Record what changed.${overdueCount ? ` ${overdueCount} task${overdueCount === 1 ? " is" : "s are"} overdue.` : ""}`,
         action: "open_composer",
         severity: overdueCount > 0 ? "attention" : "info",

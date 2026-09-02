@@ -41,8 +41,8 @@ body.avatar-window {
 
 .avatar-compact {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 164px;
+  height: 188px;
 }
 
 /* ── Collapsed orb ─────────────────────────────────────────────── */
@@ -50,18 +50,18 @@ body.avatar-window {
 .avatar-orb {
   position: relative;
   isolation: isolate;
-  width: 76px;
-  height: 76px;
-  margin: 6px;
-  border: 1px solid #516650;
+  width: 112px;
+  height: 112px;
+  margin: 56px 26px 12px;
+  border: 1px solid #677c62;
   outline: 1px solid rgba(214, 244, 184, 0.22);
   outline-offset: -6px;
-  border-radius: 16px;
+  border-radius: 28px 28px 34px 34px;
   background:
     linear-gradient(rgba(214, 244, 184, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(214, 244, 184, 0.05) 1px, transparent 1px),
     radial-gradient(circle at 50% 42%, #303d2f, var(--avatar-console) 64%);
-  background-size: 5px 5px, 5px 5px, auto;
+  background-size: 6px 6px, 6px 6px, auto;
   color: #e7f7ca;
   cursor: pointer;
   display: grid;
@@ -80,12 +80,12 @@ body.avatar-window {
 
 .avatar-ring {
   position: absolute;
-  inset: 6px;
-  width: calc(100% - 12px);
-  height: calc(100% - 12px);
+  inset: 7px;
+  width: calc(100% - 14px);
+  height: calc(100% - 14px);
   transform: rotate(-90deg);
 }
-.avatar-ring circle { fill: none; stroke-width: 3.5; }
+.avatar-ring circle { fill: none; stroke-width: 3.8; }
 .avatar-ring .ring-track { stroke: rgba(255, 255, 255, 0.14); }
 .avatar-ring .ring-fill {
   stroke: var(--avatar-signal);
@@ -96,20 +96,55 @@ body.avatar-window {
 .avatar-orb.paused .ring-fill { stroke: #d9a441; }
 .avatar-orb.due .ring-fill { stroke: #ff9d5c; }
 
-.avatar-pet { position: relative; z-index: 1; width: 53px; height: 53px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35)); }
+.avatar-pet { position: relative; z-index: 1; width: 86px; height: 86px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
+.avatar-pet .pet-body, .avatar-pet .pet-ear { fill: #344b36; stroke: #d6f4b8; stroke-width: 2.2; stroke-linejoin: round; }
+.avatar-pet .pet-screen { fill: #c6f28e; stroke: #d6f4b8; stroke-width: 2.2; }
+.avatar-pet .pet-panel { fill: #203220; stroke: #d6f4b8; stroke-width: 1.6; }
+.avatar-pet .pet-arm, .avatar-pet .pet-tail, .avatar-pet .pet-badge { fill: none; stroke: #d6f4b8; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.avatar-pet .pet-face { fill: none; stroke: #182018; stroke-width: 2.4; stroke-linecap: round; }
+.avatar-pet .pet-face circle { fill: #182018; }
 
-.avatar-drag-handle {
+.avatar-drag-surface {
   position: absolute;
-  right: 9px;
-  bottom: 9px;
+  top: 4px;
+  left: 18px;
+  right: 18px;
+  height: 36px;
   z-index: 2;
-  color: rgba(231, 247, 202, 0.58);
-  font: 700 5.5px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
-  letter-spacing: 0.13em;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(214, 244, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(27, 36, 27, 0.88);
+  color: rgba(231, 247, 202, 0.82);
+  font: 800 13px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: .18em;
   cursor: grab;
   user-select: none;
 }
-.avatar-drag-handle:active { cursor: grabbing; }
+.avatar-drag-surface:active { cursor: grabbing; }
+
+.avatar-prompt-bubble {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  right: 6px;
+  z-index: 3;
+  padding: 9px 11px 10px;
+  border: 1px solid #344535;
+  border-radius: 15px 15px 15px 5px;
+  background: #202421;
+  color: #f4f5ee;
+  box-shadow: 0 9px 20px rgba(0, 0, 0, .28);
+  text-align: left;
+  cursor: pointer;
+}
+.avatar-prompt-bubble::after { content: ""; position: absolute; bottom: -7px; left: 25px; width: 12px; height: 12px; background: #202421; border-right: 1px solid #344535; border-bottom: 1px solid #344535; transform: rotate(45deg); }
+.avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
+.avatar-prompt-bubble strong { font-size: 10px; line-height: 1.25; }
+.avatar-prompt-bubble span { margin-top: 3px; color: #b7beb2; font-size: 8.5px; line-height: 1.35; }
+.avatar-prompt-bubble + .avatar-drag-surface { top: 64px; height: 22px; left: 38px; right: 38px; border: 0; background: transparent; font-size: 8px; }
+.avatar-day-time { position: absolute; right: 7px; bottom: 3px; color: #d6f4b8; font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .04em; }
 
 .avatar-badge {
   position: absolute;

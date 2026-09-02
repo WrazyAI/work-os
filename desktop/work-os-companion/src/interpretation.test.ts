@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, operationToolCall } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, operationToolCall, proposalApprovalCommand } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -147,5 +147,8 @@ describe("operationToolCall", () => {
       tool: "work_os.check_ins.create",
       command: 'POST /api/work-os/check-ins {"source":"desktop","kind":"optional","update_kind":"blocked","input_text":"Waiting for access"}',
     });
+    const proposal = { op: "create_task" as const, statement: "Write release notes", proposalId: "proposal-1", enabled: true };
+    expect(operationToolCall(proposal, context).tool).toBe("work_os.tasks.create");
+    expect(proposalApprovalCommand(proposal)).toBe('PATCH /api/work-os/proposals/proposal-1 {"decision":"accept"}');
   });
 });

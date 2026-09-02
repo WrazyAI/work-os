@@ -143,7 +143,7 @@ export default function App() {
   const [updateStatus, setUpdateStatus] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
-  const [taskHistoryCursor, setTaskHistoryCursor] = useState<string | null>(null);
+  const [taskHistoryCursor, setTaskHistoryCursor] = useState<number | null>(null);
   const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [taskComposerTitle, setTaskComposerTitle] = useState("");
@@ -301,9 +301,10 @@ export default function App() {
       showError(message, message, "Workday refresh failed");
       return null;
     }
-    const nextDay = dayResult.value;
+    const nextDay = { ...dayResult.value, prompt: dayResult.value.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" } };
     setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
-    setTaskHistory(nextDay.tasks ?? []); setTaskHistoryCursor(nextDay.workspaceSummary?.cursor.next ?? null);
+    const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
+    setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);
     setPlanIntent(nextDay.plan?.freeform_intent ?? "");
     setGoalProvenance(nextDay.plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : nextDay.plan?.freeform_intent ? "employee" : null);
     setSuggestionTaskIds(nextDay.plan?.suggestion_task_ids ?? []);
@@ -796,9 +797,9 @@ const redraftEod = async () => {
     if (syncBypassRef.current || taskHistoryCursor === null || !visibleDay || taskHistoryLoading) return;
     setTaskHistoryLoading(true);
     try {
-      const result = await apiRequest<{ tasks: Array<Record<string, any>>; cursor: { next: string | null } }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(visibleDay.shiftDate)}&cursor=${encodeURIComponent(taskHistoryCursor)}&limit=100`);
+      const result = await apiRequest<{ tasks: Array<Record<string, any>>; nextOffset: number | null }>(`/api/work-os/me/tasks?view=history&offset=${taskHistoryCursor}&limit=100`);
       setTaskHistory((current) => [...current, ...result.tasks.filter((item) => !current.some((existing) => existing.id === item.id))]);
-      setTaskHistoryCursor(result.cursor.next);
+      setTaskHistoryCursor(result.nextOffset);
     } catch (value) {
       showError(value, "More tasks could not be loaded.", "Task history unavailable");
     } finally { setTaskHistoryLoading(false); }
@@ -1075,10 +1076,15 @@ const redraftEod = async () => {
     void apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
       method: "POST",
       body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
-    }).then((result) => {
+    }).then(async (result) => {
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
       if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
-      setInterpretation({ status: "ready", operations: review.operations, taskOptions, reply: review.reply });
+      const proposals = review.operations.length ? await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+        method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle })) }),
+      }) : { proposals: [] };
+      const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
+      setInterpretation({ status: "ready", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions, reply: review.reply });
       setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: review.reply || "Here's what I understood.", meta: review.operations.length ? `${review.operations.length} proposed update${review.operations.length === 1 ? "" : "s"}` : undefined, createdAt: new Date().toISOString() }]);
     }).catch((value) => {
       setInterpretation(null);
@@ -1106,6 +1112,18 @@ const redraftEod = async () => {
 
   function remapOperation(index: number, taskId: string) {
     setInterpretation((current) => current ? { ...current, operations: current.operations.map((op, i) => i === index ? { ...op, taskId: taskId || undefined } : op) } : current);
+  }
+
+  function denyInterpretationOperation(index: number) {
+    const operation = interpretation?.operations[index];
+    if (!operation?.proposalId) return;
+    void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
+      method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
+    }).then(() => setInterpretation((current) => current ? {
+      ...current,
+      operations: current.operations.map((op, currentIndex) => currentIndex === index ? { ...op, enabled: false } : op),
+      results: [...(current.results ?? []), { op: operation, status: "denied", message: "Denied. This tool call will not run." }],
+    } : current)).catch((value) => showError(value, "Could not deny this tool call.", "Approval update failed"));
   }
 
   function approveInterpretation(operations: ProposedOperation[]) {
@@ -1137,8 +1155,9 @@ const redraftEod = async () => {
       const outcome = await fileApprovedOperations(enabled, {
         shiftDate: visibleDay?.shiftDate ?? null,
         personId: visibleDay?.access?.personId ?? null,
-        promptKind: visibleDay?.prompt.kind || "optional",
+        promptKind: visibleDay?.prompt?.kind || "optional",
       }, {
+        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
         completeTask: (taskId, completed) => updateTaskCompletion(taskId, completed),
         createTask: (taskInput) => sendOrQueue("/api/work-os/me/tasks", "POST", {
           name: taskInput.name, description: taskInput.description, due_date: taskInput.dueDate, assignee_person_ids: taskInput.personId ? [taskInput.personId] : [],
@@ -1191,7 +1210,7 @@ const redraftEod = async () => {
         }) as { queued?: boolean; providerStatus?: string; mirrorStatus?: string };
         const updateResult = await sendOrQueue("/api/work-os/check-ins", "POST", {
           source: "desktop",
-          kind: visibleDay?.prompt.kind || "optional",
+          kind: visibleDay?.prompt?.kind || "optional",
           update_kind: "unplanned_work",
           input_text: text,
         }) as { queued?: boolean };
@@ -1209,7 +1228,7 @@ const redraftEod = async () => {
       } else {
         const result = await sendOrQueue("/api/work-os/check-ins", "POST", {
           source: "desktop",
-          kind: visibleDay?.prompt.kind || "optional",
+          kind: visibleDay?.prompt?.kind || "optional",
           update_kind: kind,
           input_text: text,
         }) as { queued?: boolean };
@@ -1260,7 +1279,7 @@ const redraftEod = async () => {
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay?.shiftDate ?? "", -1)).map((item) => item.task)}
         elapsed={observedOnly ? pulse.observedElapsedLabel : pulse.elapsedLabel}
         progressPercent={pulse.progressPercent}
-        nextPrompt={formatTime(visibleDay?.prompt.nextPromptAt, visibleDay?.shift?.timezone)}
+        nextPrompt={formatTime(visibleDay?.prompt?.nextPromptAt, visibleDay?.shift?.timezone)}
         shiftStart={formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}
         shiftEnd={formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}
         remaining={timeRemaining(visibleDay?.shift?.endsAt)}
@@ -1332,11 +1351,12 @@ const redraftEod = async () => {
         onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setProgressReceipt(null); setInterpretation(null); }}
         onSubmit={startProgressUpdate}
         interpretation={interpretation}
-        toolContext={{ shiftDate: visibleDay?.shiftDate ?? null, personId: visibleDay?.access?.personId ?? null, promptKind: visibleDay?.prompt.kind || "optional" }}
+        toolContext={{ shiftDate: visibleDay?.shiftDate ?? null, personId: visibleDay?.access?.personId ?? null, promptKind: visibleDay?.prompt?.kind || "optional" }}
         aiUnavailable={aiUnavailable}
         onToggleOperation={toggleOperation}
         onEditOperation={editOperation}
         onRemapOperation={remapOperation}
+        onDenyOperation={denyInterpretationOperation}
         onApproveOperations={approveInterpretation}
         onClassify={classifyProgressUpdate}
         onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })}
@@ -1441,7 +1461,7 @@ export function PreShiftAgendaSummary({ todayCount, yesterdayDueCount, onToday, 
   return <div className="pre-shift-agenda-summary" aria-label="Agenda summary"><button onClick={onToday}><span>{todayCount}</span><div><strong>{todayCount === 1 ? "Task" : "Tasks"} scheduled for today</strong><small>Open today’s agenda</small></div><ChevronRight size={15} /></button><button className={yesterdayDueCount ? "has-due" : ""} disabled={!yesterdayDueCount} onClick={onYesterday}><span>{yesterdayDueCount}</span><div><strong>{yesterdayDueCount === 1 ? "Task" : "Tasks"} due from yesterday</strong><small>{yesterdayDueCount ? "Needs your attention" : "Nothing carried forward"}</small></div>{yesterdayDueCount > 0 && <ChevronRight size={15} />}</button></div>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onApproveOperations }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = false, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onToggleOperation, onEditOperation, onRemapOperation, onDenyOperation, onApproveOperations }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -1449,7 +1469,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: boolean;
-  onToggleOperation?: (index: number) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onApproveOperations?: (operations: Array<import("./interpretation").ProposedOperation>) => void;
+  onToggleOperation?: (index: number) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onDenyOperation?: (index: number) => void; onApproveOperations?: (operations: Array<import("./interpretation").ProposedOperation>) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1485,7 +1505,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
         ? <div className="progress-message user" key={index}><p>{turn.text}</p></div>
         : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><p>{turn.text}</p>{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
   : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><p>{interpretation.reply}</p><small>Share an update below and I’ll turn it into records.</small></div></div>
-   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.results ? "Tool call results" : "Review assistant tool calls"}</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>{interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op.op === op.op && item.op.taskId === op.taskId && item.op.statement === op.statement); return <ToolApprovalCard key={index} op={op} context={toolContext} result={result} onToggle={() => onToggleOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>; })}</div><button className="primary approve-interpretation" disabled={busy || !!interpretation.results || !interpretation.operations.some((op) => op.enabled)} onClick={() => onApproveOperations?.(interpretation.operations)}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled).length} tool call{interpretation.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}</button></div></div>
+   : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.results ? "Tool call results" : "Review assistant tool calls"}</strong>{interpretation.reply ? <p>{interpretation.reply}</p> : null}<p>{interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op.proposalId === op.proposalId); return <ToolApprovalCard key={index} op={op} context={toolContext} result={result} onToggle={() => onToggleOperation?.(index)} onDeny={() => onDenyOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>; })}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId))} onClick={() => onApproveOperations?.(interpretation.operations.filter((op) => !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)))}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length} tool call{interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length === 1 ? "" : "s"}</button></div></div>
   : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ? "Assistant is unavailable — choose the update type." : "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
     <div className="progress-input-shell"><button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button><textarea ref={composerInputRef} rows={1} value={input} onFocus={onOpen} onChange={(event) => onInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSubmit(); } }} placeholder={open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} aria-label="Share an update or add a task" /><span className={required ? "composer-hint due" : "composer-hint"}>{required ? "Update due" : <><kbd>Enter</kbd> to send</>}</span><button className={input.trim() ? "progress-send ready" : "progress-send"} aria-label="Review update type" aria-keyshortcuts="Enter" disabled={!input.trim() || busy} onClick={onSubmit}><ArrowUp size={17} /></button></div>

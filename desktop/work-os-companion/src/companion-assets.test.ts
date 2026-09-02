@@ -66,6 +66,9 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");
     expect(avatar).toContain("ToolApprovalCard");
+    expect(avatar).toContain("avatar-drag-surface");
+    expect(avatar).toContain("/api/work-os/me/proposals");
+    expect(avatar).toContain("denyOperation");
   });
 
   it("stores main and avatar conversations in the encrypted vault", () => {

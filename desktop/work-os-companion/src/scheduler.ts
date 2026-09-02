@@ -39,10 +39,10 @@ async function deliverOSNotification(title: string, body: string, cause: string)
  */
 export function schedulePrompt(day: DayData, onDue: () => void | Promise<void>) {
   cancelScheduledPrompt();
-  if (!day.prompt.nextPromptAt) return;
+  if (!day.prompt?.nextPromptAt) return;
   const triggerAt = day.prompt.nextPromptAt;
   const delay = new Date(triggerAt).getTime() - Date.now();
-  diagnostics.info("scheduler.prompt.armed", "Prompt timer armed", { kind: day.prompt.kind, triggerAt, delayMs: delay });
+  diagnostics.info("scheduler.prompt.armed", "Prompt timer armed", { kind: day.prompt?.kind ?? null, triggerAt, delayMs: delay });
   if (delay <= 0) {
     void onDue();
     return;
