@@ -64,6 +64,7 @@ describe("operational visualizations", () => {
     expect(app).toContain('type ComposerMode = "progress" | "agenda"');
     expect(app).toContain('mode={sessionActive && view === "day" ? "progress" : "agenda"}');
     expect(app).toContain('label === "shift.clock_in" && /workday is already closed/i.test(message)');
+    expect(app).toContain('refresh({ dayOnly: true, refreshAttendance: true })');
     expect(app).toContain("Record work or add a task · this does not clock you in");
     expect(app).toContain("Added from the Work OS daily composer.");
     expect(app).toContain("Share an update or add a task…");

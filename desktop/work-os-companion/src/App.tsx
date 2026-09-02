@@ -523,7 +523,10 @@ const redraftEod = async () => {
       const message = value instanceof Error ? value.message : "Action failed";
       if (label === "shift.clock_in" && /workday is already closed/i.test(message)) {
         try {
-          const nextDay = await refresh({ dayOnly: true, refreshProviders: true });
+          // A closed-workday conflict only needs a fresh attendance reading.
+          // Avoid coupling recovery to the slower Nifty sync, which can time
+          // out even when Worktivity has already reconciled the session.
+          const nextDay = await refresh({ dayOnly: true, refreshAttendance: true });
           if (nextDay && sessionGate(nextDay).worktivitySynced) {
             diagnostics.info("ui.action.recovered", "Fresh Worktivity activity replaced a stale closed-workday view.", { action: label, activeView: view });
             notifications.info("Worktivity activity is active. Retrying your clock-in.", "Activity synchronized");
