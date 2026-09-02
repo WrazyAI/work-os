@@ -81,14 +81,14 @@ fn open_https_url_windows(url: &str) -> Result<(), String> {
 
 
 /// Windows toast with click-to-focus: activating the notification focuses the
-/// target window (avatar -> also emits the expand event; main -> show+focus).
+/// target window (avatar -> also emits the expand event; EOD -> opens review).
 /// Other platforms keep the JS notification plugin, which handles clicks there.
 #[tauri::command]
 fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: String) -> Result<(), String> {
     #[cfg(windows)]
     {
         let app_handle = app.clone();
-        let window_target = target.clone();
+        let window_target = if target == "eod" { "main".to_string() } else { target.clone() };
         tauri_winrt_notification::Toast::new("com.wrazy.workos.pilot")
             .title(&title)
             .text1(&body)
@@ -100,6 +100,9 @@ fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: Stri
                 }
                 if window_target == "avatar" {
                     let _ = app_handle.emit_to("avatar", "avatar://expand", ());
+                }
+                if target == "eod" {
+                    let _ = app_handle.emit_to("main", "work-os://avatar-open-eod", ());
                 }
                 Ok(())
             })
@@ -139,6 +142,11 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+#[tauri::command]
+fn focus_main(app: tauri::AppHandle) {
+    show_main(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -160,6 +168,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
             notify_focus,
+            focus_main,
             open_work_os_auth,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,

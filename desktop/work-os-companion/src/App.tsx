@@ -358,6 +358,18 @@ export default function App() {
     return () => unlisten?.();
   }, [refresh]);
 
+  // EOD clicks can originate in the floating avatar or a Windows toast. Both
+  // routes land on the same review workspace, then refresh its current record.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen("work-os://avatar-open-eod", () => {
+      setView("review");
+      void refresh({ dayOnly: true }).catch(() => undefined);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [refresh]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setPulseNow(new Date()), 30_000);
     return () => clearInterval(timer);

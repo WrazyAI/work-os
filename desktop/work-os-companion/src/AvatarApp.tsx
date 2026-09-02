@@ -10,7 +10,7 @@ import { ToolApprovalCard } from "./ToolApprovalCard";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
-  collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
+  avatarPrompt, collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -76,11 +76,11 @@ function fireNotification(nudge: CompanionNudge, permission: boolean): void {
   try {
     if (navigator.userAgent.includes("Windows")) {
       // Windows toasts support click-to-focus through the local notify_focus
-      // command; hourly nudges open the companion, clock-in/EOD open the app.
+      // command; check-ins open the companion and EOD opens the review workspace.
       void invoke("notify_focus", {
         title: nudge.title,
         body: nudge.body,
-        target: nudge.kind === "hourly" ? "avatar" : "main",
+        target: nudge.kind === "hourly" ? "avatar" : nudge.kind === "eod" ? "eod" : "main",
       }).catch(() => { sendNotification({ title: nudge.title, body: nudge.body }); });
       return;
     }
@@ -93,9 +93,9 @@ export default function AvatarApp(): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [facts, setFacts] = useState<DayFacts>({
-    loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null,
+    loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
-    clockedOutAt: null, pausedSeconds: 0, personId: null, planIntent: null,
+    clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, personId: null, planIntent: null,
     timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItemIds: [],
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
@@ -161,12 +161,17 @@ export default function AvatarApp(): React.ReactElement {
         shiftDate: String(day?.shiftDate ?? ""),
         promptRequired: prompt.kind === "follow_up" || prompt.kind === "hourly_fallback",
         nextPromptAt: typeof prompt.nextPromptAt === "string" ? prompt.nextPromptAt : null,
+        promptKind: ["plan", "follow_up", "hourly_fallback", "eod"].includes(prompt.kind) ? prompt.kind : null,
         shiftStartsAt: day?.shift?.startsAt ?? session.scheduled_starts_at ?? null,
         shiftEndsAt: day?.shift?.endsAt ?? session.scheduled_ends_at ?? null,
         sessionState: session.state ?? null,
         clockedInAt: session.clocked_in_at ?? null,
         clockedOutAt: session.clocked_out_at ?? null,
         pausedSeconds: Number(session.paused_seconds ?? 0) || 0,
+        lastSubstantiveUpdateAt: typeof session.last_substantive_update_at === "string" ? session.last_substantive_update_at : null,
+        employeeUpdates: Number(day?.signals?.employeeUpdates ?? 0) || 0,
+        completedTasks: Number(day?.signals?.completedTasks ?? 0) || 0,
+        openTasks: Number(day?.signals?.openTasks ?? 0) || 0,
         personId: day?.access?.personId ?? null,
         planIntent: day?.plan?.freeform_intent ?? null,
         timezone: day?.shift?.timezone ?? null,
@@ -318,6 +323,12 @@ export default function AvatarApp(): React.ReactElement {
     } catch { /* sizing is cosmetic */ }
   }, [win]);
 
+  const openEodReview = useCallback(async (): Promise<void> => {
+    void emit("work-os://avatar-open-eod");
+    await invoke("focus_main").catch(() => undefined);
+    await toggleExpanded(false);
+  }, [toggleExpanded]);
+
   // ── Persist position after drags settle ──
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -445,10 +456,13 @@ export default function AvatarApp(): React.ReactElement {
   }, [facts.planItemIds, filing, input, loadDay]);
 
   // ── Derived render state ──
+  const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
+  const attentionDue = ["agenda", "check_in", "eod"].includes(contextualPrompt.kind);
+  const showBadge = contextualPrompt.kind === "eod" || (contextualPrompt.kind === "check_in" && !missed);
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
-  const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : facts.promptRequired ? "due" : "live";
-  const petPose = agendaDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : facts.promptRequired ? "alert" : "focus";
+  const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
+  const petPose = attentionDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : "focus";
   const lastEntry = chat[chat.length - 1];
   const statusText = !facts.loaded
     ? daySyncState === "error" ? "Today is syncing" : "Loading today…"
@@ -496,10 +510,10 @@ export default function AvatarApp(): React.ReactElement {
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
         <div className="avatar-compact">
-        {agendaDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>What are you working on today?</strong><span>Set your focus before the next check-in.</span></button>}
+        {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
         <button
-          className={`avatar-orb ${ringClass} ${facts.promptRequired ? "pulse" : ""}`}
+          className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}`}
           onClick={() => void toggleExpanded(true)}
           title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
         >
@@ -508,7 +522,7 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
           <CompanionPet pose={petPose} className="avatar-pet" />
-          {facts.promptRequired && !missed && <span className="avatar-badge" />}
+          {showBadge && <span className="avatar-badge" />}
         </button>
         {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
         </div>
@@ -521,12 +535,12 @@ export default function AvatarApp(): React.ReactElement {
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
-          {agendaDue && <div className="avatar-agenda"><strong>What are you working on today?</strong><small>Set today’s focus here. This does not affect attendance.</small></div>}
+          {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
-              <div className="chat-entry assistant"><p>{facts.promptRequired
-                ? "Hourly check-in — what have you been working on?"
-                : "Hey! Share an update, or tell me to create, complete, or block tasks."}</p></div>
+              <div className="chat-entry assistant"><p>{attentionDue
+                ? contextualPrompt.body
+                : "Share an update, or tell me to create, complete, or block tasks."}</p></div>
             )}
             {chat.map((entry) => (
               <div key={entry.id} className={`chat-entry ${entry.role}`}>
@@ -556,18 +570,18 @@ export default function AvatarApp(): React.ReactElement {
             ))}
             {thinking && <div className="chat-entry assistant"><p className="chat-thinking">Thinking…</p></div>}
           </div>
-          <footer className="avatar-composer">
+          {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer">
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void (agendaDue ? submitAgenda() : sendUpdate()); } }}
-              placeholder={agendaDue ? "Describe your goal for today…" : facts.promptRequired && !missed ? "Hourly update — what's happening?" : "Share an update or instruct the assistant…"}
+              placeholder={agendaDue ? "Describe your goal for today…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
               autoFocus
               maxLength={4000}
             />
             <button className="avatar-send" disabled={!input.trim() || thinking || filing} onClick={() => void (agendaDue ? submitAgenda() : sendUpdate())} aria-label={agendaDue ? "Confirm today’s agenda" : "Send update"}>{agendaDue ? "✓" : "↑"}</button>
-          </footer>
-          {facts.promptRequired && !missed && !lastEntry?.receipt && (
+          </footer>}
+          {contextualPrompt.kind === "check_in" && !missed && !lastEntry?.receipt && (
             <button className="avatar-snooze" onClick={() => {
               const until = snoozeUntil(Date.now(), snoozeCount);
               if (until === null) { setMissed(true); writeJson(SNOOZE_KEY, { count: 0, until: null }); }

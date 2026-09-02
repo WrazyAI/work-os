@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift,
-  nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
+  avatarPrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts,
 } from "./avatarLogic";
 
@@ -37,6 +37,24 @@ describe("hourly nudge", () => {
     const seen = new Set([nudge!.key]);
     expect(hourlyNudge(facts, NOW + 1000, seen)).toBeNull();
   });
+  it("uses the recorded update and focus in the due prompt", () => {
+    const facts = {
+      ...base,
+      promptRequired: true,
+      promptKind: "hourly_fallback" as const,
+      nextPromptAt: "2026-08-31T10:00:00Z",
+      timezone: "UTC",
+      lastSubstantiveUpdateAt: "2026-08-31T09:20:00Z",
+      planIntent: "Finish the companion approval flow",
+      completedTasks: 1,
+      openTasks: 2,
+    };
+    const nudge = hourlyNudge(facts, NOW, new Set());
+    expect(nudge?.title).toBe("Check-in due");
+    expect(nudge?.body).toContain("9:20 AM");
+    expect(nudge?.body).toContain("Finish the companion approval flow");
+    expect(nudge?.body).toContain("1 completed and 2 open tasks");
+  });
   it("never fires off shift", () => {
     const facts = { ...base, promptRequired: true, clockedInAt: null };
     expect(hourlyNudge(facts, NOW, new Set())).toBeNull();
@@ -67,6 +85,25 @@ describe("eod nudge", () => {
   });
   it("does not fire mid-shift", () => {
     expect(eodNudge(base, NOW, new Set())).toBeNull();
+  });
+  it("fires from the server EOD prompt before the scheduled end", () => {
+    const facts = { ...base, promptKind: "eod" as const, nextPromptAt: "2026-08-31T15:50:00Z" };
+    const at = new Date("2026-08-31T15:50:00Z").getTime();
+    expect(eodNudge(facts, at, new Set())?.title).toBe("EOD review is due");
+  });
+});
+
+describe("avatar prompt", () => {
+  it("asks for an EOD submission with shift and task context", () => {
+    const prompt = avatarPrompt({ ...base, promptKind: "eod", timezone: "UTC", completedTasks: 3, openTasks: 1 }, NOW);
+    expect(prompt.action).toBe("open_eod");
+    expect(prompt.body).toContain("4:00 PM");
+    expect(prompt.body).toContain("3 completed and 1 open task");
+    expect(prompt.body).toContain("submit your EOD");
+  });
+  it("keeps paused and off-shift states explicit instead of asking for work", () => {
+    expect(avatarPrompt({ ...base, sessionState: "paused" }, NOW).heading).toBe("Shift paused");
+    expect(avatarPrompt({ ...base, clockedOutAt: "2026-08-31T09:30:00Z", sessionState: "clocked_out" }, NOW).heading).toBe("Off shift");
   });
 });
 
