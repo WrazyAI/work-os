@@ -16,6 +16,7 @@ import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { db, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { suppressPromptForSubmittedEod } from "@/modules/work-os/workday";
 
 const NIFTY_FRESH_MS = 5 * 60_000;
 const niftyRefreshes = new Map<string, Promise<void>>();
@@ -142,5 +143,8 @@ export async function getWorkOsDay(
     completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
-  return { at: at.toISOString(), shiftDate, shift, prompt: workday.session ? workday.prompt : prompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
+  const workdayPrompt = workday.session
+    ? suppressPromptForSubmittedEod(workday.prompt, report?.submitted_at as string | null | undefined)
+    : prompt;
+  return { at: at.toISOString(), shiftDate, shift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
 }

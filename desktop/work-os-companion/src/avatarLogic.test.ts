@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift,
-  avatarPrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
+  avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts,
 } from "./avatarLogic";
 
@@ -101,9 +101,23 @@ describe("avatar prompt", () => {
     expect(prompt.body).toContain("3 completed and 1 open task");
     expect(prompt.body).toContain("submit your EOD");
   });
+  it("stops EOD reminders after the report is submitted", () => {
+    const facts = { ...base, promptKind: "eod" as const, eodSubmitted: true };
+    expect(avatarPrompt(facts, NOW).heading).toBe("Off shift");
+    expect(eodNudge(facts, NOW, new Set())).toBeNull();
+  });
   it("keeps paused and off-shift states explicit instead of asking for work", () => {
     expect(avatarPrompt({ ...base, sessionState: "paused" }, NOW).heading).toBe("Shift paused");
     expect(avatarPrompt({ ...base, clockedOutAt: "2026-08-31T09:30:00Z", sessionState: "clocked_out" }, NOW).heading).toBe("Off shift");
+  });
+});
+
+describe("recorded update receipt", () => {
+  it("clears the due prompt locally after a confirmed response", () => {
+    const facts = clearRecordedUpdatePrompt({ ...base, promptRequired: true, promptKind: "hourly_fallback", nextPromptAt: "2026-08-31T10:00:00Z" });
+    expect(facts.promptRequired).toBe(false);
+    expect(facts.promptKind).toBeNull();
+    expect(avatarPrompt(facts, NOW).kind).toBe("available");
   });
 });
 
@@ -133,6 +147,10 @@ describe("shift elapsed fraction", () => {
   it("clamps to 1 after the scheduled end", () => {
     const late = new Date("2026-08-31T20:00:00Z").getTime();
     expect(shiftElapsedFraction(base, late).fraction).toBe(1);
+  });
+  it("never renders negative elapsed time before a stale future shift boundary", () => {
+    const future = { ...base, shiftStartsAt: "2026-09-03T15:00:00Z", clockedInAt: "2026-09-03T15:00:00Z" };
+    expect(shiftElapsedFraction(future, NOW).label).toBe("0m");
   });
 });
 

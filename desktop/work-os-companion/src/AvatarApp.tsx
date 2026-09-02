@@ -10,7 +10,7 @@ import { ToolApprovalCard } from "./ToolApprovalCard";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
-  avatarPrompt, collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
+  avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -95,7 +95,7 @@ export default function AvatarApp(): React.ReactElement {
   const [facts, setFacts] = useState<DayFacts>({
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
-    clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, personId: null, planIntent: null,
+    clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
     timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItemIds: [],
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
@@ -172,6 +172,7 @@ export default function AvatarApp(): React.ReactElement {
         employeeUpdates: Number(day?.signals?.employeeUpdates ?? 0) || 0,
         completedTasks: Number(day?.signals?.completedTasks ?? 0) || 0,
         openTasks: Number(day?.signals?.openTasks ?? 0) || 0,
+        eodSubmitted: typeof day?.report?.submitted_at === "string",
         personId: day?.access?.personId ?? null,
         planIntent: day?.plan?.freeform_intent ?? null,
         timezone: day?.shift?.timezone ?? null,
@@ -408,6 +409,7 @@ export default function AvatarApp(): React.ReactElement {
       setChat((current) => current.map((entry) => entry.id === entryId
         ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: outcome.results, receipt: null }
         : entry));
+      if (outcome.recorded > 0) setFacts((current) => clearRecordedUpdatePrompt(current));
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
       setMissed(false);
