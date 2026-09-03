@@ -71,6 +71,8 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("avatar-drag-surface");
     expect(avatar).toContain("/api/work-os/me/proposals");
     expect(avatar).toContain("denyOperation");
+    expect(avatar).toContain("TaskSelectionCard");
+    expect(avatar).toContain("proposeAvatarSelectedCompletions");
   });
 
   it("shares the per-workday conversation between the main window and avatar", () => {
@@ -89,5 +91,7 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('"work-os://conversation-changed"');
     expect(avatar).toContain("const history = [...chat.filter");
     expect(avatar).toContain("const promptTurnId = attentionDue");
+    expect(main).toContain("proposeSelectedTaskCompletions");
+    expect(main).toContain("TaskSelectionCard");
   });
 });

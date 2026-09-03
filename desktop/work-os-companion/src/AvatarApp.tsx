@@ -7,6 +7,7 @@ import { secureState, type WorkOsConversationTurn } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { ToolApprovalCard } from "./ToolApprovalCard";
+import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
@@ -396,7 +397,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       const proposals = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle })) }),
+        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
       });
       const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       setChat((current) => [
@@ -445,6 +446,28 @@ export default function AvatarApp(): React.ReactElement {
       setFiling(false);
     }
   }, [facts.shiftDate, facts.personId, filing, loadDay, toggleExpanded]);
+
+  const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
+    if (!taskIds.length || filing) return;
+    const titles = new Map(facts.taskOptions.map((task) => [task.id, task.title]));
+    const operations = taskIds.map((taskId) => ({
+      op: "complete_task" as const,
+      statement: `Employee confirmed completion of ${titles.get(taskId) ?? "selected task"}.`,
+      task_id: taskId,
+      task_title: titles.get(taskId) ?? "selected task",
+    }));
+    setFiling(true);
+    void apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ input_text: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, operations }),
+    }).then(({ proposals }) => {
+      const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
+      const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
+      if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
+      setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+    }).catch((value) => setChat((current) => [...current, { id: `completion-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not create completion proposals." }]))
+      .finally(() => setFiling(false));
+  }, [facts.taskOptions, filing]);
 
   const denyOperation = useCallback((entryId: string, operation: ProposedOperation) => {
     if (!operation.proposalId) return;
@@ -579,6 +602,18 @@ export default function AvatarApp(): React.ReactElement {
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
                       : <>
                         <p>{entry.text}</p>
+                        {entry.toolResults?.map((result) => {
+                          const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
+                          if (!selection) return null;
+                          const tasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
+                            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
+                            description: typeof task.description === "string" ? task.description : null,
+                            dueDate: typeof task.due_date === "string" ? task.due_date : null,
+                            priority: typeof task.priority === "string" ? task.priority : null,
+                            state: selection.view === "overdue" ? "overdue" : "pending",
+                          })).filter((task) => !!task.id) : [];
+                          return <TaskSelectionCard key={result.op.proposalId} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                        })}
                         {entry.operations && (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => (

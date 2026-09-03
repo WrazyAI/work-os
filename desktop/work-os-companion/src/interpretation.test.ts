@@ -138,6 +138,13 @@ describe("fileApprovedOperations", () => {
     expect(outcome.failed[1]?.op.op).toBe("record_blocker");
     expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "failed", "failed"]);
   });
+
+  it("uses the persisted proposal as a tool-result payload", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "display_pending_tasks" }]), {
+      reviewProposal: async () => ({ proposal: { provider_result: { view: "pending", tasks: [{ id: "task-1" }] } } }),
+    });
+    expect(outcome.results[0]?.data).toEqual({ provider_result: { view: "pending", tasks: [{ id: "task-1" }] } });
+  });
 });
 
 describe("operationToolCall", () => {
