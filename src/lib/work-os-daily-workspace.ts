@@ -88,8 +88,8 @@ const db = () => createAdminClient();
 const dateOf = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 
 function cursorValue(row: DailyWorkspaceTaskRow) {
-  const priority = ({ due_date: 0, surfaced: 1, completed: 2, creation_observed: 3, carried: 4, subtask_activity: 5 } as const)[row.dayAttribution.reason];
-  return `${String(priority).padStart(2, "0")}|${String(row.due_date ?? "9999-12-31")}|${String(row.provider_created_at ?? row.created_at ?? "")}|${row.id}`;
+  const createdAt = Date.parse(String(row.provider_created_at ?? row.created_at ?? ""));
+  return `${String(Number.isFinite(createdAt) ? createdAt : 0).padStart(16, "0")}|${row.id}`;
 }
 
 export function encodeWorkspaceCursor(value: string) {
@@ -148,7 +148,7 @@ export async function resolveDailyWorkspace(
     db().from("work_task_day_events").select("*")
       .eq("organization_id", access.organizationId).eq("local_date", date)
       .order("observed_at", { ascending: true }).order("id", { ascending: true }),
-    db().from("work_daily_plans").select("id,freeform_intent,goal_provenance,suggestion_task_ids,revision,status")
+    db().from("work_daily_plans").select("id,freeform_intent,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
       .eq("shift_date", date).maybeSingle(),
     db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,correction_status,correction_reason")
@@ -176,6 +176,10 @@ export async function resolveDailyWorkspace(
   }
 
   const childrenByParent = new Map<string, Json[]>();
+  const planItemsByTaskId = new Map<string, Json>();
+  for (const item of Array.isArray(planResult.data?.items) ? planResult.data.items as Json[] : []) {
+    if (item.task_id && item.disposition !== "removed") planItemsByTaskId.set(String(item.task_id), item);
+  }
   const parents = attributable.filter((task) => !task.parent_task_id && !task.parent_provider_task_id);
   for (const child of attributable.filter((task) => task.parent_task_id || task.parent_provider_task_id)) {
     const key = String(child.parent_task_id ?? allTasks.find((task) => task.provider_task_id === child.parent_provider_task_id)?.id ?? "");
@@ -188,6 +192,7 @@ export async function resolveDailyWorkspace(
   const resolved: DailyWorkspaceTaskRow[] = [];
   for (const parent of parents) {
     const children = childrenByParent.get(String(parent.id)) ?? [];
+    const planItem = planItemsByTaskId.get(String(parent.id)) ?? planItemsByTaskId.get(String(parent.provider_task_id));
     let attribution: { reason: TaskDayAttributionReason; event: Json | null } | null = resolveTaskDayAttribution(parent, eventsByTask.get(String(parent.id)) ?? [], date);
     let childTaskIds: string[] = [];
     if (!attribution) {
@@ -197,13 +202,22 @@ export async function resolveDailyWorkspace(
         childTaskIds = matchedChildren.map((child) => String(child.id));
       }
     }
+    // A saved daily plan is an explicit record that the task belonged to this
+    // workday, including days before task-event capture was introduced.
+    if (!attribution && planItem) attribution = { reason: "surfaced", event: null };
     if (!attribution) continue;
     const completedChildren = children.filter((child) => child.completed === true).length;
     const event = attribution.event;
     const dispositionEvent = (eventsByTask.get(String(parent.id)) ?? [])
       .filter((item) => item.event_type === "surfaced" || item.event_type === "deferred").at(-1);
+    const historicalCompleted = planItem?.completion_state === "completed"
+      ? true
+      : planItem?.completion_state === "open"
+        ? false
+        : typeof event?.task_snapshot?.completed === "boolean" ? event.task_snapshot.completed : parent.completed === true;
     resolved.push({
       ...parent,
+      completed: historicalCompleted,
       dayDisposition: dispositionEvent?.event_type === "deferred" ? "deferred" : "active",
       dayAttribution: {
         date,
@@ -221,9 +235,9 @@ export async function resolveDailyWorkspace(
         || String(left.provider_created_at ?? left.created_at).localeCompare(String(right.provider_created_at ?? right.created_at))),
     } as DailyWorkspaceTaskRow);
   }
-  resolved.sort((left, right) => cursorValue(left).localeCompare(cursorValue(right)));
+  resolved.sort((left, right) => cursorValue(right).localeCompare(cursorValue(left)));
   const after = decodeWorkspaceCursor(options.cursor);
-  const afterFiltered = after ? resolved.filter((row) => cursorValue(row) > after) : resolved;
+  const afterFiltered = after ? resolved.filter((row) => cursorValue(row) < after) : resolved;
   const limit = Math.min(100, Math.max(1, options.limit ?? 50));
   const page = afterFiltered.slice(0, limit);
   const next = afterFiltered.length > page.length && page.length

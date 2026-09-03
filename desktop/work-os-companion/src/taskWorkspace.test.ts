@@ -67,6 +67,13 @@ describe("unified Tasks workspace", () => {
     expect(orderTasksByRecency([{ id: "invalid", updated_at: "not-a-date" }, { id: "valid", updated_at: "2026-08-26" }]).map((task) => task.id)).toEqual(["valid", "invalid"]);
   });
 
+  it("orders historical task rows by their most recently added time", () => {
+    expect(orderTasksByRecency([
+      { id: "older", provider_created_at: "2026-09-02T09:00:00Z" },
+      { id: "newer", provider_created_at: "2026-09-02T11:00:00Z" },
+    ]).map((task) => task.id)).toEqual(["newer", "older"]);
+  });
+
   it("replaces provider failure payloads with deliberate fallback copy", () => {
     expect(safeTaskText("TypeError: Failed to fetch", "No description added.")).toBe("No description added.");
     expect(safeTaskText("  A useful task description  ", "No description added.")).toBe("A useful task description");

@@ -22,7 +22,10 @@ const currentPlan: DailyPlan = {
 
 const historicalPlan: DailyPlan = {
   id: "plan-history", status: "closed", freeform_intent: "Remove the old Plan route and preserve the task record.", goal_provenance: "employee", suggestion_task_ids: [], shift_date: "2026-08-20", revision: 5,
-  items: [{ id: "item-carry", task_id: "task-carry", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Review provider sync failures", blocker: null, item_kind: "nifty_task", completion_state: "open" }],
+  items: [
+    { id: "item-carry", task_id: "task-carry", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Review provider sync failures", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+    { id: "item-done", task_id: "task-done", source: "carry_over", disposition: "selected", rank: 1, title_snapshot: "Remove Plan navigation", blocker: null, item_kind: "nifty_task", completion_state: "completed" },
+  ],
 };
 
 export default function TasksPreview() {

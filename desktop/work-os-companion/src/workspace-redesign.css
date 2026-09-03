@@ -3650,6 +3650,10 @@ button:not(:disabled):active {
   font-size: 9px;
 }
 
+.task-record-columns { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 12px; margin: 0 0 8px; padding: 0 12px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.task-record-columns span:last-child { text-align: right; }
+@media (max-width: 700px) { .task-record-columns { display: none; } }
+
 @media (max-width: 560px) {
   .eod-composer-header { flex-direction: column; }
   .eod-feedback { grid-template-columns: 1fr; }
