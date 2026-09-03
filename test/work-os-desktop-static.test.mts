@@ -123,6 +123,7 @@ assert.match(app, /onRefine=\{refineEod\}/);
 assert.match(app, /allTasksCompleted=\{allTodayTasksCompleted\}/);
 assert.match(taskSurfaces, /Refine this draft/);
 assert.match(taskSurfaces, /Your bottleneck answer stays separate/);
+assert.match(app, /task-record-columns/);
 assert.match(app, /PersonalInsights/);
 assert.match(app, /observedSeconds/);
 assert.doesNotMatch(app, /width: "(?:76|52|34)%"/);
