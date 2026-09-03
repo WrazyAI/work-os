@@ -47,7 +47,7 @@ export async function getWorkOsDay(
   access: WorkOsAccess,
   personId: string,
   at = new Date(),
-  options: { refreshNifty?: boolean; refreshAttendance?: boolean } = {},
+  options: { refreshNifty?: boolean; refreshAttendance?: boolean; compact?: boolean } = {},
 ) {
   // The provider refreshes are independent external calls: start them (and
   // the owner lookup the Nifty sync depends on) immediately and in parallel
@@ -108,32 +108,17 @@ export async function getWorkOsDay(
     authority: "nifty",
     ...(!options.refreshNifty && organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
   };
-  const [tasks, taskHistory, evidence] = await Promise.all([
-    listPersonTasks(ownerId, personId, { todayOnly: true, todayDate: shiftDate, limit: 1000 }),
-    listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
-    listEvidence(ownerId, { personId, date: shiftDate }),
+  const [taskHistory, evidence, proposalsResult, reportResult, workspace] = await Promise.all([
+    options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
+    options.compact ? Promise.resolve([]) : listEvidence(ownerId, { personId, date: shiftDate }),
+    options.compact ? Promise.resolve({ data: [], error: null }) : db().from("work_task_proposals").select("*").eq("organization_id", access.organizationId).eq("person_id", personId).in("status", ["pending", "needs_review", "failed", "stale"]).order("created_at", { ascending: false }),
+    db().from("work_reports").select(options.compact ? "submitted_at" : "*").eq("organization_id", access.organizationId).eq("person_id", personId).eq("report_date", shiftDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 100, now: at }),
   ]);
-  const { data: proposals, error: proposalError } = await db()
-    .from("work_task_proposals")
-    .select("*")
-    .eq("organization_id", access.organizationId)
-    .eq("person_id", personId)
-    .in("status", ["pending", "needs_review", "failed", "stale"])
-    .order("created_at", { ascending: false });
-  if (proposalError) throw new Error(`load task proposals: ${proposalError.message}`);
-  const { data: report, error: reportError } = await db()
-    .from("work_reports")
-    .select("*")
-    .eq("organization_id", access.organizationId)
-    .eq("person_id", personId)
-    .eq("report_date", shiftDate)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (reportError) throw new Error(`load current EOD report: ${reportError.message}`);
+  if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
+  if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);
   const workday = await getWorkday(access, at);
-  const workspace = await resolveDailyWorkspace(access, shiftDate, { limit: 100, now: at });
-  const taskRows = tasks ?? [];
+  const taskRows = workspace.tasks;
   const historyRows = taskHistory ?? [];
   const evidenceRows = evidence ?? [];
   const signals = {
@@ -144,7 +129,7 @@ export async function getWorkOsDay(
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
   const workdayPrompt = workday.session
-    ? suppressPromptForSubmittedEod(workday.prompt, report?.submitted_at as string | null | undefined)
+    ? suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined)
     : prompt;
-  return { at: at.toISOString(), shiftDate, shift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposals ?? [], report };
+  return { at: at.toISOString(), shiftDate, shift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
 }

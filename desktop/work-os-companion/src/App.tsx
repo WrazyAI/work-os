@@ -17,7 +17,7 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insi
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, simulateAiEod, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, simulateAiEod, stripBottleneckSection, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
@@ -92,6 +92,7 @@ export default function App() {
   const notifications = useNotifications();
   const [session, setSession] = useState<DesktopSession | null>(null);
   const [day, setDay] = useState<DayData | null>(null);
+  const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
   const [input, setInput] = useState("");
@@ -261,11 +262,12 @@ export default function App() {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [moveMenuId, subtaskMenuId]);
 
-  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean } = {}) => {
+  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
     if (syncBypassRef.current) return null;
     const dayQuery = new URLSearchParams();
     if (options.refreshProviders) dayQuery.set("refreshProviders", "true");
     if (options.refreshAttendance) dayQuery.set("refreshAttendance", "true");
+    if (!options.details) dayQuery.set("compact", "true");
     const [onboardingResult, dayResult] = await Promise.allSettled([
       options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
       apiRequest<DayData>(`/api/work-os/me/day${dayQuery.size ? `?${dayQuery}` : ""}`, {
@@ -301,6 +303,7 @@ export default function App() {
       prompt: rawDay.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" },
     };
     setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
+    setDayDetailsLoaded(options.details === true);
     const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
     setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);
     setPlanIntent(nextDay.plan?.freeform_intent ?? "");
@@ -335,6 +338,13 @@ export default function App() {
     window.addEventListener("online", recover); const timer = window.setInterval(() => void recover().catch(() => undefined), 60_000);
     return () => { window.removeEventListener("online", recover); clearInterval(timer); };
   }, [refresh, session]);
+
+  // The dashboard only needs the compact workday snapshot. Load the heavier
+  // history, evidence, and EOD records when a workspace that uses them opens.
+  useEffect(() => {
+    if (!day || dayDetailsLoaded || !["tasks", "review", "evidence"].includes(view)) return;
+    void refresh({ dayOnly: true, details: true }).catch(() => undefined);
+  }, [day, dayDetailsLoaded, refresh, view]);
 
   // The avatar is a separate window. Its confirmed writes should be visible in
   // the main workspace immediately, not only after the next periodic refresh.
@@ -402,6 +412,22 @@ export default function App() {
       }
       setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
       notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
+    } finally { setEodRedrafting(false); }
+  };
+
+  const refineEod = async (markdown: string, feedback: string) => {
+    if (!visibleDay || syncBypassRef.current) return false;
+    setEodRedrafting(true);
+    try {
+      const result = await apiRequest<{ markdown: string }>('/api/work-os/me/eod/ai-draft', {
+        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate, draft: stripBottleneckSection(markdown), feedback }),
+      });
+      setEodDraft((current) => current ? { ...current, markdown: result.markdown, source: "ai" } : { markdown: result.markdown, source: "ai" });
+      notifications.success("The draft was refined from your feedback. Your bottleneck answer was not changed.", "Draft refined");
+      return true;
+    } catch (value) {
+      showError(value, "Your feedback was not applied. Your draft and bottleneck answer are unchanged.", "Draft refinement failed");
+      return false;
     } finally { setEodRedrafting(false); }
   };
 
@@ -744,6 +770,7 @@ export default function App() {
   }, [gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
   const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
   const openTasks = todayParentTasks.filter((task) => !task.completed);
+  const allTodayTasksCompleted = todayParentTasks.length > 0 && openTasks.length === 0;
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
@@ -1334,12 +1361,14 @@ export default function App() {
           initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
           source={eodDraft?.source ?? "deterministic"}
           suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
+          allTasksCompleted={allTodayTasksCompleted}
           redrafting={eodRedrafting}
           clockedOut={eodClockedOut}
           screenshotContext={eodDraft?.screenshots ?? null}
           screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
           busy={busy}
           onRedraft={() => void redraftEod()}
+          onRefine={refineEod}
           onSubmit={submitEod}
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}

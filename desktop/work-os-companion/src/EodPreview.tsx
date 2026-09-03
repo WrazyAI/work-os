@@ -1,0 +1,13 @@
+import { useState } from "react";
+import { EodComposer } from "./taskSurfaces";
+
+const draft = "## Summary\nCompleted the release checks and documented the results for review.\n\n## Completed\n- Verify the EOD refinement flow\n\n## Carried forward\n- Nothing pending";
+
+export default function EodPreview() {
+  const allTasksCompleted = new URLSearchParams(window.location.search).has("all-complete");
+  const [markdown, setMarkdown] = useState(draft);
+  const [submitted, setSubmitted] = useState(false);
+  return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
+    {submitted ? <section className="panel"><strong>EOD submitted</strong><p>Your report is with your manager.</p></section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck="A pending approval delayed the final handoff." allTasksCompleted={allTasksCompleted} redrafting={false} busy={false} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
+  </main></section></div>;
+}

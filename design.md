@@ -1362,6 +1362,18 @@ mutation actions and explain why they need regeneration. Approval remains a
 primary local action only while the proposal is actionable; a successful browser
 request is not displayed as Nifty write-back until provider confirmation exists.
 
+### 29.1a EOD draft refinement
+
+An EOD draft may be refined from employee feedback before it is submitted to a
+manager. Feedback is a separate, local decision area beneath the editable report:
+the primary action is `Refine draft`, and its helper copy states that the
+employee-authored bottleneck remains separate. The AI request receives the report
+narrative and feedback, never the bottleneck answer. When every task in the
+current-day list is complete, disable the bottleneck field, clear any prior value,
+and omit the bottleneck section from the submitted report. Otherwise the employee
+must provide a bottleneck before submission. A failed refinement preserves both
+the report, feedback, and bottleneck input.
+
 ### 29.2 Insights
 
 Insights follows summary → comparison → exact record:

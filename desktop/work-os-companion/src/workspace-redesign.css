@@ -3617,6 +3617,25 @@ button:not(:disabled):active {
   line-height: 1.45;
 }
 
+.eod-feedback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-raised, #fbfcf8);
+}
+
+.eod-feedback > div { display: grid; gap: 3px; }
+.eod-feedback span { color: #666a61; font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.eod-feedback small { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.eod-feedback textarea { grid-column: 1 / -1; width: 100%; padding: 10px 12px; border: 1px solid #d3d3ca; border-radius: 9px; background: #fffef8; color: var(--ink); font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; resize: vertical; }
+.eod-feedback textarea:focus { outline: none; border-color: #a7c982; box-shadow: 0 0 0 4px rgba(129, 180, 70, .11); }
+.eod-feedback button { align-self: start; min-height: 34px; padding: 0 12px; border: 1px solid #cbd7c3; border-radius: 9px; background: #fff; color: #40543a; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.eod-feedback button:disabled { opacity: .55; }
+.eod-bottleneck-label textarea:disabled { background: var(--surface, #eef1eb); color: var(--muted); cursor: not-allowed; }
+
 .eod-composer > footer {
   display: flex;
   align-items: center;
@@ -3629,6 +3648,12 @@ button:not(:disabled):active {
 .eod-composer > footer small {
   color: var(--muted);
   font-size: 9px;
+}
+
+@media (max-width: 560px) {
+  .eod-composer-header { flex-direction: column; }
+  .eod-feedback { grid-template-columns: 1fr; }
+  .eod-feedback button { justify-self: start; }
 }
 
 /* Insights AI synthesis — Slice D */

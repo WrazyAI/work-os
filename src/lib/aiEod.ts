@@ -202,3 +202,36 @@ export async function draftEodNarrative(grounding: EodGrounding): Promise<EodDra
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
   }
 }
+
+function withoutBottleneck(markdown: string) {
+  return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
+}
+
+/** Refines report wording from employee feedback without touching their separate bottleneck answer. */
+export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string): Promise<EodDraftResult> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: EOD_MODEL,
+        messages: [
+          { role: "system", content: "You refine Work OS EOD report wording. Apply the employee feedback, preserve truthful task and progress statements, and never add a Bottleneck section. Do not invent completion, evidence, timing, or outcomes." },
+          { role: "user", content: `Known Work OS facts:\n${buildEodPrompt(grounding)}\n\nCurrent report:\n${withoutBottleneck(draft)}\n\nEmployee feedback:\n${feedback}\n\nReturn only the revised markdown report. Do not include a Bottleneck heading or content.` },
+        ],
+        temperature: 0.2,
+        max_tokens: 1800,
+      }),
+      signal: AbortSignal.timeout(EOD_TIMEOUT_MS),
+    });
+    if (!response.ok) return { ok: false, reason: "ai_unavailable", detail: `provider responded ${response.status}` };
+    const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const markdown = withoutBottleneck(String(payload.choices?.[0]?.message?.content ?? ""));
+    if (!markdown) return { ok: false, reason: "ai_malformed", detail: "empty refined report" };
+    return { ok: true, markdown, model: EOD_MODEL };
+  } catch (error) {
+    return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
+  }
+}

@@ -90,6 +90,11 @@ describe("EOD composer helpers", () => {
     expect(final).toContain("## Bottleneck\nThe certificate was pending.");
     expect(final).not.toContain("(placeholder)");
   });
+
+  it("omits the bottleneck when every task is complete", () => {
+    const final = composeEodMarkdown("## Summary\nA day.\n## Bottleneck\n(placeholder)", "", false);
+    expect(final).toBe("## Summary\nA day.");
+  });
 });
 
 describe("fileApprovedOperations", () => {

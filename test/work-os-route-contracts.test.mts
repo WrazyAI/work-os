@@ -21,6 +21,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const applyInterpretation = await source("src/app/api/work-os/me/interpret/apply/route.ts");
   const interpretedProposals = await source("src/app/api/work-os/me/proposals/route.ts");
   const day = await source("src/app/api/work-os/me/day/route.ts");
+  const dayView = await source("src/lib/work-os-day-view.ts");
   const attendance = await source("src/lib/work-os-attendance.ts");
   const attendanceProjection = await source("src/modules/work-os/attendance.ts");
   const attendanceSync = await source("src/app/api/work-os/attendance/sync-due/route.ts");
@@ -43,6 +44,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(insights, /getPersonalInsights/);
   assert.match(insights, /requirePerson: true/);
   assert.match(insights, /day.*7d.*30d/);
+  assert.match(day, /compact: url\.searchParams\.get\("compact"\) === "true"/);
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);
+  assert.match(dayView, /select\(options\.compact \? "submitted_at" : "\*"\)/);
+  assert.match(dayView, /suppressPromptForSubmittedEod\(workday\.prompt, reportResult\.data\?\.submitted_at/);
   assert.match(tasks, /view === "options"/);
   assert.match(tasks, /getWorkOsTaskCreationOptions/);
   assert.match(tasks, /createWorkOsEmployeeTask/);

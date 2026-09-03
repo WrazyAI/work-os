@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     const day = await getWorkOsDay(auth.access, auth.access.personId as string, at, {
       refreshNifty: url.searchParams.get("refreshProviders") === "true",
       refreshAttendance: url.searchParams.get("refreshAttendance") === "true",
+      compact: url.searchParams.get("compact") === "true",
     }) as Record<string, unknown>;
     return NextResponse.json({
       ...day,

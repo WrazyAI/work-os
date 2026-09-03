@@ -291,18 +291,24 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
-export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onSubmit }: {
+export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onRefine, onSubmit }: {
   reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
-  redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onSubmit: (markdown: string, idempotencyKey: string) => void;
+  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefine: (markdown: string, feedback: string) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
+  const [feedback, setFeedback] = useState("");
   // A redraft replaces the buffer (and any in-progress edits) by design.
   useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
-  const canSubmit = hasBottleneckAnswer(bottleneck) && markdown.trim() && !busy && !redrafting;
+  useEffect(() => { if (allTasksCompleted) setBottleneck(""); }, [allTasksCompleted]);
+  const canSubmit = (allTasksCompleted || hasBottleneckAnswer(bottleneck)) && markdown.trim() && !busy && !redrafting;
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit(composeEodMarkdown(markdown, bottleneck), crypto.randomUUID());
+    onSubmit(composeEodMarkdown(markdown, bottleneck, !allTasksCompleted), crypto.randomUUID());
+  };
+  const refine = async () => {
+    if (!feedback.trim() || busy || redrafting) return;
+    if (await onRefine(markdown, feedback)) setFeedback("");
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
@@ -316,9 +322,13 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
     <label className="eod-markdown-label"><span>Report</span>
       <textarea value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />
     </label>
-    <label className="eod-bottleneck-label"><span>Bottleneck — required</span>
-      <textarea value={bottleneck} rows={2} maxLength={2000} placeholder={BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={BOTTLENECK_QUESTION} />
-      <small>What prevented you from completing your task list? This goes to your manager with the report.</small>
+    <section className="eod-feedback" aria-label="Draft feedback"><div><span>Refine this draft</span><small>Tell the assistant what to clarify or change. Your bottleneck answer stays separate.</small></div>
+      <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
+      <button disabled={!feedback.trim() || busy || redrafting} onClick={() => void refine()}>{redrafting ? "Refining…" : "Refine draft"}</button>
+    </section>
+    <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
+      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? "Every task in today's list is complete." : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
+      <small>{allTasksCompleted ? "Every task in today’s list is complete, so no reason is needed or sent with this report." : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
     </label>
     <footer><small>Nothing is filed until you submit.</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
   </section>;

@@ -134,8 +134,9 @@ export function hasBottleneckAnswer(answer: string): boolean {
 }
 
 /** Final submitted markdown: the narrative (placeholder-free) plus the employee's bottleneck answer. */
-export function composeEodMarkdown(markdown: string, bottleneck: string): string {
-  return `${stripBottleneckSection(markdown)}\n\n## Bottleneck\n${bottleneck.trim()}`;
+export function composeEodMarkdown(markdown: string, bottleneck: string, requiresBottleneck = true): string {
+  const narrative = stripBottleneckSection(markdown);
+  return requiresBottleneck ? `${narrative}\n\n## Bottleneck\n${bottleneck.trim()}` : narrative;
 }
 
 /** Offline playground stand-in for the AI EOD draft — device-only, clearly labeled. */
