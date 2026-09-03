@@ -105,6 +105,7 @@ export default function App() {
   // flyout intentionally keeps it.
   const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
   const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
+  const composerConversationSignature = useRef("");
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
@@ -727,16 +728,18 @@ export default function App() {
       notifications.info("Your queued update is ready for review. Nothing has been recorded yet.", "Review queued update");
     }).catch((value) => diagnostics.warn("offline_queue.restore_interpretation", errorMessage(value, "Could not restore queued interpretation")));
   }, [notifications, queuedInterpretationId, taskHistory, visibleDay]);
-  const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId
-    ? `main:${visibleSession.organizationId}:${visibleDay.access.personId}`
+  const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId && visibleDay.shiftDate
+    ? `workday:${visibleSession.organizationId}:${visibleDay.access.personId}:${visibleDay.shiftDate}`
     : null;
   useEffect(() => {
     let cancelled = false;
+    composerConversationSignature.current = "";
     setLoadedComposerConversation(null);
     setComposerHistory([]);
     if (!composerConversationScope) return () => { cancelled = true; };
     void secureState.conversation(composerConversationScope).then((turns) => {
       if (!cancelled) {
+        composerConversationSignature.current = JSON.stringify(turns);
         setComposerHistory(turns);
         setLoadedComposerConversation(composerConversationScope);
       }
@@ -747,8 +750,23 @@ export default function App() {
   }, [composerConversationScope]);
   useEffect(() => {
     if (!composerConversationScope || loadedComposerConversation !== composerConversationScope) return;
-    void secureState.saveConversation(composerConversationScope, composerHistory);
+    const signature = JSON.stringify(composerHistory);
+    if (composerConversationSignature.current === signature) return;
+    composerConversationSignature.current = signature;
+    void secureState.saveConversation(composerConversationScope, composerHistory).then(() => emit("work-os://conversation-changed", { scope: composerConversationScope })).catch(() => undefined);
   }, [composerConversationScope, composerHistory, loadedComposerConversation]);
+  useEffect(() => {
+    if (!composerConversationScope || !isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ scope?: string }>("work-os://conversation-changed", (event) => {
+      if (event.payload?.scope !== composerConversationScope) return;
+      void secureState.conversation(composerConversationScope).then((turns) => {
+        composerConversationSignature.current = JSON.stringify(turns);
+        setComposerHistory(turns);
+      }).catch(() => undefined);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [composerConversationScope]);
   useEffect(() => {
     if (debugScenario.enabled && visibleDay?.plan) {
       setPlanIntent(visibleDay.plan.freeform_intent ?? "");
@@ -1120,7 +1138,8 @@ export default function App() {
 
   function clearComposerChat() {
     setComposerHistory([]);
-    if (composerConversationScope) void secureState.clearConversation(composerConversationScope);
+    composerConversationSignature.current = "";
+    if (composerConversationScope) void secureState.clearConversation(composerConversationScope).then(() => emit("work-os://conversation-changed", { scope: composerConversationScope })).catch(() => undefined);
     setProgressReceipt(null);
     setInterpretation(null);
     setPendingProgressUpdate("");

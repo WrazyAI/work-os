@@ -103,6 +103,7 @@ export default function AvatarApp(): React.ReactElement {
   const [now, setNow] = useState(() => Date.now());
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
+  const chatConversationSignature = useRef("");
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [filing, setFiling] = useState(false);
@@ -219,17 +220,19 @@ export default function AvatarApp(): React.ReactElement {
     return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
 
-  const avatarConversationScope = desktopSession?.organizationId && facts.personId
-    ? `avatar:${desktopSession.organizationId}:${facts.personId}`
+  const avatarConversationScope = desktopSession?.organizationId && facts.personId && facts.shiftDate
+    ? `workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}`
     : null;
   useEffect(() => {
     let cancelled = false;
+    chatConversationSignature.current = "";
     setLoadedChatConversation(null);
     setChat([]);
     if (!avatarConversationScope) return () => { cancelled = true; };
     void secureState.conversation(avatarConversationScope).then((turns) => {
       if (!cancelled) {
-        setChat(turns.map((turn) => ({ ...turn, role: turn.role as ChatEntry["role"] })));
+        chatConversationSignature.current = JSON.stringify(turns);
+        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
         setLoadedChatConversation(avatarConversationScope);
       }
     }).catch(() => {
@@ -242,8 +245,23 @@ export default function AvatarApp(): React.ReactElement {
     const turns: WorkOsConversationTurn[] = chat
       .filter((entry): entry is ChatEntry & { role: "user" | "assistant" } => entry.role === "user" || entry.role === "assistant")
       .map((entry) => ({ id: entry.id, role: entry.role, text: entry.text, ...(entry.receipt ? { meta: entry.receipt } : {}), createdAt: entry.createdAt ?? new Date().toISOString() }));
-    void secureState.saveConversation(avatarConversationScope, turns);
+    const signature = JSON.stringify(turns);
+    if (chatConversationSignature.current === signature) return;
+    chatConversationSignature.current = signature;
+    void secureState.saveConversation(avatarConversationScope, turns).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
   }, [avatarConversationScope, chat, loadedChatConversation]);
+  useEffect(() => {
+    if (!avatarConversationScope) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ scope?: string }>("work-os://conversation-changed", (event) => {
+      if (event.payload?.scope !== avatarConversationScope) return;
+      void secureState.conversation(avatarConversationScope).then((turns) => {
+        chatConversationSignature.current = JSON.stringify(turns);
+        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
+      }).catch(() => undefined);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [avatarConversationScope]);
 
   // ── Tick ──
   useEffect(() => {
@@ -361,12 +379,14 @@ export default function AvatarApp(): React.ReactElement {
     const text = input.trim();
     if (!text || thinking || filing) return;
     setInput("");
-    setChat((current) => [...current, { id: `u-${Date.now()}`, role: "user", text }]);
+    const userTurn: ChatEntry = { id: `u-${Date.now()}`, role: "user", text, createdAt: new Date().toISOString() };
+    const history = [...chat.filter((entry) => entry.role === "user" || entry.role === "assistant"), userTurn];
+    setChat((current) => [...current, userTurn]);
     setThinking(true);
     try {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
-        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: chat.filter((entry) => entry.role === "user" || entry.role === "assistant").slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
+        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
       const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
@@ -391,7 +411,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setThinking(false);
     }
-  }, [input, thinking, filing, facts.planIntent, facts.shiftDate]);
+  }, [input, thinking, filing, facts.planIntent, facts.shiftDate, chat]);
 
   const approveOperations = useCallback(async (entryId: string, operations: ProposedOperation[]) => {
     const enabled = operations.filter((op) => op.enabled);
@@ -460,6 +480,13 @@ export default function AvatarApp(): React.ReactElement {
   // ── Derived render state ──
   const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
   const attentionDue = ["agenda", "check_in", "eod"].includes(contextualPrompt.kind);
+  const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
+  useEffect(() => {
+    if (!promptTurnId) return;
+    setChat((current) => current.some((entry) => entry.id === promptTurnId)
+      ? current
+      : [...current, { id: promptTurnId, role: "assistant", text: `${contextualPrompt.heading}: ${contextualPrompt.body}`, createdAt: new Date().toISOString() }]);
+  }, [contextualPrompt.body, promptTurnId]);
   const showBadge = contextualPrompt.kind === "eod" || (contextualPrompt.kind === "check_in" && !missed);
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
@@ -479,7 +506,8 @@ export default function AvatarApp(): React.ReactElement {
 
   function clearAvatarConversation() {
     setChat([]);
-    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope);
+    chatConversationSignature.current = "";
+    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
   }
 
   useEffect(() => {
