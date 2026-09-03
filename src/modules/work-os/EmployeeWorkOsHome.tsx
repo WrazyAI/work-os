@@ -151,6 +151,7 @@ export default function EmployeeWorkOsHome() {
     queryKey: ["work-os", "task-day", selectedTaskDate],
     queryFn: () => fetchJson(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(selectedTaskDate)}&limit=100`),
     enabled: !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate,
+    staleTime: 5 * 60_000,
   });
   const insightsThrough = selectedTaskDate || day.data?.shiftDate;
   const insights = useQuery<InsightsResponse>({

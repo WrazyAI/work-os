@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
-import type { DesktopSession, OfflineAction } from "./types";
+import type { DayData, DesktopSession, OfflineAction } from "./types";
 
 export interface WorkOsConversationTurn {
   id: string;
@@ -74,9 +74,24 @@ export const secureState = {
     await remove("session");
     await remove("pending-auth");
     await remove("offline-queue");
+    await remove("day-snapshot");
   },
   queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
   saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),
+  daySnapshot: async () => {
+    if (!isTauri()) return null;
+    const [session, snapshot] = await Promise.all([
+      secureState.session(),
+      get<{ savedAt: string; organizationId: string; token: string; day: DayData }>("day-snapshot"),
+    ]);
+    if (!session || !snapshot || snapshot.organizationId !== session.organizationId || snapshot.token !== session.token || Date.now() - Date.parse(snapshot.savedAt) > 5 * 60_000) return null;
+    return snapshot.day;
+  },
+  saveDaySnapshot: async (day: DayData) => {
+    if (!isTauri()) return;
+    const session = await secureState.session();
+    if (session) await set("day-snapshot", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, day });
+  },
   conversation: async (scope: string) => isTauri() ? (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [] : [],
   saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => isTauri()
     ? set(`conversation:${scope}`, turns.slice(-60))

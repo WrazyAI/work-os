@@ -105,6 +105,8 @@ assert.match(app, /Clock in when you begin. Activity observation stays separate/
 assert.match(app, /dayQuery\.set\("refreshProviders", "true"\)/);
 assert.match(app, /dayQuery\.set\("compact", "true"\)/);
 assert.match(app, /\["tasks", "review", "evidence"\]/);
+assert.match(app, /secureState\.daySnapshot\(\)/);
+assert.match(app, /secureState\.saveDaySnapshot\(nextDay\)/);
 assert.match(app, /updater\.check_failed/);
 assert.match(app, /pulse-provider-popover/);
 assert.match(app, /Shift pulse options/);
