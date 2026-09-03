@@ -214,32 +214,38 @@ export default function WorkOsHome() {
   const projects = useQuery<{ projects: AnyRow[] }>({
     queryKey: ["work-os", "projects"],
     queryFn: () => fetchJson("/api/work-os/projects"),
-    enabled: schemaReady,
+    enabled: schemaReady && tab === "tasks",
+    staleTime: 60_000,
   });
   const tasks = useQuery<{ tasks: AnyRow[] }>({
     queryKey: ["work-os", "tasks", completed, personId],
     queryFn: () => fetchJson(`/api/work-os/tasks?completed=${completed}${personId ? `&personId=${personId}` : ""}`),
     enabled: schemaReady && tab === "tasks",
+    staleTime: 30_000,
   });
   const todayTasks = useQuery<{ tasks: AnyRow[] }>({
     queryKey: ["work-os", "today", personId],
     queryFn: () => fetchJson(`/api/work-os/tasks/today${personId ? `?personId=${personId}` : ""}`),
     enabled: schemaReady && tab === "today",
+    staleTime: 30_000,
   });
   const evidence = useQuery<{ evidence: AnyRow[] }>({
     queryKey: ["work-os", "evidence", personId],
     queryFn: () => fetchJson(`/api/work-os/evidence?date=${todayIso()}${personId ? `&personId=${personId}` : ""}`),
     enabled: schemaReady && (tab === "today" || tab === "evidence"),
+    staleTime: 30_000,
   });
   const reports = useQuery<{ reports: AnyRow[] }>({
     queryKey: ["work-os", "reports"],
     queryFn: () => fetchJson("/api/work-os/reports"),
     enabled: schemaReady && tab === "reports",
+    staleTime: 30_000,
   });
   const blueprints = useQuery<{ blueprints: AnyRow[] }>({
     queryKey: ["work-os", "blueprints"],
     queryFn: () => fetchJson("/api/work-os/blueprints"),
     enabled: schemaReady && tab === "blueprints",
+    staleTime: 60_000,
   });
 
   const refresh = () => {

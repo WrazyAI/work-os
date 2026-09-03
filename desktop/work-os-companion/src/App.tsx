@@ -305,6 +305,7 @@ export default function App() {
       prompt: rawDay.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" },
     };
     setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
+    void secureState.saveDaySnapshot(nextDay);
     setDayDetailsLoaded(options.details === true);
     const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
     setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);
@@ -318,8 +319,14 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, enabled]) => {
+    void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
+      if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
+        setDay(snapshot);
+        setTaskHistory(snapshot.taskHistory ?? snapshot.tasks);
+        setTaskHistoryCursor(null);
+        setPlanHistoryDate(snapshot.shiftDate);
+      }
       if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
     }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
     void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
