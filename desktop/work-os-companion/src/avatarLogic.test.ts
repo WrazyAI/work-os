@@ -106,6 +106,11 @@ describe("avatar prompt", () => {
     expect(avatarPrompt(facts, NOW).heading).toBe("Off shift");
     expect(eodNudge(facts, NOW, new Set())).toBeNull();
   });
+  it("asks for today's work immediately after clock-in", () => {
+    const prompt = avatarPrompt({ ...base, promptKind: "plan" }, NOW);
+    expect(prompt.heading).toBe("What are you working on today?");
+    expect(prompt.body).toContain("This does not affect attendance.");
+  });
   it("keeps paused and off-shift states explicit instead of asking for work", () => {
     expect(avatarPrompt({ ...base, sessionState: "paused" }, NOW).heading).toBe("Shift paused");
     expect(avatarPrompt({ ...base, clockedOutAt: "2026-08-31T09:30:00Z", sessionState: "clocked_out" }, NOW).heading).toBe("Off shift");

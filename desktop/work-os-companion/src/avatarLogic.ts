@@ -114,9 +114,9 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
   if (facts.promptKind === "plan") {
     return {
       kind: "agenda",
-      heading: "Set today’s focus",
-      body: [focusContext, "Name the work you intend to move forward. This does not affect attendance."].filter(Boolean).join(" "),
-      compact: "Set your focus before the next check-in.",
+      heading: "What are you working on today?",
+      body: [focusContext, "Set today's focus. This does not affect attendance."].filter(Boolean).join(" "),
+      compact: "What are you working on today?",
       action: null,
     };
   }
