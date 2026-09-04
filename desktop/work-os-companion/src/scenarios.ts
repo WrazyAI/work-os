@@ -18,6 +18,7 @@ export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   enabled: false,
   syncBypass: false,
   companionForce: null,
+  planningState: null,
   authState: "real",
   onboardingState: "real",
   invalidateOnboardingData: false,
@@ -34,6 +35,10 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; scenario: Partial
   { id: "first_launch", label: "First launch", scenario: { enabled: true, authState: "unauthenticated", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ALL_ONBOARDING_DETAILS.map((item) => item.key), dayState: "no_shift" } },
   { id: "profile_missing", label: "Incomplete onboarding", scenario: { enabled: true, authState: "real", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ["consentProvided", "profileConfirmed", "timezoneProvided", "scheduleProvided", "notificationsConfigured", "privacyAcknowledged", "roleAssigned", "teamAssigned", "managerAssigned", "officialScheduleConfigured"] } },
   { id: "shift_start", label: "Shift start", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "shift_start" } },
+  { id: "planning_required", label: "Planning required", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in", planningState: "required" } },
+  { id: "planning_ai_unavailable", label: "Planning AI unavailable", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in", planningState: "ai_unavailable" } },
+  { id: "planning_conflict", label: "Planning conflict", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in", planningState: "conflict" } },
+  { id: "planning_offline", label: "Planning offline queue", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in", planningState: "offline" } },
   { id: "explicit_clock_in", label: "Explicit clock-in", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "scheduled" } },
   { id: "provider_failure", label: "Provider outage", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
@@ -198,6 +203,9 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
         markdown: ["# EOD Report: David Z (scenario)", "", "## Summary", "Worked on the debugger fix and desktop recovery states.", "", "## Completed", "- Reviewed desktop recovery states", "", "## Carried forward", "- Complete the Work OS Phase 1 runtime", "", "## Bottleneck", "(needs your input — what prevented you from completing your task list?)"].join("\n"),
       },
     };
+  }
+  if (scenario.planningState === "required" && result.plan && result.session) {
+    result = { ...result, plan: { ...result.plan, status: "draft" }, prompt: { kind: "plan", required: true, reason: "Planning review is required before follow-up prompts.", nextPromptAt: null } };
   }
   return result;
 }

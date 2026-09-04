@@ -60,8 +60,11 @@ const transitions: Record<WorkSessionAction, readonly WorkSessionState[]> = {
   clock_out: ["clocked_in", "active", "paused", "eod_due"],
 };
 
-export const DEFAULT_CHECK_IN_INTERVAL_MINUTES = 5;
-const MIN_CHECK_IN_INTERVAL_MINUTES = 1;
+/** Planning is available as soon as attendance has been recorded. */
+export const FIRST_FOLLOW_UP_MINUTES = 75;
+/** Hourly is the safe production fallback; deployments may only lengthen it. */
+export const DEFAULT_CHECK_IN_INTERVAL_MINUTES = 60;
+const MIN_CHECK_IN_INTERVAL_MINUTES = 15;
 const MAX_CHECK_IN_INTERVAL_MINUTES = 240;
 export const EOD_LEAD_TIME_MS = 10 * 60_000;
 
@@ -75,10 +78,10 @@ export function checkInIntervalMs(value = process.env.WORK_OS_CHECK_IN_INTERVAL_
 
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "session" | "at">) {
   if (context.firstFollowUpAt) return context.firstFollowUpAt;
-  const baseline = context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
+  const baseline = context.planConfirmedAt ?? context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  return new Date(baselineAt + checkInIntervalMs()).toISOString();
+  return new Date(baselineAt + FIRST_FOLLOW_UP_MINUTES * 60_000).toISOString();
 }
 
 export function eodDueAt(scheduledEndsAt: string | null | undefined) {
@@ -118,6 +121,15 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
   }
   if (session.snoozedUntil && Date.parse(session.snoozedUntil) > now) {
     return { kind: null, nextPromptAt: session.snoozedUntil, required: false, reason: "Check-in snoozed." };
+  }
+  if (!context.hasConfirmedPlan) {
+    const availableAt = session.clockedInAt ?? context.at;
+    return {
+      kind: "plan",
+      nextPromptAt: availableAt,
+      required: true,
+      reason: "Plan not confirmed.",
+    };
   }
   const firstAt = Date.parse(firstFollowUpAt(context));
   if (!Number.isFinite(firstAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");

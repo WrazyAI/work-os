@@ -26,6 +26,7 @@ import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
 import { CompanionPet } from "./CompanionPet";
+import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import "./plan-insights.css";
 
 type AssetSource = string | { src: string };
@@ -127,6 +128,7 @@ export default function App() {
   const [planItems, setPlanItems] = useState<DailyPlanItem[]>([]);
   const [planDirty, setPlanDirty] = useState(false);
   const [planSaveState, setPlanSaveState] = useState<"saved" | "saving" | "offline" | "conflict">("saved");
+  const [planningSessionOpen, setPlanningSessionOpen] = useState(false);
   const [planHistoryDate, setPlanHistoryDate] = useState("");
   const [historicalPlan, setHistoricalPlan] = useState<DailyPlan | null>(null);
   const [historicalTasks, setHistoricalTasks] = useState<Array<Record<string, any>>>([]);
@@ -197,7 +199,7 @@ export default function App() {
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
   const planEditVersion = useRef(0);
-  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen;
+  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen;
 
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
     const message = errorMessage(value, fallback);
@@ -216,8 +218,9 @@ export default function App() {
     if (missedClockOut) { setMissedClockOut(null); return; }
     if (taskDetails) { setTaskDetails(null); return; }
     if (taskComposerOpen) { setTaskComposerOpen(false); return; }
+    if (planningSessionOpen) { setPlanningSessionOpen(false); return; }
     if (carryOverOpen) setCarryOverOpen(false);
-  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, subtaskMenuId, taskComposerOpen, taskDetails]);
+  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, subtaskMenuId, taskComposerOpen, taskDetails]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -806,11 +809,107 @@ export default function App() {
   const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
   const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
 
+  useEffect(() => {
+    if (active && (debugScenario.planningState === "required" || visibleDay?.prompt.kind === "plan" && visibleDay.prompt.required && visibleDay.plan?.status !== "confirmed")) {
+      setPlanningSessionOpen(true);
+    }
+  }, [active, debugScenario.planningState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
+
   function editPlan(mutator: () => void) {
     planEditVersion.current += 1;
     mutator();
     setPlanDirty(true);
   }
+
+  async function interpretPlanning(input: string): Promise<PlanningInterpretation> {
+    if (!visibleDay) throw new Error("Your workday is still loading.");
+    if (debugScenario.enabled && debugScenario.planningState === "ai_unavailable") throw new Error("Planning assistance is unavailable in this scenario.");
+    if (syncBypassRef.current) {
+      const task = planItems.find((item) => item.task_id) ?? null;
+      return {
+        rawIntent: input,
+        summary: input,
+        commitments: [{
+          clientId: "offline-plan", linkedTaskId: task?.task_id ?? undefined, title: task?.title_snapshot ?? "Today's work", objective: input,
+          successCriteria: [], sourceRefs: task?.task_id ? [{ provider: "work_os", type: "task", id: task.task_id, label: task.title_snapshot }] : [{ provider: "employee", type: "intent", id: "raw_intent", label: "Employee planning input" }], confidence: 1,
+        }],
+        clarifications: [], readiness: "ready",
+      };
+    }
+    const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+      method: "POST",
+      body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })) }),
+    });
+    return result.interpretation;
+  }
+
+  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed"> {
+    if (!visibleDay?.plan) return "conflict";
+    if (debugScenario.enabled && debugScenario.planningState === "conflict") return "conflict";
+    if (debugScenario.enabled && debugScenario.planningState === "offline") return "queued";
+    if (syncBypassRef.current) {
+      const nextPlan = { ...visibleDay.plan, status: active ? "confirmed" as const : "draft" as const, freeform_intent: input, focus_summary: interpretation?.summary ?? null };
+      setDay((current) => current ? { ...current, plan: nextPlan } : current);
+      setPlanIntent(input);
+      setPlanItems(nextPlan.items);
+      return active ? "confirmed" : "saved";
+    }
+    setBusy(true);
+    try {
+      const commitmentByTask = new Map((interpretation?.commitments ?? []).filter((item) => item.linkedTaskId).map((item) => [item.linkedTaskId!, item]));
+      const clarificationState = (commitment: PlanningInterpretation["commitments"][number]) => {
+        const questions = interpretation?.clarifications.filter((question) => question.commitmentId === commitment.clientId) ?? [];
+        return questions.length ? questions.every((question) => clarificationAnswers[question.id]?.trim()) ? "resolved" : "needs_clarification" : "none";
+      };
+      const items: Array<Record<string, unknown>> = planItems.map((item) => {
+        const commitment = item.task_id ? commitmentByTask.get(item.task_id) : undefined;
+        return {
+          id: item.id, task_id: item.task_id, title_snapshot: item.title_snapshot, disposition: item.disposition,
+          item_kind: item.item_kind, completion_state: item.completion_state,
+          ...(commitment ? { objective: commitment.objective, success_criteria: commitment.successCriteria, estimate_minutes: commitment.estimatedMinutes, source_refs: commitment.sourceRefs, clarification_state: clarificationState(commitment) } : {}),
+        };
+      });
+      for (const commitment of interpretation?.commitments ?? []) {
+        if (commitment.linkedTaskId) continue;
+        items.push({ title_snapshot: commitment.title, disposition: "selected", item_kind: "outcome", completion_state: "open", objective: commitment.objective, success_criteria: commitment.successCriteria, estimate_minutes: commitment.estimatedMinutes, source_refs: commitment.sourceRefs, clarification_state: clarificationState(commitment) });
+      }
+      const saved = await sendOrQueue("/api/work-os/me/plan", "PUT", {
+        shift_date: visibleDay.shiftDate,
+        revision: visibleDay.plan.revision,
+        confirm: active,
+        freeform_intent: input,
+        goal_provenance: "employee",
+        focus_summary: interpretation?.summary,
+        interpretation_metadata: interpretation ? { model: "work-os-plan", promptVersion: "work-os-plan-v1", interpretedAt: new Date().toISOString(), clarificationCount: interpretation.clarifications.length, sourceContext: ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates"], clarifications: interpretation.clarifications } : undefined,
+        ...(interpretation ? { clarification_answers: clarificationAnswers } : {}),
+        items,
+      }) as DailyPlan & { queued?: boolean };
+      if (saved.queued) {
+        setPlanSaveState("offline");
+        return "queued";
+      }
+      if (!active) {
+        setDay((current) => current ? { ...current, plan: saved } : current);
+        setPlanIntent(input);
+        setPlanItems(saved.items);
+        return "saved";
+      }
+      setDay((current) => current ? { ...current, plan: saved } : current);
+      setPlanIntent(input);
+      setPlanItems(saved.items);
+      setPlanSaveState("saved");
+      void emit("work-os://main-day-changed");
+      return "confirmed";
+    } catch (value) {
+      const message = errorMessage(value, "Your plan could not be saved.");
+      setPlanSaveState(/changed on another device/i.test(message) ? "conflict" : "offline");
+      return /changed on another device/i.test(message) ? "conflict" : "failed";
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openPlanningSession() { setPlanningSessionOpen(true); }
 
   async function loadPlanHistory(date: string) {
     setPlanHistoryDate(date);
@@ -818,10 +917,10 @@ export default function App() {
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
     try {
       const [planResult, taskResult] = await Promise.all([
-        apiRequest<DailyPlan | null>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
+        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
         apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
       ]);
-      setHistoricalPlan(planResult);
+      setHistoricalPlan(planResult.plan);
       setHistoricalTasks(taskResult.tasks);
     } catch (value) {
       showError(value, "Daily workspace history could not be loaded.", "History unavailable");
@@ -1390,7 +1489,7 @@ export default function App() {
         observedOnly={observedOnly}
         canPause={sessionActive && !visibleDay?.breakPolicy?.worktivityAuthoritative}
         canClockOut={sessionActive}
-        onEditFocus={openGoalComposer}
+        onEditFocus={openPlanningSession}
         onAddTask={() => void openTaskComposer()}
         onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
@@ -1404,7 +1503,7 @@ export default function App() {
         }}
         onClockOut={() => setClockOutConfirmation(true)}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openGoalComposer} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
       {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
           title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
           body={eodGate.detail}
@@ -1487,6 +1586,7 @@ export default function App() {
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
+    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onConfirm={confirmPlanning} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{clockInConfirmation.kind === "exception" && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder="Reason for starting outside the scheduled window" />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}

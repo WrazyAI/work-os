@@ -9,6 +9,7 @@ const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8")
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
 const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
+const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -76,7 +77,7 @@ describe("operational visualizations", () => {
     expect(app).toContain('className={`panel task-agenda-hero');
     expect(app).toContain("Today’s agenda");
     expect(app).toContain("Review unfinished work");
-    expect(app).toContain("onEditFocus={openGoalComposer}");
+    expect(app).toContain("onEditFocus={openPlanningSession}");
     expect(app).not.toContain('className="panel daily-goal-card"');
     expect(app).toContain("function TaskLifecycleMenu");
     expect(app).toContain("Delete permanently");
@@ -84,6 +85,15 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".task-agenda-hero");
     expect(workspaceStyles).toContain(".dashboard-task-menu");
     expect(workspaceStyles).toContain(".goal-composer-panel .composer-goal-suggestion");
+    expect(planningSession).toContain("Review commitments");
+    expect(planningSession).toContain("Your daily commitments are confirmed.");
+    expect(planningSession).toContain("queued locally");
+    expect(planningSession).toContain("Your plan was not saved.");
+    expect(planningSession).toContain("planning-clarification-");
+    expect(planningSession).toContain("clarificationAnswers");
+    expect(app).toContain("clarification_answers");
+    expect(app).toContain("confirm: active");
+    expect(workspaceStyles).toContain(".planning-session");
   });
 
   it("treats keyboard and readable secondary text as part of the polish", () => {

@@ -17,21 +17,21 @@ test("session transitions reject impossible branches", () => {
   assert.throws(() => nextSessionState("clocked_out", "pause"));
 });
 
-test("prompt contract is planless and suppresses breaks, final hour, and post clock-out", () => {
+test("prompt contract requires planning before adaptive follow-ups and suppresses breaks, final hour, and post clock-out", () => {
   const firstPrompt = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T09:05:00.000Z" });
-  assert.equal(firstPrompt.kind, "follow_up");
-  assert.equal(firstPrompt.nextPromptAt, "2026-08-12T09:05:00.000Z");
+  assert.equal(firstPrompt.kind, "plan");
+  assert.equal(firstPrompt.nextPromptAt, "2026-08-12T09:00:00.000Z");
   assert.equal(decideWorkdayPrompt({ session, breaks: [{ startsAt: "2026-08-12T12:00:00.000Z", endsAt: "2026-08-12T12:30:00.000Z" }], hasConfirmedPlan: true, at: "2026-08-12T12:05:00.000Z" }).kind, null);
   assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:15:00.000Z" }).kind, null);
   assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:51:00.000Z" }).kind, "eod");
   assert.equal(decideWorkdayPrompt({ session: { ...session, state: "clocked_out" }, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T18:00:00.000Z" }).kind, null);
 });
 
-test("check-in cadence defaults to five minutes and accepts bounded configuration", () => {
-  assert.equal(checkInIntervalMs(undefined), 5 * 60_000);
+test("check-in cadence defaults to an hourly fallback and accepts bounded configuration", () => {
+  assert.equal(checkInIntervalMs(undefined), 60 * 60_000);
   assert.equal(checkInIntervalMs("15"), 15 * 60_000);
-  assert.equal(checkInIntervalMs("0"), 5 * 60_000);
-  assert.equal(checkInIntervalMs("241"), 5 * 60_000);
+  assert.equal(checkInIntervalMs("0"), 60 * 60_000);
+  assert.equal(checkInIntervalMs("241"), 60 * 60_000);
 });
 
 test("a submitted EOD suppresses any remaining workday prompt", () => {
@@ -51,10 +51,23 @@ test("a substantive response schedules the next configured check-in", () => {
     lastPromptKind: "follow_up",
     lastPromptAt: "2026-08-12T09:05:00.000Z",
     lastSubstantiveUpdateAt: "2026-08-12T09:07:00.000Z",
-    at: "2026-08-12T09:12:00.000Z",
+    hasConfirmedPlan: true,
+    at: "2026-08-12T10:07:00.000Z",
   });
   assert.equal(prompt.kind, "hourly_fallback");
-  assert.equal(prompt.nextPromptAt, "2026-08-12T09:12:00.000Z");
+  assert.equal(prompt.nextPromptAt, "2026-08-12T10:07:00.000Z");
+});
+
+test("a confirmed plan anchors the first follow-up at seventy-five minutes", () => {
+  const prompt = decideWorkdayPrompt({
+    session,
+    breaks: [],
+    hasConfirmedPlan: true,
+    planConfirmedAt: "2026-08-12T09:10:00.000Z",
+    at: "2026-08-12T09:20:00.000Z",
+  });
+  assert.equal(prompt.kind, "follow_up");
+  assert.equal(prompt.nextPromptAt, "2026-08-12T10:25:00.000Z");
 });
 
 test("daily plan candidates deduplicate provider and local tasks", () => {

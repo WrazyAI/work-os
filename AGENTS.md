@@ -370,8 +370,14 @@ node scripts/log-nifty-tasks.mjs --file tasks.json
 - **Subtasks** = tasks with a `task_id` field referencing the parent. There's no
   dedicated subtask creation endpoint. Just POST to `/api/v1.0/tasks` with
   `task_id: "<parent-id>"`.
-- **Token refresh** is handled automatically (uses `NIFTY_REFRESH_TOKEN` from
-  `/home/dev/agent-os/.env`).
+- **Credentials are local-first.** `scripts/log-nifty-tasks.mjs` should use the
+  Nifty credentials in this repository's `.env.local` (falling back to `.env`).
+  The VPS copy at `/home/dev/agent-os/.env` is a remote fallback when local
+  validation or refresh fails; run the Nifty operation on that host instead of
+  copying its token back. Never assume the VPS path exists locally.
+- **Never shell-source a Nifty env file.** Secret values can contain shell
+  metacharacters such as `&`. Parse `KEY=value` entries with Node or a
+  line-oriented shell loop instead; never print a credential or access token.
 - Use `--dry-run` to validate without creating anything.
 
 **Milestone behavior:** Creates a new milestone if one with the given name doesn't
@@ -451,18 +457,34 @@ and never guess missing child IDs.
 
 ### Marking tasks complete
 
-Use the Nifty API directly with a Bearer token (refreshed the same way as the
-logger script). There's a convenience edge in the existing library, but the raw
-call is simpler:
+Use the Nifty API directly with a Bearer token. Prefer the fresh local
+`NIFTY_ACCESS_TOKEN` in `.env.local`; if it is absent or rejected, refresh it
+using the local client credentials. Do not `source .env.local` or `.env`.
 
 ```bash
-# First get a fresh token
+# Read local Nifty variables safely and print only the access token to this shell.
 ACCESS_TOKEN=$(node -e "
 const { readFileSync } = require('fs');
-const raw = readFileSync('/home/dev/agent-os/.env','utf-8');
-raw.split('\n').forEach(l => { const m = l.match(/^([^=#]+)=(.*)$/); if(m) { const k=m[1].trim(); let v=m[2].trim(); if ((v.startsWith('\"')&&v.endsWith('\"'))||(v.startsWith(\"'\")&&v.endsWith(\"'\"))) v=v.slice(1,-1); if(!process.env[k]) process.env[k]=v; } });
-const b=Buffer.from(process.env.NIFTY_CLIENT_ID+':'+process.env.NIFTY_CLIENT_SECRET).toString('base64');
-fetch('https://openapi.niftypm.com/oauth/token',{method:'POST',headers:{Authorization:'Basic '+b,'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:process.env.NIFTY_REFRESH_TOKEN})}).then(r=>r.json()).then(d=>console.log(d.access_token));
+for (const path of ['.env.local', '.env']) {
+  try {
+    for (const line of readFileSync(path, 'utf8').split('\n')) {
+      const match = line.match(/^([^=#]+)=(.*)$/); if (!match) continue;
+      let value = match[2].trim();
+      if ((value.startsWith('\"') && value.endsWith('\"')) || (value.startsWith(\"'\") && value.endsWith(\"'\"))) value = value.slice(1, -1);
+      if (!process.env[match[1].trim()]) process.env[match[1].trim()] = value;
+    }
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+(async () => {
+  if (process.env.NIFTY_ACCESS_TOKEN) {
+    const verification = await fetch('https://openapi.niftypm.com/api/v1.0/projects?limit=1', { headers: { Authorization: 'Bearer ' + process.env.NIFTY_ACCESS_TOKEN } });
+    if (verification.ok) return console.log(process.env.NIFTY_ACCESS_TOKEN);
+  }
+  const basic = Buffer.from(process.env.NIFTY_CLIENT_ID + ':' + process.env.NIFTY_CLIENT_SECRET).toString('base64');
+  const response = await fetch('https://openapi.niftypm.com/oauth/token', { method: 'POST', headers: { Authorization: 'Basic ' + basic, 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: process.env.NIFTY_REFRESH_TOKEN }) });
+  if (!response.ok) throw new Error('Nifty token refresh failed: HTTP ' + response.status);
+  console.log((await response.json()).access_token);
+})().catch(error => { console.error(error.message); process.exit(1); });
 ")
 
 # Mark a task complete
@@ -472,22 +494,28 @@ curl -s -X POST "https://openapi.niftypm.com/api/v1.0/tasks/<TASK_ID>/complete" 
   -d '{"completed": true}'
 ```
 
-Or with a single one-liner from Node:
+When an operation must run on the VPS, keep the token there. This shell-only
+reader handles unquoted shell metacharacters without emitting the token:
+
 ```bash
-node -e "
-const {readFileSync}=require('fs');
-const raw=readFileSync('/home/dev/agent-os/.env','utf-8');
-raw.split('\n').forEach(l=>{const m=l.match(/^([^=#]+)=(.*)$/);if(m){const k=m[1].trim();let v=m[2].trim();if((v.startsWith('\"')&&v.endsWith('\"'))||(v.startsWith(\"'\")&&v.endsWith(\"'\")))v=v.slice(1,-1);if(!process.env[k])process.env[k]=v;}});
-(async()=>{
-  const b=Buffer.from(process.env.NIFTY_CLIENT_ID+':'+process.env.NIFTY_CLIENT_SECRET).toString('base64');
-  const t=(await(await fetch('https://openapi.niftypm.com/oauth/token',{method:'POST',headers:{Authorization:'Basic '+b,'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:process.env.NIFTY_REFRESH_TOKEN})})).json()).access_token;
-  for(const id of process.argv.slice(2)){
-    const r=await fetch('https://openapi.niftypm.com/api/v1.0/tasks/'+id+'/complete',{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({completed:true})});
-    console.log(id+' -> HTTP '+r.status);
-  }
-})();
-" <TASK_ID_1> <TASK_ID_2> ...
+ssh -i /home/zahemen/.ssh/google_compute_engine -o BatchMode=yes dev@72.62.5.190 '
+  token=""; while IFS= read -r line; do case "$line" in
+    NIFTY_ACCESS_TOKEN=*) token="${line#NIFTY_ACCESS_TOKEN=}" ;;
+  esac; done < /home/dev/agent-os/.env
+  token="${token#\"}"; token="${token%\"}"
+  curl --fail --silent --show-error -X POST \
+    -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+    -d "{\"completed\":true}" \
+    "https://openapi.niftypm.com/api/v1.0/tasks/<TASK_ID>/complete"
+'
 ```
+
+If the local token validation and refresh both fail, use this VPS pattern. Do
+not retry stale local credentials or copy a VPS token into the local shell.
+
+Read back the task after every completion write and verify `name`, `completed`,
+and `archived`. Do not paste command output that includes a token into a task,
+log, or chat.
 
 ### Screenshots
 

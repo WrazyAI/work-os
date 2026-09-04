@@ -30,12 +30,20 @@ export interface DailyPlanItem {
   item_kind: "nifty_task" | "outcome";
   completion_state: "open" | "completed";
   completed_at?: string | null;
+  objective?: string | null;
+  success_criteria?: string[];
+  estimate_minutes?: number | null;
+  source_refs?: Array<{ provider: string; type: string; id: string; label?: string }>;
+  clarification_state?: "none" | "needs_clarification" | "resolved" | null;
 }
 
 export interface DailyPlan {
   id: string;
   status: "draft" | "confirmed" | "closed";
   freeform_intent: string | null;
+  focus_summary?: string | null;
+  interpretation_metadata?: Record<string, unknown>;
+  clarification_answers?: Record<string, string>;
   goal_provenance?: "employee" | "suggested" | "accepted_suggestion" | null;
   suggestion_task_ids?: string[];
   shift_date: string;
@@ -223,6 +231,7 @@ export interface DebugScenario {
   liveWrites?: boolean;
   syncBypass: boolean;
   companionForce?: string | null;
+  planningState?: "required" | "ai_unavailable" | "conflict" | "offline" | null;
   authState: "real" | "unauthenticated";
   onboardingState: "real" | "complete" | "missing";
   invalidateOnboardingData: boolean;

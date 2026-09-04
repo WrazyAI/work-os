@@ -29,7 +29,9 @@ const migrations = [
   "supabase/migrations/0024_work_os_phase1_ledger_closure.sql",
   "supabase/migrations/0025_work_os_phase1_pilot_corrections.sql",
   "supabase/migrations/0026_work_os_pilot_schedule_correction.sql",
-  "supabase/migrations/0027_work_os_multiple_daily_sessions.sql",
+    "supabase/migrations/0027_work_os_multiple_daily_sessions.sql",
+    "neon/migrations/0033_adaptive_planning.sql",
+    "neon/migrations/0034_adaptive_planning_atomic_save.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -111,6 +113,14 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and column_name = any($1)
   `, [["goal_provenance", "suggestion_task_ids"]]);
   assert.equal(goalColumns.rows.length, 2);
+  const adaptivePlanColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_daily_plans'
+      and column_name = any($1)
+  `, [["focus_summary", "interpretation_metadata", "clarification_answers"]]);
+  assert.equal(adaptivePlanColumns.rows.length, 3);
+  const atomicPlanSave = await db.query(`select proname from pg_proc where proname='work_save_daily_plan_draft'`);
+  assert.equal(atomicPlanSave.rows.length, 1);
   const hardeningColumns = await db.query(`
     select table_name, column_name from information_schema.columns
     where table_schema='public' and (table_name='work_employee_onboarding' and column_name = any($1)
@@ -205,6 +215,31 @@ test("Work OS companion migration is complete and idempotent", async () => {
     insert into work_daily_plan_items(organization_id,plan_id,person_id,source,title_snapshot,item_kind,completion_state)
     values ($1,$2,$3,'unplanned','Ship the plan page','outcome','open')
   `, [orgA, preShiftPlan.rows[0].id, personA]);
+  const preShiftOutcome = await db.query(`select id from work_daily_plan_items where plan_id=$1`, [preShiftPlan.rows[0].id]);
+  await assert.rejects(() => db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,1,'atomic-invalid','Intent','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      $4::jsonb,array[]::uuid[],false,null,null
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, JSON.stringify([{ id: crypto.randomUUID(), rank: 0, disposition: 'selected', title_snapshot: 'Ship the plan page', completion_state: 'open', objective: null, success_criteria: [], estimate_minutes: null, source_refs: [], clarification_state: null }])]), /daily plan item changed/);
+  const atomicRollback = await db.query(`select revision, freeform_intent from work_daily_plans where id=$1`, [preShiftPlan.rows[0].id]);
+  assert.deepEqual(atomicRollback.rows[0], { revision: 1, freeform_intent: null });
+  const atomicSave = await db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,1,'atomic-valid','Ship planning','employee',array[]::text[],null,$5::jsonb,$6::jsonb,
+      $4::jsonb,array[]::uuid[],false,null,null
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, JSON.stringify([{ id: preShiftOutcome.rows[0].id, rank: 0, disposition: 'selected', title_snapshot: 'Ship the plan page', completion_state: 'open', objective: 'Ship the planning page.', success_criteria: ['Review it'], estimate_minutes: 30, source_refs: [], clarification_state: 'resolved' }]), JSON.stringify({ clarifications: [{ id: 'scope', question: 'Which release?', reason: 'ambiguous_scope' }] }), JSON.stringify({ scope: 'This release only.' })]);
+  assert.deepEqual(atomicSave.rows[0], { revision: 2, replayed: false });
+  const atomicReplay = await db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,1,'atomic-valid','Different intent','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      '[]'::jsonb,array[]::uuid[],false,null,null
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id]);
+  assert.deepEqual(atomicReplay.rows[0], { revision: 2, replayed: true });
+  const atomicPersisted = await db.query(`select revision, freeform_intent, clarification_answers from work_daily_plans where id=$1`, [preShiftPlan.rows[0].id]);
+  assert.deepEqual(atomicPersisted.rows[0], { revision: 2, freeform_intent: 'Ship planning', clarification_answers: { scope: 'This release only.' } });
   await assert.rejects(() => db.query(`
     insert into work_daily_plans(organization_id,person_id,shift_date,status)
     values ($1,$2,'2026-08-12','draft')

@@ -11,6 +11,70 @@
   --shadow-card: 0 1px 2px rgba(20, 30, 18, 0.035), 0 7px 24px rgba(20, 30, 18, 0.035);
 }
 
+.planning-session {
+  width: min(100% - 32px, 620px);
+  max-height: min(760px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-raised);
+  box-shadow: 0 18px 60px rgba(18, 27, 17, 0.14);
+}
+
+.planning-session > header,
+.planning-session > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.planning-session > header small,
+.planning-review > small,
+.planning-review article small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.planning-session > header h2 { margin: 3px 0 0; font-size: 20px; }
+.planning-session > header button { width: 32px; height: 32px; padding: 0; }
+.planning-session-body { overflow: auto; padding: 20px; }
+.planning-session-body > label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; }
+.planning-session-body > textarea { width: 100%; min-height: 108px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); color: var(--ink); font: inherit; line-height: 1.5; }
+.planning-session-body > textarea:focus { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+.planning-provenance { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.planning-status, .planning-notice, .planning-confirmed { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0 0; padding: 10px 12px; border-radius: 11px; font-size: 12px; line-height: 1.45; }
+.planning-status { color: var(--muted); }
+.planning-notice { border: 1px solid #e7c887; background: var(--paper); color: #755515; }
+.planning-confirmed { background: #e4f4d3; color: #244513; }
+.planning-review { margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.planning-review h3 { margin: 5px 0 14px; font-size: 16px; }
+.planning-review article { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.planning-review article > b { color: var(--signal-strong); font-size: 11px; }
+.planning-review article strong { font-size: 13px; }
+.planning-review article p { margin: 4px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.planning-review article ul { margin: 5px 0 0; padding-left: 17px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.planning-clarifications { margin-top: 12px; padding: 12px; border-radius: 10px; background: #fff8e8; }
+.planning-clarifications p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; }
+.planning-clarifications label { display: grid; gap: 6px; margin-top: 10px; color: var(--ink); font-size: 12px; font-weight: 650; }
+.planning-clarifications textarea { min-height: 68px; resize: vertical; }
+.planning-session > footer { justify-content: flex-end; border-top: 1px solid var(--line); border-bottom: 0; }
+.planning-session > footer button { min-height: 36px; }
+
+@media (max-width: 560px) {
+  .planning-session { width: min(100% - 20px, 620px); max-height: calc(100vh - 20px); }
+  .planning-session > header, .planning-session > footer, .planning-session-body { padding: 14px; }
+  .planning-session > footer { flex-wrap: wrap; }
+  .planning-session > footer button { flex: 1 1 100%; min-height: 40px; }
+}
+
 body {
   background: #eef1eb;
   color: var(--ink);
