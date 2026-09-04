@@ -1177,6 +1177,21 @@ or edit, and larger only for task detail or evidence review. Header, scrolling
 body, and footer actions are distinct regions. Destructive confirmations name the
 task and distinguish reversible archive from permanent deletion.
 
+### 25.7 Task selection card
+
+A reusable task selection card is a fixed-height card with a static header and
+footer, plus one internally scrolling row list. It is for pending or overdue
+task data when a parent workflow needs explicit batch-completion intent. Rows use
+native checkboxes, title, one quiet metadata line, and a text status; overdue rows
+add a 2px danger edge and `Overdue` label. The footer action is
+`Mark selected done`, disabled until at least one task is selected, and passes
+only the selected IDs to its parent callback. The card itself never mutates a
+task or claims Nifty confirmation. It defines loading skeletons, a specific empty
+state, a recoverable error with optional retry, a degraded last-known-data notice,
+and dense rows. At narrow widths, status labels may hide, metadata wraps, and the
+footer action becomes full width. Checkbox focus remains visible and all
+non-essential motion is removed with reduced motion.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition

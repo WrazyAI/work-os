@@ -88,6 +88,10 @@ export type ProposalOperation =
   | "link_evidence"
   | "complete_task"
   | "reopen_task"
+  | "archive_task"
+  | "delete_task"
+  | "add_subtask"
+  | "display_tasks"
   | "remove_from_plan";
 
 export const OPERATIONS = new Set<ProposalOperation>([
@@ -99,6 +103,10 @@ export const OPERATIONS = new Set<ProposalOperation>([
   "link_evidence",
   "complete_task",
   "reopen_task",
+  "archive_task",
+  "delete_task",
+  "add_subtask",
+  "display_tasks",
   "remove_from_plan",
 ]);
 

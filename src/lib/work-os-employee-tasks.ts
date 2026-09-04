@@ -16,7 +16,8 @@ import {
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
-import { audit, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
 const DEFAULT_NIFTY_TASK_PROJECT_ID = "czFZk9928z";
@@ -124,6 +125,30 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
     source: "employee_explicit",
   });
   return { task: updated, providerStatus: "nifty_confirmed" };
+}
+
+/** Returns provider-backed task rows for a read-only assistant selection card. */
+export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view: "pending" | "overdue", requestedLimit?: unknown) {
+  const limit = Math.min(100, Math.max(1, Math.trunc(Number(requestedLimit) || 20)));
+  const personId = access.personId as string;
+  const [{ timezone }, ownerId] = await Promise.all([
+    loadShiftData(access, personId, new Date()),
+    organizationOwnerId(access.organizationId),
+  ]);
+  const currentDate = localDateForTimezone(new Date(), timezone);
+  const tasks = await listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 500 }) as Json[];
+  const pending = tasks.filter((task) => task.completed !== true && !["archived", "deleted"].includes(String(task.status ?? "")));
+  const selected = (view === "overdue"
+    ? pending.filter((task) => {
+      const due = dateOnly(typeof task.due_date === "string" ? task.due_date : null);
+      return !!due && due < currentDate;
+    })
+    : pending)
+    .sort((left, right) => view === "overdue"
+      ? String(dateOnly(typeof left.due_date === "string" ? left.due_date : null)).localeCompare(String(dateOnly(typeof right.due_date === "string" ? right.due_date : null)))
+      : String(right.provider_updated_at ?? right.updated_at ?? right.created_at ?? "").localeCompare(String(left.provider_updated_at ?? left.updated_at ?? left.created_at ?? "")))
+    .slice(0, limit);
+  return { view, currentDate, tasks: selected };
 }
 
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {

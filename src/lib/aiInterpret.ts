@@ -13,12 +13,14 @@ const INTERPRET_RESPONSE_SCHEMA = {
     properties: {
       taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
       claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" } } }, maxItems: 20 },
-      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" } } }, maxItems: 20 },
+      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" }, taskGroupId: { type: "string" }, limit: { type: "integer" } } }, maxItems: 20 },
     },
   },
 } as const;
 
-export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task";
+export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
+  | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
 
 export interface CandidateOperation {
@@ -26,6 +28,8 @@ export interface CandidateOperation {
   statement: string;
   taskId?: string;
   taskTitle?: string;
+  taskGroupId?: string;
+  limit?: number;
 }
 
 export interface CandidateWorkUpdate {
@@ -37,7 +41,7 @@ export interface CandidateWorkUpdate {
 
 export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed" | "nifty_failure";
 
-const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task"];
+const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks"];
 const CLAIM_KINDS: CandidateClaimKind[] = ["progress", "completion", "blocker", "priority_change", "new_work"];
 
 function text(value: unknown, max = 4000): string | null {
@@ -53,10 +57,11 @@ function safeId(value: unknown, allowed: { has(id: string): boolean }): string |
  * Task references that are not in the server-fetched allow-list are dropped,
  * so a hallucinated or cross-org id can never reach an operation.
  */
-export function parseInterpretation(raw: unknown, originalInput: string, allowedTasks: Array<{ id: string; title: string }>): CandidateWorkUpdate | null {
+export function parseInterpretation(raw: unknown, originalInput: string, allowedTasks: Array<{ id: string; title: string; taskGroupId?: string | null }>): CandidateWorkUpdate | null {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Record<string, unknown>;
   const allowed = new Map(allowedTasks.map((task) => [task.id, task.title]));
+  const allowedTaskGroupIds = new Set(allowedTasks.map((task) => task.taskGroupId).filter((id): id is string => !!id));
 
   const taskMatches: CandidateWorkUpdate["taskMatches"] = [];
   if (Array.isArray(source.taskMatches)) {
@@ -90,12 +95,16 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
       const statement = text(entry.statement, 1000);
       if (!op || !statement) continue;
       const taskId = safeId(entry.taskId ?? entry.task_id, allowed);
-      if ((op === "complete_task" || op === "reopen_task" || op === "record_progress") && !taskId) continue;
+      if ((op === "complete_task" || op === "reopen_task" || op === "record_progress" || op === "record_blocker" || op === "archive_task" || op === "delete_task" || op === "modify_task_description" || op === "modify_task_status" || op === "add_subtask" || op === "modify_subtask" || op === "delete_subtask") && !taskId) continue;
+      const taskGroupId = text(entry.taskGroupId ?? entry.task_group_id, 160) ?? undefined;
+      if (op === "modify_task_status" && (!taskGroupId || !allowedTaskGroupIds.has(taskGroupId))) continue;
       operations.push({
         op,
         statement,
         taskId,
-        taskTitle: op === "create_task" ? text(entry.taskTitle ?? entry.task_title, 240) ?? statement.slice(0, 240) : undefined,
+        taskTitle: ["create_task", "add_task", "add_subtask"].includes(op) ? text(entry.taskTitle ?? entry.task_title, 240) ?? statement.slice(0, 240) : undefined,
+        taskGroupId,
+        limit: typeof entry.limit === "number" && Number.isInteger(entry.limit) ? Math.min(100, Math.max(1, entry.limit)) : undefined,
       });
     }
   }
@@ -103,7 +112,7 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
   return { originalInput, taskMatches, claims, operations };
 }
 
-function buildPrompt(input: string, tasks: Array<{ id: string; title: string; completed: boolean }>, planIntent: string | null, today: string): string {
+function buildPrompt(input: string, tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>, planIntent: string | null, today: string): string {
   const taskList = tasks.map((task) => `- id: ${task.id} | title: ${task.title} | ${task.completed ? "completed" : "open"}`).join("\n") || "(no tasks)";
   return [
     `Today is ${today}. The employee wrote this update:`,
@@ -112,10 +121,12 @@ function buildPrompt(input: string, tasks: Array<{ id: string; title: string; co
     "Their tasks:",
     taskList,
     "",
-    "Convert the update into structured operations. Rules:",
+    "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
-    '{"taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task","statement":"...","taskId":"...","taskTitle":"..."}]}',
+    '{"taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20}]}',
     "- Only reference taskIds from the list above; never invent ids.",
+    "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",
+    "- Use task-management operations only for an explicit employee request. A status change must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
     "- completion claims become complete_task operations; blockers become record_blocker; new work becomes create_task with a short clear taskTitle.",
     "- Use record_progress for work-in-progress notes on a specific task.",
     "- Statements must be plain, jargon-free sentences a manager can read.",
@@ -132,7 +143,7 @@ export interface InterpretResult {
 }
 
 /** Calls the configured provider and returns a validated interpretation. */
-export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: unknown; today?: unknown }, tasks: Array<{ id: string; title: string; completed: boolean }>): Promise<InterpretResult> {
+export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: unknown; today?: unknown }, tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>): Promise<InterpretResult> {
   const key = process.env.OPENROUTER_API_KEY;
   const input = text(body.input, 4000);
   if (!input) return { ok: false, reason: "ai_malformed", detail: "input is required" };
@@ -177,9 +188,9 @@ export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: 
 }
 
 /** Loads the employee's open tasks for task matching and id validation. */
-export async function loadInterpretationTasks(ownerId: string, personId: string): Promise<Array<{ id: string; title: string; completed: boolean }>> {
+export async function loadInterpretationTasks(ownerId: string, personId: string): Promise<Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>> {
   const rows = await listPersonTasks(ownerId, personId, { limit: 200, includeCompleted: true }) as unknown as Array<Record<string, unknown>>;
   return rows
     .filter((row) => typeof row.id === "string" && typeof row.title === "string")
-    .map((row) => ({ id: row.id as string, title: row.title as string, completed: row.completed === true }));
+    .map((row) => ({ id: row.id as string, title: row.title as string, completed: row.completed === true, taskGroupId: typeof row.task_group_id === "string" ? row.task_group_id : null }));
 }
