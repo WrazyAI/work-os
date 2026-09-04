@@ -298,7 +298,7 @@ body.avatar-window {
 
 .chat-entry { display: flex; }
 .chat-entry.user { justify-content: flex-end; }
-.chat-entry.user p {
+.chat-entry.user .chat-markdown {
   margin: 0;
   max-width: 84%;
   background: var(--avatar-ink);
@@ -307,9 +307,8 @@ body.avatar-window {
   border-radius: 14px 14px 4px 14px;
   font-size: 12.5px;
   line-height: 1.45;
-  white-space: pre-wrap;
 }
-.chat-entry.assistant p {
+.chat-entry.assistant > .chat-markdown {
   margin: 0;
   max-width: 88%;
   background: #eef3e4;
@@ -321,7 +320,7 @@ body.avatar-window {
   color: var(--avatar-ink);
 }
 .chat-entry.assistant { max-width: 96%; }
-.chat-system p {
+.chat-system .chat-markdown {
   margin: 0;
   font-size: 11px;
   color: #8a6d3b;
@@ -330,6 +329,13 @@ body.avatar-window {
   border-radius: 10px;
   padding: 7px 10px;
 }
+.chat-markdown p { margin: 0; }
+.chat-markdown p + p { margin-top: 6px; }
+.chat-markdown ul { margin: 6px 0 0; padding-left: 18px; }
+.chat-markdown li + li { margin-top: 3px; }
+.chat-markdown strong { font-weight: 750; }
+.chat-markdown code { padding: 1px 3px; border-radius: 4px; background: rgba(24, 32, 24, .08); font: 600 .9em/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.chat-markdown-heading { display: block; margin-bottom: 4px; }
 .chat-receipt p {
   margin: 0;
   font-size: 12px;

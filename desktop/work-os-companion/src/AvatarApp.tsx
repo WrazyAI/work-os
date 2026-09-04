@@ -8,6 +8,7 @@ import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
@@ -597,11 +598,11 @@ export default function AvatarApp(): React.ReactElement {
             )}
             {chat.map((entry) => (
               <div key={entry.id} className={`chat-entry ${entry.role}`}>
-                {entry.role === "user" ? <p>{entry.text}</p>
-                  : entry.role === "system" ? <p className="chat-system">{entry.text}</p>
+                {entry.role === "user" ? <ChatMarkdown text={entry.text} />
+                  : entry.role === "system" ? <div className="chat-system"><ChatMarkdown text={entry.text} /></div>
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
                       : <>
-                        <p>{entry.text}</p>
+                        <ChatMarkdown text={entry.text} />
                         {entry.toolResults?.map((result) => {
                           const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
                           if (!selection) return null;

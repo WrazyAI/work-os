@@ -253,6 +253,8 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
       structuredMappings.has("definition_of_done") ? null : patch.definition_of_done ?? task.definition_of_done,
     );
   }
+  // Nifty's partial task update clears completion unless it is sent explicitly.
+  if (Object.keys(allowed).length && !("completed" in allowed)) allowed.completed = task.completed === true;
   const result = Object.keys(allowed).length
     ? await niftyForOwner(userId, () => updateNiftyTask(providerTaskId, allowed))
     : null;

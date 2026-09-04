@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listPersonTasks } from "@/lib/work-os";
-import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions } from "@/lib/work-os-companion";
+import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmployeeTaskSelection } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 
@@ -36,6 +36,7 @@ export async function GET(req: Request) {
     const requestedDate = date(params.get("date"));
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
+    if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, limit));
     if (view === "today" || view === "day" || params.has("cursor")) {
       const workspace = await resolveDailyWorkspace(auth.access, requestedDate, {
         cursor: params.get("cursor"),
