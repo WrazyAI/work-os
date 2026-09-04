@@ -4,7 +4,7 @@ import { listPersonTasks } from "@/lib/work-os";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -282,14 +282,13 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   const context = shift ?? await unscheduledSessionContext(access, observed);
   const late = !!shift && observed.getTime() > Date.parse(shift.startsAt) + 15 * 60_000;
   if (late && body.late_acknowledged !== true) throw new Error("Late clock-in acknowledgement is required.");
-  const firstFollowUpAt = new Date(observed.getTime() + 30 * 60_000).toISOString();
   const payload = {
     organization_id: access.organizationId, person_id: access.personId, schedule_id: shift?.scheduleId ?? null,
     shift_date: context.shiftDate, state: "clocked_in", timezone: context.timezone,
     scheduled_starts_at: shift?.startsAt ?? null, scheduled_ends_at: shift?.endsAt ?? null, clocked_in_at: observed.toISOString(),
     source: value(body.source) ?? "desktop", clock_in_idempotency_key: idempotencyKey,
     late_acknowledged_at: late ? observed.toISOString() : null, created_by: access.ctx.user.id,
-    first_follow_up_at: firstFollowUpAt,
+    first_follow_up_at: null,
     exception_acknowledged_at: unscheduled ? observed.toISOString() : null,
     exception_reason: unscheduled ? exceptionReason ?? "Legacy client exception acknowledgement" : null,
     correction_status: "valid",
@@ -483,7 +482,108 @@ type DraftItem = {
   rank?: number;
   item_kind?: string;
   completion_state?: string;
+  objective?: string | null;
+  success_criteria?: unknown;
+  estimate_minutes?: number | null;
+  source_refs?: unknown;
+  clarification_state?: string | null;
 };
+
+function boundedCriteria(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  if (value.length > 5) throw new Error("A commitment can have at most five success criteria.");
+  return value.map((item) => {
+    const criterion = valueText(item);
+    if (!criterion || criterion.length > 300) throw new Error("Success criteria must be 300 characters or fewer.");
+    return criterion;
+  });
+}
+
+function valueText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function commitmentFields(item: DraftItem, taskId: string | null) {
+  const objective = item.objective === undefined ? undefined : valueText(item.objective);
+  if (objective !== undefined && objective !== null && objective.length > 1_000) throw new Error("Commitment objectives must be 1000 characters or fewer.");
+  const criteria = item.success_criteria === undefined ? undefined : boundedCriteria(item.success_criteria);
+  const estimate = item.estimate_minutes;
+  if (estimate !== undefined && estimate !== null && (!Number.isInteger(estimate) || estimate < 1 || estimate > 720)) {
+    throw new Error("Commitment estimates must be between 1 and 720 minutes.");
+  }
+  const clarificationState = item.clarification_state;
+  if (clarificationState !== undefined && clarificationState !== null && !["none", "needs_clarification", "resolved"].includes(clarificationState)) {
+    throw new Error("Invalid commitment clarification state.");
+  }
+  let sourceRefs: Json[] | undefined;
+  if (item.source_refs !== undefined) {
+    if (!Array.isArray(item.source_refs) || item.source_refs.length > 10) throw new Error("A commitment can have at most ten source references.");
+    sourceRefs = item.source_refs.map((entry) => {
+      if (!entry || typeof entry !== "object") throw new Error("Commitment source references are invalid.");
+      const ref = entry as Json;
+      const provider = valueText(ref.provider);
+      const type = valueText(ref.type);
+      const id = valueText(ref.id);
+      const label = valueText(ref.label);
+      const validTaskRef = taskId && ["work_os", "nifty"].includes(provider ?? "") && type === "task" && id === taskId;
+      const validIntentRef = !taskId && provider === "employee" && type === "intent" && id === "raw_intent";
+      if (!validTaskRef && !validIntentRef) throw new Error("Commitment source references must be server-known task or employee intent references.");
+      return { provider, type, id, ...(label ? { label: label.slice(0, 240) } : {}) };
+    });
+  }
+  return {
+    ...(objective !== undefined ? { objective } : {}),
+    ...(criteria !== undefined ? { success_criteria: criteria } : {}),
+    ...(estimate !== undefined ? { estimate_minutes: estimate } : {}),
+    ...(sourceRefs !== undefined ? { source_refs: sourceRefs } : {}),
+    ...(clarificationState !== undefined ? { clarification_state: clarificationState } : {}),
+  };
+}
+
+function interpretationMetadata(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("interpretation_metadata must be an object.");
+  const raw = value as Json;
+  const sourceContext = Array.isArray(raw.sourceContext)
+    ? raw.sourceContext.filter((item): item is string => typeof item === "string" && ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates", "github"].includes(item)).slice(0, 6)
+    : [];
+  const clarificationCount = Number(raw.clarificationCount);
+  if (!Number.isInteger(clarificationCount) || clarificationCount < 0 || clarificationCount > 2) throw new Error("interpretation_metadata clarificationCount must be between 0 and 2.");
+  const result: Json = { clarificationCount, sourceContext };
+  for (const key of ["model", "promptVersion", "interpretedAt"] as const) {
+    const entry = valueText(raw[key]);
+    if (entry) result[key] = entry.slice(0, 240);
+  }
+  const clarifications = Array.isArray(raw.clarifications) ? raw.clarifications.slice(0, 2).flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const clarification = entry as Json;
+    const id = valueText(clarification.id);
+    const question = valueText(clarification.question);
+    const reason = valueText(clarification.reason);
+    const commitmentId = valueText(clarification.commitmentId);
+    if (!id || id.length > 120 || !question || question.length > 300 || !reason || reason.length > 120) return [];
+    return [{ id, question, reason, ...(commitmentId && commitmentId.length <= 120 ? { commitmentId } : {}) }];
+  }) : [];
+  result.clarifications = clarifications;
+  return result;
+}
+
+function clarificationAnswers(value: unknown, metadata: Json) {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("clarification_answers must be an object.");
+  const allowedIds = new Set(Array.isArray(metadata.clarifications)
+    ? metadata.clarifications.flatMap((entry) => entry && typeof entry === "object" && !Array.isArray(entry) && valueText((entry as Json).id) ? [valueText((entry as Json).id)!] : [])
+    : []);
+  const entries = Object.entries(value as Json);
+  if (entries.length > 2) throw new Error("A plan can include at most two clarification answers.");
+  const answers: Json = {};
+  for (const [id, rawAnswer] of entries) {
+    const answer = valueText(rawAnswer);
+    if (!allowedIds.has(id) || !answer || answer.length > 1_000) throw new Error("Clarification answers must address the current planning questions.");
+    answers[id] = answer;
+  }
+  return answers;
+}
 
 export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const { shiftDate: currentDate } = await localWorkDate(access);
@@ -492,37 +592,34 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   const session = await activeSession(access);
   const plan = session ? await ensureDailyPlan(access, session) : await ensureDailyPlanForDate(access, shiftDate);
   if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  const confirm = body.confirm === true;
+  if (confirm && !session) throw new Error("Clock in before confirming a plan.");
+  if (confirm && plan.status === "confirmed") {
+    if (plan.confirmation_idempotency_key === idempotencyKey) return plan;
+    throw new WorkOsConflictError("This plan was already confirmed on another device. Refresh before saving again.");
+  }
   const expectedRevision = Number(body.revision ?? plan.revision ?? 1);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("A valid plan revision is required.");
   const submitted = Array.isArray(body.items) ? body.items as DraftItem[] : null;
   if (submitted && submitted.length > 100) throw new Error("A daily plan can contain at most 100 items.");
-  const freeformIntent = value(body.freeform_intent);
+  const hasIntent = Object.prototype.hasOwnProperty.call(body, "freeform_intent");
+  const freeformIntent = hasIntent ? value(body.freeform_intent) : value(plan.freeform_intent);
   if (freeformIntent && freeformIntent.length > 4000) throw new Error("Plan intent must be 4000 characters or fewer.");
-  const requestedProvenance = value(body.goal_provenance);
+  const requestedProvenance = body.goal_provenance === undefined ? value(plan.goal_provenance) : value(body.goal_provenance);
   if (requestedProvenance && !["employee", "accepted_suggestion"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal or an accepted suggestion");
   const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
     ? [...new Set(body.suggestion_task_ids.filter((item): item is string => typeof item === "string" && !!item.trim()).map((item) => item.trim()))]
-    : [];
+    : Array.isArray(plan.suggestion_task_ids) ? plan.suggestion_task_ids.filter((item: unknown): item is string => typeof item === "string") : [];
   if (suggestionTaskIds.length > 20) throw new Error("A goal suggestion can reference at most 20 tasks.");
+  const focusSummary = body.focus_summary === undefined ? undefined : value(body.focus_summary);
+  if (focusSummary && focusSummary.length > 500) throw new Error("Plan focus_summary must be 500 characters or fewer.");
+  const metadata = interpretationMetadata(body.interpretation_metadata)
+    ?? (plan.interpretation_metadata && typeof plan.interpretation_metadata === "object" && !Array.isArray(plan.interpretation_metadata) ? plan.interpretation_metadata as Json : {});
+  const answers = clarificationAnswers(body.clarification_answers, metadata)
+    ?? (plan.clarification_answers && typeof plan.clarification_answers === "object" && !Array.isArray(plan.clarification_answers) ? plan.clarification_answers as Json : {});
   const now = new Date().toISOString();
-  const goalPatch = {
-    freeform_intent: freeformIntent,
-    goal_provenance: freeformIntent ? requestedProvenance ?? "employee" : null,
-    suggestion_task_ids: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
-    revision: expectedRevision + 1,
-    updated_at: now,
-  };
-  let { data: claimed, error: claimError } = await db().from("work_daily_plans").update(goalPatch)
-    .eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision).neq("status", "closed").select("id").maybeSingle();
-  if (claimError && /goal_provenance|suggestion_task_ids|schema cache|does not exist/i.test(claimError.message)) {
-    const fallback = await db().from("work_daily_plans").update({ freeform_intent: freeformIntent, revision: expectedRevision + 1, updated_at: now })
-      .eq("organization_id", access.organizationId).eq("id", plan.id).eq("revision", expectedRevision).neq("status", "closed").select("id").maybeSingle();
-    claimed = fallback.data;
-    claimError = fallback.error;
-  }
-  if (claimError) throw new Error(`save daily plan draft: ${claimError.message}`);
-  if (!claimed) throw new WorkOsConflictError("This plan changed on another device. Refresh before saving again.");
-
+  const preparedItems: Json[] = [];
+  let removableOutcomeIds: string[] = [];
   if (submitted) {
     const existingItems = Array.isArray(plan.items) ? plan.items as Json[] : [];
     const existingById = new Map(existingItems.map((item) => [String(item.id), item]));
@@ -536,46 +633,68 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
         const outcome = existing.item_kind === "outcome" || !existing.task_id;
         const title = outcome ? value(item.title_snapshot) : value(existing.title_snapshot);
         if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
-        const { error } = await db().from("work_daily_plan_items").update({
-          rank: index,
-          disposition,
-          title_snapshot: title,
-          completion_state: outcome ? completionState : existing.completion_state,
-          completed_at: outcome && completionState === "completed" ? existing.completed_at ?? now : null,
-          updated_at: now,
-        }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("id", existing.id);
-        if (error) throw new Error(`update daily plan item: ${error.message}`);
+        const fields = commitmentFields(item, existing.task_id ? String(existing.task_id) : null);
+        preparedItems.push({
+          id: String(existing.id), rank: index, disposition, title_snapshot: title,
+          completion_state: outcome ? completionState : String(existing.completion_state ?? "open"),
+          objective: "objective" in fields ? fields.objective : existing.objective ?? null,
+          success_criteria: "success_criteria" in fields ? fields.success_criteria : existing.success_criteria ?? [],
+          estimate_minutes: "estimate_minutes" in fields ? fields.estimate_minutes : existing.estimate_minutes ?? null,
+          source_refs: "source_refs" in fields ? fields.source_refs : existing.source_refs ?? [],
+          clarification_state: "clarification_state" in fields ? fields.clarification_state : existing.clarification_state ?? null,
+        });
         if (outcome) retainedOutcomes.add(String(existing.id));
         continue;
       }
       if (item.item_kind !== "outcome" && item.task_id) throw new Error("New Nifty plan items must come from the server-provided task list.");
       const title = value(item.title_snapshot);
       if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
-      const { data: created, error } = await db().from("work_daily_plan_items").insert({
-        organization_id: access.organizationId,
-        plan_id: plan.id,
-        person_id: access.personId,
-        task_id: null,
-        source: "unplanned",
-        disposition,
-        rank: index,
-        title_snapshot: title,
-        item_kind: "outcome",
-        completion_state: completionState,
-        completed_at: completionState === "completed" ? now : null,
-      }).select("id").single();
-      if (error) throw new Error(`create daily plan outcome: ${error.message}`);
-      retainedOutcomes.add(String(created.id));
+      preparedItems.push({
+        rank: index, disposition, title_snapshot: title, item_kind: "outcome", completion_state: completionState,
+        objective: null, success_criteria: [], estimate_minutes: null, source_refs: [], clarification_state: null,
+        ...commitmentFields(item, null),
+      });
     }
-    const removable = existingItems.filter((item) => (item.item_kind === "outcome" || !item.task_id) && !retainedOutcomes.has(String(item.id)));
-    if (removable.length) {
-      const { error } = await db().from("work_daily_plan_items").delete().eq("organization_id", access.organizationId)
-        .eq("plan_id", plan.id).in("id", removable.map((item) => String(item.id)));
-      if (error) throw new Error(`remove daily plan outcomes: ${error.message}`);
-    }
+    removableOutcomeIds = existingItems.filter((item) => (item.item_kind === "outcome" || !item.task_id) && !retainedOutcomes.has(String(item.id))).map((item) => String(item.id));
   }
-  await auditPlan(access, "plan.draft_saved", String(plan.id), {
+  const confirmedAt = plan.confirmed_at ? new Date(plan.confirmed_at as string) : new Date(now);
+  const firstFollowUpAt = confirm && session && !session.first_follow_up_at ? nextFirstFollowUpAt({
+    planConfirmedAt: confirmedAt.toISOString(),
+    session: {
+      state: session.state as WorkSessionState,
+      scheduledStartsAt: session.scheduled_starts_at as string | null,
+      scheduledEndsAt: session.scheduled_ends_at as string | null,
+      clockedInAt: session.clocked_in_at as string | null,
+    },
+    at: now,
+  }) : null;
+  const { data: mutation, error: mutationError } = await db().rpc("work_save_daily_plan_draft", {
+    p_organization_id: access.organizationId,
+    p_person_id: access.personId,
+    p_plan_id: plan.id,
+    p_expected_revision: expectedRevision,
+    p_idempotency_key: idempotencyKey,
+    p_freeform_intent: freeformIntent,
+    p_goal_provenance: freeformIntent ? requestedProvenance ?? "employee" : null,
+    p_suggestion_task_ids: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
+    p_focus_summary: focusSummary ?? plan.focus_summary ?? null,
+    p_interpretation_metadata: metadata,
+    p_clarification_answers: answers,
+    p_items: submitted ? preparedItems : null,
+    p_remove_outcome_ids: removableOutcomeIds,
+    p_confirm: confirm,
+    p_session_id: session?.id ?? null,
+    p_first_follow_up_at: firstFollowUpAt,
+  });
+  if (mutationError) {
+    if (/changed on another device/i.test(mutationError.message)) throw new WorkOsConflictError("This plan changed on another device. Refresh before saving again.");
+    throw new Error(`save daily plan draft atomically: ${mutationError.message}`);
+  }
+  const result = Array.isArray(mutation) ? mutation[0] : mutation;
+  if (!result) throw new Error("save daily plan draft atomically: no mutation result");
+  if (result.replayed !== true) await auditPlan(access, confirm ? "plan.confirmed" : "plan.draft_saved", String(plan.id), {
     shiftDate, revision: expectedRevision + 1, idempotencyKey,
+    confirmed: confirm,
     goalProvenance: freeformIntent ? requestedProvenance ?? "employee" : null,
     suggestionTaskIds: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
   });
@@ -694,7 +813,16 @@ export async function saveDailyPlan(access: WorkOsAccess, body: Json, idempotenc
   }
   const confirmed = body.confirm === true;
   const confirmedAt = plan.confirmed_at ? new Date(plan.confirmed_at as string) : now;
-  const followUpAt = session.first_follow_up_at ?? new Date(confirmedAt.getTime() + 30 * 60_000).toISOString();
+  const followUpAt = session.first_follow_up_at ?? nextFirstFollowUpAt({
+    planConfirmedAt: confirmedAt.toISOString(),
+    session: {
+      state: session.state as WorkSessionState,
+      scheduledStartsAt: session.scheduled_starts_at as string | null,
+      scheduledEndsAt: session.scheduled_ends_at as string | null,
+      clockedInAt: session.clocked_in_at as string | null,
+    },
+    at: now.toISOString(),
+  });
   const { data, error } = await db().from("work_daily_plans").update({
     freeform_intent: value(body.freeform_intent), status: confirmed ? "confirmed" : plan.status,
     confirmation_idempotency_key: confirmed ? idempotencyKey : plan.confirmation_idempotency_key,

@@ -8,6 +8,7 @@ export {
   deleteWorkOsEmployeeTask,
   createWorkOsEmployeeTask,
   completeWorkOsTask,
+  listWorkOsEmployeeTaskSelection,
 } from "@/lib/work-os-employee-tasks";
 export {
   listWorkOsSchedules,

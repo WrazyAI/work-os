@@ -16,10 +16,18 @@ import {
   type Json,
   type ProposalOperation,
 } from "@/lib/work-os-internal";
-import { completeWorkOsTask } from "@/lib/work-os-employee-tasks";
+import {
+  archiveWorkOsEmployeeTask,
+  createWorkOsEmployeeTask,
+  deleteWorkOsEmployeeTask,
+  listWorkOsEmployeeTaskSelection,
+  setWorkOsEmployeeTaskCompletion,
+} from "@/lib/work-os-employee-tasks";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
-type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task";
+type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
+  | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
 
 function interpretedOperations(value: unknown) {
   if (!Array.isArray(value) || !value.length || value.length > 20) throw new Error("Choose between 1 and 20 proposed updates");
@@ -30,12 +38,15 @@ function interpretedOperations(value: unknown) {
     const statement = text(row.statement);
     const taskId = text(row.task_id);
     const taskTitle = text(row.task_title);
-    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task"].includes(op) || !statement || statement.length > 1000) {
+    const taskGroupId = text(row.task_group_id);
+    const limit = Math.min(100, Math.max(1, Math.trunc(Number(row.limit) || 20)));
+    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks"].includes(op) || !statement || statement.length > 1000) {
       throw new Error(`Proposed update ${index + 1} is invalid`);
     }
-    if (op !== "create_task" && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
-    if (op === "create_task" && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
-    return { op, statement, taskId, taskTitle };
+    if (!["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
+    if (["create_task", "add_task", "add_subtask"].includes(op) && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
+    if (op === "modify_task_status" && !taskGroupId) throw new Error("task_group_id is required for a Nifty status move");
+    return { op, statement, taskId, taskTitle, taskGroupId, limit };
   });
 }
 
@@ -74,6 +85,9 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
   }
   const ownerId = await organizationOwnerId(access.organizationId);
   const taskId = text(proposal.task_id) ?? text((proposal.before_state as Json | undefined)?.id);
+  if (operation === "display_tasks") {
+    return listWorkOsEmployeeTaskSelection(access, change.view === "overdue" ? "overdue" : "pending", change.limit);
+  }
   if (operation === "create_task") {
     if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
     const marker = `Work OS proposal: ${proposal.id}`;
@@ -88,6 +102,15 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
     });
   }
   if (!taskId) throw new Error("proposal task is required");
+  if (operation === "add_subtask") {
+    return createWorkOsEmployeeTask(access, {
+      name: text(change.name) ?? "Untitled subtask",
+      description: text(change.description) ?? undefined,
+      parent_task_id: taskId,
+    });
+  }
+  if (operation === "archive_task") return archiveWorkOsEmployeeTask(access, taskId);
+  if (operation === "delete_task") return deleteWorkOsEmployeeTask(access, taskId);
   if (operation === "update_task") {
     const patch: Json = { ...change };
     if (text(change.title) && !text(change.name)) patch.name = change.title;
@@ -155,10 +178,10 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
     return data;
   }
   if (operation === "complete_task") {
-    return completeWorkOsTask(access, taskId, true);
+    return setWorkOsEmployeeTaskCompletion(access, taskId, true);
   }
   if (operation === "reopen_task") {
-    return completeWorkOsTask(access, taskId, false);
+    return setWorkOsEmployeeTaskCompletion(access, taskId, false);
   }
   throw new Error("unsupported proposal operation");
 }
@@ -185,9 +208,24 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
       continue;
     }
     const task = operation.taskId ? byId.get(operation.taskId) : null;
-    if (operation.op !== "create_task" && !task) throw new Error(`The selected task is no longer available for proposed update ${index + 1}`);
+    if (!["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(operation.op) && !task) throw new Error(`The selected task is no longer available for proposed update ${index + 1}`);
+    if (operation.op === "modify_task_status") {
+      const taskProjectId = text(task?.provider_project_id);
+      const knownTaskGroupIds = new Set((taskProjectId ? available : [])
+        .filter((candidate) => text(candidate.provider_project_id) === taskProjectId)
+        .map((candidate) => text(candidate.task_group_id))
+        .filter((id): id is string => !!id));
+      if (!operation.taskGroupId || !input.includes(operation.taskGroupId) || !knownTaskGroupIds.has(operation.taskGroupId)) {
+        throw new Error("A Nifty status move requires an employee-supplied, existing task_group_id for this project");
+      }
+    }
     const providerOperation: ProposalOperation = operation.op === "record_progress" ? "log_progress"
       : operation.op === "record_blocker" ? "add_blocker"
+      : operation.op === "add_task" ? "create_task"
+      : operation.op === "modify_task_description" || operation.op === "modify_task_status" || operation.op === "modify_subtask" ? "update_task"
+      : operation.op === "add_subtask" ? "add_subtask"
+      : operation.op === "delete_subtask" ? "delete_task"
+      : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks" ? "display_tasks"
       : operation.op as ProposalOperation;
     const beforeState = task ? {
       id: task.id,
@@ -197,14 +235,24 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
       completed: task.completed,
       due_date: task.due_date,
       start_date: task.start_date,
+      task_group_id: task.task_group_id,
+      parent_provider_task_id: task.parent_provider_task_id,
     } : {};
-    const proposedChange: Json = operation.op === "create_task"
+    const proposedChange: Json = operation.op === "create_task" || operation.op === "add_task"
       ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement, task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5" }
       : operation.op === "record_progress"
         ? { summary: operation.statement }
         : operation.op === "record_blocker"
           ? { description: operation.statement }
-          : {};
+          : operation.op === "modify_task_description" || operation.op === "modify_subtask"
+            ? { description: operation.statement }
+            : operation.op === "modify_task_status"
+              ? { task_group_id: operation.taskGroupId as string }
+              : operation.op === "add_subtask"
+                ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement }
+                : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks"
+                  ? { view: operation.op === "display_overdue_tasks" ? "overdue" : "pending", limit: operation.limit }
+                  : {};
     const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
       organization_id: access.organizationId,
       person_id: personId,
@@ -352,7 +400,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       await syncNifty(ownerId);
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       const before = (proposal.before_state ?? {}) as Json;
-      const keys = ["title", "description", "status", "completed", "due_date", "start_date"];
+      const keys = ["title", "description", "status", "completed", "due_date", "start_date", "task_group_id", "parent_provider_task_id"];
       if (keys.some((key) => JSON.stringify(before[key] ?? null) !== JSON.stringify(current[key] ?? null))) {
         const { data: stale, error: staleError } = await db().from("work_task_proposals").update({
           status: "stale", failure_reason: "Nifty task changed after this proposal was drafted. Create a new proposal from the current task state.",
@@ -398,7 +446,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     if (proposal.check_in_id) {
       await db().from("work_check_ins").update({ substantive: true }).eq("id", proposal.check_in_id as string);
     }
-    if (["log_progress", "add_blocker", "complete_task", "reopen_task", "create_task"].includes(String(proposal.operation))) {
+    if (["log_progress", "add_blocker", "complete_task", "reopen_task", "create_task", "archive_task", "delete_task", "add_subtask", "update_task"].includes(String(proposal.operation))) {
       const { error: sessionError } = await db().from("work_sessions").update({
         state: "active",
         last_substantive_update_at: new Date().toISOString(),

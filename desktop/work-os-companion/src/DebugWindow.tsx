@@ -117,6 +117,9 @@ export default function DebugWindow() {
           <DebugToggle label="No evidence" checked={scenario.emptyEvidence} onChange={(value) => update({ emptyEvidence: value })} />
           <DebugToggle label="No proposals" checked={scenario.emptyProposals} onChange={(value) => update({ emptyProposals: value })} />
         </div>
+        <label><span>Planning session</span><select value={scenario.planningState ?? ""} onChange={(event) => update({ planningState: event.target.value ? event.target.value as NonNullable<DebugScenario["planningState"]> : null })}>
+          <option value="">Use live behavior</option><option value="required">Required plan</option><option value="ai_unavailable">AI unavailable</option><option value="conflict">Revision conflict</option><option value="offline">Offline queue</option>
+        </select></label>
         <section className="debug-section">
           <h2>Companion</h2>
           <label><span>Force state</span><select value={scenario.companionForce ?? ""} onChange={(event) => update({ companionForce: event.target.value || null })}>

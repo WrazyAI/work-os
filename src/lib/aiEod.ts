@@ -15,6 +15,7 @@ export interface EodGrounding {
   completed: string[];
   carried: string[];
   blockers: string[];
+  commitments?: Array<{ title: string; status: "selected" | "deferred" | "completed" }>;
 }
 
 const BOTTLENECK_PLACEHOLDER = "(needs your input — what prevented you from completing your task list?)";
@@ -51,6 +52,15 @@ function eodFacts(grounding: EodGrounding) {
   };
 }
 
+/** Renders persisted plan state only; it is intentionally separate from task evidence. */
+export function renderCommitmentReconciliation(commitments: EodGrounding["commitments"] = []): string[] {
+  if (!commitments.length) return ["- No daily commitments were confirmed."];
+  return commitments.map((commitment) => {
+    const status = commitment.status === "completed" ? "marked complete in the plan" : commitment.status === "deferred" ? "deferred in the plan" : "still open in the plan";
+    return `- ${commitment.title} (${status})`;
+  });
+}
+
 function selectedFactIds(value: unknown, prefix: string, allowed: Set<string>): string[] | null {
   if (!Array.isArray(value) || value.some((id) => typeof id !== "string")) return null;
   return [...new Set(value.filter((id): id is string => typeof id === "string" && id.startsWith(prefix) && allowed.has(id)))];
@@ -84,6 +94,7 @@ export function renderEodSelection(selection: EodSelection, grounding: EodGround
     "## Summary", ...(summary.length ? summary.map((text) => `- ${text}`) : ["- No recorded progress update."]),
     "", "## Completed", ...(completed.length ? completed.map((text) => `- ${text}`) : ["- Nothing completed yet"]),
     "", "## Carried forward", ...(carried.length ? carried.map((text) => `- ${text}`) : ["- Nothing pending"]),
+    "", "## Daily commitment reconciliation", ...renderCommitmentReconciliation(grounding.commitments),
     "", "## Bottleneck", ...(blockers.length ? blockers.map((text) => `- ${text}`) : [BOTTLENECK_PLACEHOLDER]),
   ].join("\n");
 }
@@ -104,6 +115,9 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Carried over to tomorrow:",
     fmt(facts.carried, "none"),
     "",
+    "Daily commitments (planning status only; this does not prove task completion):",
+    fmt((grounding.commitments ?? []).map((commitment, index) => ({ id: `commitment:${index}`, text: `${commitment.title} (${commitment.status})` })), "none"),
+    "",
     "Bottleneck facts (recorded blockers):",
     fmt(facts.blocker, "none"),
     "",
@@ -122,16 +136,19 @@ export function ensureBottleneckSection(markdown: unknown): string | null {
 
 export async function gatherEodGrounding(organizationId: string, personId: string, date: string, personName: string): Promise<EodGrounding> {
   const db = createAdminClient();
-  const [updatesResult, eventsResult, sessionResult] = await Promise.all([
+  const [updatesResult, eventsResult, sessionResult, planResult] = await Promise.all([
     db.from("work_check_ins").select("input_text,update_kind,occurred_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
     db.from("work_task_day_events").select("event_type,task_snapshot").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("local_date", date).order("occurred_at", { ascending: true }),
     db.from("work_sessions").select("clocked_in_at,clocked_out_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,disposition,completion_state)")
+      .eq("organization_id", organizationId).eq("person_id", personId).eq("shift_date", date).maybeSingle(),
   ]);
   if (updatesResult.error) throw new Error(`load EOD updates: ${updatesResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
+  if (planResult.error) throw new Error(`load EOD commitments: ${planResult.error.message}`);
 
   const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
     .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
@@ -149,6 +166,12 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     if (update.kind === "blocked" && !blockers.includes(update.text)) blockers.push(update.text);
   }
   const session = (sessionResult.data ?? {}) as { clocked_in_at?: unknown; clocked_out_at?: unknown };
+  const commitments = ((Array.isArray(planResult.data?.items) ? planResult.data.items : []) as Array<Record<string, unknown>>).flatMap((item) => {
+    const title = typeof item.title_snapshot === "string" && item.title_snapshot.trim() ? item.title_snapshot.trim() : null;
+    if (!title || !["selected", "deferred"].includes(String(item.disposition))) return [];
+    const status = item.completion_state === "completed" ? "completed" : item.disposition === "deferred" ? "deferred" : "selected";
+    return [{ title, status: status as "selected" | "deferred" | "completed" }];
+  });
   return {
     date,
     personName,
@@ -158,6 +181,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     completed,
     carried,
     blockers,
+    commitments,
   };
 }
 

@@ -4,12 +4,7 @@ import {
   syncNifty,
   syncNiftyPersonTasks,
 } from "@/lib/work-os";
-import {
-  decideWorkOsPrompt,
-  localDateForTimezone,
-  resolveShiftWindow,
-  type WorkOsCheckInState,
-} from "@/modules/work-os/companion";
+import { localDateForTimezone, resolveShiftWindow } from "@/modules/work-os/companion";
 import { getWorkday } from "@/lib/work-os-workday";
 import { loadPersistedWorktivityAttendance, observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
@@ -70,15 +65,6 @@ export async function getWorkOsDay(
   // Upcoming-shift display must not advance task/history attribution into the
   // next day after the current shift ends.
   const shiftDate = localDateForTimezone(at, timezone);
-  const { data: checkIns, error: checkInError } = await db()
-    .from("work_check_ins")
-    .select("substantive, confirmed_existing_tasks, occurred_at, snoozed_until")
-    .eq("organization_id", access.organizationId)
-    .eq("person_id", personId)
-    .eq("shift_date", shiftDate)
-    .order("occurred_at", { ascending: true });
-  if (checkInError) throw new Error(`load shift check-ins: ${checkInError.message}`);
-  const prompt = decideWorkOsPrompt(shift, (checkIns ?? []) as WorkOsCheckInState[], at);
   const ownerId = await ownerIdPromise;
   const [latestTaskResult, latestProjectResult, organizationSyncResult] = await Promise.all([
     db().from("work_tasks").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
@@ -122,14 +108,12 @@ export async function getWorkOsDay(
   const historyRows = taskHistory ?? [];
   const evidenceRows = evidence ?? [];
   const signals = {
-    employeeUpdates: (checkIns ?? []).filter((item: any) => item.substantive === true).length,
+    employeeUpdates: 0,
     outputEvidence: evidenceRows.filter((item: any) => item.source !== "worktivity").length,
     activityContext: evidenceRows.filter((item: any) => item.source === "worktivity").length || (attendance.attendance.state === "active" || attendance.attendance.state === "paused" ? 1 : 0),
     completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
-  const workdayPrompt = workday.session
-    ? suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined)
-    : prompt;
+  const workdayPrompt = suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined);
   return { at: at.toISOString(), shiftDate, shift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
 }

@@ -97,4 +97,12 @@ describe("offline playground scenario", () => {
     expect(day!.tasks.length).toBeGreaterThan(0);
     expect(day!.session).not.toBeNull();
   });
+
+  it("models required planning without marking the fixture plan confirmed", () => {
+    const scenario = { ...DEFAULT_DEBUG_SCENARIO, enabled: true, planningState: "required" } satisfies DebugScenario;
+    const day = applyDayScenario(null, scenario);
+    expect(day?.prompt.kind).toBe("plan");
+    expect(day?.prompt.required).toBe(true);
+    expect(day?.plan?.status).toBe("draft");
+  });
 });

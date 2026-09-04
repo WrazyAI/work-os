@@ -23,7 +23,22 @@ interface ParsedProposal {
   change: Json;
 }
 
-async function parseCheckIn(input: string, tasks: Json[]): Promise<{ model: string; proposals: ParsedProposal[] }> {
+export type CheckInCommitmentContext = { title: string; objective: string | null; successCriteria: string[]; status: "selected" | "deferred" | "completed" };
+
+/** Commitment context gives the model employee-reviewed intent, never completion evidence. */
+export function checkInCommitmentContext(rows: Json[]): CheckInCommitmentContext[] {
+  return rows.slice(0, 12).flatMap((row) => {
+    const title = text(row.title_snapshot);
+    if (!title) return [];
+    const criteria = Array.isArray(row.success_criteria)
+      ? row.success_criteria.filter((item): item is string => typeof item === "string" && !!item.trim()).slice(0, 5)
+      : [];
+    const status = row.completion_state === "completed" ? "completed" : row.disposition === "deferred" ? "deferred" : "selected";
+    return [{ title, objective: text(row.objective), successCriteria: criteria, status }];
+  });
+}
+
+async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[]): Promise<{ model: string; proposals: ParsedProposal[] }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is required to turn a check-in into task proposals");
   const taskContext = tasks.map((task) => ({
@@ -74,11 +89,12 @@ async function parseCheckIn(input: string, tasks: Json[]): Promise<{ model: stri
           content: [
             "You produce proposals for human review. Nifty is authoritative for tasks.",
             "Use an existing task when the text refers to one. Do not claim work, status, output, blockers, or completion unless the employee explicitly states it.",
+            "Daily commitments are employee-reviewed planning context, not evidence. Never infer a commitment is completed or progressed from its presence.",
             "Use complete_task only for explicit completion language. Activity alone never proves completion.",
             "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
           ].join("\n"),
         },
-        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext }) },
+        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments }) },
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
@@ -160,7 +176,11 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   }
   const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
   if (confirmedExisting && !tasks.length) throw new Error("there are no existing Nifty tasks to confirm as the current plan");
-  const parsed = input ? await parseCheckIn(input, tasks) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
+  const planItems = await db().from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,objective,success_criteria,disposition,completion_state)")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("shift_date", shiftDate).maybeSingle();
+  if (planItems.error) throw new Error(`load check-in planning context: ${planItems.error.message}`);
+  const commitments = checkInCommitmentContext(Array.isArray(planItems.data?.items) ? planItems.data.items as Json[] : []);
+  const parsed = input ? await parseCheckIn(input, tasks, commitments) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
   const { data: checkIn, error: checkInError } = await db().from("work_check_ins").insert({
     organization_id: access.organizationId,
     person_id: personId,
@@ -175,7 +195,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     session_id: activeSession?.id ?? null,
     update_kind: updateKind,
     structured_claims: body.structured_claims && typeof body.structured_claims === "object" ? body.structured_claims : {},
-    inference_metadata: {},
+    inference_metadata: { commitmentContextCount: commitments.length },
     created_by: access.ctx.user.id,
   }).select("*").single();
   if (checkInError) throw new Error(`create Work OS check-in: ${checkInError.message}`);

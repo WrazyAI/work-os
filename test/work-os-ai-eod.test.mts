@@ -1,18 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEodPrompt, ensureBottleneckSection, parseEodSelection, renderEodSelection } from "../src/lib/aiEod";
+import { buildEodPrompt, ensureBottleneckSection, parseEodSelection, renderCommitmentReconciliation, renderEodSelection } from "../src/lib/aiEod";
 
 test("the prompt grounds the model in only the recorded facts", () => {
   const prompt = buildEodPrompt({
     date: "2026-08-27", personName: "David", clockedInAt: "2026-08-27T15:00:00Z", clockedOutAt: null,
     updates: [{ kind: "material_progress", text: "Finished the debugger fix.", at: "2026-08-27T16:00:00Z" }],
-    completed: ["Ship the debugger fix"], carried: [], blockers: ["Signing certificate"],
+    completed: ["Ship the debugger fix"], carried: [], blockers: ["Signing certificate"], commitments: [{ title: "Ship the debugger fix", status: "selected" }],
   });
   assert.match(prompt, /Finished the debugger fix\./);
   assert.match(prompt, /Ship the debugger fix/);
   assert.match(prompt, /Signing certificate/);
   assert.match(prompt, /Bottleneck/);
+  assert.match(prompt, /planning status only/i);
   assert.match(prompt, /never invent/i);
+});
+
+test("reconciles persisted daily commitments without treating them as task evidence", () => {
+  assert.deepEqual(renderCommitmentReconciliation([{ title: "Ship the release", status: "completed" }, { title: "Review the migration", status: "deferred" }]), [
+    "- Ship the release (marked complete in the plan)",
+    "- Review the migration (deferred in the plan)",
+  ]);
 });
 
 test("keeps a valid bottleneck section untouched", () => {

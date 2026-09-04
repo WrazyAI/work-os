@@ -1,6 +1,8 @@
 import { safeTaskText } from "./taskWorkspace";
 
-export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task";
+export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
+  | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
 
 export interface ProposedOperation {
@@ -8,6 +10,8 @@ export interface ProposedOperation {
   statement: string;
   taskId?: string;
   taskTitle?: string;
+  taskGroupId?: string;
+  limit?: number;
   proposalId?: string;
   /** Employee inclusion toggle — nothing files without this. */
   enabled: boolean;
@@ -17,6 +21,7 @@ export interface ToolCallResult {
   op: ProposedOperation;
   status: "recorded" | "queued" | "failed" | "denied";
   message: string;
+  data?: unknown;
 }
 
 export interface CandidateReview {
@@ -32,6 +37,16 @@ const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
   complete_task: "Mark done:",
   reopen_task: "Reopen:",
   create_task: "New task:",
+  add_task: "New task:",
+  archive_task: "Archive:",
+  delete_task: "Delete:",
+  modify_task_description: "Update description:",
+  modify_task_status: "Move status:",
+  add_subtask: "New subtask:",
+  modify_subtask: "Update subtask:",
+  delete_subtask: "Delete subtask:",
+  display_pending_tasks: "Show pending tasks",
+  display_overdue_tasks: "Show overdue tasks",
 };
 
 export function operationLabel(op: CandidateOperationKind): string {
@@ -52,11 +67,31 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
       command: `PATCH /api/work-os/me/tasks/${op.taskId ?? "<select-task>"} ${JSON.stringify({ completed: op.op === "complete_task" })}`,
     };
   }
-  if (op.op === "create_task") {
+  if (op.op === "create_task" || op.op === "add_task") {
     return {
       tool: "work_os.tasks.create",
       command: `POST /api/work-os/me/tasks ${JSON.stringify({ name: (op.taskTitle || op.statement).slice(0, 240), description: op.statement, due_date: context.shiftDate, assignee_person_ids: context.personId ? [context.personId] : [] })}`,
     };
+  }
+  if (op.op === "archive_task" || op.op === "delete_task") {
+    const mode = op.op === "delete_task" ? "delete" : "archive";
+    return { tool: `work_os.tasks.${mode}`, command: `DELETE /api/work-os/me/tasks/${op.taskId ?? "<select-task>"}?mode=${mode}` };
+  }
+  if (op.op === "modify_task_description" || op.op === "modify_subtask") {
+    return { tool: "work_os.tasks.update", command: `PATCH /api/work-os/me/tasks/${op.taskId ?? "<select-task>"} ${JSON.stringify({ description: op.statement })}` };
+  }
+  if (op.op === "modify_task_status") {
+    return { tool: "work_os.tasks.update_status", command: `PATCH /api/work-os/me/tasks/${op.taskId ?? "<select-task>"} ${JSON.stringify({ task_group_id: op.taskGroupId ?? "<status-column>" })}` };
+  }
+  if (op.op === "add_subtask") {
+    return { tool: "work_os.tasks.create_subtask", command: `POST /api/work-os/me/tasks ${JSON.stringify({ name: (op.taskTitle || op.statement).slice(0, 240), parent_task_id: op.taskId ?? "<parent-task>" })}` };
+  }
+  if (op.op === "delete_subtask") {
+    return { tool: "work_os.tasks.delete_subtask", command: `DELETE /api/work-os/me/tasks/${op.taskId ?? "<select-subtask>"}?mode=delete` };
+  }
+  if (op.op === "display_pending_tasks" || op.op === "display_overdue_tasks") {
+    const view = op.op === "display_overdue_tasks" ? "overdue" : "pending";
+    return { tool: `work_os.tasks.display_${view}`, command: `GET /api/work-os/me/tasks?view=${view}&limit=${op.limit ?? 20}` };
   }
   return {
     tool: "work_os.check_ins.create",
@@ -96,9 +131,11 @@ export function normalizeInterpretation(
     const statement = safeTaskText(candidate.statement, "");
     if (!op || !(op in OPERATION_LABELS) || !statement) continue;
     const taskId = typeof candidate.taskId === "string" && allowed.has(candidate.taskId) ? candidate.taskId : undefined;
-    if ((op === "complete_task" || op === "reopen_task" || op === "record_progress") && !taskId) continue;
+    if ((op === "complete_task" || op === "reopen_task" || op === "record_progress" || op === "record_blocker" || op === "archive_task" || op === "delete_task" || op === "modify_task_description" || op === "modify_task_status" || op === "add_subtask" || op === "modify_subtask" || op === "delete_subtask") && !taskId) continue;
     const taskTitle = typeof candidate.taskTitle === "string" && candidate.taskTitle.trim() ? safeTaskText(candidate.taskTitle, "") || undefined : undefined;
-    operations.push({ op, statement, taskId, taskTitle, enabled: true });
+    const taskGroupId = typeof candidate.taskGroupId === "string" && candidate.taskGroupId.trim() ? candidate.taskGroupId.trim().slice(0, 160) : undefined;
+    const limit = typeof candidate.limit === "number" && Number.isInteger(candidate.limit) ? Math.min(100, Math.max(1, candidate.limit)) : undefined;
+    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, enabled: true });
   }
   if (!operations.length && !reply) return null;
   return { originalInput, operations, reply };
@@ -194,8 +231,11 @@ export async function fileApprovedOperations(
         outcome.queued += 1;
         outcome.results.push({ op, status: "queued", message: "Queued locally for a later sync." });
       } else {
+        const data = result && typeof result === "object" && "proposal" in result
+          ? (result as { proposal: unknown }).proposal
+          : result;
         outcome.recorded += 1;
-        outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state." });
+        outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state.", data });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "The change could not be filed.";
