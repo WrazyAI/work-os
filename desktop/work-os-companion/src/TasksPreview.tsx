@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LayoutDashboard, ListChecks, MessageSquareText, Gauge, ShieldCheck, Settings } from "lucide-react";
 import { ProgressComposer, TasksWorkspace } from "./App";
 import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation, TaskCarryOverFlyout } from "./taskSurfaces";
+import { TaskSelectionCard } from "./TaskSelectionCard";
 import { suggestDailyGoal, unfinishedBefore, type TaskRow } from "./taskWorkspace";
 import type { DailyPlan } from "./types";
 import { formatWorkOsDate } from "./dateFormat";
@@ -53,6 +54,8 @@ export default function TasksPreview() {
     subtaskSync: scenario === "degraded" ? { tasks: null, syncedAt: null, error: "nifty_unreachable" } : { tasks: 3, syncedAt: `${CURRENT_DATE}T09:05:00Z`, error: null },
   };
   const menuId = scenario === "menu-bottom" ? "task-old" : scenario === "menu-middle" ? "task-carry" : scenario === "menu-top" ? "task-today" : null;
+  const selectionScenario = scenario?.startsWith("selection-") ? scenario.slice("selection-".length) : null;
+  const selectionTasks = tasks.slice(0, 3).map((task, index) => ({ id: String(task.id), title: String(task.title), description: String(task.description), dueDate: task.due_date, projectName: task.project?.name, priority: task.priority, state: index === 1 ? "overdue" as const : "pending" as const }));
   return <div className="workspace preview-workspace">
     <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav aria-label="Work OS"><div className="nav-group nav-core">{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"]].map(([Icon, label]) => <button className={label === "Tasks" ? "active" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-context">{[[Gauge, "Insights"], [ShieldCheck, "Evidence"]].map(([Icon, label]) => <button className={label === "Evidence" ? "nav-evidence" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-settings"><button><Settings size={18} /><span>Settings</span></button></div></nav><div className="rail-foot"><span className="presence live" /><div><strong>On shift</strong><small>Synced</small></div></div></aside>
     <section className="stage"><header className="masthead"><div><p>{formatWorkOsDate(history ? "2026-08-20" : CURRENT_DATE)}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Live · 3 open</span><button className="avatar">DZ</button></div></header>
@@ -66,6 +69,7 @@ export default function TasksPreview() {
       {scenario === "confirm-archive" && <TaskRemovalConfirmation mode="archive" scope="task" title="Ship unified Tasks workspace" subtaskCount={3} busy={false} onCancel={() => undefined} onConfirm={() => undefined} />}
       {scenario === "confirm-delete" && <TaskRemovalConfirmation mode="delete" scope="task" title="Ship unified Tasks workspace" subtaskCount={3} busy={false} onCancel={() => undefined} onConfirm={() => undefined} />}
       {scenario === "move-menu" && <TaskDetailsModal details={detailsTask} loading={false} readOnly={false} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId="sub-2" moveMenuId="sub-2" onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={() => undefined} onMoveMenu={() => undefined} onSubtaskCreate={() => undefined} onEditTask={() => undefined} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
+      {selectionScenario && <TaskSelectionCard title="Finish pending work" tasks={selectionScenario === "empty" || selectionScenario === "error" ? [] : selectionTasks} status={selectionScenario === "loading" ? "loading" : selectionScenario === "error" ? "error" : "ready"} degraded={selectionScenario === "degraded"} dense={selectionScenario === "dense"} errorMessage="Nifty could not refresh this task list." onRetry={() => undefined} onMarkSelectedDone={() => undefined} />}
     </section>
   </div>;
 }

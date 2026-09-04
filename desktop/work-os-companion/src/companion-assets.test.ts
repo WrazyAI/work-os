@@ -71,9 +71,11 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("avatar-drag-surface");
     expect(avatar).toContain("/api/work-os/me/proposals");
     expect(avatar).toContain("denyOperation");
+    expect(avatar).toContain("TaskSelectionCard");
+    expect(avatar).toContain("proposeAvatarSelectedCompletions");
   });
 
-  it("stores main and avatar conversations in the encrypted vault", () => {
+  it("shares the per-workday conversation between the main window and avatar", () => {
     const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
     const main = readFileSync(resolve(root, "src/App.tsx"), "utf8");
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
@@ -83,5 +85,13 @@ describe("floating companion integration", () => {
     expect(main).toContain("composerConversationScope");
     expect(main).toContain("ToolApprovalCard");
     expect(avatar).toContain("avatarConversationScope");
+    expect(main).toContain("workday:${visibleSession.organizationId}:${visibleDay.access.personId}:${visibleDay.shiftDate}");
+    expect(avatar).toContain("workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}");
+    expect(main).toContain('"work-os://conversation-changed"');
+    expect(avatar).toContain('"work-os://conversation-changed"');
+    expect(avatar).toContain("const history = [...chat.filter");
+    expect(avatar).toContain("const promptTurnId = attentionDue");
+    expect(main).toContain("proposeSelectedTaskCompletions");
+    expect(main).toContain("TaskSelectionCard");
   });
 });

@@ -7,6 +7,7 @@ import { secureState, type WorkOsConversationTurn } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { ToolApprovalCard } from "./ToolApprovalCard";
+import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
@@ -103,6 +104,7 @@ export default function AvatarApp(): React.ReactElement {
   const [now, setNow] = useState(() => Date.now());
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
+  const chatConversationSignature = useRef("");
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [filing, setFiling] = useState(false);
@@ -219,17 +221,19 @@ export default function AvatarApp(): React.ReactElement {
     return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
 
-  const avatarConversationScope = desktopSession?.organizationId && facts.personId
-    ? `avatar:${desktopSession.organizationId}:${facts.personId}`
+  const avatarConversationScope = desktopSession?.organizationId && facts.personId && facts.shiftDate
+    ? `workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}`
     : null;
   useEffect(() => {
     let cancelled = false;
+    chatConversationSignature.current = "";
     setLoadedChatConversation(null);
     setChat([]);
     if (!avatarConversationScope) return () => { cancelled = true; };
     void secureState.conversation(avatarConversationScope).then((turns) => {
       if (!cancelled) {
-        setChat(turns.map((turn) => ({ ...turn, role: turn.role as ChatEntry["role"] })));
+        chatConversationSignature.current = JSON.stringify(turns);
+        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
         setLoadedChatConversation(avatarConversationScope);
       }
     }).catch(() => {
@@ -242,8 +246,23 @@ export default function AvatarApp(): React.ReactElement {
     const turns: WorkOsConversationTurn[] = chat
       .filter((entry): entry is ChatEntry & { role: "user" | "assistant" } => entry.role === "user" || entry.role === "assistant")
       .map((entry) => ({ id: entry.id, role: entry.role, text: entry.text, ...(entry.receipt ? { meta: entry.receipt } : {}), createdAt: entry.createdAt ?? new Date().toISOString() }));
-    void secureState.saveConversation(avatarConversationScope, turns);
+    const signature = JSON.stringify(turns);
+    if (chatConversationSignature.current === signature) return;
+    chatConversationSignature.current = signature;
+    void secureState.saveConversation(avatarConversationScope, turns).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
   }, [avatarConversationScope, chat, loadedChatConversation]);
+  useEffect(() => {
+    if (!avatarConversationScope) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ scope?: string }>("work-os://conversation-changed", (event) => {
+      if (event.payload?.scope !== avatarConversationScope) return;
+      void secureState.conversation(avatarConversationScope).then((turns) => {
+        chatConversationSignature.current = JSON.stringify(turns);
+        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
+      }).catch(() => undefined);
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [avatarConversationScope]);
 
   // ── Tick ──
   useEffect(() => {
@@ -361,12 +380,14 @@ export default function AvatarApp(): React.ReactElement {
     const text = input.trim();
     if (!text || thinking || filing) return;
     setInput("");
-    setChat((current) => [...current, { id: `u-${Date.now()}`, role: "user", text }]);
+    const userTurn: ChatEntry = { id: `u-${Date.now()}`, role: "user", text, createdAt: new Date().toISOString() };
+    const history = [...chat.filter((entry) => entry.role === "user" || entry.role === "assistant"), userTurn];
+    setChat((current) => [...current, userTurn]);
     setThinking(true);
     try {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
-        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: chat.filter((entry) => entry.role === "user" || entry.role === "assistant").slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
+        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
       const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
@@ -376,7 +397,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       const proposals = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle })) }),
+        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
       });
       const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       setChat((current) => [
@@ -391,7 +412,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setThinking(false);
     }
-  }, [input, thinking, filing, facts.planIntent, facts.shiftDate]);
+  }, [input, thinking, filing, facts.planIntent, facts.shiftDate, chat]);
 
   const approveOperations = useCallback(async (entryId: string, operations: ProposedOperation[]) => {
     const enabled = operations.filter((op) => op.enabled);
@@ -425,6 +446,28 @@ export default function AvatarApp(): React.ReactElement {
       setFiling(false);
     }
   }, [facts.shiftDate, facts.personId, filing, loadDay, toggleExpanded]);
+
+  const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
+    if (!taskIds.length || filing) return;
+    const titles = new Map(facts.taskOptions.map((task) => [task.id, task.title]));
+    const operations = taskIds.map((taskId) => ({
+      op: "complete_task" as const,
+      statement: `Employee confirmed completion of ${titles.get(taskId) ?? "selected task"}.`,
+      task_id: taskId,
+      task_title: titles.get(taskId) ?? "selected task",
+    }));
+    setFiling(true);
+    void apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ input_text: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, operations }),
+    }).then(({ proposals }) => {
+      const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
+      const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
+      if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
+      setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+    }).catch((value) => setChat((current) => [...current, { id: `completion-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not create completion proposals." }]))
+      .finally(() => setFiling(false));
+  }, [facts.taskOptions, filing]);
 
   const denyOperation = useCallback((entryId: string, operation: ProposedOperation) => {
     if (!operation.proposalId) return;
@@ -460,6 +503,13 @@ export default function AvatarApp(): React.ReactElement {
   // ── Derived render state ──
   const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
   const attentionDue = ["agenda", "check_in", "eod"].includes(contextualPrompt.kind);
+  const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
+  useEffect(() => {
+    if (!promptTurnId) return;
+    setChat((current) => current.some((entry) => entry.id === promptTurnId)
+      ? current
+      : [...current, { id: promptTurnId, role: "assistant", text: `${contextualPrompt.heading}: ${contextualPrompt.body}`, createdAt: new Date().toISOString() }]);
+  }, [contextualPrompt.body, promptTurnId]);
   const showBadge = contextualPrompt.kind === "eod" || (contextualPrompt.kind === "check_in" && !missed);
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
@@ -479,7 +529,8 @@ export default function AvatarApp(): React.ReactElement {
 
   function clearAvatarConversation() {
     setChat([]);
-    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope);
+    chatConversationSignature.current = "";
+    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
   }
 
   useEffect(() => {
@@ -551,6 +602,18 @@ export default function AvatarApp(): React.ReactElement {
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
                       : <>
                         <p>{entry.text}</p>
+                        {entry.toolResults?.map((result) => {
+                          const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
+                          if (!selection) return null;
+                          const tasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
+                            id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
+                            description: typeof task.description === "string" ? task.description : null,
+                            dueDate: typeof task.due_date === "string" ? task.due_date : null,
+                            priority: typeof task.priority === "string" ? task.priority : null,
+                            state: selection.view === "overdue" ? "overdue" : "pending",
+                          })).filter((task) => !!task.id) : [];
+                          return <TaskSelectionCard key={result.op.proposalId} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                        })}
                         {entry.operations && (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => (
