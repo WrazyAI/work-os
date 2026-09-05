@@ -2,7 +2,12 @@ name: Work OS Companion Windows Internal Release
 
 on:
   push:
+    branches: [main]
     tags: ["work-os-companion-internal-v*"]
+    paths:
+      - "desktop/work-os-companion/package.json"
+      - "desktop/work-os-companion/src-tauri/Cargo.toml"
+      - "desktop/work-os-companion/src-tauri/tauri.conf.json"
   workflow_dispatch:
     inputs:
       version:
@@ -68,10 +73,17 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tagPrefix = "work-os-companion-internal-v"
           if ("${{ github.event_name }}" -eq "push") {
-            if (-not "${{ github.ref }}".StartsWith("refs/tags/$tagPrefix")) { throw "Internal release tags must use $tagPrefix<semver>" }
-            $version = "${{ github.ref_name }}".Substring($tagPrefix.Length)
-            $publish = "false"
-            $tag = "${{ github.ref_name }}"
+            if ("${{ github.ref }}".StartsWith("refs/tags/$tagPrefix")) {
+              $version = "${{ github.ref_name }}".Substring($tagPrefix.Length)
+              $publish = "false"
+              $tag = "${{ github.ref_name }}"
+            } elseif ("${{ github.ref }}" -eq "refs/heads/main") {
+              $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+              $publish = "true"
+              $tag = "$tagPrefix$version"
+            } else {
+              throw "Internal releases must originate from main or a $tagPrefix<semver> tag"
+            }
           } else {
             $version = $env:DISPATCH_VERSION.Trim()
             $publish = $env:DISPATCH_PUBLISH.ToLowerInvariant()
