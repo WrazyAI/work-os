@@ -270,3 +270,30 @@ export async function fileApprovedOperations(
   }
   return outcome;
 }
+
+/** Stable identity for a tool call across windows. Server proposals carry an
+ * id; immediate display results fall back to their content coordinates. */
+export function toolCallKey(op: Pick<ProposedOperation, "proposalId" | "op" | "taskId" | "statement">): string {
+  return op.proposalId ?? `${op.op}|${op.taskId ?? ""}|${op.statement}`;
+}
+
+/** One pending review shared between the main window and the avatar so a
+ * tool call raised in either surface appears in both. Results merge by key,
+ * so filing or denying in one window is reflected in the other. Local
+ * approve toggles stay per-window; the server dedupes concurrent filings. */
+export interface PendingToolReview {
+  input: string;
+  reply?: string;
+  operations: ProposedOperation[];
+  results: ToolCallResult[];
+  taskOptions: Array<{ id: string; title: string }>;
+  updatedAt: string;
+  origin: "main" | "avatar";
+}
+
+/** Merges incoming filed results over existing ones by stable key. Incoming
+ * wins per key; unseen entries are appended in order. */
+export function mergeToolResults(existing: ToolCallResult[], incoming: ToolCallResult[]): ToolCallResult[] {
+  const keys = new Set(incoming.map((item) => toolCallKey(item.op)));
+  return [...existing.filter((item) => !keys.has(toolCallKey(item.op))), ...incoming];
+}

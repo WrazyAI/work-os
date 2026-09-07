@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, normalizeInterpretation, operationLabel, operationToolCall, proposalApprovalCommand } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, proposalApprovalCommand, toolCallKey } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -171,5 +171,29 @@ describe("operationToolCall", () => {
       operations: [],
     }, "show my pending tasks", TASKS);
     expect(review?.reply).toContain("- Fix the crash\n- Ship the build");
+  });
+});
+
+describe("toolCallKey", () => {
+  it("prefers the server proposal id and falls back to content coordinates", () => {
+    const withId = { op: "complete_task", statement: "Done.", taskId: "t-1", proposalId: "p-1", enabled: true } as const;
+    expect(toolCallKey(withId)).toBe("p-1");
+    const a = { op: "display_pending_tasks", statement: "Show.", enabled: true } as const;
+    const b = { op: "display_pending_tasks", statement: "Show.", enabled: true } as const;
+    const c = { op: "display_overdue_tasks", statement: "Show.", enabled: true } as const;
+    expect(toolCallKey(a)).toBe(toolCallKey(b));
+    expect(toolCallKey(a)).not.toBe(toolCallKey(c));
+  });
+
+  it("merges filed results by stable key with incoming wins", () => {
+    const op = { op: "complete_task", statement: "Done.", taskId: "t-1", proposalId: "p-1", enabled: true } as const;
+    const display = { op: "display_pending_tasks", statement: "Show.", enabled: false } as const;
+    const existing = [{ op: display, status: "recorded", message: "Loaded." } as const];
+    const incoming = [{ op, status: "recorded", message: "Recorded." } as const];
+    const merged = mergeToolResults([...existing], [...incoming]);
+    expect(merged).toHaveLength(2);
+    const updated = mergeToolResults(merged, [{ op, status: "failed", message: "Nope." }]);
+    expect(updated).toHaveLength(2);
+    expect(updated.find((item) => item.op === op)?.status).toBe("failed");
   });
 });

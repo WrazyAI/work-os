@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
-import { isDisplayToolOp, isMutatingToolOp, normalizeInterpretation, fileApprovedOperations, type NavigatePage, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
@@ -142,8 +142,11 @@ export default function AvatarApp(): React.ReactElement {
   const chatScroll = useRef<HTMLDivElement | null>(null);
   const dayRef = useRef<DayFacts>(facts);
   const dayLoadInFlight = useRef(false);
+  const chatRef = useRef<ChatEntry[]>([]);
+  const avatarToolsSig = useRef("");
 
   useEffect(() => { dayRef.current = facts; }, [facts]);
+  useEffect(() => { chatRef.current = chat; }, [chat]);
 
   // ── Toast activation (Windows): expand the composer when clicked ──
   useEffect(() => {
@@ -279,6 +282,61 @@ export default function AvatarApp(): React.ReactElement {
     chatConversationSignature.current = signature;
     void secureState.saveConversation(avatarConversationScope, turns).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
   }, [avatarConversationScope, chat, loadedChatConversation]);
+  const shareAvatarTools = useCallback(async (review: Omit<PendingToolReview, "origin" | "updatedAt">) => {
+    if (!avatarConversationScope) return;
+    const record: PendingToolReview = { ...review, updatedAt: new Date().toISOString(), origin: "avatar" };
+    const signature = JSON.stringify(record);
+    if (avatarToolsSig.current === signature) return;
+    avatarToolsSig.current = signature;
+    await secureState.savePendingTools(avatarConversationScope, record).catch(() => undefined);
+    emit("work-os://pending-tools-changed", { scope: avatarConversationScope }).catch(() => undefined);
+  }, [avatarConversationScope]);
+  // Tool calls raised in the main window appear here too. Adopt a fresh
+  // review only when this chat has none active; otherwise merge filed
+  // results into the matching local cards by stable key.
+  const adoptSharedTools = useCallback(async () => {
+    if (!avatarConversationScope) return;
+    const shared = await secureState.pendingTools(avatarConversationScope).catch(() => null);
+    if (!shared || shared.origin === "avatar") return;
+    const signature = JSON.stringify(shared);
+    if (avatarToolsSig.current === signature) return;
+    avatarToolsSig.current = signature;
+    setChat((current) => {
+      const hasActive = current.some((entry) => entry.operations?.some((op) => isMutatingToolOp(op)
+        && !(entry.toolResults ?? []).some((result) => toolCallKey(result.op) === toolCallKey(op))));
+      if (!hasActive && shared.operations.length) {
+        void toggleExpanded(true);
+        return [...current, {
+          id: `shared-${shared.updatedAt}`, role: "assistant" as const,
+          text: shared.reply ?? "Tool calls shared from the main window.",
+          operations: shared.operations, taskOptions: shared.taskOptions ?? [],
+          toolResults: shared.results.length ? shared.results : undefined,
+        }];
+      }
+      return current.map((entry) => {
+        if (!entry.operations?.length) return entry;
+        const fresh = shared.results.filter((result) => {
+          const key = toolCallKey(result.op);
+          return entry.operations!.some((op) => toolCallKey(op) === key)
+            && !(entry.toolResults ?? []).some((existing) => toolCallKey(existing.op) === key);
+        });
+        return fresh.length ? { ...entry, toolResults: [...(entry.toolResults ?? []), ...fresh] } : entry;
+      });
+    });
+  }, [avatarConversationScope]); // eslint-disable-line react-hooks/exhaustive-deps -- toggleExpanded is stable for the window lifetime
+  useEffect(() => {
+    if (!avatarConversationScope) return;
+    void adoptSharedTools();
+  }, [avatarConversationScope, adoptSharedTools]);
+  useEffect(() => {
+    if (!avatarConversationScope) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ scope?: string }>("work-os://pending-tools-changed", (event) => {
+      if (event.payload?.scope !== avatarConversationScope) return;
+      void adoptSharedTools();
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [avatarConversationScope, adoptSharedTools]);
   useEffect(() => {
     if (!avatarConversationScope) return;
     let unlisten: (() => void) | undefined;
@@ -462,10 +520,9 @@ export default function AvatarApp(): React.ReactElement {
         }
       }
       const trace = settle(stages.map((stage) => stage.label), mutating.length ? `${mutating.length} proposal${mutating.length === 1 ? "" : "s"} to review` : "Shown inline");
-      setChat((current) => [
-        ...current,
-        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined },
-      ]);
+      const assistantEntry: ChatEntry = { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined };
+      setChat((current) => [...current, assistantEntry]);
+      void shareAvatarTools({ input: text, reply: review.reply, operations, results: displayResults, taskOptions: [] });
     } catch (value) {
       setChat((current) => [...current, {
         id: `e-${Date.now()}`, role: "system",
@@ -490,8 +547,19 @@ export default function AvatarApp(): React.ReactElement {
         outcome.failed.length ? `${outcome.failed.length} failed` : null,
       ].filter(Boolean).join(" · ") || "Nothing to record";
       setChat((current) => current.map((entry) => entry.id === entryId
-        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: outcome.results, receipt: null }
+        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(entry.toolResults ?? [], outcome.results), receipt: null }
         : entry));
+      const filed = chatRef.current.find((entry) => entry.id === entryId);
+      const entries = chatRef.current;
+      const at = entries.findIndex((entry) => entry.id === entryId);
+      const precedingUser = [...entries.slice(0, at < 0 ? entries.length : at)].reverse().find((entry) => entry.role === "user");
+      void shareAvatarTools({
+        input: precedingUser?.text ?? "",
+        reply: filed?.text,
+        operations: (filed?.operations ?? enabled).map((op) => ({ ...op, enabled: false })),
+        results: mergeToolResults(filed?.toolResults ?? [], outcome.results),
+        taskOptions: [],
+      });
       if (outcome.recorded > 0) setFacts((current) => clearRecordedUpdatePrompt(current));
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
@@ -526,6 +594,7 @@ export default function AvatarApp(): React.ReactElement {
       const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
       if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
       setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+      void shareAvatarTools({ input: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
     }).catch((value) => setChat((current) => [...current, { id: `completion-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not create completion proposals." }]))
       .finally(() => setFiling(false));
   }, [facts.taskOptions, filing]);
@@ -534,11 +603,22 @@ export default function AvatarApp(): React.ReactElement {
     if (!operation.proposalId) return;
     void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
       method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
-    }).then(() => setChat((current) => current.map((entry) => entry.id === entryId ? {
-      ...entry,
-      operations: entry.operations?.map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
-      toolResults: [...(entry.toolResults ?? []), { op: operation, status: "denied", message: "Denied. This tool call will not run." }],
-    } : entry))).catch((value) => setChat((current) => [...current, { id: `deny-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not deny this tool call." }]));
+    }).then(() => {
+      const denied: ToolCallResult = { op: operation, status: "denied", message: "Denied. This tool call will not run." };
+      setChat((current) => current.map((entry) => entry.id === entryId ? {
+        ...entry,
+        operations: entry.operations?.map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
+        toolResults: [...(entry.toolResults ?? []), denied],
+      } : entry));
+      const deniedEntry = chatRef.current.find((entry) => entry.id === entryId);
+      void shareAvatarTools({
+        input: "",
+        reply: deniedEntry?.text,
+        operations: (deniedEntry?.operations ?? [operation]).map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
+        results: [...(deniedEntry?.toolResults ?? []), denied],
+        taskOptions: [],
+      });
+    }).catch((value) => setChat((current) => [...current, { id: `deny-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not deny this tool call." }]));
   }, []);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
@@ -741,7 +821,10 @@ export default function AvatarApp(): React.ReactElement {
   function clearAvatarConversation() {
     setChat([]);
     chatConversationSignature.current = "";
-    if (avatarConversationScope) void secureState.clearConversation(avatarConversationScope).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
+    if (avatarConversationScope) {
+      void secureState.clearConversation(avatarConversationScope).then(() => emit("work-os://conversation-changed", { scope: avatarConversationScope })).catch(() => undefined);
+      void secureState.clearPendingTools(avatarConversationScope).then(() => emit("work-os://pending-tools-changed", { scope: avatarConversationScope })).catch(() => undefined);
+    }
   }
 
   useEffect(() => {
@@ -855,7 +938,7 @@ export default function AvatarApp(): React.ReactElement {
                               if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={index} page={op.page} statement={op.statement} onNavigate={(page) => void navigateToPage(page)} />;
                               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
                               return (
-                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={result} onToggle={() => {
+                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={result} index={index} total={entry.operations!.length} onToggle={() => {
                                 if (entry.toolResults?.some((item) => item.op === op)) return;
                                   const next = entry.operations!.map((candidate, i) => i === index ? { ...candidate, enabled: !candidate.enabled } : candidate);
                                   setChat((current) => current.map((e) => e.id === entry.id ? { ...e, operations: next } : e));

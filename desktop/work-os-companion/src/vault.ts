@@ -3,7 +3,7 @@ import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
-import type { ProposedOperation, ToolCallResult } from "./interpretation";
+import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 
 export interface WorkOsConversationTurn {
   id: string;
@@ -103,6 +103,13 @@ export const secureState = {
     ? set(`conversation:${scope}`, turns.slice(-60))
     : Promise.resolve(),
   clearConversation: (scope: string) => isTauri() ? remove(`conversation:${scope}`) : Promise.resolve(),
+  /** Latest pending tool review for the scope, shared by the main window and
+   * the avatar so cards raised in either surface appear in both. */
+  pendingTools: async (scope: string) => isTauri() ? (await get<PendingToolReview>(`pending-tools:${scope}`)) ?? null : null,
+  savePendingTools: (scope: string, review: PendingToolReview) => isTauri()
+    ? set(`pending-tools:${scope}`, review)
+    : Promise.resolve(),
+  clearPendingTools: (scope: string) => isTauri() ? remove(`pending-tools:${scope}`) : Promise.resolve(),
   pendingAuth: async () => {
     if (!isTauri()) return null;
     const pending = await get<{ verifier: string; state: string; apiBase: string }>("pending-auth");

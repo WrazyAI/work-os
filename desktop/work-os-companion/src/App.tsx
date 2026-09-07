@@ -17,7 +17,7 @@ import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insi
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, normalizeInterpretation, simulateAiEod, stripBottleneckSection, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ToolApprovalCard } from "./ToolApprovalCard";
@@ -783,6 +783,54 @@ export default function App() {
     composerConversationSignature.current = signature;
     void secureState.saveConversation(composerConversationScope, composerHistory).then(() => emit("work-os://conversation-changed", { scope: composerConversationScope })).catch(() => undefined);
   }, [composerConversationScope, composerHistory, loadedComposerConversation]);
+  const sharedToolsSig = useRef("");
+  const sharePendingTools = useCallback(async (review: Omit<PendingToolReview, "origin" | "updatedAt">) => {
+    if (!composerConversationScope) return;
+    const record: PendingToolReview = { ...review, updatedAt: new Date().toISOString(), origin: "main" };
+    const signature = JSON.stringify(record);
+    if (sharedToolsSig.current === signature) return;
+    sharedToolsSig.current = signature;
+    await secureState.savePendingTools(composerConversationScope, record).catch(() => undefined);
+    emit("work-os://pending-tools-changed", { scope: composerConversationScope }).catch(() => undefined);
+  }, [composerConversationScope]);
+  const adoptSharedTools = useCallback(async () => {
+    if (!composerConversationScope) return;
+    const shared = await secureState.pendingTools(composerConversationScope).catch(() => null);
+    if (!shared || shared.origin === "main") return;
+    const signature = JSON.stringify(shared);
+    if (sharedToolsSig.current === signature) return;
+    sharedToolsSig.current = signature;
+    setInterpretation((current) => {
+      if (!current) {
+        if (!shared.operations.length) return current;
+        setPendingProgressUpdate(shared.input);
+        setComposerHistory((history) => [...history, { id: crypto.randomUUID(), role: "assistant", text: shared.reply || "Tool calls shared from the companion.", meta: "shared review", createdAt: new Date().toISOString() }]);
+        if (typeof document !== "undefined" && document.hasFocus()) setProgressComposerOpen(true);
+        else notifications.info("Tool calls shared from the companion.", "Review shared tools");
+        return { status: "ready", operations: shared.operations, taskOptions: shared.taskOptions, reply: shared.reply, results: shared.results.length ? shared.results : undefined };
+      }
+      const localKeys = new Set(current.operations.map(toolCallKey));
+      const fresh = shared.results.filter((result) => localKeys.has(toolCallKey(result.op)));
+      if (!fresh.length) return current;
+      return { ...current, results: mergeToolResults(current.results ?? [], fresh) };
+    });
+  }, [composerConversationScope, notifications]);
+  // Pending tool calls raised in the avatar appear here too, and results
+  // filed in either window merge by stable key. Adopt a fresh review only
+  // when this window has none active; never clobber an in-progress review.
+  useEffect(() => {
+    if (!composerConversationScope) return;
+    void adoptSharedTools();
+  }, [composerConversationScope, adoptSharedTools]);
+  useEffect(() => {
+    if (!composerConversationScope || !isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ scope?: string }>("work-os://pending-tools-changed", (event) => {
+      if (event.payload?.scope !== composerConversationScope) return;
+      void adoptSharedTools();
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, [composerConversationScope, adoptSharedTools]);
   useEffect(() => {
     if (!composerConversationScope || !isTauri()) return;
     let unlisten: (() => void) | undefined;
@@ -1267,6 +1315,7 @@ export default function App() {
       }
       setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined });
       setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: review.reply || "Here's what I understood.", meta: mutating.length ? `${mutating.length} proposed update${mutating.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString() }]);
+      void sharePendingTools({ input: text, reply: review.reply, operations, results: displayResults, taskOptions });
     }).catch((value) => {
       setInterpretation(null);
       setAiUnavailable(interpretationFallbackReason(value));
@@ -1277,7 +1326,10 @@ export default function App() {
   function clearComposerChat() {
     setComposerHistory([]);
     composerConversationSignature.current = "";
-    if (composerConversationScope) void secureState.clearConversation(composerConversationScope).then(() => emit("work-os://conversation-changed", { scope: composerConversationScope })).catch(() => undefined);
+    if (composerConversationScope) {
+      void secureState.clearConversation(composerConversationScope).then(() => emit("work-os://conversation-changed", { scope: composerConversationScope })).catch(() => undefined);
+      void secureState.clearPendingTools(composerConversationScope).then(() => emit("work-os://pending-tools-changed", { scope: composerConversationScope })).catch(() => undefined);
+    }
     setProgressReceipt(null);
     setInterpretation(null);
     setPendingProgressUpdate("");
@@ -1331,11 +1383,13 @@ export default function App() {
     if (!operation?.proposalId) return;
     void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
       method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
-    }).then(() => setInterpretation((current) => current ? {
-      ...current,
-      operations: current.operations.map((op, currentIndex) => currentIndex === index ? { ...op, enabled: false } : op),
-      results: [...(current.results ?? []), { op: operation, status: "denied", message: "Denied. This tool call will not run." }],
-    } : current)).catch((value) => showError(value, "Could not deny this tool call.", "Approval update failed"));
+    }).then(() => {
+      const denied: ToolCallResult = { op: operation, status: "denied", message: "Denied. This tool call will not run." };
+      const operations = (interpretation?.operations ?? []).map((op, currentIndex) => currentIndex === index ? { ...op, enabled: false } : op);
+      const results = [...(interpretation?.results ?? []), denied];
+      setInterpretation((current) => current ? { ...current, operations, results } : current);
+      void sharePendingTools({ input: pendingProgressUpdate.trim(), reply: interpretation?.reply, operations, results, taskOptions: interpretation?.taskOptions ?? [] });
+    }).catch((value) => showError(value, "Could not deny this tool call.", "Approval update failed"));
   }
 
   function approveInterpretation(operations: ProposedOperation[]) {
@@ -1352,7 +1406,7 @@ export default function App() {
       if (results) setProgressReceipt(null);
       else setProgressReceipt({ kind: dominant, text, queued: false, message });
       setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: message, meta: "recorded", createdAt: new Date().toISOString() }]);
-      setInterpretation((current) => current ? { ...current, operations: current.operations.map((op) => ({ ...op, enabled: false })), results } : current);
+      setInterpretation((current) => current ? { ...current, operations: current.operations.map((op) => ({ ...op, enabled: false })), results: mergeToolResults(current.results ?? [], results ?? []) } : current);
       setPendingProgressUpdate(results ? "tool calls reviewed" : "");
     };
     if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
@@ -1371,6 +1425,13 @@ export default function App() {
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
       if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
       close(outcome.results);
+      void sharePendingTools({
+        input: text,
+        reply: interpretation?.reply,
+        operations: (interpretation?.operations ?? enabled).map((op) => ({ ...op, enabled: false })),
+        results: mergeToolResults(interpretation?.results ?? [], outcome.results),
+        taskOptions: interpretation?.taskOptions ?? [],
+      });
       if (outcome.failed.length) {
         notifications.error(`${parts.join(" · ")}. First failure: ${outcome.failed[0]!.message}`, "Some updates did not file");
       } else {
@@ -1407,6 +1468,7 @@ export default function App() {
       setInterpretation((current) => current ? { ...current, operations: [...current.operations, ...operations] } : {
         status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.",
       });
+      void sharePendingTools({ input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
     }).catch((value) => showError(value, "The completion proposals could not be saved. Nothing was marked done.", "Proposal update failed"))
       .finally(() => setBusy(false));
   }
@@ -1753,7 +1815,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
         ? <div className="progress-message user" key={index}><ChatMarkdown text={turn.text} /></div>
         : <div className="progress-message assistant" key={index}><Sparkles size={16} /><div><strong>Assistant</strong><ChatMarkdown text={turn.text} />{turn.meta === "recorded" ? <small>Recorded</small> : turn.meta ? <small>{turn.meta} — review them below</small> : null}</div></div>)}</div>}{receipt ? <div className="progress-message assistant"><CheckCircle2 size={16} /><div><strong>{receiptTitle}</strong><p>{receipt.message}</p></div></div> : pending ? <>{interpretation?.status === "loading" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></div></div>
    : interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>Assistant</strong><ChatMarkdown text={interpretation.reply} /><small>Share an update below and I’ll turn it into records.</small></div></div>
-       : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.operations.some((op) => isMutatingToolOp(op)) ? (interpretation.results ? "Tool call results" : "Review assistant tool calls") : "Assistant shortcuts"}</strong>{interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}<p>{interpretation.operations.some((op) => isMutatingToolOp(op)) ? (interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it.") : "Loaded inline below \u2014 viewing never needs approval."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId)); const selection = (result?.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result; const selectionTasks: TaskSelectionCardTask[] = Array.isArray(selection?.tasks) ? selection.tasks.map((task) => ({ id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task", description: typeof task.description === "string" ? task.description : null, dueDate: typeof task.due_date === "string" ? task.due_date : null, priority: typeof task.priority === "string" ? task.priority : null, state: selection?.view === "overdue" ? "overdue" : "pending" })).filter((task) => !!task.id) : []; const isDisplay = isDisplayToolOp(op); if (op.op === "navigate_to_page" && op.page) return <div key={index}><NavigateButton page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} /></div>; return <div key={index}>{isDisplay ? null : <ToolApprovalCard op={op} context={toolContext} result={result} onToggle={() => onToggleOperation?.(index)} onDeny={() => onDenyOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>}{isDisplay && result?.status === "failed" ? <p className="tool-display-error">{result.message}</p> : null}{selection && <TaskSelectionCard title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />}</div>; })}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId))} onClick={() => onApproveOperations?.(interpretation.operations.filter((op) => !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)))}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length} tool call{interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length === 1 ? "" : "s"}</button></div></div>
+       : interpretation?.status === "ready" ? <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{interpretation.operations.some((op) => isMutatingToolOp(op)) ? (interpretation.results ? "Tool call results" : "Review assistant tool calls") : "Assistant shortcuts"}</strong>{interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}<p>{interpretation.operations.some((op) => isMutatingToolOp(op)) ? (interpretation.results ? "Each result is retained below." : "Review the exact command for each proposal. Nothing runs until you approve it.") : "Loaded inline below \u2014 viewing never needs approval."}</p><div className="interpretation-list">{interpretation.operations.map((op, index) => { const result = interpretation.results?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId)); const selection = (result?.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result; const selectionTasks: TaskSelectionCardTask[] = Array.isArray(selection?.tasks) ? selection.tasks.map((task) => ({ id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task", description: typeof task.description === "string" ? task.description : null, dueDate: typeof task.due_date === "string" ? task.due_date : null, priority: typeof task.priority === "string" ? task.priority : null, state: selection?.view === "overdue" ? "overdue" : "pending" })).filter((task) => !!task.id) : []; const isDisplay = isDisplayToolOp(op); if (op.op === "navigate_to_page" && op.page) return <div key={index}><NavigateButton page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} /></div>; return <div key={index}>{isDisplay ? null : <ToolApprovalCard op={op} context={toolContext} result={result} index={index} total={interpretation.operations.length} onToggle={() => onToggleOperation?.(index)} onDeny={() => onDenyOperation?.(index)}><input className="interpretation-statement" disabled={!!result} value={op.statement} maxLength={1000} onChange={(event) => onEditOperation?.(index, event.target.value)} aria-label="Proposed update text" />{!result && (op.op === "complete_task" || op.op === "reopen_task" || op.op === "record_progress") && <select value={op.taskId ?? ""} onChange={(event) => onRemapOperation?.(index, event.target.value)} aria-label="Attach to task"><option value="">No task</option>{interpretation.taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>}</ToolApprovalCard>}{isDisplay && result?.status === "failed" ? <p className="tool-display-error">{result.message}</p> : null}{selection && <TaskSelectionCard title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />}</div>; })}</div><button className="primary approve-interpretation" disabled={busy || !interpretation.operations.some((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId))} onClick={() => onApproveOperations?.(interpretation.operations.filter((op) => !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)))}>Approve &amp; record {interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length} tool call{interpretation.operations.filter((op) => op.enabled && !interpretation.results?.some((result) => result.op.proposalId === op.proposalId)).length === 1 ? "" : "s"}</button></div></div>
 
   : <div className="progress-message assistant"><Sparkles size={16} /><div><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="progress-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></div></div>}</> : <div className={`progress-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>{history.length ? "Continue the conversation below." : "What would you like to record?"}</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
