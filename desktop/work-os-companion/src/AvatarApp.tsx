@@ -9,6 +9,7 @@ import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpret
 import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
+import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
@@ -905,6 +906,7 @@ export default function AvatarApp(): React.ReactElement {
             )}
             {chat.map((entry) => (
               <div key={entry.id} className={`chat-entry ${entry.role}`}>
+                <ChatSectionBoundary label="avatar chat message">
                 {entry.role === "user" ? <ChatMarkdown text={entry.text} />
                   : entry.role === "system" ? <div className="chat-system"><ChatMarkdown text={entry.text} /></div>
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
@@ -953,6 +955,7 @@ export default function AvatarApp(): React.ReactElement {
                         )}
                       </>
                 }
+                </ChatSectionBoundary>
               </div>
             ))}
             {thinkingTrace && <div className="chat-entry assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></div>}

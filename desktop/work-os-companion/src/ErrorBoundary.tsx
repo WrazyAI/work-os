@@ -25,3 +25,33 @@ export default function ErrorBoundary({ children }: { children: ReactNode }) {
   const notifications = useNotifications();
   return <AppErrorBoundary onError={(message) => notifications.error(message, "Application error")}>{children}</AppErrorBoundary>;
 }
+
+export function ChatErrorFallback({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="chat-error" role="alert">
+      <strong>This message couldn&apos;t render</strong>
+      <p>Your conversation is preserved. Try again, and the failure is logged for diagnostics.</p>
+      <button type="button" onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+
+/** Isolates one chat region so a single bad card can never blank the whole
+ * conversation. Failures are reported to diagnostics with their component
+ * stack for later inspection. */
+export class ChatSectionBoundary extends Component<{ label: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(_error: Error) {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    diagnostics.error("react.chat_boundary", `${this.props.label}: ${error.message}`, { componentStack: info.componentStack ?? "" });
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return <ChatErrorFallback onRetry={() => this.setState({ failed: false })} />;
+  }
+}

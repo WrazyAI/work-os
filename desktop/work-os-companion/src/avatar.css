@@ -369,6 +369,12 @@ body.avatar-window {
 }
 .chat-thinking { color: #8f9289; font-style: italic; }
 
+.chat-error { display: grid; gap: 5px; margin: 6px 0; padding: 10px 12px; border: 1px solid #e3aaa2; border-radius: 10px; background: #fff6f4; color: #7c2d26; font-size: 11px; line-height: 1.45; }
+.chat-error strong { font-size: 11.5px; }
+.chat-error p { margin: 0; }
+.chat-error button { justify-self: start; border: 0; border-radius: 8px; background: #7c2d26; color: #fff; font-size: 10px; font-weight: 700; padding: 6px 12px; cursor: pointer; }
+.chat-error button:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
+
 /* ── Thinking trace ─────────────────────────────────────────────── */
 
 .avatar-thinking { max-width: 96%; }
