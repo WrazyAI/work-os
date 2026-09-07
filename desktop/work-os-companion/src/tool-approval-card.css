@@ -21,6 +21,12 @@
 .tool-approval-card > p { margin: 0; color: #40503d; font-size: 10px; font-weight: 650; }
 .tool-approval-card > code { display: block; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: #182018; color: #e7f7ca; font: 9px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
 .tool-approval-transport { margin: 2px 0 -4px; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.tool-approval-transport summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+.tool-approval-transport summary::-webkit-details-marker { display: none; }
+.tool-approval-transport summary::before { content: "▸"; font-size: 9px; }
+.tool-approval-transport[open] summary::before { content: "▾"; }
+.tool-approval-transport summary:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; border-radius: 4px; }
+.tool-approval-transport code { margin-top: 5px; }
 .tool-approval-card > footer { display: flex; gap: 5px; align-items: center; color: #626a61; font-size: 9px; line-height: 1.35; }
 .tool-approval-card.is-recorded { border-color: #a8cf82; background: #f4faee; }
 .tool-approval-card.is-queued { border-color: #d8bb79; background: #fffaf0; }

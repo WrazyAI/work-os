@@ -23,7 +23,7 @@ export function ToolApprovalCard({ op, context, result, onToggle, onDeny, childr
       </header>
        <p>{operationLabel(op.op)} {op.taskTitle ?? "this update"}</p>
        <code>{call.command}</code>
-       {approvalCommand ? <><small className="tool-approval-transport">Approval transport</small><code>{approvalCommand}</code></> : null}
+       {approvalCommand ? <details className="tool-approval-transport"><summary>Approval transport</summary><code>{approvalCommand}</code></details> : null}
       {children}
       <footer>{result ? result.message : op.enabled ? "Waiting for your approval. This command will not run until you select Approve & record." : <><X size={13} /> Denied. This command will not run.</>}</footer>
     </section>

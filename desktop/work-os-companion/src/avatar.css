@@ -330,7 +330,16 @@ body.avatar-window {
   line-height: 1.5;
   color: var(--avatar-ink);
 }
-.chat-entry.assistant { max-width: 96%; }
+.chat-entry.assistant { max-width: 96%; flex-direction: column; align-items: stretch; }
+.chat-entry.assistant > .chat-markdown { max-width: 100%; }
+.chat-entry.assistant > .chat-receipt,
+.chat-entry.assistant > .chat-operations,
+.chat-entry.assistant > .task-selection-card { max-width: 100%; width: 100%; }
+.chat-entry.assistant > .task-selection-card { margin-top: 6px; }
+.avatar-chat .task-selection-card-footer { flex-wrap: wrap; row-gap: 8px; }
+.avatar-chat .task-selection-card-footer button { flex: 1 1 100%; justify-content: center; }
+.chat-operations .tool-approval-card { margin: 0; }
+.chat-operations .tool-approval-card + .tool-approval-card { margin-top: 5px; }
 .chat-system .chat-markdown {
   margin: 0;
   font-size: 11px;

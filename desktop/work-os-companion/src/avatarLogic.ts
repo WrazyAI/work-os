@@ -3,6 +3,7 @@
  * escalation, notification decisions, and the shift timer fraction. Kept
  * side-effect free so the whole cadence is unit-testable.
  */
+import type { ProposedOperation, ToolCallResult } from "./interpretation";
 
 export interface CompanionDayFacts {
   shiftDate: string;
@@ -247,4 +248,64 @@ export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { f
 /** Notification payload prefix per nudge kind (used by the scheduler tests). */
 export function nudgeStackTraceKey(nudge: CompanionNudge): string {
   return nudge.key;
+}
+
+/** Persisted shape of one avatar chat turn. Tool state rides along so a vault
+ * reload or cross-window sync restores approval cards and results intact. */
+export interface AvatarStoredTurn {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  meta?: string;
+  createdAt: string;
+  operations?: ProposedOperation[];
+  toolResults?: ToolCallResult[];
+}
+
+/** Live avatar chat entry: persisted fields plus local-only review state. */
+export interface AvatarChatEntryState {
+  id: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  receipt?: string | null;
+  createdAt?: string;
+  operations?: ProposedOperation[];
+  toolResults?: ToolCallResult[];
+  taskOptions?: Array<{ id: string; title: string }>;
+}
+
+/** Serializes a live entry for the vault. System notices stay ephemeral. */
+export function serializeAvatarChatEntry(entry: AvatarChatEntryState): AvatarStoredTurn | null {
+  if (entry.role !== "user" && entry.role !== "assistant") return null;
+  const turn: AvatarStoredTurn = {
+    id: entry.id,
+    role: entry.role,
+    text: entry.text,
+    createdAt: entry.createdAt ?? new Date().toISOString(),
+  };
+  if (entry.receipt) turn.meta = entry.receipt;
+  if (entry.operations) turn.operations = entry.operations;
+  if (entry.toolResults) turn.toolResults = entry.toolResults;
+  return turn;
+}
+
+/** Merges reloaded turns over local state by id. Incoming text wins; local
+ * tool state survives when the incoming turn does not carry it (another
+ * window saved text-only turns). Entries missing from the incoming list are
+ * dropped so conversation clears propagate. */
+export function mergeAvatarChatEntries(current: AvatarChatEntryState[], incoming: AvatarStoredTurn[]): AvatarChatEntryState[] {
+  const localById = new Map(current.map((entry) => [entry.id, entry]));
+  return incoming.map((turn) => {
+    const local = localById.get(turn.id);
+    return {
+      id: turn.id,
+      role: turn.role,
+      text: turn.text,
+      receipt: turn.meta ?? local?.receipt ?? null,
+      createdAt: turn.createdAt ?? local?.createdAt,
+      operations: turn.operations ?? local?.operations,
+      toolResults: turn.toolResults ?? local?.toolResults,
+      taskOptions: local?.taskOptions ?? [],
+    };
+  });
 }

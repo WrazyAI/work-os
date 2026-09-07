@@ -3,7 +3,7 @@ import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { secureState, type WorkOsConversationTurn } from "./vault";
+import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { ToolApprovalCard } from "./ToolApprovalCard";
@@ -17,8 +17,8 @@ import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
-  avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, shiftElapsedFraction, snoozeUntil,
-  type CompanionDayFacts, type CompanionNudge,
+  avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
+  type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
 
@@ -260,7 +260,7 @@ export default function AvatarApp(): React.ReactElement {
     void secureState.conversation(avatarConversationScope).then((turns) => {
       if (!cancelled) {
         chatConversationSignature.current = JSON.stringify(turns);
-        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
+        setChat(mergeAvatarChatEntries([], turns as AvatarStoredTurn[]));
         setLoadedChatConversation(avatarConversationScope);
       }
     }).catch(() => {
@@ -270,9 +270,9 @@ export default function AvatarApp(): React.ReactElement {
   }, [avatarConversationScope]);
   useEffect(() => {
     if (!avatarConversationScope || loadedChatConversation !== avatarConversationScope) return;
-    const turns: WorkOsConversationTurn[] = chat
-      .filter((entry): entry is ChatEntry & { role: "user" | "assistant" } => entry.role === "user" || entry.role === "assistant")
-      .map((entry) => ({ id: entry.id, role: entry.role, text: entry.text, ...(entry.receipt ? { meta: entry.receipt } : {}), createdAt: entry.createdAt ?? new Date().toISOString() }));
+    const turns = chat
+      .map(serializeAvatarChatEntry)
+      .filter((turn): turn is AvatarStoredTurn => turn !== null);
     const signature = JSON.stringify(turns);
     if (chatConversationSignature.current === signature) return;
     chatConversationSignature.current = signature;
@@ -285,7 +285,7 @@ export default function AvatarApp(): React.ReactElement {
       if (event.payload?.scope !== avatarConversationScope) return;
       void secureState.conversation(avatarConversationScope).then((turns) => {
         chatConversationSignature.current = JSON.stringify(turns);
-        setChat(turns.map(({ meta, ...turn }) => ({ ...turn, role: turn.role as ChatEntry["role"], receipt: meta })));
+        setChat((current) => mergeAvatarChatEntries(current, turns as AvatarStoredTurn[]));
       }).catch(() => undefined);
     }).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
@@ -478,7 +478,6 @@ export default function AvatarApp(): React.ReactElement {
       setMissed(false);
       await loadDay();
       void emit("work-os://avatar-day-changed");
-      setTimeout(() => { void toggleExpanded(false); }, 2_200);
     } catch (value) {
       setChat((current) => [...current, {
         id: `e-${Date.now()}`, role: "system",

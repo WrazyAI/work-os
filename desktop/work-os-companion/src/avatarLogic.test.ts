@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift,
+  clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   type CompanionDayFacts,
 } from "./avatarLogic";
@@ -166,5 +166,40 @@ describe("collectNudges", () => {
     const lateFacts: CompanionDayFacts = { ...facts, clockedInAt: "2026-08-31T08:05:00Z", clockedOutAt: null };
     const nudges = collectNudges(lateFacts, at, new Set());
     expect(nudges.map((nudge) => nudge.kind).sort()).toEqual(["eod", "hourly"]);
+  });
+});
+
+describe("mergeAvatarChatEntries", () => {
+  const op = { op: "complete_task", statement: "Done.", taskId: "t-1", enabled: true } as const;
+  const result = { op, status: "recorded", message: "Recorded." } as const;
+
+  it("preserves local tool state when the incoming turn is text-only", () => {
+    const merged = mergeAvatarChatEntries(
+      [{ id: "a-1", role: "assistant", text: "Review.", operations: [{ ...op }], toolResults: [{ ...result }] }],
+      [{ id: "a-1", role: "assistant", text: "Review.", createdAt: "2026-08-31T10:00:00Z" }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.operations).toHaveLength(1);
+    expect(merged[0]?.toolResults).toHaveLength(1);
+  });
+
+  it("prefers incoming text while keeping local tool state, and drops cleared entries", () => {
+    const merged = mergeAvatarChatEntries(
+      [
+        { id: "a-1", role: "assistant", text: "Old.", operations: [{ ...op }] },
+        { id: "u-9", role: "user", text: "Cleared away." },
+      ],
+      [{ id: "a-1", role: "assistant", text: "New.", createdAt: "2026-08-31T10:01:00Z", toolResults: [{ ...result }] }],
+    );
+    expect(merged.map((entry) => entry.id)).toEqual(["a-1"]);
+    expect(merged[0]?.text).toBe("New.");
+    expect(merged[0]?.operations).toHaveLength(1);
+    expect(merged[0]?.toolResults).toHaveLength(1);
+  });
+
+  it("serializes tool state for the vault while keeping system notices ephemeral", () => {
+    expect(serializeAvatarChatEntry({ id: "a-1", role: "assistant", text: "Hi.", operations: [{ ...op }] }))
+      .toMatchObject({ id: "a-1", operations: [{ op: "complete_task" }] });
+    expect(serializeAvatarChatEntry({ id: "s-1", role: "system", text: "Nope." })).toBeNull();
   });
 });

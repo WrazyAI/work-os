@@ -3,6 +3,7 @@ import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
+import type { ProposedOperation, ToolCallResult } from "./interpretation";
 
 export interface WorkOsConversationTurn {
   id: string;
@@ -10,6 +11,11 @@ export interface WorkOsConversationTurn {
   text: string;
   meta?: string;
   createdAt: string;
+  /** Pending tool calls awaiting employee approval. Persisted so a reload or
+   * cross-window sync never drops an approval card mid-review. */
+  operations?: ProposedOperation[];
+  /** Filed results stay visible as the receipt for an approved tool call. */
+  toolResults?: ToolCallResult[];
 }
 
 let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
