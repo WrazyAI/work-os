@@ -14,7 +14,8 @@ export async function POST(req: Request) {
     });
     if (auth.response) return auth.response;
     const body = await req.json();
-    const personId = auth.access.role === "employee" ? auth.access.personId : body.person_id;
+    const requestedPersonId = typeof body.person_id === "string" && body.person_id.trim() ? body.person_id.trim() : null;
+    const personId = auth.access.role === "employee" ? auth.access.personId : (requestedPersonId ?? auth.access.personId);
     if (!personId) return NextResponse.json({ error: "person_id is required" }, { status: 400 });
     const denied = await requireWorkOsPersonAccess(auth.access, personId);
     if (denied) return denied;
