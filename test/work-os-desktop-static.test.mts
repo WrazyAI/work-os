@@ -227,7 +227,7 @@ assert.match(tauri, /"label": "debug"[\s\S]*"url": "debug\.html"[\s\S]*"visible"
 assert.doesNotMatch(tauri, /localhost:1420/);
 assert.match(tauri, /com\.wrazy\.workos\.pilot/);
 assert.match(tauri, /\/home\/zahemen\/\.nvm\/versions\/node\/v22\.14\.0\/bin\/npm/);
-assert.match(updaterPublicKey, /minisign public key: 4D2A437FD73172B0/);
+assert.match(updaterPublicKey, /minisign public key: 84E0D8F6DBD888F/);
 
 const msi = read("installer/windows-pilot.wxs");
 assert.match(msi, /WebView2Loader\.dll/);
