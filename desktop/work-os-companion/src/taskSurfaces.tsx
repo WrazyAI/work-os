@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
 import { BOTTLENECK_QUESTION, composeEodMarkdown, hasBottleneckAnswer } from "./interpretation";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
 import { CompanionPet } from "./CompanionPet";
@@ -298,6 +299,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
   const [feedback, setFeedback] = useState("");
+  const [view, setView] = useState<"preview" | "raw">("preview");
   // A redraft replaces the buffer (and any in-progress edits) by design.
   useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
   useEffect(() => { if (allTasksCompleted) setBottleneck(""); }, [allTasksCompleted]);
@@ -319,12 +321,23 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
     </header>
     {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</details>}
     {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses today&apos;s recorded work only.</p>}
-    <label className="eod-markdown-label"><span>Report</span>
-      <textarea value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />
-    </label>
-    <section className="eod-feedback" aria-label="Draft feedback"><div><span>Refine this draft</span><small>Tell the assistant what to clarify or change. Your bottleneck answer stays separate.</small></div>
+    <section className="eod-report" aria-label="Report draft">
+      <div className="eod-report-head">
+        <span>Report</span>
+        <div className="eod-view-toggle" role="group" aria-label="Report view">
+          <button type="button" aria-pressed={view === "preview"} className={view === "preview" ? "active" : ""} onClick={() => setView("preview")}>Preview</button>
+          <button type="button" aria-pressed={view === "raw"} className={view === "raw" ? "active" : ""} onClick={() => setView("raw")}>Raw</button>
+        </div>
+      </div>
+      {view === "preview"
+        ? <div className="eod-preview" aria-label="Report preview" aria-live="polite"><ChatMarkdown text={markdown.trim() ? markdown : "Nothing to preview yet."} /></div>
+        : <textarea className="eod-raw" value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />}
+    </section>
+    <section className="eod-refine" aria-label="Draft feedback">
+      <span>Refine this draft</span>
+      <small>Tell the assistant what to clarify or change. Your bottleneck answer stays separate.</small>
       <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
-      <button disabled={!feedback.trim() || busy || redrafting} onClick={() => void refine()}>{redrafting ? "Refining…" : "Refine draft"}</button>
+      <div className="eod-refine-actions"><button disabled={!feedback.trim() || busy || redrafting} onClick={() => void refine()}>{redrafting ? "Refining…" : "Refine draft"}</button></div>
     </section>
     <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
       <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? "Every task in today's list is complete." : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />

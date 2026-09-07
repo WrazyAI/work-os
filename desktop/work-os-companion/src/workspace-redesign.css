@@ -4024,19 +4024,31 @@ button:not(:disabled):active {
 .eod-composer-header button {
   min-height: 34px;
   flex: 0 0 auto;
-  padding: 0 12px;
-  border: 1px solid #cbd7c3;
+  padding: 0 14px;
+  border: 0;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.85);
-  color: #40543a;
+  background: var(--surface, #eef1eb);
+  color: var(--ink);
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .eod-composer-header button:not(:disabled):hover {
-  border-color: #91c568;
-  background: #edf6e4;
+  background: #e2e9dc;
+}
+
+.eod-composer-header button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.eod-composer-header button:focus-visible,
+.eod-refine-actions button:focus-visible,
+.eod-view-toggle button:focus-visible {
+  outline: 2px solid #7cc936;
+  outline-offset: 2px;
 }
 
 .eod-screenshot-context { margin: 0 22px 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); color: var(--muted); }
@@ -4057,13 +4069,121 @@ button:not(:disabled):active {
 @media (max-width: 560px) { .status-update-bubble { right: 14px; bottom: 92px; max-width: min(278px, calc(100vw - 28px)); } }
 @media (prefers-reduced-motion: reduce) { .status-update-bubble { transition: none; } }
 
-.eod-markdown-label,
+.eod-report {
+  display: grid;
+  gap: 8px;
+}
+
+.eod-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eod-report-head > span {
+  color: #666a61;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eod-view-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface, #eef1eb);
+}
+
+.eod-view-toggle button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.eod-view-toggle button.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(20, 30, 18, 0.14);
+}
+
+.eod-view-toggle button:not(.active):hover {
+  color: var(--ink);
+}
+
+.eod-view-toggle button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.eod-preview {
+  padding: 4px 2px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.eod-preview .chat-markdown p {
+  margin: 0 0 10px;
+}
+
+.eod-preview .chat-markdown .chat-markdown-heading {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.eod-preview .chat-markdown .chat-markdown-heading:first-child {
+  margin-top: 0;
+}
+
+.eod-preview .chat-markdown ul {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+
+.eod-preview .chat-markdown li + li {
+  margin-top: 4px;
+}
+
+.eod-preview .chat-markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(24, 32, 24, 0.07);
+  font: 600 0.88em/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.eod-raw {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+  padding: 12px;
+  font: 400 11px/1.6 ui-monospace, Consolas, monospace;
+  resize: vertical;
+}
+
+.eod-raw:focus {
+  outline: none;
+  border-color: #a7c982;
+  box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
+}
+
 .eod-bottleneck-label {
   display: grid;
   gap: 6px;
 }
 
-.eod-markdown-label > span,
 .eod-bottleneck-label > span {
   color: #666a61;
   font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -4071,23 +4191,17 @@ button:not(:disabled):active {
   text-transform: uppercase;
 }
 
-.eod-markdown-label textarea,
 .eod-bottleneck-label textarea {
   width: 100%;
-  border: 1px solid #d3d3ca;
+  border: 1px solid var(--line);
   border-radius: 11px;
-  background: #fffef8;
+  background: #fff;
   color: var(--ink);
   padding: 12px;
-  font: 400 11px/1.6 ui-monospace, Consolas, monospace;
+  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   resize: vertical;
 }
 
-.eod-bottleneck-label textarea {
-  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-
-.eod-markdown-label textarea:focus,
 .eod-bottleneck-label textarea:focus {
   outline: none;
   border-color: #a7c982;
@@ -4100,23 +4214,67 @@ button:not(:disabled):active {
   line-height: 1.45;
 }
 
-.eod-feedback {
+.eod-refine {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--surface-raised, #fbfcf8);
+  gap: 6px;
 }
 
-.eod-feedback > div { display: grid; gap: 3px; }
-.eod-feedback span { color: #666a61; font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: .08em; text-transform: uppercase; }
-.eod-feedback small { color: var(--muted); font-size: 9px; line-height: 1.45; }
-.eod-feedback textarea { grid-column: 1 / -1; width: 100%; padding: 10px 12px; border: 1px solid #d3d3ca; border-radius: 9px; background: #fffef8; color: var(--ink); font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; resize: vertical; }
-.eod-feedback textarea:focus { outline: none; border-color: #a7c982; box-shadow: 0 0 0 4px rgba(129, 180, 70, .11); }
-.eod-feedback button { align-self: start; min-height: 34px; padding: 0 12px; border: 1px solid #cbd7c3; border-radius: 9px; background: #fff; color: #40543a; font-size: 10px; font-weight: 700; white-space: nowrap; }
-.eod-feedback button:disabled { opacity: .55; }
+.eod-refine > span {
+  color: #666a61;
+  font: 700 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.eod-refine > small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.eod-refine textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  resize: vertical;
+}
+
+.eod-refine textarea:focus {
+  outline: none;
+  border-color: #a7c982;
+  box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
+}
+
+.eod-refine-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.eod-refine-actions button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--surface, #eef1eb);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.eod-refine-actions button:not(:disabled):hover {
+  background: #e2e9dc;
+}
+
+.eod-refine-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 .eod-bottleneck-label textarea:disabled { background: var(--surface, #eef1eb); color: var(--muted); cursor: not-allowed; }
 
 .eod-composer > footer {
@@ -4139,8 +4297,7 @@ button:not(:disabled):active {
 
 @media (max-width: 560px) {
   .eod-composer-header { flex-direction: column; }
-  .eod-feedback { grid-template-columns: 1fr; }
-  .eod-feedback button { justify-self: start; }
+  .eod-report-head { flex-wrap: wrap; }
 }
 
 /* Insights AI synthesis — Slice D */
