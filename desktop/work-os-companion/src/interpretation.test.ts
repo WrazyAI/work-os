@@ -164,4 +164,12 @@ describe("operationToolCall", () => {
     expect(operationToolCall(proposal, context).tool).toBe("work_os.proposals.review");
     expect(proposalApprovalCommand(proposal)).toBe('PATCH /api/work-os/proposals/proposal-1 {"decision":"accept"}');
   });
+
+  it("preserves reply line breaks so chat lists stay readable", () => {
+    const review = normalizeInterpretation({
+      reply: "You have 2 pending tasks:\n- Fix the crash\n- Ship the build",
+      operations: [],
+    }, "show my pending tasks", TASKS);
+    expect(review?.reply).toContain("- Fix the crash\n- Ship the build");
+  });
 });

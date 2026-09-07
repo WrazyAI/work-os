@@ -117,7 +117,7 @@ export function normalizeInterpretation(
   if (!raw || typeof raw !== "object") return null;
   const source = raw as { operations?: unknown; reply?: unknown };
   const allowed = new Set(tasks.map((task) => task.id));
-  const reply = typeof source.reply === "string" && source.reply.trim() ? source.reply.replace(/\s+/g, " ").trim().slice(0, 600) : undefined;
+  const reply = typeof source.reply === "string" && source.reply.trim() ? source.reply.replace(/\r\n?/g, "\n").split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n").slice(0, 1200) || undefined : undefined;
   if (!Array.isArray(source.operations)) {
     // A conversational reply with nothing to record is a valid assistant turn.
     return reply ? { originalInput, operations: [], reply } : null;
