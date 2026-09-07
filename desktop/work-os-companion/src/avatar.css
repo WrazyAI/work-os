@@ -72,6 +72,17 @@ body.avatar-window {
 .avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 7px 16px rgba(13, 15, 12, 0.38); }
 .avatar-orb:active { transform: translateY(1px) scale(0.985); box-shadow: 0 3px 8px rgba(13, 15, 12, 0.3); }
 .avatar-orb.pulse { animation: avatarPulse 1.8s ease-in-out infinite; }
+/* Single acknowledgement hop when a new prompt arrives — one iteration only,
+ * never ambient. Rotation-free 6px lift keeps it inside the motion budget. */
+.avatar-orb.hop-once { animation: avatarHop 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 1; }
+.avatar-orb.hop-once.pulse { animation: avatarHop 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 1, avatarPulse 1.8s ease-in-out 0.55s infinite; }
+
+@keyframes avatarHop {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-6px); }
+  70% { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
 
 @keyframes avatarPulse {
   0%, 100% { box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35), 0 0 0 0 rgba(139, 195, 74, 0.55); }
@@ -348,6 +359,140 @@ body.avatar-window {
 }
 .chat-thinking { color: #8f9289; font-style: italic; }
 
+/* ── Thinking trace ─────────────────────────────────────────────── */
+
+.avatar-thinking { max-width: 96%; }
+.avatar-thinking-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 4px 6px;
+  margin-left: -6px;
+  color: #6a6d64;
+  font: 600 12px/1.4 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+.avatar-thinking-head:hover { background: rgba(23, 25, 20, 0.05); color: var(--avatar-ink); }
+.avatar-thinking-head:focus-visible { outline: 2px solid var(--avatar-signal); outline-offset: 1px; }
+.avatar-thinking-active {
+  background-image: linear-gradient(90deg, #8f9289 35%, var(--avatar-ink) 50%, #8f9289 65%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: avatarShimmer 1.4s linear infinite;
+}
+@keyframes avatarShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.avatar-thinking-done { color: #6a6d64; }
+.avatar-thinking-elapsed {
+  color: #8f9289;
+  font: 600 11px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.avatar-thinking-chevron { transition: transform 0.2s ease; }
+.avatar-thinking-chevron.open { transform: rotate(180deg); }
+.avatar-thinking-trace-wrap {
+  display: grid;
+  transition: grid-template-rows 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
+}
+.avatar-thinking-trace-clip { overflow: hidden; min-height: 0; }
+.avatar-thinking-trace {
+  margin: 2px 0 2px 6px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(23, 25, 20, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.avatar-thinking-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.avatar-thinking-check { flex: 0 0 auto; color: #5d7a4a; }
+.avatar-thinking-spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(23, 25, 20, 0.2);
+  border-top-color: var(--avatar-ink);
+  animation: avatarSpin 0.7s linear infinite;
+}
+@keyframes avatarSpin { to { transform: rotate(360deg); } }
+.avatar-thinking-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--avatar-ink);
+}
+.avatar-thinking-detail { flex: 0 0 auto; font-size: 11px; color: #8f9289; }
+
+/* ── Agenda review card ─────────────────────────────────────────── */
+
+.agenda-review-card {
+  border: 1px solid #b8d692;
+  border-radius: 11px;
+  background: #f2f8ea;
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agenda-review-card > strong { font-size: 12px; color: #24331e; }
+.agenda-review-question { display: flex; flex-direction: column; gap: 4px; }
+.agenda-review-question > span { font-size: 11.5px; font-weight: 600; color: var(--avatar-ink); }
+.agenda-review-question input {
+  border: 1px solid rgba(23, 25, 20, 0.16);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: 400 12px/1.4 Manrope, Inter, sans-serif;
+  color: var(--avatar-ink);
+  background: #fff;
+  outline: none;
+  user-select: text;
+}
+.agenda-review-question input:focus { border-color: var(--avatar-signal); box-shadow: 0 0 0 3px rgba(139, 195, 74, 0.18); }
+.agenda-review-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.agenda-review-send {
+  border: 0;
+  border-radius: 9px;
+  background: var(--avatar-ink);
+  color: #fff;
+  font: 600 11.5px/1 Manrope, Inter, sans-serif;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.agenda-review-send:disabled { opacity: 0.45; cursor: default; }
+.agenda-review-skip {
+  border: 1px solid rgba(23, 25, 20, 0.16);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--avatar-ink);
+  font: 600 11.5px/1 Manrope, Inter, sans-serif;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.agenda-review-skip:disabled { opacity: 0.45; cursor: default; }
+.agenda-review-cancel {
+  border: 0;
+  background: transparent;
+  color: #8f9289;
+  font: 600 11.5px/1 Manrope, Inter, sans-serif;
+  padding: 9px 6px;
+  cursor: pointer;
+}
+.agenda-review-cancel:hover { color: var(--avatar-ink); }
+
+/* ── Task context card ──────────────────────────────────────────── */
+
+.avatar-task-context { margin: 10px 14px 0; }
+.avatar-task-context .task-selection-card { border-color: #c9d8b6; }
+
 .chat-operations {
   margin-top: 6px;
   display: grid;
@@ -423,5 +568,7 @@ body.avatar-window {
 .avatar-empty { padding: 14px; font-size: 12px; color: #6a6d64; }
 
 @media (prefers-reduced-motion: reduce) {
-  .avatar-orb, .avatar-panel, .avatar-orb.pulse { animation: none; transition: none; }
+  .avatar-orb, .avatar-panel, .avatar-orb.pulse, .avatar-orb.hop-once,
+  .avatar-thinking-active, .avatar-thinking-spinner, .avatar-thinking-chevron,
+  .avatar-thinking-trace-wrap { animation: none; transition: none; }
 }

@@ -9,6 +9,11 @@ import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
+import { AgendaReviewCard } from "./AgendaReviewCard";
+import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
+import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
+import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { CompanionPet } from "./CompanionPet";
 import {
@@ -28,9 +33,15 @@ interface DayFacts extends CompanionDayFacts {
   displayName: string | null;
   niftySyncing: boolean;
   niftySyncError: string | null;
-  taskOptions: Array<{ id: string; title: string }>;
+  taskOptions: Array<{ id: string; title: string; dueDate: string | null; completed: boolean }>;
   planStatus: string | null;
   planItemIds: string[];
+}
+
+interface AvatarTrace {
+  labels: string[];
+  elapsedMs: number;
+  result?: string;
 }
 
 interface ChatEntry {
@@ -41,7 +52,15 @@ interface ChatEntry {
   toolResults?: ToolCallResult[];
   taskOptions?: Array<{ id: string; title: string }>;
   receipt?: string | null;
+  trace?: AvatarTrace | null;
   createdAt?: string;
+}
+
+interface AgendaReview {
+  input: string;
+  interpretation: PlanningInterpretation;
+  answers: AgendaAnswers;
+  round: number;
 }
 
 const AVATAR_COLLAPSED = { width: 164, height: 188 };
@@ -107,7 +126,9 @@ export default function AvatarApp(): React.ReactElement {
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
+  const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
+  const thinking = thinkingTrace !== null;
+  const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
   const [filing, setFiling] = useState(false);
   const [snoozeCount, setSnoozeCount] = useState<number>(() => {
     const s = readJson<{ count?: number; until?: number | null }>(SNOOZE_KEY, {});
@@ -184,7 +205,12 @@ export default function AvatarApp(): React.ReactElement {
         niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null,
         taskOptions: Array.isArray(day?.tasks) ? day.tasks
           .filter((task: unknown): task is Record<string, unknown> => !!task && typeof task === "object" && typeof (task as Record<string, unknown>).id === "string")
-          .map((task: Record<string, unknown>) => ({ id: String(task.id), title: typeof task.title === "string" ? task.title : "Untitled task" }))
+          .map((task: Record<string, unknown>) => ({
+            id: String(task.id),
+            title: typeof task.title === "string" ? task.title : "Untitled task",
+            dueDate: typeof task.due_date === "string" ? task.due_date : null,
+            completed: task.completed === true,
+          }))
           .slice(0, 200) : [],
         planStatus: typeof day?.plan?.status === "string" ? day.plan.status : null,
         planItemIds: Array.isArray(day?.plan?.items) ? day.plan.items
@@ -379,31 +405,46 @@ export default function AvatarApp(): React.ReactElement {
   // ── Composer: interpret + approve, same flow as the main window ──
   const sendUpdate = useCallback(async () => {
     const text = input.trim();
-    if (!text || thinking || filing) return;
+    if (!text || thinkingTrace || filing) return;
     setInput("");
+    const startedAt = Date.now();
+    const stages: AvatarThinkingStage[] = [
+      { label: "Reading today's context" },
+      { label: "Matching your tasks" },
+      { label: "Drafting proposals" },
+    ];
+    setThinkingTrace({ stages, active: 0, startedAt });
+    const settle = (labels: string[], result?: string): AvatarTrace => ({
+      labels,
+      elapsedMs: Date.now() - startedAt,
+      result,
+    });
     const userTurn: ChatEntry = { id: `u-${Date.now()}`, role: "user", text, createdAt: new Date().toISOString() };
     const history = [...chat.filter((entry) => entry.role === "user" || entry.role === "assistant"), userTurn];
     setChat((current) => [...current, userTurn]);
-    setThinking(true);
     try {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
         body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
+      setThinkingTrace({ stages, active: 1, startedAt });
       const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
       if (!review.operations.length) {
-        setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted." }]);
+        const trace = settle(stages.map((stage) => stage.label), "Nothing to record");
+        setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted.", trace }]);
         return;
       }
+      setThinkingTrace({ stages, active: 2, startedAt });
       const proposals = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
       });
       const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
+      const trace = settle(stages.map((stage) => stage.label), `${review.operations.length} proposal${review.operations.length === 1 ? "" : "s"} to review`);
       setChat((current) => [
         ...current,
-        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions: [] },
+        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions: [], trace },
       ]);
     } catch (value) {
       setChat((current) => [...current, {
@@ -411,9 +452,9 @@ export default function AvatarApp(): React.ReactElement {
         text: value instanceof Error ? value.message : "The assistant is unavailable — file this one from the main window.",
       }]);
     } finally {
-      setThinking(false);
+      setThinkingTrace(null);
     }
-  }, [input, thinking, filing, facts.planIntent, facts.shiftDate, chat]);
+  }, [input, thinkingTrace, filing, facts.planIntent, facts.shiftDate, chat]);
 
   const approveOperations = useCallback(async (entryId: string, operations: ProposedOperation[]) => {
     const enabled = operations.filter((op) => op.enabled);
@@ -482,24 +523,162 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
-  const submitAgenda = useCallback(async () => {
-    const goal = input.trim();
-    if (!goal || filing) return;
+  /** Persists a reviewed agenda. A null interpretation means the assistant was
+   * unavailable, so the raw employee wording is confirmed exactly as written. */
+  const confirmAgenda = useCallback(async (
+    goal: string,
+    interpretation: PlanningInterpretation | null,
+    answers: AgendaAnswers,
+    review: { rounds: number; answered: number; asked: number; reviewed: boolean },
+  ) => {
     setFiling(true);
     try {
-      await apiRequest("/api/work-os/me/plan", {
-        method: "PATCH",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ confirm: true, freeform_intent: goal, item_ids: facts.planItemIds, deferred_ids: [] }),
-      });
+      if (interpretation) {
+        await apiRequest("/api/work-os/me/plan", {
+          method: "PUT",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: JSON.stringify({
+            shift_date: facts.shiftDate,
+            confirm: true,
+            freeform_intent: goal,
+            goal_provenance: "employee",
+            focus_summary: interpretation.summary,
+            interpretation_metadata: {
+              model: "work-os-plan", promptVersion: "work-os-plan-v1", interpretedAt: new Date().toISOString(),
+              clarificationCount: interpretation.clarifications.length,
+              sourceContext: ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates"],
+              clarifications: interpretation.clarifications,
+            },
+            clarification_answers: answers,
+          }),
+        });
+      } else {
+        await apiRequest("/api/work-os/me/plan", {
+          method: "PATCH",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
+          body: JSON.stringify({ confirm: true, freeform_intent: goal, item_ids: facts.planItemIds, deferred_ids: [] }),
+        });
+      }
       setInput("");
-      setChat((current) => [...current, { id: `agenda-${Date.now()}`, role: "assistant", text: "Today's agenda is set. I’ll check in again after you’ve had time to make progress.", receipt: "Agenda confirmed" }]);
+      setAgendaReview(null);
+      setChat((current) => [...current, {
+        id: `agenda-${Date.now()}`, role: "assistant",
+        text: review.reviewed ? agendaReceipt(review) : "Today's agenda is set without AI review — the assistant is unavailable, so your words were kept exactly as written.",
+        receipt: "Agenda confirmed",
+      }]);
       await loadDay();
       void emit("work-os://avatar-day-changed");
     } catch (value) {
-      setChat((current) => [...current, { id: `agenda-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Your agenda could not be confirmed." }]);
+      const message = value instanceof Error ? value.message : "Your agenda could not be confirmed.";
+      setChat((current) => [...current, {
+        id: `agenda-error-${Date.now()}`, role: "system",
+        text: /changed on another device|already confirmed/i.test(message)
+          ? "This plan changed on another device. Open the main window to review it before confirming again."
+          : message,
+      }]);
     } finally { setFiling(false); }
-  }, [facts.planItemIds, filing, input, loadDay]);
+  }, [facts.planItemIds, facts.shiftDate, loadDay]);
+  /** Agenda entry: the assistant reviews the goal first and asks up to two
+   * follow-up questions before anything is persisted. */
+  const submitAgenda = useCallback(async () => {
+    const goal = input.trim();
+    if (!goal || filing || thinkingTrace || agendaReview || !facts.shiftDate) return;
+    const startedAt = Date.now();
+    const stages: AvatarThinkingStage[] = [
+      { label: "Reading your agenda" },
+      { label: "Reviewing today's tasks" },
+      { label: "Confirming your plan" },
+    ];
+    setThinkingTrace({ stages, active: 0, startedAt });
+    try {
+      const conversation = chat
+        .filter((entry) => entry.role === "user" || entry.role === "assistant")
+        .slice(-8)
+        .map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text }));
+      const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+        method: "POST",
+        body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
+      });
+      const interpretation = result.interpretation;
+      setThinkingTrace({ stages, active: 1, startedAt });
+      if (interpretation.clarifications.length > 0) {
+        setAgendaReview({ input: goal, interpretation, answers: {}, round: 1 });
+        setChat((current) => [...current, {
+          id: `agenda-review-${Date.now()}`, role: "assistant",
+          text: `${interpretation.summary} Before I set this, ${interpretation.clarifications.length === 1 ? "one quick question" : "two quick questions"}.`,
+        }]);
+        return;
+      }
+      setThinkingTrace({ stages, active: 2, startedAt });
+      await confirmAgenda(goal, interpretation, {}, { rounds: 1, answered: 0, asked: 0, reviewed: true });
+    } catch (value) {
+      if (value instanceof ApiRequestError && (value.status === 501 || value.status === 503 || value.status === null)) {
+        await confirmAgenda(goal, null, {}, { rounds: 0, answered: 0, asked: 0, reviewed: false });
+      } else {
+        setChat((current) => [...current, {
+          id: `agenda-error-${Date.now()}`, role: "system",
+          text: value instanceof Error ? value.message : "Your agenda could not be reviewed.",
+        }]);
+      }
+    } finally { setThinkingTrace(null); }
+  }, [agendaReview, chat, confirmAgenda, facts.shiftDate, filing, input, thinkingTrace]);
+  const answerAgendaReview = useCallback(async () => {
+    if (!agendaReview || filing || thinkingTrace) return;
+    const { input: goal, interpretation, answers, round } = agendaReview;
+    const startedAt = Date.now();
+    const stages: AvatarThinkingStage[] = [
+      { label: "Reading your answers" },
+      { label: "Reviewing today's tasks" },
+      { label: "Confirming your plan" },
+    ];
+    setThinkingTrace({ stages, active: 0, startedAt });
+    try {
+      const conversation = withAnswerRound(
+        chat.filter((entry) => entry.role === "user" || entry.role === "assistant")
+          .slice(-8).map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text })),
+        interpretation.clarifications,
+        answers,
+      );
+      const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+        method: "POST",
+        body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
+      });
+      const next = result.interpretation;
+      setThinkingTrace({ stages, active: 1, startedAt });
+      const stillOpen = unansweredQuestions(next.clarifications, answers);
+      if (stillOpen.length > 0 && round < 2) {
+        setAgendaReview({ input: goal, interpretation: next, answers, round: round + 1 });
+        setChat((current) => [...current, {
+          id: `agenda-review-${Date.now()}`, role: "assistant",
+          text: `${next.summary} ${stillOpen.length === 1 ? "One more question" : "Two more questions"} before I set this.`,
+        }]);
+        return;
+      }
+      setThinkingTrace({ stages, active: 2, startedAt });
+      const applicable = applicableAnswers(next.clarifications, answers);
+      const answeredCount = Object.keys(applicable).length;
+      await confirmAgenda(goal, next, applicable, { rounds: round + 1, answered: answeredCount, asked: interpretation.clarifications.length, reviewed: true });
+    } catch (value) {
+      setChat((current) => [...current, {
+        id: `agenda-error-${Date.now()}`, role: "system",
+        text: value instanceof Error ? value.message : "Your answers could not be reviewed.",
+      }]);
+    } finally { setThinkingTrace(null); }
+  }, [agendaReview, chat, confirmAgenda, facts.shiftDate, filing, thinkingTrace]);
+  const skipAgendaReview = useCallback(() => {
+    if (!agendaReview || filing || thinkingTrace) return;
+    const { input: goal, interpretation, answers } = agendaReview;
+    const answered = interpretation.clarifications.filter((question) => answers[question.id]?.trim()).length;
+    void confirmAgenda(goal, interpretation, answers, { rounds: 1, answered, asked: interpretation.clarifications.length, reviewed: true });
+  }, [agendaReview, confirmAgenda, filing, thinkingTrace]);
+  const cancelAgendaReview = useCallback(() => {
+    if (!agendaReview) return;
+    setAgendaReview(null);
+    setChat((current) => [...current, {
+      id: `agenda-cancelled-${Date.now()}`, role: "system",
+      text: "Review cancelled — your agenda text is still in the composer.",
+    }]);
+  }, [agendaReview]);
 
   // ── Derived render state ──
   const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
@@ -512,6 +691,18 @@ export default function AvatarApp(): React.ReactElement {
       : [...current, { id: promptTurnId, role: "assistant", text: `${contextualPrompt.heading}: ${contextualPrompt.body}`, createdAt: new Date().toISOString() }]);
   }, [contextualPrompt.body, promptTurnId]);
   const showBadge = contextualPrompt.kind === "eod" || (contextualPrompt.kind === "check_in" && !missed);
+  const taskContext = useMemo(
+    () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
+    [facts.loaded, facts.shiftDate, facts.taskOptions],
+  );
+  // Single acknowledgement hop when a new prompt arrives — state-driven, never ambient.
+  const [hop, setHop] = useState(false);
+  useEffect(() => {
+    if (!promptTurnId) return;
+    setHop(true);
+    const timer = setTimeout(() => setHop(false), 650);
+    return () => clearTimeout(timer);
+  }, [promptTurnId]);
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
@@ -567,7 +758,7 @@ export default function AvatarApp(): React.ReactElement {
         {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
         <button
-          className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}`}
+          className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
           title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
         >
@@ -590,6 +781,20 @@ export default function AvatarApp(): React.ReactElement {
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
           {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
+          {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
+            <div className="avatar-task-context">
+              <TaskSelectionCard
+                dense
+                maxHeight={220}
+                title={taskContextTitle(taskContext)}
+                tasks={taskContext.visible.map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending" }))}
+                onMarkSelectedDone={proposeAvatarSelectedCompletions}
+                degraded={daySyncState === "stale"}
+                emptyTitle="No open tasks"
+                emptyMessage="Tasks waiting to be completed will appear here."
+              />
+            </div>
+          )}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
               <div className="chat-entry assistant"><p>{attentionDue
@@ -603,6 +808,15 @@ export default function AvatarApp(): React.ReactElement {
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
                       : <>
                         <ChatMarkdown text={entry.text} />
+                        {entry.trace && (
+                          <AvatarThinking
+                            stages={entry.trace.labels.map((label) => ({ label }))}
+                            active={-1}
+                            startedAt={0}
+                            settledMs={entry.trace.elapsedMs}
+                            result={entry.trace.result}
+                          />
+                        )}
                         {entry.toolResults?.map((result) => {
                           const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
                           if (!selection) return null;
@@ -634,18 +848,29 @@ export default function AvatarApp(): React.ReactElement {
                 }
               </div>
             ))}
-            {thinking && <div className="chat-entry assistant"><p className="chat-thinking">Thinking…</p></div>}
+            {thinkingTrace && <div className="chat-entry assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></div>}
+            {agendaReview && (
+              <AgendaReviewCard
+                clarifications={agendaReview.interpretation.clarifications}
+                answers={agendaReview.answers}
+                onAnswers={(answers) => setAgendaReview((current) => (current ? { ...current, answers } : current))}
+                onSend={() => void answerAgendaReview()}
+                onSkip={skipAgendaReview}
+                onCancel={cancelAgendaReview}
+                busy={filing || thinking}
+              />
+            )}
           </div>
           {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer">
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void (agendaDue ? submitAgenda() : sendUpdate()); } }}
-              placeholder={agendaDue ? "Describe your goal for today…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
+              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!agendaReview) void (agendaDue ? submitAgenda() : sendUpdate()); } }}
+              placeholder={agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
               autoFocus
               maxLength={4000}
             />
-            <button className="avatar-send" disabled={!input.trim() || thinking || filing} onClick={() => void (agendaDue ? submitAgenda() : sendUpdate())} aria-label={agendaDue ? "Confirm today’s agenda" : "Send update"}>{agendaDue ? "✓" : "↑"}</button>
+            <button className="avatar-send" disabled={!input.trim() || thinking || filing || !!agendaReview} onClick={() => void (agendaDue ? submitAgenda() : sendUpdate())} aria-label={agendaDue ? "Confirm today’s agenda" : "Send update"}>{agendaDue ? "✓" : "↑"}</button>
           </footer>}
           {contextualPrompt.kind === "check_in" && !missed && !lastEntry?.receipt && (
             <button className="avatar-snooze" onClick={() => {

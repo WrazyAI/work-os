@@ -1192,6 +1192,28 @@ and dense rows. At narrow widths, status labels may hide, metadata wraps, and th
 footer action becomes full width. Checkbox focus remains visible and all
 non-essential motion is removed with reduced motion.
 
+### 25.8 Assistant thinking trace
+
+When the floating companion performs multi-step assistant work (interpreting an
+update, reviewing an agenda), it may show a thinking trace instead of a bare
+`Thinking…` label so the employee can see what is actually happening.
+
+Contract:
+
+- Stages are driven by the real request lifecycle. Only stages that started
+  render; a stage never claims work that did not happen.
+- While work is in flight the trace stays open with a shimmer header and a live
+  elapsed timer in tabular monospace (`2.4s`).
+- Once settled it collapses to a one-line receipt (`Thought for 2.4s ·
+  2 proposals to review`) that remains expandable via `aria-expanded`.
+- Completed stages use a muted check; the in-flight stage uses a small spinner.
+- Header uses the standard 12px semibold control type; rows use 12px semibold
+  labels with quiet detail text. No Tailwind-style gallery tokens.
+- All motion (shimmer, spinner, expand) is removed under
+  `prefers-reduced-motion`, leaving the stage labels and receipt visible.
+- The trace never replaces the approval barrier: proposals still require
+  explicit review in `ToolApprovalCard` before anything is recorded.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition
