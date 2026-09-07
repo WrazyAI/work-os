@@ -3675,6 +3675,24 @@ button:not(:disabled):active {
   font-size: 10px;
 }
 
+.task-selection-card-footer .ghost {
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.task-selection-card-footer .ghost:hover {
+  color: var(--ink);
+  border-color: #c3ccbb;
+}
+
 .task-selection-card.is-dense .task-selection-row {
   min-height: 58px;
   padding-block: 7px;
@@ -3719,6 +3737,11 @@ button:not(:disabled):active {
   }
 
   .task-selection-card-footer .primary {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .task-selection-card-footer .ghost {
     width: 100%;
     min-height: 40px;
   }

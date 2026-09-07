@@ -2,7 +2,12 @@ import { safeTaskText } from "./taskWorkspace";
 
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
-  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
+  | "navigate_to_page";
+
+/** Destinations the assistant may link inline. Anything else is dropped. */
+export const NAVIGATE_PAGES = ["day", "tasks", "review", "insights", "evidence", "settings"] as const;
+export type NavigatePage = (typeof NAVIGATE_PAGES)[number];
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
 
 export interface ProposedOperation {
@@ -12,6 +17,7 @@ export interface ProposedOperation {
   taskTitle?: string;
   taskGroupId?: string;
   limit?: number;
+  page?: NavigatePage;
   proposalId?: string;
   /** Employee inclusion toggle — nothing files without this. */
   enabled: boolean;
@@ -47,10 +53,22 @@ const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
   delete_subtask: "Delete subtask:",
   display_pending_tasks: "Show pending tasks",
   display_overdue_tasks: "Show overdue tasks",
+  navigate_to_page: "Open page:",
 };
 
 export function operationLabel(op: CandidateOperationKind): string {
   return OPERATION_LABELS[op] ?? "Update:";
+}
+
+/** Read-only tools fetch immediately in the client — viewing tasks or
+ * navigating mutates nothing, so these never enter the approval queue. */
+export function isDisplayToolOp(op: Pick<ProposedOperation, "op">): boolean {
+  return op.op === "display_pending_tasks" || op.op === "display_overdue_tasks";
+}
+
+/** Mutating tools always require an explicit approval decision first. */
+export function isMutatingToolOp(op: Pick<ProposedOperation, "op">): boolean {
+  return !isDisplayToolOp(op) && op.op !== "navigate_to_page";
 }
 
 /** The exact Work OS request an approved assistant proposal will make. */
@@ -88,6 +106,9 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
   }
   if (op.op === "delete_subtask") {
     return { tool: "work_os.tasks.delete_subtask", command: `DELETE /api/work-os/me/tasks/${op.taskId ?? "<select-subtask>"}?mode=delete` };
+  }
+  if (op.op === "navigate_to_page") {
+    return { tool: "work_os.navigation.go", command: `OPEN ${op.page ?? "<page>"}` };
   }
   if (op.op === "display_pending_tasks" || op.op === "display_overdue_tasks") {
     const view = op.op === "display_overdue_tasks" ? "overdue" : "pending";
@@ -135,7 +156,11 @@ export function normalizeInterpretation(
     const taskTitle = typeof candidate.taskTitle === "string" && candidate.taskTitle.trim() ? safeTaskText(candidate.taskTitle, "") || undefined : undefined;
     const taskGroupId = typeof candidate.taskGroupId === "string" && candidate.taskGroupId.trim() ? candidate.taskGroupId.trim().slice(0, 160) : undefined;
     const limit = typeof candidate.limit === "number" && Number.isInteger(candidate.limit) ? Math.min(100, Math.max(1, candidate.limit)) : undefined;
-    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, enabled: true });
+    const page = op === "navigate_to_page" && typeof candidate.page === "string" && (NAVIGATE_PAGES as readonly string[]).includes(candidate.page)
+      ? candidate.page as NavigatePage
+      : undefined;
+    if (op === "navigate_to_page" && !page) continue;
+    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, page, enabled: true });
   }
   if (!operations.length && !reply) return null;
   return { originalInput, operations, reply };

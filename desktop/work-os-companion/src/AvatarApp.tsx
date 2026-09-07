@@ -5,7 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
-import { normalizeInterpretation, fileApprovedOperations, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { isDisplayToolOp, isMutatingToolOp, normalizeInterpretation, fileApprovedOperations, type NavigatePage, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -376,6 +377,11 @@ export default function AvatarApp(): React.ReactElement {
     await toggleExpanded(false);
   }, [toggleExpanded]);
 
+  const navigateToPage = useCallback(async (page: NavigatePage): Promise<void> => {
+    void emit("work-os://avatar-navigate", { view: page });
+    await invoke("focus_main").catch(() => undefined);
+  }, []);
+
   // ── Persist position after drags settle ──
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -436,15 +442,29 @@ export default function AvatarApp(): React.ReactElement {
         return;
       }
       setThinkingTrace({ stages, active: 2, startedAt });
-      const proposals = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      const mutating = review.operations.map((op, index) => ({ op, index })).filter(({ op }) => isMutatingToolOp(op));
+      const proposals = mutating.length ? await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: text, operations: review.operations.map((op) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
-      });
-      const byIndex = new Map(proposals.proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
-      const trace = settle(stages.map((stage) => stage.label), `${review.operations.length} proposal${review.operations.length === 1 ? "" : "s"} to review`);
+        body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
+      }) : { proposals: [] };
+      const proposalIdByOriginal = new Map(proposals.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
+      const operations = review.operations.map((op, index) => ({ ...op, enabled: isMutatingToolOp(op), proposalId: proposalIdByOriginal.get(index) }));
+      // Read-only display tools fetch immediately — viewing tasks mutates
+      // nothing, so there is nothing to approve.
+      const displayResults: ToolCallResult[] = [];
+      for (const op of operations.filter(isDisplayToolOp)) {
+        const view = op.op === "display_overdue_tasks" ? "overdue" : "pending";
+        try {
+          const data = await apiRequest<{ tasks: Array<Record<string, unknown>> }>(`/api/work-os/me/tasks?view=${view}&limit=${op.limit ?? 20}`);
+          displayResults.push({ op, status: "recorded", message: view === "overdue" ? "Overdue tasks loaded." : "Pending tasks loaded.", data: { provider_result: { view, tasks: data.tasks ?? [] } } });
+        } catch (value) {
+          displayResults.push({ op, status: "failed", message: value instanceof Error ? value.message : "The task list could not be loaded." });
+        }
+      }
+      const trace = settle(stages.map((stage) => stage.label), mutating.length ? `${mutating.length} proposal${mutating.length === 1 ? "" : "s"} to review` : "Shown inline");
       setChat((current) => [
         ...current,
-        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations: review.operations.map((op, index) => ({ ...op, proposalId: byIndex.get(index) })), taskOptions: [], trace },
+        { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined },
       ]);
     } catch (value) {
       setChat((current) => [...current, {
@@ -816,7 +836,7 @@ export default function AvatarApp(): React.ReactElement {
                             result={entry.trace.result}
                           />
                         )}
-                        {entry.toolResults?.map((result) => {
+                        {entry.toolResults?.map((result, resultIndex) => {
                           const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
                           if (!selection) return null;
                           const tasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
@@ -826,20 +846,25 @@ export default function AvatarApp(): React.ReactElement {
                             priority: typeof task.priority === "string" ? task.priority : null,
                             state: selection.view === "overdue" ? "overdue" : "pending",
                           })).filter((task) => !!task.id) : [];
-                          return <TaskSelectionCard key={result.op.proposalId} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
                         {entry.operations && (
                           <div className="chat-operations">
-                            {entry.operations.map((op, index) => (
-                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={entry.toolResults?.find((item) => item.op.proposalId === op.proposalId)} onToggle={() => {
-                                if (entry.toolResults?.some((item) => item.op.proposalId === op.proposalId)) return;
+                            {entry.operations.map((op, index) => {
+                              const result = entry.toolResults?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId));
+                              if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={index} page={op.page} statement={op.statement} onNavigate={(page) => void navigateToPage(page)} />;
+                              if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
+                              return (
+                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={result} onToggle={() => {
+                                if (entry.toolResults?.some((item) => item.op === op)) return;
                                   const next = entry.operations!.map((candidate, i) => i === index ? { ...candidate, enabled: !candidate.enabled } : candidate);
                                   setChat((current) => current.map((e) => e.id === entry.id ? { ...e, operations: next } : e));
                                 }} onDeny={() => denyOperation(entry.id, op)} />
-                            ))}
-                            <button className="op-approve" disabled={filing || !!entry.toolResults || !entry.operations.some((op) => op.enabled)}
+                              );
+                            })}
+                            <button className="op-approve" disabled={filing || !entry.operations.some((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op))}
                               onClick={() => void approveOperations(entry.id, entry.operations!)}>
-                              {filing ? "Filing…" : `Approve & record ${entry.operations.filter((op) => op.enabled).length} tool call${entry.operations.filter((op) => op.enabled).length === 1 ? "" : "s"}`}
+                              {filing ? "Filing…" : `Approve & record ${entry.operations.filter((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op)).length} tool call${entry.operations.filter((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op)).length === 1 ? "" : "s"}`}
                             </button>
                           </div>
                         )}

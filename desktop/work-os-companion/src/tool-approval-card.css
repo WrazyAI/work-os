@@ -19,7 +19,18 @@
 .tool-approval-actions { display: inline-flex; align-items: center; gap: 7px; }
 .tool-approval-actions button { border: 0; background: transparent; color: #9f3e37; font-size: 9px; font-weight: 750; cursor: pointer; }
 .tool-approval-card > p { margin: 0; color: #40503d; font-size: 10px; font-weight: 650; }
-.tool-approval-card > code { display: block; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: #182018; color: #e7f7ca; font: 9px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+.tool-approval-action { display: grid; gap: 2px; margin: 0; padding: 8px 9px; border-radius: 9px; background: #f0f4ea; }
+.tool-approval-action > span { color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.tool-approval-action > strong { color: #182018; font-size: 11px; line-height: 1.4; }
+.tool-approval-command { margin: 0; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.tool-approval-command summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; min-height: 24px; }
+.tool-approval-command summary::-webkit-details-marker { display: none; }
+.tool-approval-command summary::before { content: "▸"; font-size: 9px; }
+.tool-approval-command[open] summary::before { content: "▾"; }
+.tool-approval-command summary:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; border-radius: 4px; }
+.tool-approval-command code { margin-top: 5px; }
+.tool-approval-command code,
+.tool-approval-transport code { display: block; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: #182018; color: #e7f7ca; font: 9px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre-wrap; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .tool-approval-transport { margin: 2px 0 -4px; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .tool-approval-transport summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; }
 .tool-approval-transport summary::-webkit-details-marker { display: none; }
@@ -32,7 +43,23 @@
 .tool-approval-card.is-queued { border-color: #d8bb79; background: #fffaf0; }
 .tool-approval-card.is-failed { border-color: #e3aaa2; background: #fff6f4; }
 .tool-approval-card.is-denied { border-color: #d9ded5; background: #f7f8f5; }
-.tool-approval-state { display: inline-flex; gap: 4px; align-items: center; color: #3f7d20; font-size: 9px; font-weight: 750; }
+.tool-approval-card.is-pending { border-color: #9cc384; box-shadow: 0 1px 2px rgba(20, 30, 18, 0.05), 0 4px 14px rgba(20, 30, 18, 0.05); }
+.tool-approval-state { display: inline-flex; gap: 4px; align-items: center; padding: 3px 8px; border-radius: 999px; background: #e4f4d3; color: #3f7d20; font-size: 9px; font-weight: 750; white-space: nowrap; }
+.tool-approval-card.is-failed .tool-approval-state { background: #f8ded8; color: #af4138; }
+.tool-approval-card.is-queued .tool-approval-state { background: #fff3d9; color: #8a6410; }
+.tool-approval-card.is-denied .tool-approval-state { background: #eceee8; color: #626a61; }
+.tool-approval-choice { min-height: 28px; }
+.tool-approval-actions button { min-height: 28px; padding: 0 4px; }
+.tool-approval-actions button:focus-visible,
+.tool-approval-choice input:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
+
+.tool-display-error { margin: 6px 0; color: #af4138; font-size: 10px; line-height: 1.4; }
+
+.navigate-button { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 34px; margin: 6px 0; padding: 0 12px; border: 1px solid #b9d68f; border-radius: 10px; background: #eef7df; color: #24331e; font-size: 11px; font-weight: 700; cursor: pointer; }
+.navigate-button:hover { background: #e2f2cb; }
+.navigate-button:active { transform: translateY(1px) scale(0.99); }
+.navigate-button:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
+.navigate-button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-approval-card.is-failed .tool-approval-state { color: #af4138; }
 
 @media (prefers-reduced-motion: reduce) { .tool-approval-card { transition: none; } }

@@ -13,14 +13,15 @@ const INTERPRET_RESPONSE_SCHEMA = {
     properties: {
       taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
       claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" } } }, maxItems: 20 },
-      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" }, taskGroupId: { type: "string" }, limit: { type: "integer" } } }, maxItems: 20 },
+      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" }, taskGroupId: { type: "string" }, limit: { type: "integer" }, page: { type: "string" } } }, maxItems: 20 },
     },
   },
 } as const;
 
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
-  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
+  | "navigate_to_page";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
 
 export interface CandidateOperation {
@@ -30,6 +31,7 @@ export interface CandidateOperation {
   taskTitle?: string;
   taskGroupId?: string;
   limit?: number;
+  page?: string;
 }
 
 export interface CandidateWorkUpdate {
@@ -41,7 +43,8 @@ export interface CandidateWorkUpdate {
 
 export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed" | "nifty_failure";
 
-const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks"];
+const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "navigate_to_page"];
+const NAVIGATE_PAGES = ["day", "tasks", "review", "insights", "evidence", "settings"];
 const CLAIM_KINDS: CandidateClaimKind[] = ["progress", "completion", "blocker", "priority_change", "new_work"];
 
 function text(value: unknown, max = 4000): string | null {
@@ -98,6 +101,8 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
       if ((op === "complete_task" || op === "reopen_task" || op === "record_progress" || op === "record_blocker" || op === "archive_task" || op === "delete_task" || op === "modify_task_description" || op === "modify_task_status" || op === "add_subtask" || op === "modify_subtask" || op === "delete_subtask") && !taskId) continue;
       const taskGroupId = text(entry.taskGroupId ?? entry.task_group_id, 160) ?? undefined;
       if (op === "modify_task_status" && (!taskGroupId || !allowedTaskGroupIds.has(taskGroupId))) continue;
+      const page = op === "navigate_to_page" && typeof entry.page === "string" && NAVIGATE_PAGES.includes(entry.page) ? entry.page : undefined;
+      if (op === "navigate_to_page" && !page) continue;
       operations.push({
         op,
         statement,
@@ -105,6 +110,7 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
         taskTitle: ["create_task", "add_task", "add_subtask"].includes(op) ? text(entry.taskTitle ?? entry.task_title, 240) ?? statement.slice(0, 240) : undefined,
         taskGroupId,
         limit: typeof entry.limit === "number" && Number.isInteger(entry.limit) ? Math.min(100, Math.max(1, entry.limit)) : undefined,
+        page,
       });
     }
   }
@@ -123,9 +129,10 @@ function buildPrompt(input: string, tasks: Array<{ id: string; title: string; co
     "",
     "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
-    '{"taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20}]}',
+    '{"taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review"}]}',
     "- Only reference taskIds from the list above; never invent ids.",
     "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",
+    "- Use navigate_to_page when the employee should go somewhere in the app (page is one of: day, tasks, review, insights, evidence, settings). Attach it for time-sensitive destinations like a due EOD report so they get a direct button (page review).",
     "- Use task-management operations only for an explicit employee request. A status change must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
     "- completion claims become complete_task operations; blockers become record_blocker; new work becomes create_task with a short clear taskTitle.",
     "- Use record_progress for work-in-progress notes on a specific task.",

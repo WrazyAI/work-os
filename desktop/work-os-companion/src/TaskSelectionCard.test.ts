@@ -33,4 +33,10 @@ describe("TaskSelectionCard", () => {
     expect(degraded).toContain("Showing the last available task details.");
     expect(degraded).toContain("is-dense");
   });
+
+  it("asks for confirmation before filing completions", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("Select one or more tasks to continue.");
+    expect(markup).not.toContain("Confirm Done");
+  });
 });

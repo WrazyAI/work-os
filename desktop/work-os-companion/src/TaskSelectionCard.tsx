@@ -56,9 +56,11 @@ export function TaskSelectionCard({
   }
   const taskIdsKey = listedTasks.map((task) => task.id).join("\u0000");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     setSelectedIds((current) => new Set([...current].filter((id) => knownIds.has(id))));
+    setConfirming(false);
   }, [taskIdsKey]);
 
   const selectedTasks = listedTasks.filter((task) => selectedIds.has(task.id));
@@ -68,12 +70,19 @@ export function TaskSelectionCard({
   const cardStyle = { "--task-selection-card-height": `${maxHeight}px` } as CSSProperties;
 
   const toggle = (taskId: string) => {
+    setConfirming(false);
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(taskId)) next.delete(taskId);
       else next.add(taskId);
       return next;
     });
+  };
+
+  const confirmDone = () => {
+    if (!selectedTasks.length) return;
+    setConfirming(false);
+    onMarkSelectedDone(selectedTasks.map((task) => task.id));
   };
 
   return <section className={`task-selection-card ${dense ? "is-dense" : ""}`} style={cardStyle} aria-labelledby="task-selection-card-title" aria-busy={loading}>
@@ -100,6 +109,8 @@ export function TaskSelectionCard({
               </li>;
             })}</ul>}
     </div>
-    <footer className="task-selection-card-footer"><small>{selectedTasks.length ? `${selectedTasks.length} task${selectedTasks.length === 1 ? "" : "s"} will be sent for completion.` : "Select one or more tasks to continue."}</small><button className="primary" type="button" disabled={loading || failed || selectedTasks.length === 0} onClick={() => onMarkSelectedDone(selectedTasks.map((task) => task.id))}><Check size={15} aria-hidden="true" />Mark selected done</button></footer>
+    <footer className="task-selection-card-footer"><small>{confirming ? `Confirm marking ${selectedTasks.length} task${selectedTasks.length === 1 ? "" : "s"} done? Proposals are created for your approval.` : selectedTasks.length ? `${selectedTasks.length} task${selectedTasks.length === 1 ? "" : "s"} selected. Review them, then confirm.` : "Select one or more tasks to continue."}</small>{confirming
+      ? <><button className="ghost" type="button" onClick={() => setConfirming(false)}>Back</button><button className="primary" type="button" disabled={loading || failed || selectedTasks.length === 0} onClick={confirmDone}><Check size={15} aria-hidden="true" />Confirm Done</button></>
+      : <button className="primary" type="button" disabled={loading || failed || selectedTasks.length === 0} onClick={() => setConfirming(true)}><Check size={15} aria-hidden="true" />Mark selected done</button>}</footer>
   </section>;
 }

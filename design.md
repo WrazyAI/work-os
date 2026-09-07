@@ -1214,6 +1214,37 @@ Contract:
 - The trace never replaces the approval barrier: proposals still require
   explicit review in `ToolApprovalCard` before anything is recorded.
 
+### 25.9 Approval-free assistant tools
+
+Tools that mutate nothing bypass the approval queue entirely: the pending and
+overdue task views fetch and render inline, and page-navigation shortcuts
+render as inline buttons. They never create proposal rows and never show an
+approval card — there is nothing to approve.
+
+Contract:
+
+- `display_pending_tasks` and `display_overdue_tasks` resolve through the
+  read-only task-selection endpoint with the requested limit (1–100) and
+  render the reusable task selection card. Failures render a short inline
+  error, never an approval card and never a blank region.
+- `navigate_to_page` accepts only the six primary destinations (`day`,
+  `tasks`, `review`, `insights`, `evidence`, `settings`). Anything else is
+  dropped before render. The button reads `Open <destination>` and moves
+  immediately on click — from the avatar it focuses the main window first.
+- Time-sensitive assistant news (for example a due EOD report) pairs the
+  message with a navigation shortcut to the `review` destination instead of
+  describing where to click.
+- Mutating tools are unaffected: they still require one explicit approval
+  decision per proposal before anything is recorded.
+
+### 25.10 Task selection confirmation
+
+Batch completion from a selection card is always two explicit loops: checking
+rows only arms the footer, and a separate `Confirm Done` step files the
+completion proposals. Changing the selection or the underlying list resets the
+confirmation. The confirmation step names the count and states that proposals
+still need approval — checking a box never marks anything done by itself.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition
