@@ -39,3 +39,26 @@ describe("ProgressComposer post-approve state", () => {
     expect(markup).toContain("Some random task");
   });
 });
+
+describe("ProgressComposer simplified chrome", () => {
+  const base = {
+    input: "", open: true, panel: "update" as const, pending: "", receipt: null, history: [],
+    busy: false, required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
+    onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
+    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+  };
+
+  it("offers one new-chat action and no intent strip for a plain update", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base }));
+    expect(markup).toContain("Start a new chat");
+    expect(markup).not.toContain("Clear conversation");
+    expect(markup).not.toContain("workos-chat-sub");
+    expect(markup).not.toContain("Continue the conversation below.");
+    expect(markup).toContain("What would you like to record?");
+  });
+
+  it("still surfaces the due state when an update is required", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, required: true }));
+    expect(markup).toContain("An update is due");
+  });
+});

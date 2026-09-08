@@ -298,6 +298,20 @@
 
 .avatar-composer { position: relative; }
 
+/* The shell carries one soft focus halo (mirroring the previous input
+ * treatment) so the field itself needs no inner ring. */
+.avatar-composer:focus-within {
+  border-top-color: var(--avatar-signal, #8bc34a);
+  box-shadow:
+    inset 0 0 0 1px var(--avatar-signal, #8bc34a),
+    0 0 0 3px rgba(139, 195, 74, 0.35);
+}
+
+.avatar-composer .workos-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .workos-chat-head { gap: 8px; }
 
 .progress-flyout .workos-chat-sub { padding: 8px 18px 0; }

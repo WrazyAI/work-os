@@ -454,10 +454,11 @@ Do not generate a new asset when an existing mark, illustration, or icon system 
 
 The persistent floating companion may use a compact retro-console treatment to
 differentiate it from ordinary application chrome: a dark instrument face,
-signal-green status readout, and restrained scanline/grid texture. This treatment
+signal-green status readout, and restrained scanline/grid texture on the
+collapsed orb only. This treatment
 is limited to the companion's identity and bounded-progress display; its expanded
-composer remains a warm, accessible Work OS surface with standard controls and
-plain-language status. The console is draggable from its compact body and expanded
+composer remains a flat warm, accessible Work OS surface with standard controls and
+plain-language status, free of scanline texture. The console is draggable from its compact body and expanded
 header, with a visible keyboard-operable composer once opened.
 
 The `CompanionPet` is the reusable visual identity for that console: a compact,
