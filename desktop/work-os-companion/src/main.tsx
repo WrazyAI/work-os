@@ -5,6 +5,7 @@ import AvatarApp from "./AvatarApp";
 import ErrorBoundary from "./ErrorBoundary";
 import OnboardingPreview from "./OnboardingPreview";
 import AvatarPreview from "./AvatarPreview";
+import ChatPreview from "./ChatPreview";
 import EodPreview from "./EodPreview";
 import TasksPreview from "./TasksPreview";
 import TodayPreview from "./TodayPreview";
@@ -13,6 +14,7 @@ import { NotificationProvider } from "./NotificationFlyouts";
 import "./styles.css";
 import "./sessionGate.css";
 import "./workspace-redesign.css";
+import "./work-os-chat.css";
 import "./avatar.css";
 
 installDiagnosticErrorHandlers();
@@ -26,6 +28,7 @@ if (params.get("window") === "avatar") {
 const Root = params.get("window") === "avatar" ? AvatarApp
   : import.meta.env.DEV && params.has("preview-onboarding") ? OnboardingPreview
     : import.meta.env.DEV && params.has("preview-avatar") ? AvatarPreview
+    : import.meta.env.DEV && params.has("preview-chat") ? ChatPreview
     : import.meta.env.DEV && params.has("preview-tasks") ? TasksPreview
       : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
         : import.meta.env.DEV && params.has("preview-eod") ? EodPreview

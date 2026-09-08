@@ -10,6 +10,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
+import { ChatTabs, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
@@ -128,6 +129,7 @@ export default function AvatarApp(): React.ReactElement {
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const [input, setInput] = useState("");
+  const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
   const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
@@ -883,7 +885,33 @@ export default function AvatarApp(): React.ReactElement {
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
             <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
           </header>
+          <div className="avatar-tabs">
+            <ChatTabs
+              tabs={[
+                { id: "chat", label: "Chat" },
+                { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
+              ]}
+              active={avatarTab}
+              onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
+              ariaLabel="Companion view"
+            />
+          </div>
           {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
+          {avatarTab === "tasks" ? (
+          <div className="avatar-chat workos-thread" ref={chatScroll}>
+              <TaskSelectionCard
+                title="Open tasks"
+                status={facts.loaded ? "ready" : "loading"}
+                tasks={facts.taskOptions
+                  .filter((task) => !task.completed)
+                  .map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: "pending" }))}
+                onMarkSelectedDone={proposeAvatarSelectedCompletions}
+                degraded={daySyncState === "stale"}
+                emptyTitle="No open tasks"
+                emptyMessage="Tasks waiting to be completed will appear here."
+              />
+            </div>
+          ) : (<>
           {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
             <div className="avatar-task-context">
               <TaskSelectionCard
@@ -971,16 +999,23 @@ export default function AvatarApp(): React.ReactElement {
               />
             )}
           </div>
+          </>)}
           {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer">
-            <input
+            <WorkOsPromptBar
               value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!agendaReview) void (agendaDue ? submitAgenda() : sendUpdate()); } }}
+              onChange={setInput}
+              onSend={() => void (agendaDue ? submitAgenda() : sendUpdate())}
               placeholder={agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
+              ariaLabel={agendaDue ? "Describe your goal for today" : "Share an update or instruct the assistant"}
+              canSend={!!input.trim() && !thinking && !filing && !agendaReview}
+              busy={thinking || filing}
               autoFocus
               maxLength={4000}
+              commands={workOsChatCommands({ eod: () => void openEodReview() }).map((command) =>
+                command.key === "focus" ? { ...command, insert: "Focus: " } : command,
+              )}
+              sendLabel={agendaDue ? "Confirm today’s agenda" : "Send update"}
             />
-            <button className="avatar-send" disabled={!input.trim() || thinking || filing || !!agendaReview} onClick={() => void (agendaDue ? submitAgenda() : sendUpdate())} aria-label={agendaDue ? "Confirm today’s agenda" : "Send update"}>{agendaDue ? "✓" : "↑"}</button>
           </footer>}
           {contextualPrompt.kind === "check_in" && !missed && !lastEntry?.receipt && (
             <button className="avatar-snooze" onClick={() => {

@@ -1,0 +1,327 @@
+/* Work OS shared chat language — one interaction for the in-app dock
+ * and the floating companion (design §25.11). Semantic tokens only;
+ * shells keep their established borders, radius, and focus rings. */
+
+@keyframes workos-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes workos-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Header: context tabs + actions ─────────────────────────── */
+
+/* Specificity note: the in-app flyout header has legacy
+ * `header > div` / `header button` rules; these selectors outrank
+ * them so the tabs keep their own layout in both shells. */
+.workos-chat-head .workos-chat-tabs,
+.avatar-tabs .workos-chat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workos-chat-head .workos-chat-tabs button,
+.avatar-tabs .workos-chat-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: auto;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink, #182018);
+  font: 600 13px/1.4 Manrope, Inter, "Segoe UI", sans-serif;
+  opacity: 0.5;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.workos-chat-head .workos-chat-tabs button:hover,
+.avatar-tabs .workos-chat-tabs button:hover { opacity: 0.75; }
+.workos-chat-head .workos-chat-tabs button.active,
+.avatar-tabs .workos-chat-tabs button.active { background: var(--surface, #eef1eb); opacity: 1; }
+.workos-chat-head .workos-chat-tabs button:focus-visible,
+.avatar-tabs .workos-chat-tabs button:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.workos-tab-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--surface, #eef1eb);
+  color: var(--muted, #626a61);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.workos-chat-sub {
+  margin: 0;
+  padding: 6px 2px 0;
+  color: var(--muted, #626a61);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ── Thread: fixed scroll region, bubbles, sections ─────────── */
+
+/* The in-app user bubble is established (.progress-message.user);
+ * the thread keeps it and only animates assistant sections in. */
+
+.workos-thread .progress-message.assistant,
+.workos-thread .chat-entry {
+  animation: workos-fade-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Resolving shimmer state for the in-flight assistant section. */
+.workos-thread .workos-resolving {
+  opacity: 0.55;
+  filter: blur(0.5px);
+  transform: scale(0.985);
+  transform-origin: top left;
+  transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1), filter 220ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Composer ───────────────────────────────────────────────── */
+
+.workos-promptbar { width: 100%; min-width: 0; }
+
+.workos-composer-anchor { position: relative; }
+
+.workos-controls {
+  display: grid;
+  align-items: end;
+  gap: 4px 6px;
+}
+
+.workos-controls.inline { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+.workos-controls.inline.has-footer { grid-template-columns: 36px minmax(0, 1fr) auto 36px; }
+.workos-controls.wide { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+.workos-controls.wide.has-footer { grid-template-columns: 36px auto minmax(0, 1fr) 36px; }
+.workos-controls.wide .workos-input { grid-column: 1 / -1; grid-row: 1; }
+.workos-controls.wide .workos-plus { grid-column: 1; grid-row: 2; }
+.workos-controls.wide .workos-send { grid-column: -1; grid-row: 2; }
+.workos-footer-left { display: contents; }
+.workos-controls.inline .workos-footer-left > * { grid-column: 3; }
+.workos-controls.wide.has-footer .workos-footer-left > * {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: start;
+}
+
+.workos-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted, #626a61);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.workos-plus:hover { background: rgba(24, 32, 24, 0.06); color: var(--ink, #182018); }
+.workos-plus:active { transform: scale(0.94); }
+.workos-plus.open { background: rgba(24, 32, 24, 0.08); color: var(--ink, #182018); }
+.workos-plus.open svg { transform: rotate(45deg); }
+.workos-plus svg { transition: transform 150ms ease; }
+.workos-plus:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+}
+
+.workos-input {
+  min-width: 0;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 2px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--ink, #182018);
+  font: 400 13px/1.4 Manrope, Inter, "Segoe UI", sans-serif;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.workos-input::placeholder { color: #8a9288; }
+
+/* The dock shell already carries the focus ring (border + halo +
+ * lift); an inner textarea ring would double it. The avatar shell
+ * has no focus ring, so the global textarea ring stays there. */
+.progress-input-shell .workos-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.workos-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--line, #d9ded5);
+  color: var(--muted, #626a61);
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1), color 160ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.workos-send.ready { background: var(--ink, #182018); color: var(--white, #ffffff); }
+.workos-send.ready:hover { transform: translateY(-1px); }
+.workos-send.ready:active { transform: scale(0.96); }
+.workos-send:disabled { cursor: default; }
+.workos-send:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 2px;
+}
+
+/* ── @ / menu ─────────────────────────────────────────────── */
+
+.workos-menu {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(100% + 8px);
+  z-index: 10;
+  max-height: 264px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 10px;
+  background: var(--white, #ffffff);
+  box-shadow: 0 18px 60px rgba(18, 27, 17, 0.14);
+  transform-origin: bottom center;
+  animation: workos-pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.workos-menu-glide {
+  position: absolute;
+  inset-inline: 4px;
+  border-radius: 6px;
+  background: rgba(24, 32, 24, 0.06);
+  pointer-events: none;
+  transition: top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 150ms ease;
+}
+
+.workos-menu-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workos-menu-row:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: -2px;
+}
+
+.workos-menu-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  color: var(--muted, #626a61);
+}
+
+.workos-menu-name {
+  flex: 0 0 auto;
+  color: var(--ink, #182018);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.workos-menu-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted, #626a61);
+  font-size: 12px;
+}
+
+.workos-menu-empty {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: var(--muted, #626a61);
+  font-size: 12px;
+}
+
+.workos-menu-foot {
+  margin-top: 4px;
+  padding: 6px 8px 4px;
+  border-top: 1px solid var(--line, #d9ded5);
+  color: var(--muted, #626a61);
+  font-size: 11px;
+}
+
+/* ── Shell integration (shells keep their established treatment) ── */
+
+.avatar-tabs { padding: 8px 12px 0; }
+.avatar-tabs .workos-chat-tabs button.active { background: rgba(23, 25, 20, 0.06); }
+
+.progress-input-shell > .workos-promptbar,
+.avatar-composer > .workos-promptbar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.avatar-composer { position: relative; }
+
+.workos-chat-head { gap: 8px; }
+
+.progress-flyout .workos-chat-sub { padding: 8px 18px 0; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .workos-chat-head .workos-chat-tabs,
+  .avatar-tabs .workos-chat-tabs { overflow-x: auto; scrollbar-width: none; }
+  .workos-chat-head .workos-chat-tabs::-webkit-scrollbar,
+  .avatar-tabs .workos-chat-tabs::-webkit-scrollbar { display: none; }
+  .workos-menu-row { min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workos-thread .progress-message.assistant,
+  .workos-thread .chat-entry,
+  .workos-menu,
+  .workos-plus,
+  .workos-plus svg,
+  .workos-send,
+  .workos-chat-tabs button,
+  .workos-thread .workos-resolving {
+    animation: none;
+    transition: none;
+  }
+}

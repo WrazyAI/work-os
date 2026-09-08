@@ -1245,6 +1245,55 @@ completion proposals. Changing the selection or the underlying list resets the
 confirmation. The confirmation step names the count and states that proposals
 still need approval — checking a box never marks anything done by itself.
 
+### 25.11 Assistant chat panel and prompt bar
+
+The in-app dock composer and the floating companion panel share one chat
+language (`desktop/work-os-companion/src/WorkOsChat.tsx`,
+`work-os-chat.css`), one interaction with contextual modes per §28 — not
+lookalike input bars.
+
+Anatomy, top to bottom:
+
+1. **Header:** context tabs on the left, actions on the right. The dock tabs
+   are `Update` (or `Agenda` in agenda mode) and `Focus`, switching the
+   existing composer panel — never mutating. The companion tabs are `Chat`
+   and `Tasks` (with a quiet open-task count); `Tasks` renders the reusable
+   task selection card over the live task options with `loading`, specific
+   empty, and degraded states, and delegates completion to the existing
+   propose-selected flow. Actions are Lucide icon buttons: clear/new/close
+   in the dock, new/close in the companion.
+2. **Thread:** a fixed scroll region. User turns stay right-aligned soft
+   blocks; assistant sections fade up on arrival. Provenance, receipts,
+   approval cards, selection cards, and navigation buttons render exactly
+   as before — only the container language is shared.
+3. **Composer:** context `+` button, auto-growing field, optional labeled
+   action (the dock's `Focus` button), and a 36px square 11px-radius dark
+   ink send (§28.1). Typing `@` filters Work OS context (today's tasks,
+   focus, EOD review, evidence, day summary) and inserts an `@name`
+   mention as plain text — mentioning names context, it fetches nothing.
+   Typing `/` filters commands: text commands (`/progress`, `/completed`,
+   `/blocker`, `/priority`, `/new-task`, `/tasks`) preface the draft so
+   classification and approval still happen after send; `/focus` opens the
+   focus editor and `/eod` navigates to EOD review, the explicit actions
+   the user asked for. One highlight glides between menu rows; menus close
+   on outside click and Escape, support arrow/Enter/Tab, and show a
+   specific `No matches` state.
+
+Tokens and motion: semantic Work OS tokens only; shells keep their
+established borders, radius, and focus rings (the dock shell's ring means
+the dock field suppresses its own inner ring to avoid doubling; the
+companion shell has no ring, so its field keeps the global one). Entry
+motion is 180–220ms with the product easing; all of it is removed under
+`prefers-reduced-motion`. The two-row composer layout is derived from the
+draft value (newline or labeled action), never from field measurement —
+placeholder wrap changes with width, so measurement feeds back into
+itself and oscillates.
+
+Deliberate deviations from the exploration reference: no autoplay demo,
+no dictation, no model picker, and no rainbow sweep — ambient motion,
+saturated multicolor gradients, and unbacked controls violate §§2.4,
+2.6, and 6.4. Send is 36px per §28.1, not the reference 28px.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition
