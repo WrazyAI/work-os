@@ -134,18 +134,28 @@
 .planning-confirmed { background: #e4f4d3; color: #244513; }
 .planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #f3f5ef; }
 .planning-review h3 { margin: 5px 0 6px; color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.planning-review article { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.planning-review article { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .planning-review article:first-of-type { border-top: 0; }
 .planning-review article > b {
+  display: flex;
+  align-items: flex-start;
+}
+
+.planning-review-index {
   display: grid;
   width: 22px;
   height: 22px;
+  flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
   background: #def1ca;
   color: #315f17;
   font-size: 11px;
   font-weight: 800;
+}
+
+.planning-review article > b .planning-annotation-bubble {
+  margin: 2px 0 0 4px;
 }
 .planning-review article strong { font-size: 13px; }
 .planning-review article p { margin: 4px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
@@ -173,6 +183,7 @@
 }
 .planning-session > footer {
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 12px 16px 14px 20px;
   border-top: 1px solid var(--line);
@@ -181,11 +192,13 @@
 }
 .planning-session > footer button {
   min-height: 38px;
+  flex: 0 0 auto;
   padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 10px;
   font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
@@ -227,6 +240,311 @@
 
 @media (prefers-reduced-motion: reduce) {
   .planning-session { animation: none; }
+}
+
+/* ── Plan review: feedback / annotation loop ────────────────────────────
+   Draft card controls (feedback toggle, two-tap delete), text-selection
+   annotations with persistent bubbles, and the footer refine/count pills. */
+.planning-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.planning-review-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.planning-icon-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: #edf0ea;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.planning-icon-button:hover:not(:disabled) {
+  background: #e2e7de;
+  color: var(--ink);
+}
+
+.planning-icon-button:focus-visible {
+  outline: 2px solid var(--signal-strong);
+  outline-offset: 2px;
+}
+
+.planning-icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.planning-icon-button.is-active {
+  border-color: var(--signal-strong);
+  background: #def1ca;
+  color: #315f17;
+}
+
+.planning-icon-button.is-armed {
+  border-color: #d9aaa0;
+  background: #fff0ec;
+  color: #963a2d;
+}
+
+.planning-delete-notice,
+.planning-lock-notice {
+  margin-top: 10px;
+}
+
+.planning-feedback-hint {
+  margin-top: 10px;
+  background: var(--surface);
+}
+
+.planning-feedback-composer {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--signal-strong);
+  border-radius: 12px;
+  background: #f4f9ec;
+}
+
+.planning-feedback-composer > small {
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.planning-feedback-composer > textarea {
+  min-height: 56px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid #cfd5c9;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.planning-feedback-composer > textarea:focus {
+  outline: none;
+  border-color: var(--signal-strong);
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
+}
+
+.planning-feedback-composer-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.planning-feedback-composer-row button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.planning-feedback-composer-row button.secondary {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.planning-feedback-composer-row button.primary {
+  background: var(--signal);
+  border-color: #a6e852;
+  color: #141611;
+}
+
+.planning-feedback-composer-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.planning-annotation-mark {
+  border-radius: 3px;
+  background: #fdf0c2;
+  box-shadow: 0 -1px 0 #e7c887 inset;
+  color: inherit;
+}
+
+.planning-annotation-bubble {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8b93c;
+  color: #3d2c05;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 1px;
+}
+
+.planning-edit-summary {
+  width: 100%;
+  margin: 5px 0 6px;
+  padding: 6px 8px;
+  border: 1px solid #cfd5c9;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.planning-edit-title {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #cfd5c9;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.planning-edit-objective,
+.planning-edit-criteria {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid #cfd5c9;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.planning-edit-objective { min-height: 52px; }
+.planning-edit-criteria { min-height: 64px; }
+
+.planning-edit-summary:focus,
+.planning-edit-title:focus,
+.planning-edit-objective:focus,
+.planning-edit-criteria:focus {
+  outline: none;
+  border-color: var(--signal-strong);
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
+}
+
+.planning-footer-hint {
+  flex: 1 1 200px;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.planning-annotation-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid #e7c887;
+  border-radius: 999px;
+  background: #fff8e8;
+  color: #755515;
+  font-size: 11.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.planning-annotation-pill button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+
+.planning-annotation-pill:hover button,
+.planning-annotation-pill:focus-within button {
+  opacity: 1;
+}
+
+.planning-annotation-pill button:hover {
+  background: #f3e3bd;
+}
+
+.planning-annotation-pill button:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--signal-strong);
+  outline-offset: 1px;
+}
+
+.planning-refine-button {
+  position: relative;
+}
+
+.planning-refine-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8b93c;
+  color: #3d2c05;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .planning-footer-hint {
+    flex: 1 1 100%;
+    margin-right: 0;
+  }
+
+  .planning-annotation-pill button {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planning-icon-button,
+  .planning-annotation-pill button {
+    transition: none;
+  }
 }
 
 body {

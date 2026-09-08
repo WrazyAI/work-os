@@ -1495,6 +1495,26 @@ and omit the bottleneck section from the submitted report. Otherwise the employe
 must provide a bottleneck before submission. A failed refinement preserves both
 the report, feedback, and bottleneck input.
 
+### 29.1b Plan draft refinement
+
+Confirming the day requires an AI-built plan draft first: the footer shows
+`Close`, a disabled `Refine plan`, and `Build my plan`. `Confirm my day`
+replaces `Build my plan` only once a draft exists, and stays disabled while
+annotations exist, while feedback edits are unsaved, or while clarification
+questions are unanswered. Each state carries one plain-language hint naming the
+exact unblock action.
+
+Draft review carries pencil (feedback/edit mode) and trash (two-tap delete,
+local discard only) controls. In feedback mode the employee may edit sections
+freely or highlight text to attach a comment; the first saved annotation locks
+further edits with an inline notice, and clearing all annotations unlocks them.
+Annotations render as highlighted quotes plus per-section count bubbles, with a
+`{N} Annotations` footer pill (hover to clear) and a matching count badge on
+`Refine plan`. Refining sends the draft plus annotations and field diffs and
+returns a fresh draft; annotations are single-use and clear on each new draft.
+A failed refinement keeps the current draft. The only exception is an
+AI-outage off-shift save, which preserves the raw planning note without a draft.
+
 ### 29.2 Insights
 
 Insights follows summary → comparison → exact record:
