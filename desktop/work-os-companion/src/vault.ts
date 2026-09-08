@@ -5,6 +5,12 @@ import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 
+export interface WorkOsSettings {
+  apiBase: string;
+  /** Launch update check. Absent historically means on. */
+  autoCheckUpdates: boolean;
+}
+
 export interface WorkOsConversationTurn {
   id: string;
   role: "user" | "assistant";
@@ -119,15 +125,23 @@ export const secureState = {
   },
   savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => isTauri() ? set("pending-auth", value) : Promise.resolve(),
   clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
-  settings: async () => {
-    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase) };
-    const settings = await get<{ apiBase: string }>("settings");
-    try { return { apiBase: httpsOrigin(settings?.apiBase || defaultApiBase) }; }
+  settings: async (): Promise<WorkOsSettings> => {
+    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true };
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean }>("settings");
+    const autoCheckUpdates = settings?.autoCheckUpdates !== false;
+    try { return { autoCheckUpdates, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase) }; }
     catch {
-      const fallback = { apiBase: httpsOrigin(defaultApiBase) };
+      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates };
       await set("settings", fallback);
       return fallback;
     }
   },
-  saveSettings: (settings: { apiBase: string }) => isTauri() ? set("settings", { apiBase: httpsOrigin(settings.apiBase) }) : Promise.resolve(),
+  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean }) => {
+    if (!isTauri()) return;
+    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean }>("settings");
+    await set("settings", {
+      apiBase: httpsOrigin(settings.apiBase ?? current?.apiBase ?? defaultApiBase),
+      autoCheckUpdates: settings.autoCheckUpdates ?? current?.autoCheckUpdates !== false,
+    });
+  },
 };

@@ -3,7 +3,8 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { check } from "@tauri-apps/plugin-updater";
+import type { Update } from "@tauri-apps/plugin-updater";
+import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
@@ -112,6 +113,7 @@ export default function App() {
   const [composerHistory, setComposerHistory] = useState<WorkOsConversationTurn[]>([]);
   const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
   const composerConversationSignature = useRef("");
+  const launchUpdateCheckRef = useRef(false);
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
@@ -149,6 +151,7 @@ export default function App() {
   const [apiBase, setApiBase] = useState("");
   const [autoStart, setAutoStart] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("");
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
@@ -327,7 +330,7 @@ export default function App() {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
-      const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled);
+      const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates);
       if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
         setDay(snapshot);
         setTaskHistory(snapshot.taskHistory ?? snapshot.tasks);
@@ -335,6 +338,10 @@ export default function App() {
         setPlanHistoryDate(snapshot.shiftDate);
       }
       if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
+      if (!launchUpdateCheckRef.current && shouldAutoCheckUpdate({ supported: isTauri(), debugEnabled: debugRef.current.enabled, hasSession: !!current, autoCheckUpdates: settings.autoCheckUpdates })) {
+        launchUpdateCheckRef.current = true;
+        void checkForUpdates({ silent: true });
+      }
     }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
     void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
@@ -673,32 +680,75 @@ export default function App() {
     }
   }
 
-  async function checkForUpdates() {
-    setUpdateStatus("Checking securely…");
+  async function installAvailableUpdate(update: Update, headers: Record<string, string>) {
+    setUpdateStatus(`Installing ${update.version}…`);
+    await update.downloadAndInstall(undefined, { headers });
+    await relaunch();
+  }
+
+  async function checkForUpdates({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) setUpdateStatus("Checking securely…");
     try {
       const saved = await secureState.session();
-      const updateOrigin = import.meta.env.VITE_WORK_OS_UPDATE_ORIGIN || "https://app.wrazyos.com";
-      if (!saved || new URL(saved.apiBase).origin !== new URL(updateOrigin).origin) {
-        setUpdateStatus("");
-        notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
+      if (!saved) {
+        if (!silent) {
+          setUpdateStatus("");
+          notifications.info("Sign in first, then check for updates.", "Not signed in");
+        }
         return;
       }
-      const headers = { Authorization: `Bearer ${saved.token}`, "X-Work-OS-Organization-Id": saved.organizationId };
-      const update = await check({ headers });
-      if (!update) {
-        setUpdateStatus("");
-        notifications.success("You already have the latest internal build.", "Work OS is up to date");
+      const result = await queryAvailableUpdate(saved);
+      if (result.status === "managed") {
+        if (!silent) {
+          setUpdateStatus("");
+          notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
+        }
         return;
       }
-      setUpdateStatus(`Installing ${update.version}…`);
-      notifications.info(`Downloading and installing ${update.version}.`, "Update available");
-      await update.downloadAndInstall(undefined, { headers });
-      await relaunch();
+      if (result.status === "current") {
+        if (!silent) {
+          setUpdateStatus("");
+          notifications.success("You already have the latest internal build.", "Work OS is up to date");
+        }
+        return;
+      }
+      if (silent) {
+        const copy = updateAvailableCopy(result.update.version);
+        setUpdateStatus(`Version ${result.update.version} is ready.`);
+        notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
+          label: copy.actionLabel,
+          onClick: () => {
+            notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+            void installAvailableUpdate(result.update, result.headers).catch((value: unknown) => {
+              const message = errorMessage(value, "The update could not be installed.");
+              diagnostics.warn("updater.install_failed", message);
+              setUpdateStatus("");
+              showError(message, message, "Update failed");
+            });
+          },
+        });
+        return;
+      }
+      setUpdateStatus(`Installing ${result.update.version}…`);
+      notifications.info(`Downloading and installing ${result.update.version}.`, "Update available");
+      await installAvailableUpdate(result.update, result.headers);
     } catch (value) {
       const message = errorMessage(value, "The update catalog could not be checked.");
       diagnostics.warn("updater.check_failed", message);
       setUpdateStatus("");
-      showError(message, message, "Update failed");
+      if (!silent) showError(message, message, "Update failed");
+    }
+  }
+
+  async function toggleAutoCheckUpdates(enabled: boolean) {
+    const previous = autoCheckUpdates;
+    setAutoCheckUpdates(enabled);
+    try {
+      await secureState.saveSettings({ apiBase, autoCheckUpdates: enabled });
+      notifications.success(enabled ? "Work OS will check for updates on launch." : "Work OS will no longer check for updates on launch.", "Update setting saved");
+    } catch (value) {
+      setAutoCheckUpdates(previous);
+      showError(errorMessage(value, "The update setting could not be saved."), "The update setting could not be saved.", "Setting not saved");
     }
   }
 
@@ -1633,6 +1683,7 @@ export default function App() {
             <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
             <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
             <Setting title="Desktop updates" detail={updateStatus ? `${updateStatus} · Installed version ${installedVersion}` : `Installed version ${installedVersion}`}><button onClick={() => void checkForUpdates()}>Check</button></Setting>
+            <Setting title="Automatic update checks" detail="Check on launch and show a flyout when a new build is ready"><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
             <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting>
             <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
             <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
@@ -2068,4 +2119,4 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;
 }
-function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
+export function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
