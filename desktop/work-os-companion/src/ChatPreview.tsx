@@ -31,6 +31,7 @@ export default function ChatPreview() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
       <InAppSection />
+      <InAppToolsSection />
       <AvatarSection />
     </div>
   );
@@ -97,6 +98,49 @@ function InAppSection() {
   );
 }
 
+const noop = () => undefined;
+
+function InAppToolsSection() {
+  const operations = [
+    { op: "complete_task" as const, statement: "Employee confirmed completion of Repair provider sync.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "p-1", enabled: true },
+    { op: "complete_task" as const, statement: "Employee confirmed completion of Ship the avatar review flow.", taskId: "t-today", taskTitle: "Ship the avatar review flow", proposalId: "p-2", enabled: true },
+    { op: "display_pending_tasks" as const, statement: "Show pending.", limit: 5, enabled: false },
+  ];
+  const composer = {
+    input: "", open: true, panel: "update" as const, receipt: null, history: [], busy: false,
+    required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
+    onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
+    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+  };
+  return (
+    <section aria-label="In-app tool surfaces preview" style={{ display: "grid", gap: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 14 }}>In-app thinking trace</h2>
+      <ProgressComposer
+        {...composer}
+        pending="Show my pending tasks and finish the sync repair"
+        interpretation={{ status: "loading", operations: [], taskOptions: [] }}
+        thinking={{ stages: [{ label: "Sending your update" }, { label: "Filing proposals" }], active: 1, startedAt: Date.now() - 2400 }}
+      />
+      <h2 style={{ margin: 0, fontSize: 14 }}>In-app tool cards</h2>
+      <ProgressComposer
+        {...composer}
+        pending="Review the selected task completions before anything changes."
+        interpretation={{
+          status: "ready",
+          operations,
+          taskOptions: [],
+          reply: "Review the selected task completions before anything changes.",
+          results: [{
+            op: operations[2]!, status: "recorded", message: "Pending tasks loaded.",
+            data: { provider_result: { view: "pending", tasks: [{ id: "t-9", title: "Document release evidence", due_date: null }] } },
+          }],
+        }}
+        toolContext={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
+      />
+    </section>
+  );
+}
+
 const AVATAR_TASKS = [
   { id: "t-overdue", title: "Repair provider sync", dueDate: "2026-09-06", state: "overdue" },
   { id: "t-today", title: "Ship the avatar review flow", dueDate: "2026-09-07", state: "pending" },
@@ -110,7 +154,7 @@ function AvatarSection() {
   return (
     <section aria-label="Avatar panel preview" style={{ display: "grid", gap: 12 }}>
       <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>
-      <div className="avatar-panel" style={{ width: "min(380px, 100%)", height: 560 }}>
+      <div className="avatar-panel" style={{ width: "min(400px, 100%)", height: 560 }}>
         <header className="avatar-head">
           <div className="avatar-drag-zone">
             <div className="avatar-title">

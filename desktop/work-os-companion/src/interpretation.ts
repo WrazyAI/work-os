@@ -263,12 +263,23 @@ export async function fileApprovedOperations(
         outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state.", data });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The change could not be filed.";
+      const message = filingFailureMessage(error);
       outcome.failed.push({ op, message });
       outcome.results.push({ op, status: "failed", message });
     }
   }
   return outcome;
+}
+
+/** A filing request that outlives the client timeout may still have
+ * landed server-side. Say so plainly instead of leaking timer jargon,
+ * and point at Review before a retry files twice. */
+export function filingFailureMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : "The change could not be filed.";
+  if (/timed out|timeout|abort/i.test(raw)) {
+    return "The server took too long to respond. It may still have filed — check Review before retrying.";
+  }
+  return raw;
 }
 
 /** Stable identity for a tool call across windows. Server proposals carry an

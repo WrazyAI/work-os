@@ -1845,8 +1845,8 @@ body {
 .progress-welcome p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.5;
   white-space: pre-line;
   text-wrap: pretty;
 }
@@ -1922,6 +1922,25 @@ body {
   margin: 6px 0 2px;
   font-size: 10px;
 }
+
+/* Assistant replies read as body copy: ink, larger, medium weight. */
+.progress-message.assistant .chat-markdown {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.progress-message.assistant .chat-markdown p,
+.progress-message.assistant .chat-markdown p:first-child {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.progress-message.assistant .chat-markdown p:first-child { margin-top: 0; }
+
+.progress-message.assistant .chat-markdown strong { font-size: 13px; }
 
 .progress-message .chat-markdown code {
   padding: 1px 3px;
@@ -3932,10 +3951,15 @@ button:not(:disabled):active {
 }
 
 /* Interpretation review — AI-drafted operations awaiting approval */
+.progress-message.assistant > div { min-width: 0; flex: 1 1 auto; }
+
+.progress-history > * { min-width: 0; }
+
 .interpretation-list {
   display: grid;
   gap: 7px;
   margin-top: 10px;
+  min-width: 0;
   text-align: left;
 }
 
@@ -3977,6 +4001,14 @@ button:not(:disabled):active {
   outline: none;
   border-color: #a7c982;
   background: #fffef9;
+}
+
+.tool-approval-card .interpretation-statement-filed {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .interpretation-row select {

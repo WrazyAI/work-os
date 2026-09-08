@@ -1,19 +1,24 @@
 .tool-approval-card {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   margin: 8px 0;
   padding: 11px;
   border: 1px solid #cbd5c3;
   border-radius: 12px;
   background: #fbfcf8;
   color: #182018;
+  overflow-wrap: anywhere;
 }
+
+.tool-approval-card > * { min-width: 0; }
 
 .tool-approval-card > header { display: flex; align-items: center; gap: 8px; }
 .tool-approval-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: #e4f4d3; color: #315f17; }
 .tool-approval-card header div { min-width: 0; flex: 1; }
 .tool-approval-card header small { display: block; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.tool-approval-card header strong { display: block; overflow: hidden; font: 700 10px/1.35 ui-monospace, "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.tool-approval-card header strong { display: block; overflow: hidden; font: 700 10px/1.35 ui-monospace, "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
 .tool-approval-choice { display: inline-flex; gap: 5px; align-items: center; color: #315f17; font-size: 10px; font-weight: 750; cursor: pointer; }
 .tool-approval-choice input { accent-color: #7cc936; }
 .tool-approval-actions { display: inline-flex; align-items: center; gap: 7px; }
@@ -21,7 +26,9 @@
 .tool-approval-card > p { margin: 0; color: #40503d; font-size: 10px; font-weight: 650; }
 .tool-approval-action { display: grid; gap: 2px; margin: 0; padding: 8px 9px; border-radius: 9px; background: #f0f4ea; }
 .tool-approval-action > span { color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.tool-approval-action > strong { color: #182018; font-size: 11px; line-height: 1.4; }
+.tool-approval-action > strong { color: #182018; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+
+.tool-approval-card select { max-width: 100%; }
 .tool-approval-command { margin: 0; color: #626a61; font-size: 8px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .tool-approval-command summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; min-height: 24px; }
 .tool-approval-command summary::-webkit-details-marker { display: none; }

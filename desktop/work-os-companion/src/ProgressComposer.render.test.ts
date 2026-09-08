@@ -62,6 +62,19 @@ describe("ProgressComposer simplified chrome", () => {
     expect(markup).toContain("An update is due");
   });
 
+  it("shows the live thinking trace while the interpretation is loading", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, {
+      ...base,
+      pending: "checking something",
+      interpretation: { status: "loading", operations: [], taskOptions: [] },
+      thinking: { stages: [{ label: "Sending your update" }, { label: "Filing proposals" }], active: 1, startedAt: Date.now() - 1800 },
+    }));
+    expect(markup).toContain("Thinking");
+    expect(markup).toContain("Sending your update");
+    expect(markup).toContain("Filing proposals");
+    expect(markup).not.toContain("Reading your update…");
+  });
+
   it("collapses consecutive duplicate assistant turns and echo replies", () => {
     const history = [
       { id: "h-1", role: "user" as const, text: "What's your name?", createdAt: "2026-09-08T00:00:00Z" },

@@ -145,6 +145,24 @@ describe("fileApprovedOperations", () => {
     });
     expect(outcome.results[0]?.data).toEqual({ provider_result: { view: "pending", tasks: [{ id: "task-1" }] } });
   });
+
+  it("translates a client timeout into guidance instead of timer jargon", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "complete_task", taskId: "t-1" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+    });
+    expect(outcome.failed).toHaveLength(1);
+    expect(outcome.results[0]?.status).toBe("failed");
+    expect(outcome.failed[0]?.message).toContain("may still have filed");
+    expect(outcome.failed[0]?.message).toContain("Review");
+    expect(outcome.failed[0]?.message).not.toContain("signal timed out");
+  });
+});
+
+describe("filingFailureMessage", () => {
+  it("passes ordinary failures through untouched", async () => {
+    const { filingFailureMessage } = await import("./interpretation");
+    expect(filingFailureMessage(new Error("Nifty is unreachable"))).toBe("Nifty is unreachable");
+  });
 });
 
 describe("operationToolCall", () => {

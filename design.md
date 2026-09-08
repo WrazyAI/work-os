@@ -1197,7 +1197,10 @@ non-essential motion is removed with reduced motion.
 
 When the floating companion performs multi-step assistant work (interpreting an
 update, reviewing an agenda), it may show a thinking trace instead of a bare
-`Thinking…` label so the employee can see what is actually happening.
+`Thinking…` label so the employee can see what is actually happening. The
+in-app composer reuses the same trace while an interpretation is in flight,
+with stages driven by its own request lifecycle (update sent, proposals
+filing, task views loading).
 
 Contract:
 

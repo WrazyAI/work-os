@@ -67,7 +67,7 @@ interface AgendaReview {
 }
 
 const AVATAR_COLLAPSED = { width: 164, height: 188 };
-const AVATAR_EXPANDED = { width: 380, height: 560 };
+const AVATAR_EXPANDED = { width: 400, height: 560 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";
@@ -542,7 +542,7 @@ export default function AvatarApp(): React.ReactElement {
     setFiling(true);
     try {
       const outcome = await fileApprovedOperations(enabled, {
-        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }) }),
+        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
       });
       const summary = [
         outcome.recorded ? `Recorded ${outcome.recorded}` : null,
