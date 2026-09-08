@@ -335,8 +335,7 @@ body.avatar-window {
 .chat-entry.assistant > .chat-operations,
 .chat-entry.assistant > .task-selection-card { max-width: 100%; width: 100%; }
 .chat-entry.assistant > .task-selection-card { margin-top: 6px; }
-.avatar-chat .task-selection-card-footer { flex-wrap: wrap; row-gap: 8px; }
-.avatar-chat .task-selection-card-footer button { flex: 1 1 100%; justify-content: center; }
+.avatar-chat .task-selection-card-footer button { justify-content: center; }
 .chat-operations .tool-approval-card { margin: 0; }
 .chat-operations .tool-approval-card + .tool-approval-card { margin-top: 5px; }
 .chat-system .chat-markdown {

@@ -10,7 +10,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
@@ -932,7 +932,7 @@ export default function AvatarApp(): React.ReactElement {
                 ? contextualPrompt.body
                 : "Share an update, or tell me to create, complete, or block tasks."}</p></div>
             )}
-            {chat.map((entry) => (
+            {collapseConsecutiveAssistantDuplicates(chat).map((entry) => (
               <div key={entry.id} className={`chat-entry ${entry.role}`}>
                 <ChatSectionBoundary label="avatar chat message">
                 {entry.role === "user" ? <ChatMarkdown text={entry.text} />

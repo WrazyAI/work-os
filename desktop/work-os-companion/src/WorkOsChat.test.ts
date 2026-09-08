@@ -5,6 +5,7 @@ import {
   ChatTabs,
   WORK_OS_CHAT_SOURCES,
   WorkOsPromptBar,
+  collapseConsecutiveAssistantDuplicates,
   isWideDraft,
   parseChatToken,
   workOsChatCommands,
@@ -61,6 +62,35 @@ describe("isWideDraft", () => {
   it("takes two rows for multi-line drafts or the labeled Focus action", () => {
     expect(isWideDraft("line one\nline two", false)).toBe(true);
     expect(isWideDraft("", true)).toBe(true);
+  });
+});
+
+describe("collapseConsecutiveAssistantDuplicates", () => {
+  it("drops later repeats of the same assistant text", () => {
+    const turns = [
+      { role: "assistant", text: "Hi David — how can I help?" },
+      { role: "user", text: "What's your name?" },
+      { role: "assistant", text: "I'm your Work OS assistant." },
+      { role: "assistant", text: "I'm your Work OS assistant." },
+    ];
+    const visible = collapseConsecutiveAssistantDuplicates(turns);
+    expect(visible.map((turn) => turn.text)).toEqual([
+      "Hi David — how can I help?",
+      "What's your name?",
+      "I'm your Work OS assistant.",
+    ]);
+  });
+
+  it("keeps repeats separated by other turns and turns carrying proposals", () => {
+    const op = { op: "complete_task", statement: "Done." };
+    const turns = [
+      { role: "assistant", text: "Same words" },
+      { role: "user", text: "ok" },
+      { role: "assistant", text: "Same words" },
+      { role: "assistant", text: "Same words", operations: [op] },
+    ];
+    // Separated by the user turn, then shielded by attached proposals.
+    expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(4);
   });
 });
 

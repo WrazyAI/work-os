@@ -3666,12 +3666,19 @@ button:not(:disabled):active {
   min-height: 58px;
   border-top: 1px solid var(--line);
   background: #f5f7f3;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .task-selection-card-footer small {
   color: var(--muted);
   font-size: 9px;
   line-height: 1.35;
+}
+
+.task-selection-card-footer button {
+  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .task-selection-card-footer .primary {

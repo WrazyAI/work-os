@@ -179,6 +179,42 @@ export function isWideDraft(value: string, hasFooter: boolean): boolean {
   return value.includes("\n") || hasFooter;
 }
 
+export interface CollapsibleTurn {
+  role: string;
+  text: string;
+  operations?: unknown;
+  toolResults?: unknown;
+}
+
+/** Collapse consecutive identical assistant texts at render. Dupes reach
+ * the thread through double-saves and history/live-echo overlap; hiding
+ * later repeats heals them without rewriting persisted data. Turns
+ * carrying proposals or results never collapse. */
+export function collapseConsecutiveAssistantDuplicates<T extends CollapsibleTurn>(
+  turns: readonly T[],
+): T[] {
+  const visible: T[] = [];
+  for (const turn of turns) {
+    const prev = visible[visible.length - 1];
+    const text = turn.text.trim();
+    if (
+      prev &&
+      prev.role === "assistant" &&
+      turn.role === "assistant" &&
+      text &&
+      prev.text.trim() === text &&
+      !prev.operations &&
+      !turn.operations &&
+      !prev.toolResults &&
+      !turn.toolResults
+    ) {
+      continue;
+    }
+    visible.push(turn);
+  }
+  return visible;
+}
+
 /**
  * Prompt-bar composer: context (+), @ sources, / commands, send.
  * Parent owns the draft value and send authority; this owns only the
@@ -221,6 +257,10 @@ export function WorkOsPromptBar({
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(0);
   const [engaged, setEngaged] = useState(false);
+  // The avatar panel mounts while its window is still collapsed-sized and
+  // only resizes after; without refitting, the first measurement sticks
+  // until the next keystroke.
+  const [fitKey, setFitKey] = useState(0);
   const [rowBox, setRowBox] = useState<{ top: number; height: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -271,7 +311,23 @@ export function WorkOsPromptBar({
     const contentHeight = input.scrollHeight;
     input.style.height = `${Math.min(Math.max(contentHeight, 36), 100)}px`;
     input.style.overflowY = contentHeight > 100 ? "auto" : "hidden";
-  }, [value]);
+  }, [value, fitKey]);
+
+  /* Refit when the surface itself changes size (avatar expand, window
+   * resize) or late fonts change metrics. Measuring never resizes the
+   * window, so this cannot feed back into itself. */
+  useEffect(() => {
+    const refit = () => setFitKey((key) => key + 1);
+    window.addEventListener("resize", refit);
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled) refit();
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", refit);
+    };
+  }, []);
 
   /* Clicking outside the composer closes the open menus. */
   useEffect(() => {

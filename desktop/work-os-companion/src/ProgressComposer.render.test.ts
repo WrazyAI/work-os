@@ -61,4 +61,19 @@ describe("ProgressComposer simplified chrome", () => {
     const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, required: true }));
     expect(markup).toContain("An update is due");
   });
+
+  it("collapses consecutive duplicate assistant turns and echo replies", () => {
+    const history = [
+      { id: "h-1", role: "user" as const, text: "What's your name?", createdAt: "2026-09-08T00:00:00Z" },
+      { id: "h-2", role: "assistant" as const, text: "I'm your Work OS assistant.", createdAt: "2026-09-08T00:01:00Z" },
+      { id: "h-3", role: "assistant" as const, text: "I'm your Work OS assistant.", createdAt: "2026-09-08T00:02:00Z" },
+    ];
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, {
+      ...base,
+      pending: "What's your name?",
+      history,
+      interpretation: { status: "ready", operations: [], taskOptions: [], reply: "I'm your Work OS assistant." },
+    }));
+    expect(markup.match(/I&#x27;m your Work OS assistant\./g)?.length ?? 0).toBe(1);
+  });
 });
