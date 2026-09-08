@@ -85,9 +85,9 @@ export function TaskSelectionCard({
     onMarkSelectedDone(selectedTasks.map((task) => task.id));
   };
 
-  return <section className={`task-selection-card ${dense ? "is-dense" : ""}`} style={cardStyle} aria-labelledby="task-selection-card-title" aria-busy={loading}>
+  return <section className={`task-selection-card ${dense ? "is-dense" : ""} ${confirming ? "is-confirming" : ""}`} style={cardStyle} aria-labelledby="task-selection-card-title" aria-busy={loading}>
     <header className="task-selection-card-header">
-      <div><span>Task selection</span><h2 id="task-selection-card-title">{title}</h2></div>
+      <div><span>Task selection</span><h2 id="task-selection-card-title" title={title}>{title}</h2></div>
       <output className="task-selection-count" htmlFor={contentId} aria-live="polite">{selectedTasks.length} selected</output>
     </header>
     {degraded && !loading && !failed && <p className="task-selection-notice degraded" role="status"><AlertTriangle size={15} aria-hidden="true" />Showing the last available task details.</p>}

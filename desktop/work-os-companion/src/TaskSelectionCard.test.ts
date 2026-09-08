@@ -39,4 +39,14 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("Select one or more tasks to continue.");
     expect(markup).not.toContain("Confirm Done");
   });
+
+  it("keeps long compact titles readable with an ellipsis tooltip", () => {
+    const title = "Today's tasks · 5 pending · 1 overdue";
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, dense: true, title, onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("is-dense");
+    expect(markup).not.toContain("is-confirming");
+    expect(markup).toContain("5 pending · 1 overdue");
+    expect(markup).toContain("<h2");
+    expect(markup).toContain("title=");
+  });
 });
