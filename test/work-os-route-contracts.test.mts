@@ -191,6 +191,7 @@ test("auth proxy keeps desktop CORS and bearer bypass intact", async () => {
   assert.match(proxy, /request\.method === "OPTIONS"/);
   assert.match(proxy, /workOsBearer/);
   assert.match(proxy, /Idempotency-Key/);
+  assert.match(proxy, /isDesktopUpdaterDownload/);
 });
 
 test("web Insights follows the selected historical workspace date", async () => {

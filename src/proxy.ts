@@ -39,6 +39,12 @@ function isPublic(pathname: string): boolean {
   );
 }
 
+// The Tauri updater fetches installer assets with a one-time grant instead of
+// a desktop session; the download route verifies the grant itself.
+function isDesktopUpdaterDownload(pathname: string): boolean {
+  return /^\/api\/work-os\/desktop\/updates\/[^/]+\/download$/.test(pathname);
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get("origin");
@@ -70,7 +76,7 @@ export async function proxy(request: NextRequest) {
   const notesAgentBearer =
     pathname === "/api/agent-tools/notes" &&
     /^Bearer\s+\S+$/i.test(request.headers.get("authorization") || "");
-  if (!user && !isPublic(pathname) && !workOsBearer && !seoAgentBearer && !notesAgentBearer) {
+  if (!user && !isPublic(pathname) && !workOsBearer && !seoAgentBearer && !notesAgentBearer && !isDesktopUpdaterDownload(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", `${pathname}${request.nextUrl.search}`);
