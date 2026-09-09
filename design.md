@@ -1393,6 +1393,13 @@ The current-day Tasks page uses this exact order:
 
 Do not restore a permanently editable focus textarea above the task list.
 
+When a mirrored task is tombstoned (archived or deleted) — at tombstone time and
+on every mirror sync — its open daily-plan items are marked `removed` so no list
+surface keeps rendering them. A plan item whose task row can no longer be
+resolved must never present live work: no "Awaiting Nifty sync" chip, no
+clickable detail, and no completion control for a task that no longer exists.
+Truthful removal, not a permanent dead row, is the required end state.
+
 ### 27.2 Agenda strip
 
 One strip, approximately 56–72px tall, spanning the content width:

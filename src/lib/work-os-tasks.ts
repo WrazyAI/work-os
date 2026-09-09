@@ -22,6 +22,7 @@ import {
   type Json,
 } from "@/lib/work-os-internal";
 import { syncNifty, upsertNiftyTask } from "@/lib/work-os-nifty";
+import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
 
 function structuredDescription(description: string | null, expectedOutcome: unknown, definitionOfDone: unknown) {
   const base = (description || "")
@@ -299,7 +300,7 @@ export async function archiveTask(userId: string, taskId: string) {
   const providerTaskId = task.provider_task_id as string;
   await niftyForOwner(userId, () => archiveNiftyTask(providerTaskId, true));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
-  return selectFirst(
+  const archived = await selectFirst(
     db().from("work_tasks").update({
       status: "archived",
       raw: { ...raw, archived: true },
@@ -308,6 +309,10 @@ export async function archiveTask(userId: string, taskId: string) {
     }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
     "archive task mirror",
   );
+  // A tombstoned task can no longer back a plan item: mark its plan rows
+  // removed so no workspace surface keeps rendering unhittable work.
+  await removePlanItemsForTombstonedTask(String(archived.id));
+  return archived;
 }
 
 export async function deleteTask(userId: string, taskId: string) {
@@ -315,7 +320,7 @@ export async function deleteTask(userId: string, taskId: string) {
   const providerTaskId = task.provider_task_id as string;
   await niftyForOwner(userId, () => deleteNiftyTask(providerTaskId));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
-  return selectFirst(
+  const deleted = await selectFirst(
     db().from("work_tasks").update({
       status: "deleted",
       raw: { ...raw, deleted: true, deleted_at: new Date().toISOString() },
@@ -324,6 +329,8 @@ export async function deleteTask(userId: string, taskId: string) {
     }).eq("user_id", userId).eq("provider_task_id", providerTaskId).select("*"),
     "tombstone deleted task mirror",
   );
+  await removePlanItemsForTombstonedTask(String(deleted.id));
+  return deleted;
 }
 
 export async function moveTaskToParent(userId: string, taskId: string, parentTaskId: string) {

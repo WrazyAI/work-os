@@ -17,6 +17,7 @@ import {
   type Json,
 } from "@/lib/work-os-internal";
 import { ensureWorkOsDefaults } from "@/lib/work-os-bootstrap";
+import { sweepTombstonedPlanItems } from "@/lib/work-os-plan-ghosts";
 
 async function mapAssigneePeople(supabase: Db, userId: string, assigneeIds: string[]) {
   if (!assigneeIds.length) return [];
@@ -251,6 +252,9 @@ export async function syncNifty(userId: string) {
     if (page.hasMore === false || (page.hasMore !== true && page.tasks.length < pageSize) || !fresh.length) break;
   }
   for (const task of tasks) await upsertNiftyTask(userId, task);
+  // Tasks tombstoned outside the plan flow (e.g. archived directly in Nifty)
+  // leave their plan items pointing at dead rows; heal them on every sync.
+  await sweepTombstonedPlanItems(userId);
   for (const task of tasks.filter((item) => item.parentTaskId)) {
     const parent = await db().from("work_tasks").select("id").eq("user_id", userId).eq("provider", "nifty").eq("provider_task_id", task.parentTaskId as string).maybeSingle();
     if (parent.error) throw new Error(`map Nifty parent task: ${parent.error.message}`);
