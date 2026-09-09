@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
@@ -32,6 +33,7 @@ const migrations = [
     "supabase/migrations/0027_work_os_multiple_daily_sessions.sql",
     "neon/migrations/0033_adaptive_planning.sql",
     "neon/migrations/0034_adaptive_planning_atomic_save.sql",
+    "neon/migrations/0035_ai_plan_build_confirmation_gate.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -59,7 +61,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
     "work_evidence_events", "work_screenshot_summaries", "work_screenshot_access_log",
     "work_report_versions", "work_desktop_sessions", "work_audit_log",
     "work_employee_onboarding", "work_consent_records",
-    "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_session_events", "work_task_day_events",
+    "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_daily_plan_builds", "work_session_events", "work_task_day_events",
   ];
   const tables = await db.query(`
     select table_name from information_schema.tables
@@ -219,7 +221,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
   await assert.rejects(() => db.query(`
     select * from work_save_daily_plan_draft(
       $1,$2,$3,1,'atomic-invalid','Intent','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
-      $4::jsonb,array[]::uuid[],false,null,null
+      $4::jsonb,array[]::uuid[],false,null,null,null,null
     )
   `, [orgA, personA, preShiftPlan.rows[0].id, JSON.stringify([{ id: crypto.randomUUID(), rank: 0, disposition: 'selected', title_snapshot: 'Ship the plan page', completion_state: 'open', objective: null, success_criteria: [], estimate_minutes: null, source_refs: [], clarification_state: null }])]), /daily plan item changed/);
   const atomicRollback = await db.query(`select revision, freeform_intent from work_daily_plans where id=$1`, [preShiftPlan.rows[0].id]);
@@ -227,19 +229,66 @@ test("Work OS companion migration is complete and idempotent", async () => {
   const atomicSave = await db.query(`
     select * from work_save_daily_plan_draft(
       $1,$2,$3,1,'atomic-valid','Ship planning','employee',array[]::text[],null,$5::jsonb,$6::jsonb,
-      $4::jsonb,array[]::uuid[],false,null,null
+      $4::jsonb,array[]::uuid[],false,null,null,null,null
     )
   `, [orgA, personA, preShiftPlan.rows[0].id, JSON.stringify([{ id: preShiftOutcome.rows[0].id, rank: 0, disposition: 'selected', title_snapshot: 'Ship the plan page', completion_state: 'open', objective: 'Ship the planning page.', success_criteria: ['Review it'], estimate_minutes: 30, source_refs: [], clarification_state: 'resolved' }]), JSON.stringify({ clarifications: [{ id: 'scope', question: 'Which release?', reason: 'ambiguous_scope' }] }), JSON.stringify({ scope: 'This release only.' })]);
   assert.deepEqual(atomicSave.rows[0], { revision: 2, replayed: false });
   const atomicReplay = await db.query(`
     select * from work_save_daily_plan_draft(
       $1,$2,$3,1,'atomic-valid','Different intent','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
-      '[]'::jsonb,array[]::uuid[],false,null,null
+      '[]'::jsonb,array[]::uuid[],false,null,null,null,null
     )
   `, [orgA, personA, preShiftPlan.rows[0].id]);
   assert.deepEqual(atomicReplay.rows[0], { revision: 2, replayed: true });
   const atomicPersisted = await db.query(`select revision, freeform_intent, clarification_answers from work_daily_plans where id=$1`, [preShiftPlan.rows[0].id]);
   assert.deepEqual(atomicPersisted.rows[0], { revision: 2, freeform_intent: 'Ship planning', clarification_answers: { scope: 'This release only.' } });
+  const buildId = crypto.randomUUID();
+  const intentFingerprint = createHash("sha256").update("Ship planning", "utf8").digest("hex");
+  await db.query(`
+    insert into work_daily_plan_builds(id,organization_id,person_id,shift_date,intent_fingerprint,expires_at)
+    values ($1,$2,$3,'2026-08-12',$4,now() + interval '10 minutes')
+  `, [buildId, orgA, personA, intentFingerprint]);
+  await assert.rejects(() => db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,2,'invalid-ai-build-confirm','Ship planning','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      $4::jsonb,array[]::uuid[],true,null,null,$5,$6
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, JSON.stringify([{ id: crypto.randomUUID(), rank: 0, disposition: 'selected', title_snapshot: 'Changed after build', completion_state: 'open', objective: null, success_criteria: [], estimate_minutes: null, source_refs: [], clarification_state: null }]), buildId, intentFingerprint]), /daily plan item changed/);
+  const unconsumedAfterRollback = await db.query(`select consumed_at from work_daily_plan_builds where id=$1`, [buildId]);
+  assert.equal(unconsumedAfterRollback.rows[0].consumed_at, null);
+  const confirmedByBuild = await db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,2,'ai-build-confirm','Ship planning','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      null,array[]::uuid[],true,null,null,$4,$5
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, buildId, intentFingerprint]);
+  assert.deepEqual(confirmedByBuild.rows[0], { revision: 3, replayed: false });
+  const consumedBuild = await db.query(`select consumed_at is not null as consumed, consumed_idempotency_key from work_daily_plan_builds where id=$1`, [buildId]);
+  assert.deepEqual(consumedBuild.rows[0], { consumed: true, consumed_idempotency_key: "ai-build-confirm" });
+  const confirmationReplay = await db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,2,'ai-build-confirm','Ship planning','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      null,array[]::uuid[],true,null,null,$4,$5
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, buildId, intentFingerprint]);
+  assert.deepEqual(confirmationReplay.rows[0], { revision: 3, replayed: true });
+  await assert.rejects(() => db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,3,'reused-ai-build','Ship planning','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      null,array[]::uuid[],true,null,null,$4,$5
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, buildId, intentFingerprint]), /AI build confirmation/);
+  const mismatchedBuildId = crypto.randomUUID();
+  await db.query(`
+    insert into work_daily_plan_builds(id,organization_id,person_id,shift_date,intent_fingerprint,expires_at)
+    values ($1,$2,$3,'2026-08-12',$4,now() + interval '10 minutes')
+  `, [mismatchedBuildId, orgA, personA, intentFingerprint]);
+  await assert.rejects(() => db.query(`
+    select * from work_save_daily_plan_draft(
+      $1,$2,$3,3,'mismatched-ai-intent','Different intent','employee',array[]::text[],null,'{}'::jsonb,'{}'::jsonb,
+      null,array[]::uuid[],true,null,null,$4,$5
+    )
+  `, [orgA, personA, preShiftPlan.rows[0].id, mismatchedBuildId, createHash("sha256").update("Different intent", "utf8").digest("hex")]), /AI build confirmation/);
   await assert.rejects(() => db.query(`
     insert into work_daily_plans(organization_id,person_id,shift_date,status)
     values ($1,$2,'2026-08-12','draft')

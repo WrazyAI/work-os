@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { refinePlanDraft } from "@/lib/aiPlan";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { buildPlanningContext } from "@/lib/work-os-planning-context";
+import { issueDailyPlanBuild } from "@/lib/work-os-plan-build";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +27,10 @@ export async function POST(req: Request) {
       const status = result.reason === "ai_unconfigured" ? 501 : result.reason === "ai_malformed" ? 400 : 503;
       return NextResponse.json({ error: result.detail, reason: result.reason }, { status });
     }
+    const buildId = await issueDailyPlanBuild(auth.access, date, result.interpretation.rawIntent);
     return NextResponse.json({
       interpretation: result.interpretation,
+      build_id: buildId,
       model: result.model,
       promptVersion: result.promptVersion,
       contextVersion: result.contextVersion,

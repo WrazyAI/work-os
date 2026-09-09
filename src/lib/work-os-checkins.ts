@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { listPersonTasks } from "@/lib/work-os";
 import { localDateForTimezone, resolveShiftWindow } from "@/modules/work-os/companion";
-import { saveDailyPlan } from "@/lib/work-os-workday";
 import {
   OPERATIONS,
   audit,
@@ -221,21 +220,6 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     proposals = data ?? [];
   }
   await audit(access, "check_in.created", "check_in", checkIn.id as string, { kind, proposalCount: proposals.length });
-  if (activeSession?.id && confirmedExisting) {
-    const { data: currentPlan, error: currentPlanError } = await db().from("work_daily_plans")
-      .select("id,status,confirmed_at,confirmation_idempotency_key,freeform_intent,items:work_daily_plan_items(id,disposition)")
-      .eq("organization_id", access.organizationId).eq("session_id", activeSession.id).maybeSingle();
-    if (currentPlanError) throw new Error(`load plan confirmation state: ${currentPlanError.message}`);
-    if (currentPlan && currentPlan.status !== "confirmed") {
-      const planItems = Array.isArray(currentPlan.items) ? currentPlan.items as Array<{ id: string; disposition: string }> : [];
-      await saveDailyPlan(access, {
-        confirm: true,
-        item_ids: planItems.filter((item) => item.disposition === "selected").map((item) => item.id),
-        deferred_ids: planItems.filter((item) => item.disposition === "deferred").map((item) => item.id),
-        freeform_intent: currentPlan.freeform_intent,
-      }, `check-in:${checkIn.id}`);
-    }
-  }
   if (activeSession?.id && (input || confirmedExisting)) {
     await db().from("work_sessions").update({ state: "active", last_substantive_update_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", activeSession.id);
   }

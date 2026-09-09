@@ -3,6 +3,7 @@ import { WorkOsConflictError, type WorkOsAccess, workOsOrganizationOwnerId } fro
 import { listPersonTasks } from "@/lib/work-os";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
+import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
@@ -594,10 +595,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
   const confirm = body.confirm === true;
   if (confirm && !session) throw new Error("Clock in before confirming a plan.");
-  if (confirm && plan.status === "confirmed") {
-    if (plan.confirmation_idempotency_key === idempotencyKey) return plan;
-    throw new WorkOsConflictError("This plan was already confirmed on another device. Refresh before saving again.");
-  }
+  if (confirm && plan.status === "confirmed" && plan.confirmation_idempotency_key !== idempotencyKey) throw new WorkOsConflictError("This plan was already confirmed on another device. Refresh before saving again.");
   const expectedRevision = Number(body.revision ?? plan.revision ?? 1);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("A valid plan revision is required.");
   const submitted = Array.isArray(body.items) ? body.items as DraftItem[] : null;
@@ -605,6 +603,10 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   const hasIntent = Object.prototype.hasOwnProperty.call(body, "freeform_intent");
   const freeformIntent = hasIntent ? value(body.freeform_intent) : value(plan.freeform_intent);
   if (freeformIntent && freeformIntent.length > 4000) throw new Error("Plan intent must be 4000 characters or fewer.");
+  const buildId = confirm ? value(body.build_id) : null;
+  if (confirm && !buildId) throw new Error("An AI build id is required for plan confirmation.");
+  if (buildId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(buildId)) throw new Error("build_id must be a valid AI build id.");
+  const intentFingerprint = confirm ? planIntentFingerprint(freeformIntent) : null;
   const requestedProvenance = body.goal_provenance === undefined ? value(plan.goal_provenance) : value(body.goal_provenance);
   if (requestedProvenance && !["employee", "accepted_suggestion"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal or an accepted suggestion");
   const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
@@ -685,9 +687,12 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
     p_confirm: confirm,
     p_session_id: session?.id ?? null,
     p_first_follow_up_at: firstFollowUpAt,
+    p_build_id: buildId,
+    p_intent_fingerprint: intentFingerprint,
   });
   if (mutationError) {
     if (/changed on another device/i.test(mutationError.message)) throw new WorkOsConflictError("This plan changed on another device. Refresh before saving again.");
+    if (/AI build confirmation/i.test(mutationError.message)) throw new WorkOsConflictError("The AI build is invalid, expired, already used, or does not match this plan intent. Build the plan again.");
     throw new Error(`save daily plan draft atomically: ${mutationError.message}`);
   }
   const result = Array.isArray(mutation) ? mutation[0] : mutation;
@@ -787,61 +792,4 @@ export async function convertDailyPlanOutcome(access: WorkOsAccess, body: Json, 
   if (!data) throw new Error("Plan outcome not found.");
   await auditPlan(access, "plan.outcome_converted", String(plan.id), { outcomeId, taskId, idempotencyKey });
   return loadPlanByDate(access, shiftDate);
-}
-
-export async function saveDailyPlan(access: WorkOsAccess, body: Json, idempotencyKey: string) {
-  const session = await activeSession(access); if (!session) throw new Error("Clock in before confirming a plan.");
-  const plan = await ensureDailyPlan(access, session); if (!plan) throw new Error("Daily plan not found.");
-  if (body.confirm === true && plan.status === "confirmed" && plan.confirmation_idempotency_key === idempotencyKey) return plan;
-  const itemIds = Array.isArray(body.item_ids) ? body.item_ids.map(String) : [];
-  const deferredIds = Array.isArray(body.deferred_ids) ? body.deferred_ids.map(String) : [];
-  const editableIds = new Set((Array.isArray(plan.items) ? plan.items : [])
-    .filter((item: Json) => ["selected", "deferred"].includes(String(item.disposition)))
-    .map((item: Json) => String(item.id)));
-  if (itemIds.some((id) => !editableIds.has(id)) || deferredIds.some((id) => !editableIds.has(id))) throw new Error("Plan selection contains an item that is no longer editable.");
-  if (itemIds.some((id) => deferredIds.includes(id))) throw new Error("A plan item cannot be both selected and deferred.");
-  const now = new Date();
-  for (let rank = 0; rank < itemIds.length; rank += 1) {
-    const { data: updated, error: itemError } = await db().from("work_daily_plan_items").update({ rank, disposition: "selected", updated_at: now.toISOString() }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("id", itemIds[rank]).in("disposition", ["selected", "deferred"]).select("id").maybeSingle();
-    if (itemError) throw new Error(`select daily plan item: ${itemError.message}`);
-    if (!updated) throw new Error("A selected plan item changed before the plan was saved.");
-  }
-  if (deferredIds.length) {
-    const { data: updated, error: itemError } = await db().from("work_daily_plan_items").update({ disposition: "deferred", updated_at: now.toISOString() }).eq("organization_id", access.organizationId).eq("plan_id", plan.id).in("id", deferredIds).in("disposition", ["selected", "deferred"]).select("id");
-    if (itemError) throw new Error(`defer daily plan item: ${itemError.message}`);
-    if ((updated ?? []).length !== deferredIds.length) throw new Error("A deferred plan item changed before the plan was saved.");
-  }
-  const confirmed = body.confirm === true;
-  const confirmedAt = plan.confirmed_at ? new Date(plan.confirmed_at as string) : now;
-  const followUpAt = session.first_follow_up_at ?? nextFirstFollowUpAt({
-    planConfirmedAt: confirmedAt.toISOString(),
-    session: {
-      state: session.state as WorkSessionState,
-      scheduledStartsAt: session.scheduled_starts_at as string | null,
-      scheduledEndsAt: session.scheduled_ends_at as string | null,
-      clockedInAt: session.clocked_in_at as string | null,
-    },
-    at: now.toISOString(),
-  });
-  const { data, error } = await db().from("work_daily_plans").update({
-    freeform_intent: value(body.freeform_intent), status: confirmed ? "confirmed" : plan.status,
-    confirmation_idempotency_key: confirmed ? idempotencyKey : plan.confirmation_idempotency_key,
-    confirmed_at: confirmed ? confirmedAt.toISOString() : plan.confirmed_at,
-    revision: Number(plan.revision ?? 1) + 1,
-    updated_at: now.toISOString(),
-  }).eq("id", plan.id).eq("organization_id", access.organizationId).select("*, items:work_daily_plan_items(*)").single();
-  if (error) throw new Error(`save daily plan: ${error.message}`);
-  if (confirmed && !session.first_follow_up_at) {
-    const { error: sessionError } = await db().from("work_sessions").update({
-      first_follow_up_at: followUpAt, next_fallback_at: null, last_prompt_kind: null, last_prompt_at: null, updated_at: now.toISOString(),
-    }).eq("organization_id", access.organizationId).eq("id", session.id);
-    if (sessionError) throw new Error(`save Work OS prompt schedule: ${sessionError.message}`);
-  }
-  await auditPlan(access, confirmed ? "plan.confirmed" : "plan.updated", plan.id as string, {
-    sessionId: session.id,
-    selectedCount: itemIds.length,
-    deferredCount: deferredIds.length,
-    idempotencyKey,
-  });
-  return data;
 }
