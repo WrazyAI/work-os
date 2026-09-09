@@ -32,9 +32,10 @@ describe("operational visualizations", () => {
   });
 
   it("uses unmistakable task-state semantics", () => {
-    expect(styles).toMatch(/\.task-state\.open[\s\S]*#fff3c4/);
-    expect(styles).toMatch(/\.task-state\.complete[\s\S]*#eaf5df/);
-    expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fde5e1/);
+    expect(styles).toMatch(/\.task-state\.open[\s\S]*#edf0ea/);
+    expect(styles).toMatch(/\.task-state\.complete[\s\S]*#e8f4da/);
+    expect(styles).toMatch(/\.task-state\.overdue[\s\S]*#fbe7e3/);
+    expect(styles).toMatch(/\.task-state\.sync-issue[\s\S]*#fff3d1/);
     expect(app).toContain('className={`task-state ${state}`}');
   });
 
@@ -60,8 +61,8 @@ describe("operational visualizations", () => {
   });
 
   it("keeps agenda planning available independently of attendance", () => {
-    expect(app).toContain("scheduled for today");
-    expect(app).toContain("due from yesterday");
+    expect(app).toContain("Scheduled today");
+    expect(app).toContain("Due from yesterday");
     expect(app).toContain('type ComposerMode = "progress" | "agenda"');
     expect(app).toContain('mode={sessionActive && view === "day" ? "progress" : "agenda"}');
     expect(app).toContain('label === "shift.clock_in" && /workday is already closed/i.test(message)');
@@ -69,7 +70,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("Added from the Work OS daily composer.");
     expect(app).toContain("Share an update or add a task…");
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
-    expect(workspaceStyles).toContain(".pre-shift-agenda-summary .has-due");
+    expect(workspaceStyles).toContain(".kpi-strip");
+    expect(workspaceStyles).toContain(".kpi-card em.kpi-attention");
     expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
   });
 
@@ -77,6 +79,8 @@ describe("operational visualizations", () => {
     expect(app).toContain('className={`panel task-agenda-strip');
     expect(app).toContain("agenda-strip-chip");
     expect(app).toContain("Review unfinished work");
+    expect(app).toContain("function DashboardTaskCard");
+    expect(app).toContain('className="task-check"');
     expect(app).toContain("onEditFocus={openPlanningSession}");
     expect(app).not.toContain('className="panel daily-goal-card"');
     expect(app).toContain("function TaskLifecycleMenu");

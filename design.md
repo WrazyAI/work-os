@@ -1070,6 +1070,14 @@ action, current selection/progress, or explicitly confirmed success depending on
 the accompanying label. Observation remains cool blue/neutral even when activity
 is currently present.
 
+**Status pills and row surfaces.** Task and list status renders as one compact
+soft pill per row: `Open` neutral on `#edf0ea`, `Overdue` red on `#fbe7e3`,
+`Done` green on `#e8f4da`, `Sync issue` amber on `#fff3d1`. Amber also carries
+the quiet `sync pending` note in row metadata. Color is reserved for these
+pills, due-date danger text, primary actions, bounded progress, and heroes;
+rows themselves stay transparent with hairline dividers — no per-row fills and
+no colored left edges anywhere.
+
 ### 24.2 Geometry, elevation, and motion tokens
 
 | Role | Value |
@@ -1303,16 +1311,26 @@ saturated multicolor gradients, and unbacked controls violate §§2.4,
 
 ### 26.1 Pre-shift composition
 
-The first screenful is a two-column readiness composition at wide widths:
+The first screenful is a stacked readiness composition at wide widths:
 
-- **Left primary hero:** readiness phrase, scheduled window, one `Clock in`
-  action, and one concise attendance-provenance sentence. Decorative companion
-  art may occupy the far right but never displace the action.
-- **Right Shift Pulse:** compact countdown/schedule state. The default card does
-  not repeat task counts, review counts, session state, or six Worktivity facts.
-  Its ellipsis exposes `Worktivity status` in a detached card.
-- **Below:** focus and agenda card with today’s focus, `N tasks scheduled for
-  today`, and a separate red `M tasks due from yesterday` indicator.
+- **Primary hero:** readiness phrase, scheduled window, one `Clock in` action, one
+  concise attendance-provenance sentence, and today's focus as a quiet editable
+  line (`Today's focus`, statement, provenance, `tap to update`). The companion
+  art stays small and decorative; it never displaces content.
+- **Shift Pulse beside the hero:** compact countdown/schedule state. The default
+  card does not repeat task counts, review counts, session state, or six
+  Worktivity facts. Its ellipsis exposes `Worktivity status` in a detached card.
+- **KPI strip:** four quiet stat cards in one row (`Scheduled today`, `Due from
+  yesterday`, `Completed today`, `Reviews pending`). Values are large; state is
+  a small delta line, red only when attention is required. Each card is a button
+  that navigates to what it counts, and zero-value cards render neutral. The
+  strip replaces separate agenda-summary tiles and duplicated hero metrics.
+- **Today's tasks:** one panel with a `View all` link and up to three compact
+  task cards: due chip, title, one-line description, and subtask progress ticks
+  with a percentage. Activating a card opens the task detail. The empty state is
+  a single honest line, not a decorated tile.
+
+At `≤900px` the strip folds to two columns and the task cards stack single-column.
 
 The agenda composer is available before clock-in. Its copy says it adds tasks or
 sets focus and explicitly states that planning does not affect attendance.
@@ -1351,14 +1369,14 @@ OS-owned Pause/Clock out actions, but the ellipsis must continue to expose both
 At wide widths the row grid is approximately:
 
 ```text
-26px completion | flexible title + metadata | status | 30px menu
+26px completion | flexible title + metadata | status pill | 30px menu
 ```
 
-Rows are at least 66px high with 11px gaps and neutral separators. On compact
-screens, hide the redundant status word before hiding title or completion; the
-three-column layout becomes completion, content, menu. Completion remains direct.
-Viewing uses the task title/body. Editing, archive, and permanent deletion use the
-ellipsis menu.
+Rows are at least 66px high with neutral hairline separators and a soft status
+pill (`Open`, `Done`) aligned on the row centerline. On compact screens, hide
+the redundant status pill before hiding title or completion; the layout becomes
+completion, content, menu. Completion remains direct. Viewing uses the task
+title/body. Editing, archive, and permanent deletion use the ellipsis menu.
 
 ## 27. Tasks workspace blueprint
 
@@ -1398,7 +1416,7 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 
 | Section | Membership | Order | Visual treatment |
 |---|---|---|---|
-| Overdue | Open task with due date before current workday | Oldest due first | Red label/count and 2px danger edge; no additional per-row status pill |
+| Overdue | Open task with due date before current workday | Oldest due first | Red label/count, red status pill, and red due text |
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
 
@@ -1418,19 +1436,29 @@ Invalid timestamps never reach a formatter that can throw.
 
 ### 27.4 Task row anatomy
 
-Rows are compact and scannable; the task-detail view is the place for depth:
+Rows are compact, flat, and scannable; the task-detail view is the place for
+depth:
 
-- Maximum two lines. Line one: state dot, task title, and due chip when a due
-  date exists. Line two: assignee, project, milestone, and priority — each only
-  when present.
-- Description is hidden when empty and otherwise truncated to one line; full text
-  lives in the task-detail view. Never render the empty placeholder on the row.
-- Subtask progress, when present, is a compact ring on line one.
-- No decorative column-header row above the list.
-- The only per-row provider chip is an actionable warning (`Awaiting Nifty
-  sync`). Aggregate provider freshness lives once in the toolbar or strip; a
-  per-row "synced" chip is noise.
-- Completed rows keep the muted treatment and a single completion marker.
+- Rows are transparent surfaces separated by hairline dividers — never
+  individual bordered cards. Surface tint belongs to heroes, groups, and heroes'
+  content cards; a row never carries a colored fill or a colored left edge. The
+  overdue group keeps its red label/count only.
+- Row grid: `24px completion | flexible title + metadata | progress | due date |
+  status pill | 30px menu`. The status pill is the single semantic voice:
+  `Open` (neutral), `Overdue` (red-soft), `Done` (green-soft), `Sync issue`
+  (amber-soft, degraded only). Completion is a direct checkbox; historical rows
+  omit it.
+- Title line one; metadata line two carries assignee, project, milestone, and
+  priority — each only when present, plus a quiet amber `sync pending` note when
+  a record is not yet mirrored. Description is hidden when empty and otherwise
+  truncated to one line; full text lives in the task-detail view. Never render
+  the empty placeholder on the row.
+- Tasks surfaced into today show a small `On today` tag beside the title. No
+  decorative column-header row appears above the list. Aggregate provider
+  freshness lives once in the strip or toolbar; per-row provenance chips are
+  noise.
+- Completed rows keep the muted treatment, strike-through title, and the `Done`
+  pill.
 
 ### 27.5 Filtering states
 

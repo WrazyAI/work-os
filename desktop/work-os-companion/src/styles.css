@@ -800,19 +800,24 @@ button:disabled {
   text-transform: uppercase;
 }
 .task-state.open {
-  border-color: #d8ad3f;
-  background: #fff3c4;
-  color: #765508;
+  border-color: transparent;
+  background: #edf0ea;
+  color: #5b655a;
 }
 .task-state.complete {
-  border-color: #9fc77a;
-  background: #eaf5df;
-  color: #315f16;
+  border-color: transparent;
+  background: #e8f4da;
+  color: #3c651d;
 }
 .task-state.overdue {
-  border-color: #dc8177;
-  background: #fde5e1;
-  color: #8f2f25;
+  border-color: transparent;
+  background: #fbe7e3;
+  color: #a0372b;
+}
+.task-state.sync-issue {
+  border-color: transparent;
+  background: #fff3d1;
+  color: #7d5a10;
 }
 .evidence-list h3 {
   font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -1422,29 +1427,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   min-height: 38px;
   background: #f7f6ef;
 }
-.today-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line);
-}
-.today-actions button {
-  min-height: 32px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
-  padding: 0 10px;
-  color: #5e6259;
-  font-size: 9px;
-}
-.today-actions button:first-child {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
-}
-.today-actions button:not(:disabled):hover { background: #fffef8; color: var(--ink); transform: translateY(-1px); }
-.today-actions button:first-child:not(:disabled):hover { background: #292c25; color: #fff; }
 .page { max-width: 1040px; }
 .page-intro { margin-top: 24px; margin-bottom: 34px; }
 .page-intro h2 { max-width: 760px; }
@@ -1656,7 +1638,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .rail nav button { flex: 1; padding: 0 7px; }
   .rail nav button:nth-child(4),
   .rail nav button:nth-child(5) { display: flex; }
-  .workspace-task { grid-template-columns: auto minmax(0, 1fr) auto auto !important; }
+  .workspace-task { grid-template-columns: 24px minmax(0, 1fr) auto 30px !important; }
+  .task-records .task-due { display: none; }
   .workspace-task .completion-ring { grid-column: 3; grid-row: 2; justify-self: center; }
   .evidence-list:before { left: 30px; }
   .evidence-list article { grid-template-columns: 1fr; padding-left: 28px; }
@@ -1695,7 +1678,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .carry-alert strong { font-size: 10px; }
 .carry-alert small { max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #786b4d; font-size: 9px; }
 .carry-alert em { font-style: normal; font-size: 9px; font-weight: 600; }
- .workspace-task { grid-template-columns: auto minmax(0, 1fr) auto auto !important; overflow: visible; }
+ .workspace-task { grid-template-columns: 24px minmax(0, 1fr) auto auto auto 30px !important; overflow: visible; }
 .workspace-task-menu { position: relative; z-index: 2; }
 .workspace-task-menu.open { z-index: 64; }
 .workspace-task-menu.open .subtask-menu { z-index: 65; }
@@ -1751,10 +1734,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: #f8ded8;
   color: #91392d;
 }
-.task-record-section.overdue .workspace-task {
-  border-left: 2px solid #d45f4c;
-  padding-left: 12px !important;
-}
 .task-load-more {
   width: 100%;
   min-height: 42px;
@@ -1802,7 +1781,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .goal-suggestion button { grid-column: 2; }
   .carry-alert { grid-template-columns: auto 1fr auto; }
   .carry-alert em { display: none; }
-  .workspace-task { grid-template-columns: auto minmax(0, 1fr) auto auto !important; }
+  .workspace-task { grid-template-columns: 24px minmax(0, 1fr) auto 30px !important; }
+  .task-records .task-due { display: none; }
   .workspace-task .completion-ring { grid-column: 2; justify-self: start; }
   .workspace-task-menu { grid-column: 3; grid-row: 1; }
   .workspace-task > svg { display: none; }

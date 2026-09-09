@@ -825,7 +825,8 @@ body {
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
   grid-template-areas:
     "hero pulse"
-    "focus capture";
+    "kpi kpi"
+    "tasks tasks";
   gap: 16px;
   align-items: start;
 }
@@ -898,15 +899,9 @@ body {
 }
 
 .stat-row small,
-.focus-row small,
 .card-title small {
   font-size: 10px;
   line-height: 1.4;
-}
-
-.focus-card {
-  grid-area: focus;
-  padding: 22px;
 }
 
 .capture-card {
@@ -941,47 +936,6 @@ body {
 .card-title button {
   font-size: 11px;
   font-weight: 600;
-}
-
-.today-goal {
-  margin: 0 0 16px;
-  padding: 14px;
-  border-color: #d5e2ca;
-  background: #f1f7e9;
-}
-
-.today-goal strong {
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.today-progress {
-  min-height: 58px;
-  margin-bottom: 4px;
-}
-
-.focus-row {
-  min-height: 62px;
-  padding: 12px 0;
-  transition: background 150ms ease, padding-inline 150ms ease;
-}
-
-.focus-row:hover {
-  margin-inline: -8px;
-  padding-inline: 8px;
-  border-radius: 9px;
-  background: #f2f5ef;
-}
-
-.focus-row strong {
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.off-shift-day {
-  grid-template-areas:
-    "hero pulse"
-    "focus focus";
 }
 
 .pre-shift-pulse {
@@ -1076,140 +1030,6 @@ body {
 .pulse-menu small {
   color: var(--muted);
   font-size: 9px;
-}
-
-.pre-shift-empty-tasks {
-  min-height: 84px;
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.pre-shift-empty-tasks > span {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #dce2d8;
-  border-radius: 50%;
-  background: #f4f7f1;
-  color: #798175;
-  font: 700 17px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-
-.pre-shift-empty-tasks > div {
-  display: grid;
-  gap: 4px;
-}
-
-.pre-shift-empty-tasks strong {
-  font-size: 12px;
-}
-
-.pre-shift-empty-tasks small {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.pre-shift-empty-tasks > button {
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid #dbcda5;
-  border-radius: 8px;
-  background: #fbf5e5;
-  color: #715b2d;
-  font-size: 9px;
-  font-weight: 650;
-}
-
-.pre-shift-agenda-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.pre-shift-agenda-summary > button {
-  min-width: 0;
-  min-height: 62px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid #dce3d7;
-  border-radius: 11px;
-  background: #f5f8f2;
-  text-align: left;
-}
-
-.pre-shift-agenda-summary > button:hover {
-  border-color: #b9cfaa;
-  background: #eff6e9;
-}
-
-.pre-shift-agenda-summary > button:disabled {
-  cursor: default;
-  opacity: 1;
-}
-
-.pre-shift-agenda-summary > button > span {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: #def1ca;
-  color: #355a1a;
-  font: 750 15px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  font-variant-numeric: tabular-nums;
-}
-
-.pre-shift-agenda-summary > button > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.pre-shift-agenda-summary strong {
-  overflow: hidden;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pre-shift-agenda-summary small {
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.pre-shift-agenda-summary .has-due {
-  border-color: #ebc8c2;
-  background: #fff5f3;
-}
-
-.pre-shift-agenda-summary .has-due:hover {
-  border-color: #dfaaa2;
-  background: #fff0ed;
-}
-
-.pre-shift-agenda-summary .has-due > span {
-  background: #f8d8d3;
-  color: #a33d35;
-  box-shadow: inset 0 0 0 1px rgba(163, 61, 53, 0.08);
-}
-
-.pre-shift-agenda-summary .has-due > svg {
-  color: #b34b42;
-}
-
-.off-shift-day,
-.tasks-workspace {
-  padding-bottom: 110px;
 }
 
 .pulse-provider-popover {
@@ -1443,17 +1263,6 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pre-shift-empty-tasks {
-    grid-template-columns: 44px minmax(0, 1fr);
-  }
-
-  .pre-shift-empty-tasks > button {
-    grid-column: 1 / -1;
-  }
-
-  .pre-shift-agenda-summary {
-    grid-template-columns: 1fr;
-  }
 }
 
 .active-day-page {
@@ -1942,18 +1751,18 @@ body {
 
 .carryover-metric > span {
   display: grid;
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
   flex: 0 0 auto;
   place-items: center;
-  border: 6px solid #d9ddd5;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #e6d5cf;
+  border-radius: 13px;
+  background: #fbe7e3;
 }
 
 .carryover-metric.pending > span {
-  border-color: #dc5a50;
-  box-shadow: 0 6px 18px rgba(207, 66, 57, 0.18);
+  border-color: #eec0b8;
+  box-shadow: 0 6px 18px rgba(207, 66, 57, 0.1);
 }
 
 .carryover-metric strong {
@@ -2103,28 +1912,6 @@ body {
 .active-task-list:has(.dashboard-task-menu.open) .dashboard-task-menu:not(.open) .ellipsis-button {
   opacity: 0;
   pointer-events: none;
-}
-
-.dashboard-focus-row {
-  grid-template-columns: 28px minmax(0, 1fr) auto 32px;
-}
-
-.focus-task-copy {
-  display: grid;
-  min-width: 0;
-  padding: 0;
-  gap: 3px;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-}
-
-.focus-task-copy strong,
-.focus-task-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .active-task-list article:hover {
@@ -3235,8 +3022,16 @@ button:not(:disabled):active {
     grid-template-areas:
       "hero"
       "pulse"
-      "focus"
-      "capture";
+      "kpi"
+      "tasks";
+  }
+
+  .kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-task-grid {
+    grid-template-columns: 1fr;
   }
 
   .daily-goal-card {
@@ -3444,14 +3239,6 @@ button:not(:disabled):active {
     gap: 6px;
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .dashboard-focus-row {
-    grid-template-columns: 24px minmax(0, 1fr) 32px;
-  }
-
-  .dashboard-focus-row > .task-state {
-    display: none;
   }
 
 }
@@ -4629,6 +4416,361 @@ button:not(:disabled):active {
     display: none;
   }
 }
+
+/* ============ Flat task row system (ref: quiet table rows) ============ */
+/* Rows are hairline-divided, borderless, and neutral. Color lives in the
+   status pill, the due column, and heroes — never in row surfaces. */
+
+.task-records .workspace-task {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  align-items: center;
+}
+
+.task-row-ring {
+  justify-self: center;
+}
+
+.task-records .workspace-task:hover {
+  border-color: transparent;
+  background: #f3f6ef;
+  transform: none;
+  box-shadow: none;
+}
+
+.workspace-task.is-surfaced {
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace-task:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124, 201, 54, 0.35);
+}
+
+/* Direct completion lives on the row, like the active-day list. */
+.task-records .task-check {
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+}
+
+.workspace-task.is-completed .task-check {
+  border-color: #a9d67c;
+  background: #e8f4da;
+}
+
+/* Selection marker: a quiet tag, not a surface flood. */
+.surfaced-tag {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8f4da;
+  color: #477527;
+  font-size: 8.5px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Due date as its own quiet column; overdue borrows the danger color. */
+.task-due {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.task-due.danger {
+  color: #a0372b;
+  font-weight: 750;
+}
+
+/* Provenance warning stays a quiet amber note in the meta line. */
+.task-row-line .sync-warn {
+  color: #a56d0f;
+  font-weight: 650;
+}
+
+.task-row-line.secondary-line .task-assignee-tags {
+  margin: 0;
+}
+
+/* Status pill sizing inside workspace rows: ref-style compact. */
+.task-records .task-state {
+  min-width: 62px;
+  font-size: 8.5px;
+}
+
+/* ============ Dashboard (My day) — pre-shift ============ */
+
+.day-grid.off-shift-day {
+  grid-template-areas:
+    "hero pulse"
+    "kpi kpi"
+    "tasks tasks";
+}
+
+.kpi-strip {
+  grid-area: kpi;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-card {
+  display: grid;
+  min-width: 0;
+  min-height: 88px;
+  align-content: center;
+  gap: 3px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kpi-card:not(:disabled):hover {
+  border-color: #b9cfaa;
+  transform: translateY(-1px);
+}
+
+.kpi-card:disabled {
+  cursor: default;
+}
+
+.kpi-card small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kpi-card small svg {
+  color: #6c7569;
+}
+
+.kpi-card strong {
+  font: 700 26px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.kpi-card strong.kpi-danger {
+  color: #a0372b;
+}
+
+.kpi-card em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.kpi-card em.kpi-attention {
+  color: #a0372b;
+  font-weight: 700;
+}
+
+/* Today's tasks: content cards with soft wash + progress ticks. */
+.dashboard-tasks-card {
+  grid-area: tasks;
+  padding: 18px 20px 20px;
+}
+
+.dashboard-task-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-task-card {
+  display: grid;
+  min-width: 0;
+  min-height: 128px;
+  align-content: start;
+  gap: 7px;
+  padding: 14px 15px;
+  border: 1px solid #e2e7de;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 12% -10%, rgba(168, 241, 91, 0.14), transparent 9rem),
+    #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.dashboard-task-card:hover {
+  border-color: #bcd9a1;
+  box-shadow: 0 10px 26px rgba(20, 30, 18, 0.08);
+  transform: translateY(-1px);
+}
+
+.dashboard-task-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124, 201, 54, 0.35);
+}
+
+.dashboard-task-card h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-task-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-task-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.progress-ticks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-ticks i {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.progress-ticks i i,
+.progress-ticks > i {
+  width: 5px;
+  height: 10px;
+  border-radius: 2px;
+  background: #e3e8e0;
+}
+
+.progress-ticks > i.on {
+  background: var(--signal-strong);
+}
+
+.progress-ticks em {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-task-empty {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 16px 4px;
+  color: var(--muted);
+}
+
+/* Focus line lives inside the hero now. */
+.hero-focus-line {
+  display: grid;
+  max-width: 560px;
+  gap: 3px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(217, 222, 213, 0.9);
+}
+
+.hero-focus-line > small {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.hero-focus-line > button {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.hero-focus-line > button span {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-focus-line > button:hover span {
+  text-decoration: underline;
+  text-decoration-color: #91c568;
+  text-underline-offset: 3px;
+}
+
+.hero-focus-line > em {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-style: normal;
+}
+
+/* Calmer companion art: present, quiet, never displacing content. */
+.hero-card .companion {
+  width: min(26%, 200px);
+  opacity: 0.9;
+}
+
+/* Responsive stacking — appended last so it wins the cascade at every width. */
+@media (max-width: 900px) {
+  .day-grid,
+  .day-grid.off-shift-day {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "hero"
+      "pulse"
+      "kpi"
+      "tasks";
+  }
+
+  .kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 @media (prefers-reduced-motion: reduce) {
   .progress-input-shell,
