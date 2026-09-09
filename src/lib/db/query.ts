@@ -410,24 +410,50 @@ export class PostgrestQuery {
   }
 }
 
-// PostgREST or-spec: "col.op.val,col.op.val"
+// PostgREST or-spec: "col.op.val,and(col.op.val,...),or(...)"
+// Terms may nest and()/or() groups (the agent runner relies on this for
+// upload-job recovery polling), so split only on top-level commas.
+export function splitTopLevelList(raw: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of raw) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (ch === "," && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
+function parseOrTerm(term: string, params: unknown[]): string {
+  const group = term.match(/^(and|or)\(([\s\S]*)\)$/);
+  if (group) {
+    const joiner = group[1] === "and" ? " AND " : " OR ";
+    return `(${splitTopLevelList(group[2]).map((inner) => parseOrTerm(inner, params)).join(joiner)})`;
+  }
+  const m = term.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([a-z]+)\.([\s\S]*)$/);
+  if (!m) throw new Error(`invalid or() term: ${term}`);
+  const [, col, op, rawVal] = m;
+  const colSql = ident(col);
+  if (op === "is") return rawVal === "null" ? `${colSql} IS NULL` : `${colSql} = $${params.push(rawVal)}`;
+  if (op === "in") {
+    const vals = rawVal.replace(/^\(/, "").replace(/\)$/, "").split(",").map((v) => v.trim());
+    return `${colSql} IN (${vals.map((v) => `$${params.push(coerceScalar(v))}`).join(", ")})`;
+  }
+  const sqlOp = { eq: "=", neq: "!=", gt: ">", gte: ">=", lt: "<", lte: "<=", like: "LIKE", ilike: "ILIKE" }[op];
+  if (!sqlOp) throw new Error(`unsupported or() operator: ${op}`);
+  return `${colSql} ${sqlOp} $${params.push(coerceScalar(rawVal))}`;
+}
+
 function parseOrSpec(raw: string, params: unknown[]): string {
-  return raw
-    .split(",")
-    .map((term) => {
-      const m = term.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([a-z]+)\.([\s\S]*)$/);
-      if (!m) throw new Error(`invalid or() term: ${term}`);
-      const [, col, op, rawVal] = m;
-      const colSql = ident(col);
-      if (op === "is") return rawVal === "null" ? `${colSql} IS NULL` : `${colSql} = $${params.push(rawVal)}`;
-      if (op === "in") {
-        const vals = rawVal.replace(/^\(/, "").replace(/\)$/, "").split(",").map((v) => v.trim());
-        return `${colSql} IN (${vals.map((v) => `$${params.push(coerceScalar(v))}`).join(", ")})`;
-      }
-      const sqlOp = { eq: "=", neq: "!=", gt: ">", gte: ">=", lt: "<", lte: "<=", like: "LIKE", ilike: "ILIKE" }[op];
-      if (!sqlOp) throw new Error(`unsupported or() operator: ${op}`);
-      return `${colSql} ${sqlOp} $${params.push(coerceScalar(rawVal))}`;
-    })
+  return splitTopLevelList(raw)
+    .map((term) => parseOrTerm(term, params))
     .join(" OR ");
 }
 

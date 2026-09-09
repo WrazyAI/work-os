@@ -142,7 +142,20 @@ export async function requireWorkOsAccess(options: {
   if (options.authorization && !desktop) {
     return { response: NextResponse.json({ error: "invalid or expired desktop session" }, { status: 401 }) };
   }
-  const ctx: WorkOsRequestContext = desktop ? desktop.ctx : await requireUserProfile();
+  // API routes must never leak Next.js redirect exceptions (thrown by
+  // requireUserProfile when no session cookie exists) as 500s. A missing
+  // session is a 401 for API clients; page navigation still redirects via
+  // requireUserProfile in Server Components.
+  let ctx: WorkOsRequestContext;
+  try {
+    ctx = desktop ? desktop.ctx : await requireUserProfile();
+  } catch (err) {
+    const digest = (err as { digest?: unknown } | null)?.digest;
+    if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
+      return { response: NextResponse.json({ error: "authentication required" }, { status: 401 }) };
+    }
+    throw err;
+  }
   const requestedOrganizationId = desktop?.organizationId ?? options.organizationId;
   if (desktop && options.organizationId && options.organizationId !== desktop.organizationId) {
     return { response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };

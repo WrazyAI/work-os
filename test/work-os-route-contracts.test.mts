@@ -15,6 +15,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const evidence = await source("src/app/api/work-os/evidence/route.ts");
   const workday = await source("src/app/api/work-os/me/workday/route.ts");
   const plan = await source("src/app/api/work-os/me/plan/route.ts");
+  const planInterpret = await source("src/app/api/work-os/me/plan/interpret/route.ts");
+  const planRefine = await source("src/app/api/work-os/me/plan/refine/route.ts");
   const insights = await source("src/app/api/work-os/me/insights/route.ts");
   const tasks = await source("src/app/api/work-os/me/tasks/route.ts");
   const taskDetails = await source("src/app/api/work-os/me/tasks/[taskId]/route.ts");
@@ -40,6 +42,12 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(plan, /requirePerson: true/);
   assert.match(plan, /export async function PUT/);
   assert.match(plan, /saveDailyPlanDraft/);
+  assert.match(plan, /Legacy PATCH plan confirmation is no longer supported/);
+  assert.doesNotMatch(plan, /saveDailyPlan\(auth\.access/);
+  assert.match(planInterpret, /issueDailyPlanBuild/);
+  assert.match(planInterpret, /build_id: buildId/);
+  assert.match(planRefine, /issueDailyPlanBuild/);
+  assert.match(planRefine, /build_id: buildId/);
   assert.match(plan, /updateDailyTaskSurface|updateDailyPlanOutcome/);
   assert.match(insights, /getPersonalInsights/);
   assert.match(insights, /requirePerson: true/);
@@ -96,6 +104,12 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(workdayService, /scheduled_starts_at: shift\?\.startsAt \?\? null/);
   assert.match(workdayService, /Manual pause and resume are disabled/);
   assert.match(workdayService, /worktivity:clock-in/);
+  assert.match(workdayService, /p_build_id: buildId/);
+  assert.match(workdayService, /p_intent_fingerprint: intentFingerprint/);
+  assert.match(workdayService, /An AI build id is required for plan confirmation/);
+  assert.doesNotMatch(workdayService, /export async function saveDailyPlan\(/);
+  const checkinService = await source("src/lib/work-os-checkins.ts");
+  assert.doesNotMatch(checkinService, /saveDailyPlan/);
   assert.doesNotMatch(workdayService, /This workday is already closed/);
   assert.match(onboardingService, /Consent can only be recorded during final onboarding submission/);
   assert.match(onboardingService, /work_submit_employee_onboarding/);
@@ -156,6 +170,27 @@ test("web onboarding reads back authoritative organization context", async () =>
   assert.match(employeeHome, /organizationSetup\?\.officialSchedule/);
   assert.match(employeeHome, /Official role/);
   assert.match(employeeHome, /Official schedule/);
+});
+
+test("work-os page provides a react-query client and API auth returns 401", async () => {
+  const page = await source("src/app/work-os/page.tsx");
+  const providers = await source("src/app/work-os/providers.tsx");
+  const api = await source("src/lib/work-os-api.ts");
+  assert.match(providers, /QueryClientProvider/);
+  assert.match(providers, /new QueryClient\(\)/);
+  assert.match(page, /WorkOsProviders/);
+  assert.match(api, /NEXT_REDIRECT/);
+  assert.match(api, /authentication required/);
+  assert.match(api, /status: 401/);
+});
+
+test("auth proxy keeps desktop CORS and bearer bypass intact", async () => {
+  const proxy = await source("src/proxy.ts");
+  assert.match(proxy, /tauri:\/\/localhost/);
+  assert.match(proxy, /Access-Control-Allow-Origin/);
+  assert.match(proxy, /request\.method === "OPTIONS"/);
+  assert.match(proxy, /workOsBearer/);
+  assert.match(proxy, /Idempotency-Key/);
 });
 
 test("web Insights follows the selected historical workspace date", async () => {

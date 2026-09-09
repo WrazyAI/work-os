@@ -172,11 +172,11 @@ source change before reporting the tool as live.
 ## Critical code rules (do not regress)
 - **Always use the WSL Node.js toolchain by absolute path for compilation, tests,
   installs, and packaging.** Use
-  `/home/zahemen/.nvm/versions/node/v22.14.0/bin/node` and
-  `/home/zahemen/.nvm/versions/node/v22.14.0/bin/npm`; never use `node.exe`,
+  `/home/zahemen/.nvm/versions/node/v22.20.0/bin/node` and
+  `/home/zahemen/.nvm/versions/node/v22.20.0/bin/npm`; never use `node.exe`,
   `npm.cmd`, Windows Node/npm, or a PATH resolution into `/mnt/c`. For commands
   whose child scripts invoke `node`, prefix PATH explicitly, for example:
-  `PATH=/home/zahemen/.nvm/versions/node/v22.14.0/bin:$PATH /home/zahemen/.nvm/versions/node/v22.14.0/bin/npm run build`.
+  `PATH=/home/zahemen/.nvm/versions/node/v22.20.0/bin:$PATH /home/zahemen/.nvm/versions/node/v22.20.0/bin/npm run build`.
   For the live web platform, retain the deployment rule below and use the same
   absolute npm path with `run redeploy` instead of running `build` alone.
 - **Auth proxy** (`src/proxy.ts` + `src/lib/supabase/proxy.ts`) must use local
@@ -340,9 +340,10 @@ already tracking the same outcome. This matters especially when several agent
 threads are working at once: blindly logging each request can create duplicate
 tasks within seconds.
 
-```bash
-node scripts/log-nifty-tasks.mjs --file tasks.json
-```
+The canonical creator currently lives on the VPS at
+`/home/dev/agent-os/scripts/log-nifty-tasks.mjs`. Run it through `ssh` with
+`bash -lc` so the VPS Node toolchain is available. Do not refer to a local
+`scripts/log-nifty-tasks.mjs` path unless that script has been restored here.
 
 **JSON format** (`tasks.json`):
 ```json
@@ -370,11 +371,13 @@ node scripts/log-nifty-tasks.mjs --file tasks.json
 - **Subtasks** = tasks with a `task_id` field referencing the parent. There's no
   dedicated subtask creation endpoint. Just POST to `/api/v1.0/tasks` with
   `task_id: "<parent-id>"`.
-- **Credentials are local-first.** `scripts/log-nifty-tasks.mjs` should use the
-  Nifty credentials in this repository's `.env.local` (falling back to `.env`).
-  The VPS copy at `/home/dev/agent-os/.env` is a remote fallback when local
-  validation or refresh fails; run the Nifty operation on that host instead of
-  copying its token back. Never assume the VPS path exists locally.
+- **Credentials use the current VPS-authoritative set.** The verified source is
+  `/home/dev/agent-os/.env`; synchronize `NIFTY_CLIENT_ID`,
+  `NIFTY_CLIENT_SECRET`, and `NIFTY_ACCESS_TOKEN` into this repository's
+  `.env.local` only when the operator directs local use. Transfer and update
+  values without printing them, then verify the local access token with the
+  read-only projects endpoint. The currently stored `NIFTY_REFRESH_TOKEN` flow
+  returns `401`; do not use it as an automatic recovery path.
 - **Never shell-source a Nifty env file.** Secret values can contain shell
   metacharacters such as `&`. Parse `KEY=value` entries with Node or a
   line-oriented shell loop instead; never print a credential or access token.
@@ -510,8 +513,10 @@ ssh -i /home/zahemen/.ssh/google_compute_engine -o BatchMode=yes dev@72.62.5.190
 '
 ```
 
-If the local token validation and refresh both fail, use this VPS pattern. Do
-not retry stale local credentials or copy a VPS token into the local shell.
+If local validation fails, the VPS environment is the authoritative recovery
+source. With operator approval, synchronize the current three Nifty values to
+`.env.local` without printing any credential, then revalidate the local token
+before retrying the operation. Do not use the stale refresh-token flow.
 
 Read back the task after every completion write and verify `name`, `completed`,
 and `archived`. Do not paste command output that includes a token into a task,

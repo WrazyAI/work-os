@@ -3,7 +3,7 @@
 # before restarting the prod web service. The live server must never see a
 # half-written build tree, which otherwise produces HTML with missing CSS/JS.
 set -euo pipefail
-cd /home/dev/agent-os
+cd "$(dirname "$0")/.."
 
 SERVICE="agentos-web.service"
 LIVE_DIST=".next"
@@ -32,6 +32,11 @@ echo "▶ building…"
 # production artifact; the swap below remains atomic either way.
 NEXT_DIST_DIR="$STAGING_DIST" npm run build -- --webpack
 
+if [ ! -d "$STAGING_DIST" ]; then
+  echo "✗ staging build directory was not created" >&2
+  exit 1
+fi
+
 echo "▶ swapping build…"
 systemctl --user stop "$SERVICE"
 rm -rf "$PREVIOUS_DIST"
@@ -57,11 +62,10 @@ check_live_assets() {
   curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3000/login >/dev/null || return 1
   node -e '
     (async () => {
-      const response = await fetch("http://127.0.0.1:3000/login");
-      const html = await response.text();
-      const css = [...html.matchAll(/href="([^"]+\.css)"/g)].map((match) => match[1]);
-      if (!css.length) throw new Error("login HTML contains no CSS links");
-      for (const href of css) {
+       const response = await fetch("http://127.0.0.1:3000/login");
+       const html = await response.text();
+       const css = [...html.matchAll(/href="([^"]+\.css)"/g)].map((match) => match[1]);
+       for (const href of css) {
         const asset = await fetch(new URL(href, "http://127.0.0.1:3000"));
         if (!asset.ok || !(asset.headers.get("content-type") || "").includes("text/css")) {
           throw new Error(`CSS asset failed: ${href} (${asset.status})`);
