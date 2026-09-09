@@ -625,8 +625,7 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
-  /** Persists a reviewed agenda. A null interpretation means the assistant was
-   * unavailable, so the raw employee wording is confirmed exactly as written. */
+  /** Persists only an agenda that the planning service successfully built. */
   const confirmAgenda = useCallback(async (
     goal: string,
     interpretation: PlanningInterpretation | null,
@@ -636,12 +635,14 @@ export default function AvatarApp(): React.ReactElement {
     setFiling(true);
     try {
       if (interpretation) {
+        if (!interpretation.buildId) throw new Error("Build the plan again before confirming it.");
         await apiRequest("/api/work-os/me/plan", {
           method: "PUT",
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({
             shift_date: facts.shiftDate,
             confirm: true,
+            build_id: interpretation.buildId,
             freeform_intent: goal,
             goal_provenance: "employee",
             focus_summary: interpretation.summary,
@@ -654,18 +655,12 @@ export default function AvatarApp(): React.ReactElement {
             clarification_answers: answers,
           }),
         });
-      } else {
-        await apiRequest("/api/work-os/me/plan", {
-          method: "PATCH",
-          headers: { "Idempotency-Key": crypto.randomUUID() },
-          body: JSON.stringify({ confirm: true, freeform_intent: goal, item_ids: facts.planItemIds, deferred_ids: [] }),
-        });
-      }
+      } else throw new Error("Planning assistance must build a plan before it can be confirmed.");
       setInput("");
       setAgendaReview(null);
       setChat((current) => [...current, {
         id: `agenda-${Date.now()}`, role: "assistant",
-        text: review.reviewed ? agendaReceipt(review) : "Today's agenda is set without AI review — the assistant is unavailable, so your words were kept exactly as written.",
+          text: agendaReceipt(review),
         receipt: "Agenda confirmed",
       }]);
       await loadDay();
@@ -697,11 +692,11 @@ export default function AvatarApp(): React.ReactElement {
         .filter((entry) => entry.role === "user" || entry.role === "assistant")
         .slice(-8)
         .map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text }));
-      const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+      const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
         method: "POST",
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
-      const interpretation = result.interpretation;
+      const interpretation = { ...result.interpretation, buildId: result.build_id };
       setThinkingTrace({ stages, active: 1, startedAt });
       if (interpretation.clarifications.length > 0) {
         setAgendaReview({ input: goal, interpretation, answers: {}, round: 1 });
@@ -714,14 +709,12 @@ export default function AvatarApp(): React.ReactElement {
       setThinkingTrace({ stages, active: 2, startedAt });
       await confirmAgenda(goal, interpretation, {}, { rounds: 1, answered: 0, asked: 0, reviewed: true });
     } catch (value) {
-      if (value instanceof ApiRequestError && (value.status === 501 || value.status === 503 || value.status === null)) {
-        await confirmAgenda(goal, null, {}, { rounds: 0, answered: 0, asked: 0, reviewed: false });
-      } else {
-        setChat((current) => [...current, {
-          id: `agenda-error-${Date.now()}`, role: "system",
-          text: value instanceof Error ? value.message : "Your agenda could not be reviewed.",
-        }]);
-      }
+      setChat((current) => [...current, {
+        id: `agenda-error-${Date.now()}`, role: "system",
+        text: value instanceof ApiRequestError && (value.status === 501 || value.status === 503 || value.status === null)
+          ? "Planning assistance is unavailable. Try building your plan again before confirming it."
+          : value instanceof Error ? value.message : "Your agenda could not be reviewed.",
+      }]);
     } finally { setThinkingTrace(null); }
   }, [agendaReview, chat, confirmAgenda, facts.shiftDate, filing, input, thinkingTrace]);
   const answerAgendaReview = useCallback(async () => {
@@ -741,11 +734,11 @@ export default function AvatarApp(): React.ReactElement {
         interpretation.clarifications,
         answers,
       );
-      const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+      const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
         method: "POST",
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
       });
-      const next = result.interpretation;
+      const next = { ...result.interpretation, buildId: result.build_id };
       setThinkingTrace({ stages, active: 1, startedAt });
       const stillOpen = unansweredQuestions(next.clarifications, answers);
       if (stillOpen.length > 0 && round < 2) {

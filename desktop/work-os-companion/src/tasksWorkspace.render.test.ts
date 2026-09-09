@@ -23,6 +23,7 @@ describe("Tasks workspace filters", () => {
       loadingMore: false,
       hasMore: false,
       busy: false,
+      initialFiltersOpen: true,
       onTaskView: () => undefined,
       onDate: async () => undefined,
       onEditFocus: () => undefined,

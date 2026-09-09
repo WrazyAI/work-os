@@ -68,6 +68,11 @@ assert.equal(paused?.session?.state, "paused");
 const clockedOut = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "clocked_out" });
 assert.equal(clockedOut?.session?.state, "clocked_out");
 assert.equal(clockedOut?.prompt.kind, null);
+const shiftStart = applyDayScenario(day, { ...DEFAULT_DEBUG_SCENARIO, enabled: true, dayState: "shift_start" });
+assert.equal(shiftStart?.session, null);
+assert.equal(shiftStart?.plan, null);
+assert.equal(shiftStart?.prompt.kind, "plan");
+assert.equal(shiftStart?.prompt.required, true);
 assert.equal(day.tasks.length, 1, "debug day overrides must not mutate server state");
 
 console.log("Work OS desktop scenario tests passed.");

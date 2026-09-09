@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   annotationsForTarget,
+  annotatedTextSegments,
   applyEditsToCommitments,
   countAnnotationsForCommitment,
   diffEditedCommitments,
   isAnnotationCommentValid,
+  isAnnotationRangeValid,
   parseCriteriaLines,
   sanitizeComment,
   sanitizeQuote,
   type PlanAnnotation,
 } from "./planningAnnotations";
 
-const annotation = (target: string, quote = "friction points", comment = "Make this concrete"): PlanAnnotation => ({
-  id: `a-${target}`, target, quote, comment,
+const annotation = (target: string, quote = "friction points", comment = "Make this concrete", start = 0): PlanAnnotation => ({
+  id: `a-${target}`, target, start, end: start + quote.length, quote, comment,
 });
 
 describe("planning annotations", () => {
@@ -29,11 +31,23 @@ describe("planning annotations", () => {
   });
 
   it("scopes counts to one commitment and filters exact targets", () => {
-    const list = [annotation("summary", "focus"), annotation("title:c1"), annotation("objective:c1"), annotation("title:c2")];
-    expect(countAnnotationsForCommitment(list, "c1")).toBe(2);
-    expect(countAnnotationsForCommitment(list, "c2")).toBe(1);
+    const list = [annotation("summary", "focus"), annotation("title:c1"), annotation("objective:c1"), annotation("criteria:c1"), annotation("title:c10")];
+    expect(countAnnotationsForCommitment(list, "c1")).toBe(3);
+    expect(countAnnotationsForCommitment(list, "c2")).toBe(0);
     expect(annotationsForTarget(list, "summary")).toHaveLength(1);
     expect(annotationsForTarget(list, "title:c1")).toHaveLength(1);
+  });
+
+  it("keeps repeated text annotations on the selected range only", () => {
+    const text = "Review the draft, then review the release notes.";
+    const start = text.lastIndexOf("review");
+    expect(isAnnotationRangeValid(text, start, start + "review".length)).toBe(true);
+    expect(isAnnotationRangeValid(text, -1, 2)).toBe(false);
+    expect(annotatedTextSegments(text, [annotation("summary", "review", "Clarify this", start)], "summary")).toEqual([
+      { text: "Review the draft, then ", annotationCount: 0 },
+      { text: "review", annotationCount: 1 },
+      { text: " the release notes.", annotationCount: 0 },
+    ]);
   });
 
   it("applies committed edits while preserving untouched fields", () => {

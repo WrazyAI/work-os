@@ -53,7 +53,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("nav-group nav-core");
     expect(app).toContain("nav-group nav-context");
     expect(app).toContain("nav-group nav-settings");
-    expect(app).toContain("Plan today’s work and keep the history behind it.");
+    expect(app).toContain('className="tasks-heading-row"');
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");
@@ -74,15 +74,15 @@ describe("operational visualizations", () => {
   });
 
   it("keeps focus contextual and task lifecycle actions consistent", () => {
-    expect(app).toContain('className={`panel task-agenda-hero');
-    expect(app).toContain("Today’s agenda");
+    expect(app).toContain('className={`panel task-agenda-strip');
+    expect(app).toContain("agenda-strip-chip");
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("onEditFocus={openPlanningSession}");
     expect(app).not.toContain('className="panel daily-goal-card"');
     expect(app).toContain("function TaskLifecycleMenu");
     expect(app).toContain("Delete permanently");
     expect(app).toContain("Archive <small>reversible</small>");
-    expect(workspaceStyles).toContain(".task-agenda-hero");
+    expect(workspaceStyles).toContain(".task-agenda-strip");
     expect(workspaceStyles).toContain(".dashboard-task-menu");
     expect(workspaceStyles).toContain(".goal-composer-panel .composer-goal-suggestion");
     expect(planningSession).toContain("Review commitments");

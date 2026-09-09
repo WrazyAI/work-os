@@ -3,8 +3,11 @@
 
 export type PlanAnnotation = {
   id: string;
-  /** "summary" | `title:<clientId>` | `objective:<clientId>` | `criterion:<clientId>:<index>` */
+  /** "summary" | `title:<clientId>` | `objective:<clientId>` | `criteria:<clientId>` */
   target: string;
+  /** Character offsets in the target block. They keep repeated phrases unambiguous. */
+  start: number;
+  end: number;
   /** Exact selected text the feedback refers to (whitespace-collapsed, capped). */
   quote: string;
   /** Employee feedback on the selection. */
@@ -40,6 +43,28 @@ export function sanitizeComment(value: string): string {
 export function isAnnotationCommentValid(comment: string): boolean {
   const clean = comment.trim();
   return clean.length >= MIN_ANNOTATION_COMMENT && clean.length <= MAX_ANNOTATION_COMMENT;
+}
+
+export function isAnnotationRangeValid(text: string, start: number, end: number): boolean {
+  return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start && end <= text.length;
+}
+
+export type AnnotatedTextSegment = { text: string; annotationCount: number };
+
+/** Splits a target block at annotation boundaries so only the selected occurrence is highlighted. */
+export function annotatedTextSegments(text: string, annotations: readonly PlanAnnotation[], target: string): AnnotatedTextSegment[] {
+  const ranges = annotationsForTarget(annotations, target)
+    .filter((annotation) => isAnnotationRangeValid(text, annotation.start, annotation.end));
+  if (!ranges.length) return [{ text, annotationCount: 0 }];
+  const boundaries = [...new Set([0, text.length, ...ranges.flatMap((annotation) => [annotation.start, annotation.end])])]
+    .sort((a, b) => a - b);
+  return boundaries.slice(0, -1).map((start, index) => {
+    const end = boundaries[index + 1]!;
+    return {
+      text: text.slice(start, end),
+      annotationCount: ranges.filter((annotation) => annotation.start < end && annotation.end > start).length,
+    };
+  }).filter((segment) => segment.text.length > 0);
 }
 
 /** Applies committed field edits onto a draft commitment list, preserving all other fields. */
@@ -87,7 +112,9 @@ export function parseCriteriaLines(value: string): string[] {
 
 /** Annotations attached to one commitment (title/objective/criteria targets embed the clientId). */
 export function countAnnotationsForCommitment(annotations: readonly PlanAnnotation[], clientId: string): number {
-  return annotations.filter((annotation) => annotation.target !== "summary" && annotation.target.includes(clientId)).length;
+  return annotations.filter((annotation) => annotation.target === `title:${clientId}`
+    || annotation.target === `objective:${clientId}`
+    || annotation.target === `criteria:${clientId}`).length;
 }
 
 /** Annotations attached to one exact annotated element (summary heading, title, objective, criterion). */

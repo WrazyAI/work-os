@@ -784,9 +784,10 @@ On shift:
 ### 19.2 Tasks
 
 - Search and date controls are first-class.
-- On the current-day view, use one split hero: today’s agenda/focus on the left and unfinished work from previous days on the right. The left side may expose a compact `Edit focus` action; the right side opens the unfinished-work review flow.
-- Do not keep an editable focus textarea permanently open at the top of Tasks. Focus editing belongs in the shared anchored composer so the hero remains a summary and decision surface.
-- At compact widths, stack the two hero halves without changing their order or meaning. Historical dates use a single read-only agenda summary rather than presenting current-day actions.
+- On the current-day view, use one slim agenda strip beneath the page title: the focus statement on one line (activating it opens the shared focus editor) plus count chips that double as view shortcuts, and a `Review unfinished work` link only when unfinished work exists. Do not stack a large hero above the task list.
+- Do not keep an editable focus textarea permanently open at the top of Tasks. Focus editing belongs in the shared anchored composer so the strip remains a summary and decision surface.
+- Use exactly four views: `My day`, `Unfinished`, `Completed`, `All tasks`. There is no separate Overdue view; overdue work is the red-led first group inside `Unfinished`. Tab counts are live, and the task-list panel header always repeats the active tab label using the same word.
+- At compact widths the agenda strip chips wrap; the strip stays a single surface. Historical dates use a single read-only agenda summary rather than presenting current-day actions.
 - Keep filters understandable and reversible.
 - Preserve the same task behavior as Today.
 - Keep task lifecycle actions consistent between Today and Tasks. Viewing and completion remain direct; editing, archiving, and permanent deletion live in the task’s contextual menu, with explicit confirmation for destructive actions.
@@ -1365,38 +1366,39 @@ ellipsis menu.
 
 The current-day Tasks page uses this exact order:
 
-1. Page intro and date navigator on a shared baseline.
-2. Split agenda hero.
-3. View tabs: Today, Unfinished, Completed, All tasks.
-4. Search and inclusive date-range toolbar.
+1. Page intro and date navigator on a shared baseline. The intro is one line; do not stack an eyebrow, a large display title, and a companion cue above the agenda strip.
+2. Agenda strip (see 27.2).
+3. View tabs with live counts: My day, Unfinished, Completed, All tasks.
+4. Search and compact filters toolbar.
 5. Task-list panel with local `Add task` action.
-6. Sticky agenda/focus composer.
+6. Sticky agenda/focus composer, with reserved page bottom padding so it never obscures the last task or footer.
 
 Do not restore a permanently editable focus textarea above the task list.
 
-### 27.2 Split agenda hero
+### 27.2 Agenda strip
 
-At wide widths the hero is a minimum 184px grid with columns approximately
-`1.35fr 0.65fr`; the right column has a practical minimum near 280px.
+One strip, approximately 56–72px tall, spanning the content width:
 
-- **Left, Today’s agenda:** 24–26px padding, quiet green radial wash, focus text
-  at 21–30px, `Edit focus`, scheduled task count, authorship/provenance, and save
-  state.
-- **Right, unfinished work:** neutral or amber surface, 38px state icon, unfinished
-  count, number of prior workdays involved, and `Review unfinished work` anchored
-  at the bottom.
+- **Focus statement:** one line (truncated with an ellipsis when long), followed by provenance and save state in small quiet text. Activating the statement opens the same focus editor as the composer's `Focus` control.
+- **Count chips:** `My day`, `Unfinished`, `Completed` with live counts; each chip activates its view. When unfinished carry-over exists, a `Review unfinished work` link sits at the strip's right edge and opens the carry-over flyout.
+- Historical dates show a read-only agenda line (that day's focus, or a truthful "no focus recorded") and omit current-day mutation controls.
 
-At `≤900px`, stack left then right. Replace the vertical divider with a horizontal
-divider. Historical dates show one read-only agenda panel and omit current-day
-mutation controls.
+At `≤900px` the chips may wrap to a second row; the strip never becomes a stacked two-panel hero.
 
 ### 27.3 Task views, ordering, and overdue meaning
 
-Tasks are grouped, not presented as an undifferentiated provider dump:
+`My day` is strictly day-scoped: it contains only tasks surfaced by today's plan,
+due today, or carried into today. Open tasks without a today relationship belong
+in `Unfinished`, even when that leaves `My day` nearly empty — an honest near-empty
+My day with a pull-from-Unfinished empty state beats a mislabeled dump of every
+open task.
+
+Tasks are grouped, not presented as an undifferentiated provider dump. Inside
+`Unfinished`, and nowhere else, overdue work leads:
 
 | Section | Membership | Order | Visual treatment |
 |---|---|---|---|
-| Overdue | Open task with due date before current workday | Oldest due first | Red label/count and 2px danger edge |
+| Overdue | Open task with due date before current workday | Oldest due first | Red label/count and 2px danger edge; no additional per-row status pill |
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
 
@@ -1404,20 +1406,44 @@ Provider refresh timestamps must not masquerade as meaningful task activity when
 a provider-created, provider-updated, completed, or user-action timestamp is
 available. Tie-break deterministically by normalized task title.
 
+The metadata shown on a row must explain the row's position: a group sorted by
+activity never displays creation dates as its only timestamp, and due dates appear
+wherever they drive ordering. Creation dates live in the task-detail view, not the
+row.
+
 Malformed provider titles/descriptions, HTML error bodies, `[object Object]`, and
 fetch exception text never render as task content. Use `Untitled Nifty task`, `No
 description added.`, `Nifty details unavailable`, or another deliberate fallback.
 Invalid timestamps never reach a formatter that can throw.
 
-### 27.4 Filtering states
+### 27.4 Task row anatomy
 
-- Search and date range compose with the selected view; neither silently resets
-  the other.
+Rows are compact and scannable; the task-detail view is the place for depth:
+
+- Maximum two lines. Line one: state dot, task title, and due chip when a due
+  date exists. Line two: assignee, project, milestone, and priority — each only
+  when present.
+- Description is hidden when empty and otherwise truncated to one line; full text
+  lives in the task-detail view. Never render the empty placeholder on the row.
+- Subtask progress, when present, is a compact ring on line one.
+- No decorative column-header row above the list.
+- The only per-row provider chip is an actionable warning (`Awaiting Nifty
+  sync`). Aggregate provider freshness lives once in the toolbar or strip; a
+  per-row "synced" chip is noise.
+- Completed rows keep the muted treatment and a single completion marker.
+
+### 27.5 Filtering states
+
+- Search is always visible on Tasks; the From/To date range is an uncommon
+  refinement and lives in a compact popover next to search. Search and date range
+  compose with the selected view; neither silently resets the other.
 - Show `N results` whenever filters are active.
 - The filtered-empty state is `No tasks match these filters` plus a clear-filters
   action. It must not say the user has no tasks.
 - The unfiltered empty state reflects the selected view: for example, completed
-  tasks will appear after completion.
+  tasks will appear after completion, and a strict day-scoped My day that is
+  empty offers unfinished work for review instead of pretending the day is
+  loaded.
 - `Load older tasks` is explicit pagination, not an ambiguous `Load more`.
 - Historical task workspaces are read-only but retain search, inspectability, and
   a truthful original-day link where relevant.
@@ -1508,6 +1534,10 @@ Draft review carries pencil (feedback/edit mode) and trash (two-tap delete,
 local discard only) controls. In feedback mode the employee may edit sections
 freely or highlight text to attach a comment; the first saved annotation locks
 further edits with an inline notice, and clearing all annotations unlocks them.
+The editable draft is one document-like inline canvas that preserves the review
+hierarchy; it must not become a stack of visibly bordered form controls. A
+selection belongs to one semantic text block (summary, title, objective, or
+criteria) so the associated feedback stays unambiguous.
 Annotations render as highlighted quotes plus per-section count bubbles, with a
 `{N} Annotations` footer pill (hover to clear) and a matching count badge on
 `Refine plan`. Refining sends the draft plus annotations and field diffs and
@@ -1647,18 +1677,18 @@ Every changed surface must be reviewed at these representative classes:
 |---|---|---|
 | Wide desktop | `1440×900` or larger | 208px rail, side-by-side heroes, all useful metadata |
 | Compact desktop | approximately `1024×768` | 80px icon rail, usable stage, overlays inside viewport |
-| Narrow/tablet | approximately `720×900` | stacked Tasks hero, compact rail/navigation, composer clear of rows |
+| Narrow/tablet | approximately `720×900` | agenda strip chips wrap, compact rail/navigation, composer clear of rows |
 | Small | approximately `390×844` | single-column content, touch targets ≥40px, no horizontal page scroll |
 
 Specific collapse rules:
 
 - At `≤1120px`, collapse rail labels before compressing task content.
-- At `≤900px`, stack split heroes and search/date controls.
+- At `≤900px`, wrap agenda strip chips and search/filter controls onto stacked rows.
 - At `≤560px`, stack the active-day header and footer actions, hide redundant task
   status labels, make task tabs share available width, and use two columns for
   detail facts.
-- Long task titles and focus statements wrap where they are primary; dense task
-  rows clamp descriptions to two lines.
+- Long task titles and focus statements wrap where they are primary; task rows
+  clamp descriptions to one line (see 27.4).
 - Menus, dialogs, and detached cards use viewport collision handling and internal
   scrolling. They never extend beneath the sticky composer or browser safe area.
 - The composer must not cover the row action currently being used. Scroll or

@@ -26,7 +26,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
-import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow } from "./taskWorkspace";
+import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow, type TaskSection } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
@@ -40,7 +40,7 @@ type AssetSource = string | { src: string };
 const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
-type TaskView = "today" | "unfinished" | "overdue" | "completed" | "all";
+type TaskView = "today" | "unfinished" | "completed" | "all";
 type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDetails = {
@@ -209,6 +209,7 @@ export default function App() {
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
   const planEditVersion = useRef(0);
+  const shiftStartScenarioOpened = useRef(false);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen;
 
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
@@ -936,9 +937,11 @@ export default function App() {
     // Debugger-only: choosing the Shift start scenario opens the Plan modal directly
     // so the plan/build/refine flow can be exercised from fixtures. Production behavior
     // is unchanged (debugScenario.enabled is only true from the debugger window).
-    if (debugScenario.enabled && debugScenario.dayState === "shift_start") {
+    if (debugScenario.enabled && debugScenario.dayState === "shift_start" && !shiftStartScenarioOpened.current) {
+      shiftStartScenarioOpened.current = true;
       setPlanningSessionOpen(true);
     }
+    if (!debugScenario.enabled || debugScenario.dayState !== "shift_start") shiftStartScenarioOpened.current = false;
   }, [active, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
 
   function editPlan(mutator: () => void) {
@@ -953,6 +956,7 @@ export default function App() {
     if (syncBypassRef.current) {
       const task = planItems.find((item) => item.task_id) ?? null;
       return {
+        buildId: "debug-ai-build",
         rawIntent: input,
         summary: input,
         commitments: [{
@@ -962,11 +966,11 @@ export default function App() {
         clarifications: [], readiness: "ready",
       };
     }
-    const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/interpret", {
+    const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
       method: "POST",
       body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })) }),
     });
-    return result.interpretation;
+    return { ...result.interpretation, buildId: result.build_id };
   }
 
   async function refinePlanning(input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]): Promise<PlanningInterpretation> {
@@ -977,6 +981,7 @@ export default function App() {
       // (annotate → refine → review → confirm) is fully exercisable without a backend.
       return {
         ...draft,
+        buildId: "debug-ai-build",
         rawIntent: input,
         commitments: draft.commitments.map((commitment) => {
           const edit = edits.find((entry) => entry.clientId === commitment.clientId);
@@ -984,7 +989,7 @@ export default function App() {
         }),
       };
     }
-    const result = await apiRequest<{ interpretation: PlanningInterpretation }>("/api/work-os/me/plan/refine", {
+    const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/refine", {
       method: "POST",
       body: JSON.stringify({
         input,
@@ -994,7 +999,7 @@ export default function App() {
         edits,
       }),
     });
-    return result.interpretation;
+    return { ...result.interpretation, buildId: result.build_id };
   }
 
   async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed"> {
@@ -1035,6 +1040,7 @@ export default function App() {
         shift_date: visibleDay.shiftDate,
         revision: visibleDay.plan.revision,
         confirm: active,
+        ...(active && interpretation?.buildId ? { build_id: interpretation.buildId } : {}),
         freeform_intent: input,
         goal_provenance: "employee",
         focus_summary: interpretation?.summary,
@@ -1690,7 +1696,7 @@ export default function App() {
         canClockOut={sessionActive}
         onEditFocus={openPlanningSession}
         onAddTask={() => void openTaskComposer()}
-        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("overdue"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
+        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("unfinished"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
         onToggleTask={setTaskCompletion}
         onEditTask={editTask}
@@ -1861,7 +1867,7 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
         <div className="active-shift-status"><span className={`presence ${paused ? "" : "live"}`} /><div><small>{observedOnly ? paused ? "Worktivity break" : "Activity observed" : paused ? "Shift paused" : "On shift"}</small><strong>{elapsed}</strong></div><div className="active-shift-meter"><i style={{ width: `${progressPercent}%` }} /></div></div>
         <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open workday details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close workday details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Workday status</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
       </header>
-      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show the overdue filter in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
+      <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show unfinished work in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
         <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={tasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
       <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
       {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
@@ -2046,7 +2052,7 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
+export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
@@ -2054,12 +2060,13 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
-  initialTaskMenuId?: string | null; initialSearch?: string;
+  initialTaskMenuId?: string | null; initialSearch?: string; initialFiltersOpen?: boolean;
 }) {
   const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
   const [taskSearch, setTaskSearch] = useState(initialSearch);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(initialFiltersOpen);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
@@ -2071,29 +2078,49 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const surfaced = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => historyById.get(String(item.task_id)) ?? {
     id: item.task_id, title: item.title_snapshot, completed: item.completion_state === "completed", workspace_source: item.source,
   });
-  const current = parentTasks(uniqueTasks([...todayTasks, ...surfaced]));
   const surfacedIds = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => String(item.task_id));
+  const rowId = (task: TaskRow) => String(task.provider_task_id || task.id);
+  // My day is strictly day-scoped: surfaced by today's plan, due today, or
+  // created today. Everything else open lives in Unfinished.
+  const myDayTasks = parentTasks(tasksForDate(uniqueTasks([...todayTasks, ...surfaced]), currentDate, surfacedIds));
+  const myDayIds = new Set(myDayTasks.map(rowId));
+  const unfinishedTasks = taskHistory.filter((task) => task.completed !== true && !myDayIds.has(rowId(task)));
+  const completedTasks = taskHistory.filter((task) => task.completed === true);
   const datedTasks = parentTasks(tasksForDate([...historicalTasks, ...surfaced], selectedDate, surfacedIds));
   const displayedCandidates = historical
     ? datedTasks
-    : taskView === "today" ? current
-      : taskView === "unfinished" ? taskHistory.filter((task) => task.completed !== true)
-        : taskView === "overdue" ? taskHistory.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate)
-        : taskView === "completed" ? taskHistory.filter((task) => task.completed === true)
+    : taskView === "today" ? myDayTasks
+      : taskView === "unfinished" ? unfinishedTasks
+        : taskView === "completed" ? completedTasks
           : taskHistory;
   const unfiltered = parentTasks(uniqueTasks(displayedCandidates));
   const displayed = filterWorkspaceTasks(unfiltered, currentDate, { query: taskSearch, from: filterFrom, to: filterTo });
   const hasFilters = taskSearch.trim().length > 0 || filterFrom.length > 0 || filterTo.length > 0;
-  const displayedSections = historical
-    ? displayed.length ? [{ id: "historical", label: "Tasks from this day", note: "Latest activity first", tasks: orderTasksByRecency(displayed) }] : []
-    : organizeTaskSections(displayed, currentDate);
+  const viewLabel = taskView === "today" ? "My day" : taskView === "unfinished" ? "Unfinished" : taskView === "completed" ? "Completed" : "All tasks";
+  const chipCounts: Array<{ id: TaskView; label: string; count: number }> = [
+    { id: "today", label: "My day", count: myDayTasks.filter((task) => task.completed !== true).length },
+    { id: "unfinished", label: "Unfinished", count: unfinishedTasks.length },
+    { id: "completed", label: "Completed", count: completedTasks.length },
+    { id: "all", label: "All tasks", count: taskHistory.length },
+  ];
+  const todaySections = (): TaskSection[] => {
+    const open = orderTasksByRecency(displayed.filter((task) => task.completed !== true));
+    const done = orderTasksByRecency(displayed.filter((task) => task.completed === true));
+    return [
+      open.length ? { id: "open", label: "Scheduled today", note: "Latest activity first", tasks: open } : null,
+      done.length ? { id: "completed", label: "Completed today", note: "Latest completion first", tasks: done } : null,
+    ].filter((section): section is TaskSection => section !== null);
+  };
+  const displayedSections: TaskSection[] = historical
+    ? displayed.length ? [{ id: "open", label: "Tasks from this day", note: "Latest activity first", tasks: orderTasksByRecency(displayed) }] : []
+    : taskView === "today" ? todaySections()
+      : organizeTaskSections(displayed, currentDate);
   const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
   const groups = new Map<string, typeof carryOver>();
   for (const item of carryOver) {
     const key = item.attribution.date ?? "Older";
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
-  const previousDays = new Set(carryOver.map((item) => item.attribution.date).filter(Boolean)).size;
   const carryGroups = [...groups.entries()].map(([date, items]) => ({ date, label: date === moveDate(currentDate, -1) ? `Yesterday · ${formatWorkOsDate(date)}` : formatWorkOsDate(date), items }));
   const agendaText = historical
     ? shownPlan?.freeform_intent || "No focus note was recorded for this day."
@@ -2102,32 +2129,76 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
     ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
     : goal ? goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
+  const dateFilterActive = !!filterFrom || !!filterTo;
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(".task-filters-wrap")) setFiltersOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
+  }, [filtersOpen]);
+  const emptyCopy = hasFilters
+    ? { title: "No tasks match these filters", body: "Try a different search or clear the date filters." }
+    : historical
+      ? { title: "No tasks surfaced", body: "No Nifty tasks were recorded for this day." }
+      : taskView === "today"
+        ? { title: "Nothing is scheduled for today yet", body: "Pull unfinished work forward or add a task to shape the day." }
+        : taskView === "unfinished"
+          ? { title: "No unfinished work", body: "Open tasks from previous days will appear here." }
+          : taskView === "completed"
+            ? { title: "No completed tasks", body: "Completed tasks will appear here." }
+            : { title: "No tasks yet", body: "Add your first task to get started." };
   return <main className="page tasks-workspace">
-    <div className="tasks-heading"><PageIntro eyebrow="Tasks workspace" title={historical ? "Workday history" : "Today’s tasks"} body="Plan today’s work and keep the history behind it." /><div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div></div>
-    <div className="tasks-companion-cue"><CompanionPet pose={historical ? "sleep" : "focus"} className="companion-pet-inline" /><span>{historical ? "Reviewing a past workday" : "Your desk companion is keeping today’s agenda close."}</span></div>
-    <section className={`panel task-agenda-hero ${historical ? "historical" : ""}`}>
-      <div className="agenda-hero-today"><header><span>{historical ? `Agenda · ${formatWorkOsDate(selectedDate)}` : "Today’s agenda"}</span>{!historical && <button className="agenda-edit-button" onClick={onEditFocus}><Pencil size={14} /> Edit focus</button>}</header><h2>{agendaText}</h2><footer><span><ListChecks size={14} /> {historical ? `${datedTasks.length} task${datedTasks.length === 1 ? "" : "s"} surfaced` : `${current.length} task${current.length === 1 ? "" : "s"} scheduled`}</span><small>{provenance}{!historical ? ` · ${saveLabel}` : ""}</small></footer></div>
-      {!historical && <button className={`unfinished-work-hero ${carryOver.length ? "attention" : "clear"}`} disabled={!carryOver.length} onClick={() => onCarryOverOpen(true)}><span className="unfinished-work-icon">{carryOver.length ? <AlertTriangle size={19} /> : <Check size={19} />}</span><span className="unfinished-work-copy"><small>From previous days</small><strong>{carryOver.length ? `${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}` : "Nothing left behind"}</strong><em>{carryOver.length ? `${previousDays} previous workday${previousDays === 1 ? "" : "s"} need attention` : "All earlier work is clear"}</em></span><span className="unfinished-work-action">Review unfinished work <ChevronRight size={15} /></span></button>}
+    <div className="tasks-heading-row">
+      <h1>{historical ? "Workday history" : "Tasks"}</h1>
+      <div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div>
+    </div>
+    <section className={`panel task-agenda-strip ${historical ? "historical" : ""}`} aria-label="Agenda">
+      <div className="agenda-strip-focus">
+        {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><Pencil size={13} aria-hidden="true" /><span className="agenda-strip-text">{agendaText}</span></button> : <span className="agenda-strip-text">{agendaText}</span>}
+        <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}</small>
+      </div>
+      {!historical && <>
+        <div className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</div>
+        {carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
+      </>}
     </section>
-    {!historical && <div className="task-view-tabs" role="tablist">{(["today", "unfinished", "overdue", "completed", "all"] as TaskView[]).map((item) => <button role="tab" aria-selected={taskView === item} className={taskView === item ? "active" : ""} key={item} onClick={() => onTaskView(item)}>{item === "today" ? "My day" : item === "unfinished" ? "Open" : item === "all" ? "All tasks" : sentence(item)}</button>)}</div>}
-    <section className="task-search-toolbar" aria-label="Task search and date filters"><label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => setTaskSearch("")}><X size={14} /></button>}</label><div className="task-date-range" role="group" aria-label="Task date range"><CalendarDays size={15} aria-hidden="true" /><label><span>From</span><input aria-label="Filter from date" type="date" max={filterTo || currentDate} value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label><i aria-hidden="true">—</i><label><span>To</span><input aria-label="Filter to date" type="date" min={filterFrom || undefined} max={currentDate} value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>{(filterFrom || filterTo) && <button onClick={() => { setFilterFrom(""); setFilterTo(""); }}>Clear dates</button>}</div></section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : sentence(taskView)}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="task-record-columns" aria-hidden="true"><span>Status</span><span>Task</span><span>Details</span></div><div className="evidence-list task-records">{displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
+    <section className="task-search-toolbar" aria-label="Task search and date filters">
+      <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => setTaskSearch("")}><X size={14} /></button>}</label>
+      <div className="task-filters-wrap">
+        <button type="button" className={`task-filters-toggle ${dateFilterActive ? "active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}><CalendarDays size={15} aria-hidden="true" /> Date range{dateFilterActive ? " · on" : ""}</button>
+        {filtersOpen && <div className="task-filters-popover" role="group" aria-label="Task date range">
+          <label><span>From</span><input aria-label="Filter from date" type="date" max={filterTo || currentDate} value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} /></label>
+          <i aria-hidden="true">—</i>
+          <label><span>To</span><input aria-label="Filter to date" type="date" min={filterFrom || undefined} max={currentDate} value={filterTo} onChange={(event) => setFilterTo(event.target.value)} /></label>
+          {dateFilterActive && <button onClick={() => { setFilterFrom(""); setFilterTo(""); }}>Clear dates</button>}
+        </div>}
+      </div>
+    </section>
+    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
-      const taskId = String(task.provider_task_id || task.id);
+      const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;
       const progress = subtaskProgress(task);
       const isSelected = selectedIds.has(String(task.id)) || selectedIds.has(String(task.provider_task_id));
       const state = taskState(task, currentDate);
       const title = safeTaskText(task.title, "Untitled Nifty task");
-      const description = safeTaskText(task.description, "No description added.");
+      const description = safeTaskText(task.description, "");
       const projectName = safeTaskText(task.project?.name, "Nifty");
       const milestoneName = safeTaskText(task.milestone?.name, "");
-      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""} ${isSelected ? "is-surfaced" : ""}`} role="button" tabIndex={0} key={taskId} aria-selected={isSelected} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state ${state}`}>{sentence(state)}</span><div><h3>{title}</h3><p>{description}</p><AssigneeTags task={task} /><small>{projectName}{milestoneName ? ` · ${milestoneName}` : ""}{task.priority ? ` · ${sentence(String(task.priority))} priority` : ""}{task.due_date ? ` · due ${formatWorkOsDate(task.due_date)}` : ""}{task.provider_created_at ? ` · created ${formatWorkOsDate(task.provider_created_at)}` : ""}{task.parent_provider_task_id ? " · subtask" : ""}</small><SyncChip task={task} /></div>{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{!historical && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}<ChevronRight size={17} /></article>;
-    })}</section>) : <Empty title={hasFilters ? "No tasks match these filters" : historical ? "No tasks surfaced" : "No tasks in this view"} body={hasFilters ? "Try a different search or clear the date filters." : historical ? "No Nifty tasks were recorded for this day." : taskView === "completed" ? "Completed tasks will appear here." : "Add a task or choose another view."} />}</div>{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading more tasks…" : "Load older tasks"}</button>}</section>
+      const dueDate = typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}/.test(task.due_date) ? task.due_date.slice(0, 10) : null;
+      const metaParts = [projectName !== "Nifty" ? projectName : null, milestoneName || null, task.priority ? `${sentence(String(task.priority))} priority` : null].filter(Boolean) as string[];
+      // Per-row provenance is warning-only; a healthy "synced" chip on every
+      // row is noise. The detail modal keeps the full provenance chip.
+      const showSyncChip = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
+      return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""} ${isSelected ? "is-surfaced" : ""}`} role="button" tabIndex={0} key={taskId} aria-selected={isSelected} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><span className={`task-state-dot ${state}`} role="img" aria-label={sentence(state)} title={sentence(state)} /><div className="task-row-body"><div className="task-row-line primary-line"><h3>{title}</h3>{dueDate && <span className={`task-due-chip ${state === "overdue" ? "danger" : ""}`}>due {formatWorkOsDate(dueDate)}</span>}{progress.total > 0 && <CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" />}{showSyncChip && <SyncChip task={task} />}</div>{(metaParts.length > 0 || description) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}</div>}{description && <p className="task-row-desc">{description}</p>}</div>{!historical && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}<ChevronRight size={17} /></article>;
+    })}</section>) : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading more tasks…" : "Load older tasks"}</button>}</section>
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }
-
 const durationLabel = (seconds: number) => `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
 
 function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
