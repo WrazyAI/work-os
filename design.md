@@ -1333,6 +1333,30 @@ One loading language for the whole companion
   `prefers-reduced-motion`; skeletons fall back to a static fill and the
   spinner stops.
 
+### 25.13 Client data cache
+
+The companion keeps server state in one TanStack Query cache
+(`desktop/work-os-companion/src/queryClient.ts`, `workOsQueries.ts`):
+
+- **TTLs, not refetch-on-query.** Compact day: 60s stale time with a 60s
+  background interval. Day details (history, evidence, EOD records): 2min.
+  Task history: 5min. A task detail: 60s. Insights: 5min. Onboarding: 30min.
+  Task options: 10min. Opening a view or reopening a task serves cached data
+  instantly; it never restarts a loading state for data it already holds.
+- **Lazy loading.** Day details load only when Tasks, EOD Review, or Evidence
+  opens. Task history is an infinite query; `Load older tasks` fetches the next
+  page and keeps prior pages cached.
+- **Precise invalidation, not blanket refresh.** Task and workspace writes
+  invalidate task history, task details, day details, and insights. Shift,
+  report, and proposal writes invalidate the day and insights. A compact poll
+  never erases loaded history, evidence, or proposals.
+- **Truthful merge.** The compact payload owns fresher scalars; the details
+  payload owns history/evidence/proposals. Merging preserves both, and
+  in-progress local plan edits are never overwritten by a background poll.
+- **Persistence.** The filtered cache persists to the Stronghold vault (24h
+  ceiling, session-scoped) so relaunch paints last-known work immediately and
+  revalidates in the background. Sign-out clears the cache and the vault copy.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition

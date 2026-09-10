@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
@@ -29,6 +30,8 @@ import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCa
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow, type TaskSection } from "./taskWorkspace";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
+import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails } from "./workOsQueries";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
 import { CompanionPet } from "./CompanionPet";
@@ -44,12 +47,6 @@ type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "completed" | "all";
 type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
-type TaskDetails = {
-  task: Record<string, any>;
-  subtasks: Array<Record<string, any>>;
-  moveTargets: Array<Record<string, any>>;
-  subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null };
-};
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
 type ClockInConfirmation = { kind: "late" | "exception"; reason: string };
@@ -281,22 +278,129 @@ export default function App() {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [moveMenuId, subtaskMenuId]);
 
+  // A compact refresh returns empty history/evidence/proposals arrays; the
+  // details payload owns those records. Merge so a cheap poll never wipes
+  // loaded detail data, and a details load never regresses fresher scalars.
+  function mergeDayPayload(current: DayData | null, next: DayData): DayData {
+    if (!current) return next;
+    const keepFilled = <T,>(incoming: T[] | undefined, existing: T[] | undefined): T[] | undefined =>
+      Array.isArray(incoming) && incoming.length === 0 && Array.isArray(existing) && existing.length > 0 ? existing : incoming;
+    const nextReport = next.report && typeof next.report === "object" && "markdown" in (next.report as Record<string, unknown>) ? next.report : current.report ?? next.report;
+    return {
+      ...current,
+      ...next,
+      tasks: Array.isArray(next.tasks) ? next.tasks : current.tasks,
+      taskHistory: keepFilled(next.taskHistory, current.taskHistory),
+      evidence: keepFilled(next.evidence, current.evidence),
+      proposals: keepFilled(next.proposals, current.proposals),
+      report: nextReport,
+    } as DayData;
+  }
+
+  const appliedPlanKeyRef = useRef<string>("none");
+  const planDirtyRef = useRef(false);
+  const applyDayPayload = useCallback((nextDay: DayData) => {
+    setError("");
+    setReport(nextDay.report?.markdown ?? "");
+    setDay((current) => mergeDayPayload(current, nextDay));
+    const plan = nextDay.plan;
+    const planKey = plan ? `${plan.id}:${plan.revision ?? 0}:${plan.status ?? ""}` : "none";
+    // Never clobber in-progress local plan edits, and only re-apply the plan
+    // fields when the server revision actually changed.
+    if (!planDirtyRef.current && appliedPlanKeyRef.current !== planKey) {
+      appliedPlanKeyRef.current = planKey;
+      setPlanIntent(plan?.freeform_intent ?? "");
+      setGoalProvenance(plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : plan?.freeform_intent ? "employee" : null);
+      setSuggestionTaskIds(plan?.suggestion_task_ids ?? []);
+      setPlanItems([...(plan?.items ?? [])].sort((a, b) => a.rank - b.rank));
+      setPlanDirty(false); setPlanSaveState("saved");
+    }
+    setPlanHistoryDate((current) => current || nextDay.shiftDate);
+  }, []);
+
+  useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
+
+  const queryClient = useQueryClient();
+  const invalidateTaskData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });
+    void queryClient.invalidateQueries({ queryKey: ["work-os", "task"] });
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
+    void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
+  }, [queryClient]);
+  const invalidateDayData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
+    void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
+  }, [queryClient]);
+  const signedIn = !!session;
+  const detailsViews = view === "tasks" || view === "review" || view === "evidence";
+
+  // Reads are cached with TTLs and de-duplicated by react-query. The compact
+  // snapshot refreshes every minute in the background; heavy details load only
+  // when a workspace that needs them opens.
+  const compactDayQuery = useDayQuery({ enabled: signedIn && !syncBypass, variant: "compact", pollMs: 60_000 });
+  const detailsDayQuery = useDayQuery({ enabled: signedIn && !syncBypass && detailsViews, variant: "details" });
+  const onboardingQuery = useOnboardingQuery({ enabled: signedIn && !syncBypass });
+  const historyQuery = useTaskHistoryQuery({ enabled: signedIn && !syncBypass });
+  const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
+  const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
+
+  useEffect(() => {
+    if (compactDayQuery.data) applyDayPayload(compactDayQuery.data);
+  }, [applyDayPayload, compactDayQuery.data]);
+  useEffect(() => {
+    if (detailsDayQuery.data) {
+      applyDayPayload(detailsDayQuery.data);
+      setDayDetailsLoaded(true);
+    }
+  }, [applyDayPayload, detailsDayQuery.data]);
+  useEffect(() => {
+    if (onboardingQuery.data) setOnboarding(onboardingQuery.data);
+  }, [onboardingQuery.data]);
+  useEffect(() => {
+    if (!historyQuery.data) return;
+    const rows = historyQuery.data.pages.flatMap((page) => page.tasks);
+    setTaskHistory(rows);
+    setTaskHistoryCursor(historyQuery.hasNextPage ? rows.length : null);
+  }, [historyQuery.data, historyQuery.hasNextPage]);
+  useEffect(() => { setTaskHistoryLoading(historyQuery.isFetching && historyQuery.data !== undefined); }, [historyQuery.isFetching, historyQuery.data]);
+  useEffect(() => {
+    if (historyQuery.error) showError(historyQuery.error, "Task history could not be loaded.", "Tasks unavailable");
+  }, [historyQuery.error, showError]);
+  useEffect(() => {
+    if (insightsQuery.data) {
+      setInsights(insightsQuery.data);
+      if (insightsQuery.data.freshness.stale) notifications.info(`Showing retained insight data${insightsQuery.data.freshness.staleAt ? ` from ${formatWorkOsDateTime(insightsQuery.data.freshness.staleAt)}` : ""}.`, "Insights refresh delayed");
+    }
+    setInsightsLoading(insightsQuery.isFetching && insightsQuery.data === undefined);
+  }, [insightsQuery.data, insightsQuery.isFetching, notifications]);
+  useEffect(() => {
+    if (insightsQuery.error) showError(insightsQuery.error, "Insights could not be refreshed.", "Insights unavailable");
+  }, [insightsQuery.error, showError]);
+  useEffect(() => {
+    if (historicalQuery.data) {
+      setHistoricalPlan(historicalQuery.data.plan);
+      setHistoricalTasks(historicalQuery.data.tasks);
+    }
+  }, [historicalQuery.data]);
+  useEffect(() => {
+    if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
+  }, [historicalQuery.error, showError]);
+
   const refreshInternal = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
     if (syncBypassRef.current) return null;
-    const dayQuery = new URLSearchParams();
-    if (options.refreshProviders) dayQuery.set("refreshProviders", "true");
-    if (options.refreshAttendance) dayQuery.set("refreshAttendance", "true");
-    if (!options.details) dayQuery.set("compact", "true");
+    const variant = options.details ? "details" : "compact";
     const [onboardingResult, dayResult] = await Promise.allSettled([
-      options.dayOnly ? Promise.resolve<OnboardingData | null>(null) : apiRequest<OnboardingData>("/api/work-os/me/onboarding"),
-      apiRequest<DayData>(`/api/work-os/me/day${dayQuery.size ? `?${dayQuery}` : ""}`, {
-        // A normal day read includes the current Worktivity observation, which
-        // can use its bounded server-side retry window before it degrades.
-        signal: AbortSignal.timeout(options.refreshProviders ? 90_000 : 35_000),
+      options.dayOnly
+        ? Promise.resolve(null)
+        : queryClient.fetchQuery({ queryKey: workOsKeys.onboarding(), queryFn: fetchOnboarding, staleTime: 0 }),
+      queryClient.fetchQuery({
+        queryKey: workOsKeys.day(variant),
+        queryFn: () => fetchDay({ variant, refreshProviders: options.refreshProviders, refreshAttendance: options.refreshAttendance }),
+        staleTime: 0,
       }),
     ]);
     if (onboardingResult.status === "rejected") throw onboardingResult.reason;
-    if (onboardingResult.value) setOnboarding(onboardingResult.value);
     if (dayResult.status === "rejected") {
       const rawMessage = errorMessage(dayResult.reason, "Your profile loaded, but the workday could not be refreshed.");
       const message = /timed out|abort/i.test(rawMessage)
@@ -306,33 +410,11 @@ export default function App() {
       showError(message, message, "Workday refresh failed");
       return null;
     }
-    const rawDay = dayResult.value;
-    const plan = rawDay.plan && typeof rawDay.plan === "object"
-      ? { ...rawDay.plan, items: Array.isArray(rawDay.plan.items) ? rawDay.plan.items : [] }
-      : null;
-    // Provider sync can return a partial but otherwise usable day. Keep that
-    // response renderable instead of letting a missing collection trip React.
-    const nextDay: DayData = {
-      ...rawDay,
-      tasks: Array.isArray(rawDay.tasks) ? rawDay.tasks : [],
-      taskHistory: Array.isArray(rawDay.taskHistory) ? rawDay.taskHistory : [],
-      evidence: Array.isArray(rawDay.evidence) ? rawDay.evidence : [],
-      proposals: Array.isArray(rawDay.proposals) ? rawDay.proposals : [],
-      plan,
-      prompt: rawDay.prompt ?? { kind: null, nextPromptAt: null, required: false, reason: "" },
-    };
-    setError(""); setDay(nextDay); setReport(nextDay.report?.markdown ?? "");
-    void secureState.saveDaySnapshot(nextDay);
-    setDayDetailsLoaded(options.details === true);
-    const history = nextDay.taskHistory ?? nextDay.tasks ?? [];
-    setTaskHistory(history); setTaskHistoryCursor(history.length === 100 ? 100 : null);
-    setPlanIntent(nextDay.plan?.freeform_intent ?? "");
-    setGoalProvenance(nextDay.plan?.goal_provenance === "accepted_suggestion" ? "accepted_suggestion" : nextDay.plan?.freeform_intent ? "employee" : null);
-    setSuggestionTaskIds(nextDay.plan?.suggestion_task_ids ?? []);
-    setPlanItems([...(nextDay.plan?.items ?? [])].sort((a, b) => a.rank - b.rank));
-    setPlanDirty(false); setPlanSaveState("saved"); setPlanHistoryDate((current) => current || nextDay.shiftDate);
+    const nextDay = dayResult.value;
+    applyDayPayload(nextDay);
+    if (options.details) setDayDetailsLoaded(true);
     return nextDay;
-  }, [showError]);
+  }, [applyDayPayload, queryClient, showError]);
 
   const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
     setRefreshing(true);
@@ -344,9 +426,9 @@ export default function App() {
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates);
       if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
-        setDay(snapshot);
-        setTaskHistory(snapshot.taskHistory ?? snapshot.tasks);
-        setTaskHistoryCursor(null);
+        // Seed the cache with the last workday snapshot for an instant first
+        // paint; the live query revalidates it in the background.
+        queryClient.setQueryData(workOsKeys.day("compact"), snapshot);
         setPlanHistoryDate(snapshot.shiftDate);
       }
       if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
@@ -369,17 +451,13 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    const recover = async () => { if (syncBypassRef.current || !navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); await refresh({ dayOnly: true }); };
+    const recover = async () => { if (syncBypassRef.current || !navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); };
     window.addEventListener("online", recover); const timer = window.setInterval(() => void recover().catch(() => undefined), 60_000);
     return () => { window.removeEventListener("online", recover); clearInterval(timer); };
-  }, [refresh, session]);
+  }, [session]);
 
-  // The dashboard only needs the compact workday snapshot. Load the heavier
-  // history, evidence, and EOD records when a workspace that uses them opens.
-  useEffect(() => {
-    if (!day || dayDetailsLoaded || !["tasks", "review", "evidence"].includes(view)) return;
-    void refresh({ dayOnly: true, details: true }).catch(() => undefined);
-  }, [day, dayDetailsLoaded, refresh, view]);
+  // The details payload loads lazily when a workspace that needs heavier
+  // history, evidence, or EOD records opens (driven by detailsDayQuery).
 
   // The avatar is a separate window. Its confirmed writes should be visible in
   // the main workspace immediately, not only after the next periodic refresh.
@@ -447,7 +525,7 @@ export default function App() {
     setEodRedrafting(true);
     try {
       const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
-        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate }),
+        method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: visibleDay.shiftDate }),
       });
       setEodGate(null);
       setEodClockedOut(result.clockedOut === true);
@@ -566,28 +644,6 @@ export default function App() {
   }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, showError, suggestionTaskIds]);
 
   useEffect(() => {
-    if (view !== "insights" || debugRef.current.enabled) {
-    if (syncBypassRef.current && visibleDay) {
-      setInsights(insightsFixture(visibleDay, insightRange));
-      setInsightsLoading(false);
-    }
-    return;
-  }
-  if (!session) return;
-    let cancelled = false;
-    setInsightsLoading(true);
-    void apiRequest<InsightsData>(`/api/work-os/me/insights?range=${insightRange}${day?.shiftDate ? `&through=${encodeURIComponent(day.shiftDate)}` : ""}`)
-      .then((result) => {
-        if (cancelled) return;
-        setInsights(result);
-        if (result.freshness.stale) notifications.info(`Showing retained insight data${result.freshness.staleAt ? ` from ${formatWorkOsDateTime(result.freshness.staleAt)}` : ""}.`, "Insights refresh delayed");
-      })
-      .catch((value) => { if (!cancelled) showError(value, "Insights could not be refreshed.", "Insights unavailable"); })
-      .finally(() => { if (!cancelled) setInsightsLoading(false); });
-    return () => { cancelled = true; };
-  }, [view, insightRange, session, day?.shiftDate, notifications, showError]);
-
-  useEffect(() => {
     if (!isTauri()) return;
     let unlistenScenario: (() => void) | undefined;
     let unlistenRequest: (() => void) | undefined;
@@ -622,7 +678,12 @@ export default function App() {
       return;
     }
     if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
-      await action(); const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
+      await action();
+      // Precise cache invalidation replaces blanket refetches: task/workspace
+      // writes touch task lists and details; everything else refreshes the day.
+      if (label.startsWith("task.") || label.startsWith("workspace.")) invalidateTaskData();
+      else invalidateDayData();
+      const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
       // A failed refresh after a committed write must not present the action
       // as failed — the write is done; surface success and refresh lazily.
       await refresh().catch((refreshError) => {
@@ -772,6 +833,7 @@ export default function App() {
       // Local sign-out must still succeed if the server is unavailable.
     } finally {
       await secureState.clearAccount();
+      queryClient.clear();
       setSession(null); setDay(null); setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day");
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }
@@ -787,6 +849,7 @@ export default function App() {
     setBusy(true); setError("");
     try {
       const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "DELETE" });
+      queryClient.setQueryData(workOsKeys.onboarding(), next);
       setOnboarding(next); setView("day");
       notifications.success("Your personal setup answers were cleared.", "Onboarding restarted");
     } catch (value) {
@@ -796,6 +859,15 @@ export default function App() {
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  useEffect(() => {
+    // Scenario/offline insights are computed on-device; live insights come
+    // from the cached query above.
+    if ((syncBypassRef.current || debugRef.current.enabled) && view === "insights" && visibleDay) {
+      setInsights(insightsFixture(visibleDay, insightRange));
+      setInsightsLoading(false);
+    }
+  }, [view, insightRange, visibleDay]);
 
   const visibleSession = debugScenario.enabled
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
@@ -992,6 +1064,7 @@ export default function App() {
     }
     const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
       method: "POST",
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })) }),
     });
     return { ...result.interpretation, buildId: result.build_id };
@@ -1015,6 +1088,7 @@ export default function App() {
     }
     const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/refine", {
       method: "POST",
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({
         input,
         date: visibleDay.shiftDate,
@@ -1103,16 +1177,7 @@ export default function App() {
     setPlanHistoryDate(date);
     if (syncBypassRef.current) return;
     if (!date || date === visibleDay?.shiftDate) { setHistoricalPlan(null); setHistoricalTasks([]); return; }
-    try {
-      const [planResult, taskResult] = await Promise.all([
-        apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
-        apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
-      ]);
-      setHistoricalPlan(planResult.plan);
-      setHistoricalTasks(taskResult.tasks);
-    } catch (value) {
-      showError(value, "Daily workspace history could not be loaded.", "History unavailable");
-    }
+    // The historical query fetches automatically once its key changes.
   }
 
   async function openInsightReference(reference: InsightDay["references"][number]) {
@@ -1127,15 +1192,12 @@ export default function App() {
   }
 
   async function loadMoreTasks() {
-    if (syncBypassRef.current || taskHistoryCursor === null || !visibleDay || taskHistoryLoading) return;
-    setTaskHistoryLoading(true);
+    if (syncBypassRef.current || !historyQuery.hasNextPage || historyQuery.isFetchingNextPage) return;
     try {
-      const result = await apiRequest<{ tasks: Array<Record<string, any>>; nextOffset: number | null }>(`/api/work-os/me/tasks?view=history&offset=${taskHistoryCursor}&limit=100`);
-      setTaskHistory((current) => [...current, ...result.tasks.filter((item) => !current.some((existing) => existing.id === item.id))]);
-      setTaskHistoryCursor(result.nextOffset);
+      await historyQuery.fetchNextPage();
     } catch (value) {
       showError(value, "More tasks could not be loaded.", "Task history unavailable");
-    } finally { setTaskHistoryLoading(false); }
+    }
   }
 
   async function openTaskComposer() {
@@ -1149,7 +1211,11 @@ export default function App() {
     if (taskAssigneeOptions.length || taskOptionsLoading) return;
     setTaskOptionsLoading(true);
     try {
-      const result = await apiRequest<{ people: TaskAssigneeOption[] }>("/api/work-os/me/tasks?view=options");
+      const result = await queryClient.ensureQueryData({
+        queryKey: workOsKeys.taskOptions(),
+        queryFn: () => apiRequest<{ people: TaskAssigneeOption[] }>("/api/work-os/me/tasks?view=options"),
+        staleTime: TASK_OPTIONS_STALE_MS,
+      });
       setTaskAssigneeOptions(result.people);
     } catch (value) {
       showError(value, "Could not load organization assignees.", "Assignees unavailable");
@@ -1157,17 +1223,23 @@ export default function App() {
   }
 
   async function loadTaskDetails(taskId: string) {
-    return apiRequest<TaskDetails>(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`);
+    return queryClient.fetchQuery({
+      queryKey: workOsKeys.taskDetails(taskId),
+      queryFn: () => fetchTaskDetails(taskId),
+      staleTime: 0,
+    });
   }
 
   async function openTaskDetails(task: Record<string, any>, readOnly = false) {
+    const taskId = String(task.provider_task_id || task.id);
+    setTaskDetailsReadOnly(readOnly); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
+    const cached = queryClient.getQueryData<TaskDetails>(workOsKeys.taskDetails(taskId));
+    setTaskDetails(cached ?? { task, subtasks: [], moveTargets: [] });
     if (syncBypassRef.current) {
-      setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(false);
-      setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
+      setTaskDetailsLoading(false);
       return;
     }
-    const taskId = String(task.provider_task_id || task.id);
-    setTaskDetailsReadOnly(readOnly); setTaskDetailsLoading(true); setTaskDetails({ task, subtasks: [], moveTargets: [] }); setSubtaskTitle(""); setSubtaskDescription(""); setSubtaskMenuId(null); setMoveMenuId(null);
+    setTaskDetailsLoading(!cached);
     try {
       const details = await loadTaskDetails(taskId);
       setTaskDetails({ ...details, task: details.task ?? task, subtasks: Array.isArray(details.subtasks) ? details.subtasks : [], moveTargets: Array.isArray(details.moveTargets) ? details.moveTargets : [] });
@@ -1420,6 +1492,7 @@ export default function App() {
     };
     void apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
       method: "POST",
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({ input: text, planIntent: planIntent || null, today: visibleDay?.shiftDate ?? null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
     }).then(async (result) => {
       const review = normalizeInterpretation(result.interpretation, text, taskOptions);
@@ -1679,7 +1752,7 @@ export default function App() {
       onDebug={() => void openDebugger()}
       onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
     />;
-  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   return <div className="workspace">
     <aside className="rail">

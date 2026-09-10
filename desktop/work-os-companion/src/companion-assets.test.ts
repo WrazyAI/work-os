@@ -63,7 +63,9 @@ describe("floating companion integration", () => {
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
 
     expect(capability.permissions).toContain("core:window:allow-start-dragging");
-    expect(avatar).toContain('apiRequest<Record<string, any>>("/api/work-os/me/day?compact=true"');
+    // The avatar reads the shared cached day query instead of its own fetch.
+    expect(avatar).toContain('workOsKeys.day("compact")');
+    expect(avatar).toContain('fetchDay({ variant: "compact" })');
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");

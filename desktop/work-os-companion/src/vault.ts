@@ -87,6 +87,7 @@ export const secureState = {
     await remove("pending-auth");
     await remove("offline-queue");
     await remove("day-snapshot");
+    await remove("query-cache");
   },
   queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
   saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),
@@ -104,6 +105,23 @@ export const secureState = {
     const session = await secureState.session();
     if (session) await set("day-snapshot", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, day });
   },
+  /** Persisted TanStack Query cache. Renders last-known work instantly on
+   * relaunch; background revalidation keeps it truthful. 24h ceiling. */
+  queryCache: async () => {
+    if (!isTauri()) return null;
+    const [session, snapshot] = await Promise.all([
+      secureState.session(),
+      get<{ savedAt: string; organizationId: string; token: string; state: string }>("query-cache"),
+    ]);
+    if (!session || !snapshot || snapshot.organizationId !== session.organizationId || snapshot.token !== session.token || Date.now() - Date.parse(snapshot.savedAt) > 24 * 60 * 60_000) return null;
+    return snapshot;
+  },
+  saveQueryCache: async (state: string) => {
+    if (!isTauri()) return;
+    const session = await secureState.session();
+    if (session) await set("query-cache", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, state });
+  },
+  clearQueryCache: () => isTauri() ? remove("query-cache") : Promise.resolve(),
   conversation: async (scope: string) => isTauri() ? (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [] : [],
   saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => isTauri()
     ? set(`conversation:${scope}`, turns.slice(-60))

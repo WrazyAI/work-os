@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
+import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
+import { fetchDay } from "./workOsQueries";
 import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
@@ -180,11 +182,18 @@ export default function AvatarApp(): React.ReactElement {
   }, [win]);
 
   // ── Day poll: the single source of shift/prompt facts ──
-  const loadDay = useCallback(async () => {
+  const loadDay = useCallback(async (force = false) => {
     if (dayLoadInFlight.current) return;
     dayLoadInFlight.current = true;
     try {
-      const day = await apiRequest<Record<string, any>>("/api/work-os/me/day?compact=true", { signal: AbortSignal.timeout(35_000) });
+      if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
+      // Shared query cache: a fresh cached day is served without a network
+      // round-trip; stale data refreshes in the background.
+      const day = await workOsQueryClient.fetchQuery({
+        queryKey: workOsKeys.day("compact"),
+        queryFn: () => fetchDay({ variant: "compact" }),
+        staleTime: DAY_STALE_MS,
+      }) as unknown as Record<string, any>;
       const session = (day?.session ?? {}) as Record<string, any>;
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
@@ -234,7 +243,7 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    void loadDay();
+    void loadDay(true);
     const poll = setInterval(() => { void loadDay(); }, DAY_POLL_MS);
     return () => clearInterval(poll);
   }, [loadDay]);
@@ -244,12 +253,12 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     let unlistenDay: (() => void) | undefined;
     let unlistenSession: (() => void) | undefined;
-    void listen("work-os://main-day-changed", () => { void loadDay(); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
+    void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
       void secureState.session().then((session) => {
         setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
-        void loadDay();
+        void loadDay(true);
       }).catch(() => undefined);
     }).then((fn) => { unlistenSession = fn; }).catch(() => undefined);
     return () => { unlistenDay?.(); unlistenSession?.(); };
@@ -567,7 +576,7 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
       setMissed(false);
-      await loadDay();
+      await loadDay(true);
       void emit("work-os://avatar-day-changed");
     } catch (value) {
       setChat((current) => [...current, {
@@ -663,7 +672,7 @@ export default function AvatarApp(): React.ReactElement {
           text: agendaReceipt(review),
         receipt: "Agenda confirmed",
       }]);
-      await loadDay();
+      await loadDay(true);
       void emit("work-os://avatar-day-changed");
     } catch (value) {
       const message = value instanceof Error ? value.message : "Your agenda could not be confirmed.";
