@@ -52,7 +52,7 @@ describe("Tasks workspace filters", () => {
       historicalPlan: null,
       historicalTasks: [],
       goal: "",
-      goalProvenance: null as const,
+      goalProvenance: null,
       suggestion: null,
       saveState: "saved" as const,
       taskView: "unfinished" as const,
