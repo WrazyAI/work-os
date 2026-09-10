@@ -54,6 +54,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(insights, /day.*7d.*30d/);
   assert.match(day, /compact: url\.searchParams\.get\("compact"\) === "true"/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /sanitizeEodAnnotations/);
+  assert.match(await source("src/lib/aiEod.ts"), /export function sanitizeEodAnnotations/);
+  assert.match(await source("src/lib/aiEod.ts"), /order\("observed_at"/);
   const workspace = await source("src/lib/work-os-daily-workspace.ts");
   assert.match(workspace, /items:work_daily_plan_items\(task_id,completion_state,disposition\)/);
   assert.match(workspace, /A saved daily plan is an explicit record/);

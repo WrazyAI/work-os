@@ -134,13 +134,40 @@ export function ensureBottleneckSection(markdown: unknown): string | null {
   return `${trimmed}\n\n## Bottleneck\n${BOTTLENECK_PLACEHOLDER}`;
 }
 
+export type EodAnnotation = { quote: string; comment: string };
+
+const MAX_EOD_ANNOTATIONS = 12;
+const MAX_EOD_QUOTE = 500;
+const MAX_EOD_COMMENT = 1_000;
+
+/** Bounds and cleans employee annotations before they reach the prompt. */
+export function sanitizeEodAnnotations(value: unknown): EodAnnotation[] {
+  if (!Array.isArray(value)) return [];
+  const result: EodAnnotation[] = [];
+  for (const item of value) {
+    if (result.length >= MAX_EOD_ANNOTATIONS) break;
+    if (!item || typeof item !== "object") continue;
+    const row = item as { quote?: unknown; comment?: unknown };
+    const quote = typeof row.quote === "string" ? row.quote.replace(/\s+/g, " ").trim().slice(0, MAX_EOD_QUOTE) : "";
+    const comment = typeof row.comment === "string" ? row.comment.replace(/\s+/g, " ").trim().slice(0, MAX_EOD_COMMENT) : "";
+    if (!quote || comment.length < 3) continue;
+    result.push({ quote, comment });
+  }
+  return result;
+}
+
+/** One prompt line per annotation so the model can apply each fix in place. */
+export function formatEodAnnotations(annotations: EodAnnotation[]): string {
+  return annotations.map((annotation) => `- On "${annotation.quote}": ${annotation.comment}`).join("\n");
+}
+
 export async function gatherEodGrounding(organizationId: string, personId: string, date: string, personName: string): Promise<EodGrounding> {
   const db = createAdminClient();
   const [updatesResult, eventsResult, sessionResult, planResult] = await Promise.all([
     db.from("work_check_ins").select("input_text,update_kind,occurred_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
     db.from("work_task_day_events").select("event_type,task_snapshot").eq("organization_id", organizationId)
-      .eq("person_id", personId).eq("local_date", date).order("occurred_at", { ascending: true }),
+      .eq("person_id", personId).eq("local_date", date).order("observed_at", { ascending: true }),
     db.from("work_sessions").select("clocked_in_at,clocked_out_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,disposition,completion_state)")
@@ -232,7 +259,7 @@ function withoutBottleneck(markdown: string) {
 }
 
 /** Refines report wording from employee feedback without touching their separate bottleneck answer. */
-export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string): Promise<EodDraftResult> {
+export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string, annotations: EodAnnotation[] = []): Promise<EodDraftResult> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };
   try {
@@ -243,7 +270,7 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
         model: EOD_MODEL,
         messages: [
           { role: "system", content: "You refine Work OS EOD report wording. Apply the employee feedback, preserve truthful task and progress statements, and never add a Bottleneck section. Do not invent completion, evidence, timing, or outcomes." },
-          { role: "user", content: `Known Work OS facts:\n${buildEodPrompt(grounding)}\n\nCurrent report:\n${withoutBottleneck(draft)}\n\nEmployee feedback:\n${feedback}\n\nReturn only the revised markdown report. Do not include a Bottleneck heading or content.` },
+          { role: "user", content: `Known Work OS facts:\n${buildEodPrompt(grounding)}\n\nCurrent report:\n${withoutBottleneck(draft)}\n\nEmployee feedback:\n${feedback.trim() || "(none)"}\n${annotations.length ? `\nEmployee annotations on the draft:\n${formatEodAnnotations(annotations)}\n` : ""}\nReturn only the revised markdown report. Do not include a Bottleneck heading or content.` },
         ],
         temperature: 0.2,
         max_tokens: 1800,
