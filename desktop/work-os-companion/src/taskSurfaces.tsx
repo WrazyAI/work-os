@@ -8,6 +8,8 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
 import { CompanionPet } from "./CompanionPet";
+import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
+import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 
@@ -295,26 +297,88 @@ export { sentence, taskKind };
 
 export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onRefine, onSubmit }: {
   reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
-  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefine: (markdown: string, feedback: string) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
   const [feedback, setFeedback] = useState("");
-  const [view, setView] = useState<"preview" | "raw">("preview");
   const [refining, setRefining] = useState(false);
+  const [view, setView] = useState<"preview" | "raw">("preview");
+  const [annotations, setAnnotations] = useState<Array<{ quote: string; comment: string }>>([]);
+  const [pending, setPending] = useState<{ quote: string; rect: SelectionRect } | null>(null);
+  const [pendingComment, setPendingComment] = useState("");
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const flashTimer = useRef<number | null>(null);
   // A redraft replaces the buffer (and any in-progress edits) by design.
   useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
   useEffect(() => { if (allTasksCompleted) setBottleneck(""); }, [allTasksCompleted]);
-  const canSubmit = (allTasksCompleted || hasBottleneckAnswer(bottleneck)) && markdown.trim() && !busy && !redrafting;
+  useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
+  const canSubmit = (allTasksCompleted || hasBottleneckAnswer(bottleneck)) && markdown.trim() && !busy && !redrafting && !refining;
+  const refineReady = (Boolean(feedback.trim()) || annotations.length > 0) && !busy && !redrafting && !refining;
   const submit = () => {
     if (!canSubmit) return;
     onSubmit(composeEodMarkdown(markdown, bottleneck, !allTasksCompleted), crypto.randomUUID());
   };
+  /** Selecting text in the preview raises the floating annotation pill. */
+  const captureSelection = () => {
+    if (view !== "preview" || redrafting || refining) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+    const quote = selection.toString().replace(/\s+/g, " ").trim();
+    if (quote.length < 3) return;
+    const range = selection.getRangeAt(0);
+    const holder = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+    if (!holder || !previewRef.current?.contains(holder)) return;
+    const box = range.getBoundingClientRect();
+    setPending({ quote: quote.slice(0, 300), rect: { top: box.top, left: box.left, width: box.width, height: box.height, bottom: box.bottom } });
+    setPendingComment("");
+  };
+  const addAnnotation = () => {
+    if (!pending) return;
+    const comment = sanitizeComment(pendingComment);
+    if (!isAnnotationCommentValid(comment)) return;
+    setAnnotations((current) => [...current, { quote: pending.quote, comment }]);
+    setPending(null);
+    setPendingComment("");
+  };
+  /** Flashes the quoted text in the preview so a note stays tied to its source. */
+  const flashQuote = (quote: string) => {
+    const root = previewRef.current;
+    if (!root) return;
+    const target = quote.slice(0, 60).toLowerCase();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node: Node | null = walker.nextNode();
+    while (node) {
+      const text = (node.textContent ?? "").toLowerCase();
+      const index = text.indexOf(target);
+      if (index >= 0 && node.parentElement && !node.parentElement.closest(".eod-quote-flash")) {
+        const span = document.createElement("span");
+        span.className = "eod-quote-flash";
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + target.length);
+        range.surroundContents(span);
+        span.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (flashTimer.current) window.clearTimeout(flashTimer.current);
+        flashTimer.current = window.setTimeout(() => {
+          if (span.parentNode) {
+            span.replaceWith(...Array.from(span.childNodes));
+            root.normalize();
+          }
+        }, 1600);
+        return;
+      }
+      node = walker.nextNode();
+    }
+  };
   const refine = async () => {
-    if (!feedback.trim() || busy || redrafting || refining) return;
+    if (!refineReady) return;
     setRefining(true);
     try {
-      if (await onRefine(markdown, feedback)) setFeedback("");
+      if (await onRefine(markdown, feedback, annotations)) {
+        setFeedback("");
+        setAnnotations([]);
+      }
     } finally {
       setRefining(false);
     }
@@ -326,30 +390,40 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
       <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button>
     </header>
-    {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</details>}
+    {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><div className="eod-screenshot-body"><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</div></details>}
     {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses today&apos;s recorded work only.</p>}
     <section className="eod-report" aria-label="Report draft">
       <div className="eod-report-head">
         <span>Report</span>
+        {annotations.length > 0 && <small className="eod-note-count">{annotations.length} note{annotations.length === 1 ? "" : "s"}</small>}
         <div className="eod-view-toggle" role="group" aria-label="Report view">
           <button type="button" aria-pressed={view === "preview"} className={view === "preview" ? "active" : ""} onClick={() => setView("preview")}>Preview</button>
           <button type="button" aria-pressed={view === "raw"} className={view === "raw" ? "active" : ""} onClick={() => setView("raw")}>Raw</button>
         </div>
       </div>
       {view === "preview"
-        ? <div className="eod-preview" aria-label="Report preview" aria-live="polite"><ChatMarkdown text={markdown.trim() ? markdown : "Nothing to preview yet."} /></div>
+        ? <div className="eod-preview" ref={previewRef} onMouseUp={captureSelection} onKeyUp={captureSelection} aria-label="Report preview" aria-live="polite"><ChatMarkdown text={markdown.trim() ? markdown : "Nothing to preview yet."} /></div>
         : <textarea className="eod-raw" value={markdown} rows={12} onChange={(event) => setMarkdown(event.target.value)} aria-label="End-of-day report draft" spellCheck={false} />}
     </section>
+    {annotations.length > 0 && <section className="eod-notes" aria-label="Draft notes">
+      <header><span>Draft notes</span><small>Sent with the Refine draft action. Select text in the preview to add another.</small></header>
+      <ul>{annotations.map((annotation, index) => <li key={`${annotation.quote.slice(0, 24)}:${index}`}>
+        <button type="button" className="eod-note-quote" title="Show this text in the draft" onClick={() => flashQuote(annotation.quote)}>“{annotation.quote.length > 90 ? `${annotation.quote.slice(0, 90)}…` : annotation.quote}”</button>
+        <span className="eod-note-comment">{annotation.comment}</span>
+        <button type="button" className="eod-note-remove" aria-label="Remove this note" onClick={() => setAnnotations((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={12} /></button>
+      </li>)}</ul>
+    </section>}
     <section className="eod-refine" aria-label="Draft feedback">
       <span>Refine this draft</span>
-      <small>Tell the assistant what to clarify or change. Your bottleneck answer stays separate.</small>
+      <small>Select text in the preview to add a note, or describe the change. Your bottleneck answer stays separate.</small>
       <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
-      <div className="eod-refine-actions"><button disabled={!feedback.trim() || busy || redrafting || refining} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
+      <div className="eod-refine-actions"><button disabled={!refineReady} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
     </section>
     <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
       <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? "Every task in today's list is complete." : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
       <small>{allTasksCompleted ? "Every task in today’s list is complete, so no reason is needed or sent with this report." : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
     </label>
     <footer><small>Nothing is filed until you submit.</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
+    {pending && <SelectionAnnotator quote={pending.quote} anchor={pending.rect} value={pendingComment} canSave={isAnnotationCommentValid(pendingComment)} disabled={busy || redrafting || refining} onChange={setPendingComment} onSave={addAnnotation} onCancel={() => { setPending(null); setPendingComment(""); }} />}
   </section>;
 }

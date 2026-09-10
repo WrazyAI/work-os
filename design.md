@@ -1619,8 +1619,12 @@ request is not displayed as Nifty write-back until provider confirmation exists.
 An EOD draft may be refined from employee feedback before it is submitted to a
 manager. Feedback is a separate, local decision area beneath the editable report:
 the primary action is `Refine draft`, and its helper copy states that the
-employee-authored bottleneck remains separate. The AI request receives the report
-narrative and feedback, never the bottleneck answer. When every task in the
+employee-authored bottleneck remains separate. Selecting text in the preview
+raises the floating selection annotator; saved notes collect in a `Draft notes`
+tray whose quote chips flash the matching passage in the draft, and refining
+sends the notes plus free-text feedback while the bottleneck answer is never
+included. The AI request receives the report narrative, feedback, and bounded
+annotations, never the bottleneck answer. When every task in the
 current-day list is complete, disable the bottleneck field, clear any prior value,
 and omit the bottleneck section from the submitted report. Otherwise the employee
 must provide a bottleneck before submission. A failed refinement preserves both

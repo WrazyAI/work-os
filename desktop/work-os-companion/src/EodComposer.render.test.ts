@@ -33,5 +33,7 @@ describe("EodComposer review surface", () => {
     expect(markup).toContain("Refine draft");
     expect(markup).toContain("Submit EOD");
     expect(markup).toContain("Draft with AI");
+    expect(markup).toContain("Select text in the preview to add a note");
+    expect(markup).not.toContain("Draft notes");
   });
 });
