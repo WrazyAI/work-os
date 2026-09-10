@@ -6,6 +6,7 @@ import { getStorageBackend } from "@/lib/db/storage";
 import { fetchAllLogs } from "@/lib/worktivityAudit";
 import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import type { WtActivityLog } from "@/lib/worktivity";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -13,8 +14,9 @@ import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/comp
 type Json = Record<string, unknown>;
 
 const BUCKET = "work-os-screenshots";
-const MODEL = process.env.WORK_OS_SCREENSHOT_MODEL || "gpt-5.4-mini";
-const PROMPT_VERSION = "work-os-neutral-screenshot-v1";
+const MODEL = process.env.WORK_OS_SCREENSHOT_MODEL || process.env.WORK_OS_INTERPRET_MODEL || "gpt-5.6-luna";
+const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
+const PROMPT_VERSION = "work-os-neutral-screenshot-v2";
 const MAX_SCREENSHOTS_PER_DAY = 12;
 
 function db() {
@@ -157,8 +159,8 @@ function sampleLogs(logs: WtActivityLog[]) {
 }
 
 async function neutralSummary(url: string, log: WtActivityLog) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is required for screenshot summaries");
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is required for screenshot summaries");
   const tool = {
     type: "function",
     function: {
@@ -179,7 +181,7 @@ async function neutralSummary(url: string, log: WtActivityLog) {
       },
     },
   };
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -451,7 +453,8 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
   const seenCandidates = new Set<string>();
   for (const row of candidates) {
     if (results.length >= limit) break;
-    const shiftDate = String(row.shift_date);
+    const shiftDate = dateOnly(row.shift_date);
+    if (!shiftDate) continue;
     const candidateKey = `${row.organization_id}:${row.person_id}:${shiftDate}`;
     if (seenCandidates.has(candidateKey)) continue;
     seenCandidates.add(candidateKey);
