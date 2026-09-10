@@ -300,9 +300,31 @@
   color: #963a2d;
 }
 
-.planning-delete-notice,
-.planning-lock-notice {
+.planning-delete-notice {
   margin-top: 10px;
+}
+
+.planning-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid #dbe3d3;
+  border-radius: 11px;
+  background: #f6f9f1;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.planning-loading .loading-wave {
+  width: 58px;
+  height: 22px;
+}
+
+.planning-loading .loading-arc {
+  color: #5b8f2e;
 }
 
 .planning-feedback-hint {
@@ -310,75 +332,6 @@
   background: var(--surface);
 }
 
-.planning-feedback-composer {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--signal-strong);
-  border-radius: 12px;
-  background: #f4f9ec;
-}
-
-.planning-feedback-composer > small {
-  color: var(--ink);
-  font-size: 11.5px;
-  font-weight: 650;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.planning-feedback-composer > textarea {
-  min-height: 56px;
-  resize: vertical;
-  padding: 8px 10px;
-  border: 1px solid #cfd5c9;
-  border-radius: 10px;
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.planning-feedback-composer > textarea:focus {
-  outline: none;
-  border-color: var(--signal-strong);
-  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
-}
-
-.planning-feedback-composer-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.planning-feedback-composer-row button {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.planning-feedback-composer-row button.secondary {
-  background: #fff;
-  border-color: var(--line);
-  color: var(--ink);
-}
-
-.planning-feedback-composer-row button.primary {
-  background: var(--signal);
-  border-color: #a6e852;
-  color: #141611;
-}
-
-.planning-feedback-composer-row button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 
 .planning-annotation-mark {
   border-radius: 3px;
@@ -4791,6 +4744,301 @@ button:not(:disabled):active {
   }
 }
 
+
+/* Optimistic task rows: spinner while syncing, retry + discard when failed. */
+.pending-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7a63;
+}
+
+.pending-indicator.failed {
+  color: #a0372b;
+}
+
+.pending-indicator .loading-arc {
+  color: #6f8f5c;
+}
+
+.pending-retry {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #eec0b8;
+  border-radius: 8px;
+  background: #fbe7e3;
+  color: #a0372b;
+  cursor: pointer;
+}
+
+.pending-retry:hover {
+  background: #f7d9d3;
+}
+
+.pending-dismiss {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #9a8f8c;
+  cursor: pointer;
+}
+
+.pending-dismiss:hover {
+  background: #f4efed;
+  color: #a0372b;
+}
+
+.dashboard-task-card.pending {
+  border-style: dashed;
+}
+
+.active-task-list article.pending {
+  background: #fbfcf7;
+}
+
+/* Goal auto-save state beside the focus statement. */
+.goal-retry {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  margin-left: 6px;
+  border: 1px solid #eec0b8;
+  border-radius: 7px;
+  background: #fbe7e3;
+  color: #a0372b;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.goal-retry:hover {
+  background: #f7d9d3;
+}
+
+.goal-retry .loading-arc,
+.hero-focus-line .loading-arc,
+.active-focus-copy .loading-arc,
+.agenda-strip-meta .loading-arc {
+  color: #5b8f2e;
+}
+
+/* Floating selection annotator + annotation review card */
+.selection-annotator {
+  position: fixed;
+  z-index: 70;
+  display: grid;
+  gap: 8px;
+  width: 344px;
+  padding: 12px;
+  border: 1px solid #d8dcd2;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(18, 27, 17, 0.18);
+  animation: annotation-pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.selection-annotator-quote {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: italic;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.selection-annotator-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.selection-annotator-row textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  max-height: 96px;
+  padding: 7px 10px;
+  border: 1px solid #cfd5c9;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  resize: none;
+}
+
+.selection-annotator-row textarea:focus {
+  outline: none;
+  border-color: var(--signal-strong);
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
+}
+
+.selection-annotator-save,
+.selection-annotator-cancel {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.selection-annotator-save {
+  border: 1px solid #a6e852;
+  background: var(--signal);
+  color: #141611;
+}
+
+.selection-annotator-save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.selection-annotator-cancel {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+}
+
+.selection-annotator-cancel:hover {
+  color: var(--ink);
+}
+
+.annotation-popover {
+  position: fixed;
+  z-index: 71;
+  display: grid;
+  gap: 2px;
+  width: 328px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #d8dcd2;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(18, 27, 17, 0.18);
+  animation: annotation-pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.annotation-entry {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.annotation-entry + .annotation-entry {
+  border-top: 1px solid var(--line);
+}
+
+.annotation-quote {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: italic;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.annotation-comment {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.annotation-popover textarea {
+  min-height: 56px;
+  padding: 7px 9px;
+  border: 1px solid #cfd5c9;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.annotation-popover textarea:focus {
+  outline: none;
+  border-color: var(--signal-strong);
+  box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
+}
+
+.annotation-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.annotation-actions button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.annotation-actions button.primary {
+  border-color: #a6e852;
+  background: var(--signal);
+  color: #141611;
+}
+
+.annotation-actions button.danger {
+  border-color: #ecd0ca;
+  background: #fff5f3;
+  color: #a33d35;
+}
+
+.annotation-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.planning-annotation-mark {
+  cursor: pointer;
+}
+
+.planning-annotation-mark:hover,
+.planning-annotation-mark:focus-visible {
+  background: #d9f0bd;
+  outline: none;
+}
+
+@keyframes annotation-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selection-annotator,
+  .annotation-popover {
+    animation: none;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .progress-input-shell,

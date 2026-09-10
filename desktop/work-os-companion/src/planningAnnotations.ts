@@ -49,20 +49,22 @@ export function isAnnotationRangeValid(text: string, start: number, end: number)
   return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start && end <= text.length;
 }
 
-export type AnnotatedTextSegment = { text: string; annotationCount: number };
+export type AnnotatedTextSegment = { text: string; annotationCount: number; annotationIds: string[] };
 
 /** Splits a target block at annotation boundaries so only the selected occurrence is highlighted. */
 export function annotatedTextSegments(text: string, annotations: readonly PlanAnnotation[], target: string): AnnotatedTextSegment[] {
   const ranges = annotationsForTarget(annotations, target)
     .filter((annotation) => isAnnotationRangeValid(text, annotation.start, annotation.end));
-  if (!ranges.length) return [{ text, annotationCount: 0 }];
+  if (!ranges.length) return [{ text, annotationCount: 0, annotationIds: [] }];
   const boundaries = [...new Set([0, text.length, ...ranges.flatMap((annotation) => [annotation.start, annotation.end])])]
     .sort((a, b) => a - b);
   return boundaries.slice(0, -1).map((start, index) => {
     const end = boundaries[index + 1]!;
+    const overlapping = ranges.filter((annotation) => annotation.start < end && annotation.end > start);
     return {
       text: text.slice(start, end),
-      annotationCount: ranges.filter((annotation) => annotation.start < end && annotation.end > start).length,
+      annotationCount: overlapping.length,
+      annotationIds: overlapping.map((annotation) => annotation.id),
     };
   }).filter((segment) => segment.text.length > 0);
 }

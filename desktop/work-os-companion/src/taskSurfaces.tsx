@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Skeleton, TaskDetailSkeleton } from "./LoadingUi";
+import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
@@ -142,7 +142,7 @@ export function TaskComposerModal({ busy, title, description, assignees, options
           })}</div> : <p>No assignable Nifty-mapped members were found. You can still create this task unassigned.</p>}
         </fieldset>
       </div>
-      <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>{busy ? "Creating…" : "Create task"}</button></footer>
+      <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>{busy ? <><FadeArc size={14} /> Creating…</> : "Create task"}</button></footer>
     </section>
   </div>;
 }
@@ -301,6 +301,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
   const [feedback, setFeedback] = useState("");
   const [view, setView] = useState<"preview" | "raw">("preview");
+  const [refining, setRefining] = useState(false);
   // A redraft replaces the buffer (and any in-progress edits) by design.
   useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
   useEffect(() => { if (allTasksCompleted) setBottleneck(""); }, [allTasksCompleted]);
@@ -310,15 +311,20 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
     onSubmit(composeEodMarkdown(markdown, bottleneck, !allTasksCompleted), crypto.randomUUID());
   };
   const refine = async () => {
-    if (!feedback.trim() || busy || redrafting) return;
-    if (await onRefine(markdown, feedback)) setFeedback("");
+    if (!feedback.trim() || busy || redrafting || refining) return;
+    setRefining(true);
+    try {
+      if (await onRefine(markdown, feedback)) setFeedback("");
+    } finally {
+      setRefining(false);
+    }
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
       <div className="eod-title-with-pet"><CompanionPet pose="eod" className="companion-pet-inline" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
       <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div></div>
-      <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? "Drafting…" : "Draft with AI"}</button>
+      <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button>
     </header>
     {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</details>}
     {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses today&apos;s recorded work only.</p>}
@@ -338,7 +344,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
       <span>Refine this draft</span>
       <small>Tell the assistant what to clarify or change. Your bottleneck answer stays separate.</small>
       <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
-      <div className="eod-refine-actions"><button disabled={!feedback.trim() || busy || redrafting} onClick={() => void refine()}>{redrafting ? "Refining…" : "Refine draft"}</button></div>
+      <div className="eod-refine-actions"><button disabled={!feedback.trim() || busy || redrafting || refining} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
     </section>
     <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
       <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? "Every task in today's list is complete." : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />

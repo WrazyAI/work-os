@@ -18,6 +18,7 @@ const draft: PlanningInterpretation = {
 };
 
 export default function PlanningPreview() {
+  const slow = new URLSearchParams(window.location.search).has("slow");
   const [open, setOpen] = useState(true);
   return <main className="planning-preview"><PlanningSession
     open={open}
@@ -25,7 +26,7 @@ export default function PlanningPreview() {
     active
     busy={false}
     onClose={() => setOpen(false)}
-    onInterpret={async () => draft}
+    onInterpret={async () => { if (slow) await new Promise((resolve) => setTimeout(resolve, 2600)); return draft; }}
     onRefine={async (input, current) => ({ ...current, buildId: "preview-refined-build", rawIntent: input })}
     onConfirm={async () => "confirmed"}
   /></main>;

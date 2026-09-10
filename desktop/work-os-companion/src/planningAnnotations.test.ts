@@ -44,9 +44,9 @@ describe("planning annotations", () => {
     expect(isAnnotationRangeValid(text, start, start + "review".length)).toBe(true);
     expect(isAnnotationRangeValid(text, -1, 2)).toBe(false);
     expect(annotatedTextSegments(text, [annotation("summary", "review", "Clarify this", start)], "summary")).toEqual([
-      { text: "Review the draft, then ", annotationCount: 0 },
-      { text: "review", annotationCount: 1 },
-      { text: " the release notes.", annotationCount: 0 },
+      { text: "Review the draft, then ", annotationCount: 0, annotationIds: [] },
+      { text: "review", annotationCount: 1, annotationIds: ["a-summary"] },
+      { text: " the release notes.", annotationCount: 0, annotationIds: [] },
     ]);
   });
 

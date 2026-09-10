@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import type { DailyPlan } from "./types";
+import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
+import { FadeArc, Wave } from "./LoadingUi";
 import {
   annotationsForTarget,
   annotatedTextSegments,
@@ -29,9 +31,17 @@ export type PlanningInterpretation = {
 export type EditedCommitmentFields = { title: string; objective: string; successCriteria: string[] };
 
 /** Renders only the exact selected ranges, including repeated phrases. */
-function annotatedNodes(text: string, target: string, annotations: PlanAnnotation[], keyPrefix: string): ReactNode[] {
+function annotatedNodes(text: string, target: string, annotations: PlanAnnotation[], keyPrefix: string, onOpen?: (ids: string[], element: Element) => void): ReactNode[] {
   return annotatedTextSegments(text, annotations, target).map((segment, index) => segment.annotationCount
-    ? <mark key={`${keyPrefix}-${index}`} className="planning-annotation-mark">{segment.text}</mark>
+    ? <mark
+      key={`${keyPrefix}-${index}`}
+      className="planning-annotation-mark"
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      title={onOpen ? "Review annotation feedback" : undefined}
+      onClick={onOpen ? (event) => { event.stopPropagation(); onOpen(segment.annotationIds, event.currentTarget); } : undefined}
+      onKeyDown={onOpen ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(segment.annotationIds, event.currentTarget); } } : undefined}
+    >{segment.text}</mark>
     : segment.text);
 }
 
@@ -43,6 +53,7 @@ function PlanningDocumentText({
   editing,
   label,
   maxLength,
+  onOpenAnnotation,
   onChange,
 }: {
   className: string;
@@ -52,6 +63,7 @@ function PlanningDocumentText({
   editing: boolean;
   label: string;
   maxLength: number;
+  onOpenAnnotation?: (ids: string[], element: Element) => void;
   onChange: (value: string) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -76,7 +88,7 @@ function PlanningDocumentText({
       }
       onChange(next);
     }}
-  >{editing ? value : annotatedNodes(value, target, annotations, target)}</div>;
+  >{editing ? value : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
 }
 
 export function PlanningSession({
@@ -109,7 +121,8 @@ export function PlanningSession({
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [edited, setEdited] = useState<Record<string, EditedCommitmentFields>>({});
   const [editedSummary, setEditedSummary] = useState<string | null>(null);
-  const [pendingSelection, setPendingSelection] = useState<{ target: string; quote: string; start: number; end: number } | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<{ target: string; quote: string; start: number; end: number; rect: SelectionRect } | null>(null);
+  const [openAnnotation, setOpenAnnotation] = useState<{ ids: string[]; rect: SelectionRect } | null>(null);
   const [pendingComment, setPendingComment] = useState("");
   const reviewRef = useRef<HTMLElement | null>(null);
 
@@ -127,12 +140,12 @@ export function PlanningSession({
     setEditedSummary(null);
     setPendingSelection(null);
     setPendingComment("");
+    setOpenAnnotation(null);
     setState("drafting");
   }, [open, plan?.id]);
 
   if (!open) return null;
   const hasDraft = interpretation !== null;
-  const editsLocked = annotations.length > 0;
   const working = busy || state === "saving" || state === "interpreting" || state === "refining";
   const pendingValid = pendingSelection !== null && isAnnotationCommentValid(pendingComment);
   const unansweredClarifications = Boolean(interpretation?.clarifications.some((question) => !clarificationAnswers[question.id]?.trim()));
@@ -208,6 +221,7 @@ export function PlanningSession({
     setDeleteArmed(false);
     setPendingSelection(null);
     setPendingComment("");
+    setOpenAnnotation(null);
     setState("refining");
     setError("");
     try {
@@ -254,12 +268,14 @@ export function PlanningSession({
       // Comments are explicit: leaving edit mode never submits unfinished feedback.
       setPendingSelection(null);
       setPendingComment("");
+      setOpenAnnotation(null);
       setFeedbackMode(false);
       setFeedbackDirty(false);
       setDeleteArmed(false);
     } else {
       setFeedbackMode(true);
       setDeleteArmed(false);
+      setOpenAnnotation(null);
     }
   };
 
@@ -271,7 +287,8 @@ export function PlanningSession({
 
   /** Selection is valid only inside one semantic text block. */
   const captureDocumentSelection = () => {
-    if (!feedbackMode) return;
+    // Annotation lives in the reading state; text editing suspends capture.
+    if (feedbackMode) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) return;
     const range = selection.getRangeAt(0);
@@ -289,7 +306,31 @@ export function PlanningSession({
     const start = before.toString().length;
     const end = start + range.toString().length;
     if (!target || !quote || !isAnnotationRangeValid(text, start, end)) return;
-    setPendingSelection({ target, quote, start, end });
+    const box = range.getBoundingClientRect();
+    setPendingSelection({ target, quote, start, end, rect: { top: box.top, left: box.left, width: box.width, height: box.height, bottom: box.bottom } });
+    setOpenAnnotation(null);
+    setFeedbackDirty(true);
+  };
+
+  const openAnnotationCard = (ids: string[], element: Element) => {
+    const rect = rectFromElement(element);
+    if (!rect) return;
+    setPendingSelection(null);
+    setPendingComment("");
+    setOpenAnnotation({ ids, rect });
+  };
+
+  const updateAnnotation = (id: string, comment: string) => {
+    setAnnotations((current) => current.map((annotation) => annotation.id === id ? { ...annotation, comment } : annotation));
+    setFeedbackDirty(true);
+  };
+
+  const deleteAnnotation = (id: string) => {
+    setAnnotations((current) => {
+      const next = current.filter((annotation) => annotation.id !== id);
+      setOpenAnnotation((open) => open ? { ...open, ids: open.ids.filter((candidate) => candidate !== id) } : null);
+      return next;
+    });
     setFeedbackDirty(true);
   };
 
@@ -302,8 +343,8 @@ export function PlanningSession({
         <label htmlFor="planning-intent">What do you want to get done today?</label>
         <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder="Fix the failing integration test, then get the migration ready for review." />
         <small className="planning-provenance">Your words stay attached to the plan. Work OS only suggests structure for your review.</small>
-        {state === "interpreting" && <p className="planning-status"><Sparkles size={15} /> Building a reviewable plan…</p>}
-        {state === "refining" && <p className="planning-status"><Sparkles size={15} /> Refining your plan with your feedback…</p>}
+        {state === "interpreting" && <div className="planning-loading" role="status"><Wave className="planning-wave" /><span>Building a reviewable plan…</span></div>}
+        {state === "refining" && <div className="planning-loading" role="status"><FadeArc size={16} /><span>Refining your plan with your feedback…</span></div>}
         {interpretation && <section className={`planning-review${feedbackMode ? " is-editing" : ""}`} ref={reviewRef} onMouseUp={captureDocumentSelection} onKeyUp={captureDocumentSelection}>
           <div className="planning-review-head">
             <small>Review commitments</small>
@@ -313,38 +354,33 @@ export function PlanningSession({
             </div>
           </div>
           {deleteArmed && <p className="planning-notice planning-delete-notice" role="status"><Trash2 size={15} /><span>Delete this draft and start over? Click the trash button again to confirm.</span></p>}
-          {feedbackMode && editsLocked && <p className="planning-notice planning-lock-notice" role="status"><AlertTriangle size={15} /><span>Edits are locked while annotations exist. Clear annotations to edit the text again.</span></p>}
-          {feedbackMode && !editsLocked && <p className="planning-status planning-feedback-hint" role="status"><Pencil size={15} /><span>Edit the plan like a document, or highlight text to attach feedback. Adding feedback locks further edits.</span></p>}
-          {feedbackMode && pendingSelection && <div className="planning-feedback-composer">
-            <small>Feedback on “{pendingSelection.quote.length > 80 ? `${pendingSelection.quote.slice(0, 80)}…` : pendingSelection.quote}”</small>
-            <textarea aria-label="Feedback on the highlighted text" maxLength={1000} value={pendingComment} onChange={(event) => { setPendingComment(event.target.value); setFeedbackDirty(true); }} placeholder="What should change here?" />
-            <div className="planning-feedback-composer-row">
-              <button type="button" className="secondary" onClick={() => { setPendingSelection(null); setPendingComment(""); }}>Cancel</button>
-              <button type="button" className="primary" disabled={!pendingValid} onClick={() => { flushPendingAnnotation(annotations); }}>Add feedback</button>
-            </div>
-          </div>}
-          <div className="planning-document-summary-row"><PlanningDocumentText className="planning-document-summary" target="summary" value={effectiveSummary} annotations={annotations} editing={feedbackMode && !editsLocked} label="Plan summary" maxLength={500} onChange={(value) => { setEditedSummary(value); setFeedbackDirty(true); }} />{!feedbackMode && annotationsForTarget(annotations, "summary").length > 0 && <span className="planning-annotation-bubble" aria-label={`${annotationsForTarget(annotations, "summary").length} annotations on the summary`}>{annotationsForTarget(annotations, "summary").length}</span>}</div>
+          {hasDraft && <p className="planning-status planning-feedback-hint" role="status"><Pencil size={15} /><span>{feedbackMode ? "Editing the draft. Finish editing to annotate text again." : "Select text to attach feedback, or switch to Edit to change the wording."}</span></p>}
+          {pendingSelection && <SelectionAnnotator quote={pendingSelection.quote} anchor={pendingSelection.rect} value={pendingComment} canSave={pendingValid} disabled={working} onChange={(value) => { setPendingComment(value); setFeedbackDirty(true); }} onSave={() => { flushPendingAnnotation(annotations); }} onCancel={() => { setPendingSelection(null); setPendingComment(""); }} />}
+          {openAnnotation && (() => {
+            const annotationsForCard = annotations.filter((annotation) => openAnnotation.ids.includes(annotation.id));
+            return annotationsForCard.length ? <AnnotationPopover annotations={annotationsForCard} anchor={openAnnotation.rect} onEdit={updateAnnotation} onDelete={deleteAnnotation} onClose={() => setOpenAnnotation(null)} /> : null;
+          })()}
+          <div className="planning-document-summary-row"><PlanningDocumentText className="planning-document-summary" target="summary" value={effectiveSummary} annotations={annotations} editing={feedbackMode} label="Plan summary" maxLength={500} onOpenAnnotation={openAnnotationCard} onChange={(value) => { setEditedSummary(value); setFeedbackDirty(true); }} />{!feedbackMode && annotationsForTarget(annotations, "summary").length > 0 && <span className="planning-annotation-bubble" aria-label={`${annotationsForTarget(annotations, "summary").length} annotations on the summary`}>{annotationsForTarget(annotations, "summary").length}</span>}</div>
           {interpretation.commitments.map((commitment, index) => {
             const targetTitle = `title:${commitment.clientId}`;
             const targetObjective = `objective:${commitment.clientId}`;
             const targetCriteria = `criteria:${commitment.clientId}`;
             const fields = editFor(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria });
             const bubbleCount = countAnnotationsForCommitment(annotations, commitment.clientId);
-            const editable = feedbackMode && !editsLocked;
+            const editable = feedbackMode;
             return <article key={commitment.clientId}>
               <b><span className="planning-review-index">{String(index + 1).padStart(2, "0")}</span>{!feedbackMode && bubbleCount > 0 && <span className="planning-annotation-bubble" aria-label={`${bubbleCount} annotations on this commitment`}>{bubbleCount}</span>}</b>
               <div>
-                <PlanningDocumentText className="planning-document-title" target={targetTitle} value={fields.title} annotations={annotations} editing={editable} label={`Commitment ${index + 1} title`} maxLength={240} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { title: value })} />
-                <PlanningDocumentText className="planning-document-objective" target={targetObjective} value={fields.objective} annotations={annotations} editing={editable} label={`Commitment ${index + 1} objective`} maxLength={1000} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { objective: value })} />
+                <PlanningDocumentText className="planning-document-title" target={targetTitle} value={fields.title} annotations={annotations} editing={editable} label={`Commitment ${index + 1} title`} maxLength={240} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { title: value })} />
+                <PlanningDocumentText className="planning-document-objective" target={targetObjective} value={fields.objective} annotations={annotations} editing={editable} label={`Commitment ${index + 1} objective`} maxLength={1000} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { objective: value })} />
                 {(editable || fields.successCriteria.length > 0) && <>
                   <small>Done when</small>
-                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
+                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
                 </>}
               </div>
             </article>;
           })}
           {interpretation.clarifications.length > 0 && <div className="planning-clarifications"><strong>{interpretation.clarifications.length === 1 ? "One thing to clarify" : `${interpretation.clarifications.length} things to clarify`}</strong>{interpretation.clarifications.map((question) => <label key={question.id} htmlFor={`planning-clarification-${question.id}`}><span>{question.question}</span><textarea id={`planning-clarification-${question.id}`} maxLength={1000} value={clarificationAnswers[question.id] ?? ""} disabled={busy || state === "saving" || state === "refining" || state === "confirmed"} onChange={(event) => setClarificationAnswers((current) => ({ ...current, [question.id]: event.target.value }))} /></label>)}</div>}
-          {!feedbackMode && annotations.length > 0 && <details className="planning-annotation-list"><summary>Review annotation feedback</summary>{annotations.map((annotation) => <div key={annotation.id}><strong>“{annotation.quote}”</strong><span>{annotation.comment}</span></div>)}</details>}
         </section>}
         {state === "ai_unavailable" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error} {hasDraft ? "Your current draft is kept." : active ? "Try building again — confirming needs an AI-built plan while on shift." : "You can still save your own planning note."}</span></div>}
         {state === "offline_fallback" && <div className="planning-notice"><AlertTriangle size={16} /><span>{interpretation ? "Your structured plan is queued locally. It is not confirmed until sync succeeds." : "Your raw planning note is queued locally."}</span></div>}

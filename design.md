@@ -1357,6 +1357,26 @@ The companion keeps server state in one TanStack Query cache
   ceiling, session-scoped) so relaunch paints last-known work immediately and
   revalidates in the background. Sign-out clears the cache and the vault copy.
 
+### 25.14 Optimistic writes and save states
+
+- **Task adds are optimistic.** The row appears immediately in the dashboard
+  (task card or active-day list) and in the Tasks workspace with a compact
+  spinner and `Adding to today`; the submitted payload is sent exactly once.
+- **Failed adds stay in place** with a red retry control whose tooltip names the
+  failure, plus a small discard control. Retry re-sends the same payload; a
+  successful retry removes the pending row and the created task merges into the
+  caches. Pending rows never open task details, complete, or expose the
+  lifecycle menu.
+- **Goal edits render immediately** and auto-save on the existing debounce. A
+  spinner sits beside the focus statement while the save is in flight; a failed
+  save swaps it for a red retry that re-runs the save; queued-offline keeps its
+  existing notice. The same indicator appears in the hero focus line, the
+  active-day focus block, and the Tasks agenda strip.
+- **AI waits use the loading language:** the plan modal shows the Wave while
+  building the first draft and the FadeArc while refining; EOD draft/refine
+  actions use the FadeArc; task creation uses the FadeArc in its button.
+  Loading indicators accompany truthful state text and never replace it.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition
@@ -1615,17 +1635,21 @@ annotations exist, while feedback edits are unsaved, or while clarification
 questions are unanswered. Each state carries one plain-language hint naming the
 exact unblock action.
 
-Draft review carries pencil (feedback/edit mode) and trash (two-tap delete,
-local discard only) controls. In feedback mode the employee may edit sections
-freely or highlight text to attach a comment; the first saved annotation locks
-further edits with an inline notice, and clearing all annotations unlocks them.
-The editable draft is one document-like inline canvas that preserves the review
-hierarchy; it must not become a stack of visibly bordered form controls. A
-selection belongs to one semantic text block (summary, title, objective, or
-criteria) so the associated feedback stays unambiguous.
-Annotations render as highlighted quotes plus per-section count bubbles, with a
-`{N} Annotations` footer pill (hover to clear) and a matching count badge on
-`Refine plan`. Refining sends the draft plus annotations and field diffs and
+Draft review carries pencil (edit mode) and trash (two-tap delete, local discard
+only) controls. Reading is the annotation state: highlighting text inside one
+semantic block (summary, title, objective, or criteria) raises a floating
+annotator anchored at the selection — the quoted excerpt, a one-line comment
+field, and confirm/cancel controls. Enter or the check saves; Escape or cancel
+dismisses; the popover is clamped inside the viewport and never covers the
+selection it refers to. Saved annotations render as highlighted quotes with a
+per-section count bubble; activating a highlight opens a review card with the
+quote, the comment, and Edit/Delete, and `{N} Annotations` remains in the footer
+beside a matching count on `Refine plan`. Pencil switches to document editing,
+which suspends selection capture and names the mode in the hint; edits and
+annotations refine together — annotations never lock the text. The editable
+draft is one document-like inline canvas that preserves the review hierarchy; it
+must not become a stack of visibly bordered form controls.
+Refining sends the draft plus annotations and field diffs and
 returns a fresh draft; annotations are single-use and clear on each new draft.
 A failed refinement keeps the current draft. The only exception is an
 AI-outage off-shift save, which preserves the raw planning note without a draft.
