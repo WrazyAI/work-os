@@ -476,14 +476,6 @@ button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
-.companion {
-  position: absolute;
-  width: min(52%, 360px);
-  right: -8px;
-  bottom: -18px;
-  pointer-events: none;
-  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.35));
-}
 .pulse-card {
   padding: 22px;
   display: flex;
@@ -1311,9 +1303,6 @@ button:disabled {
   }
   .hero-copy {
     max-width: 82%;
-  }
-  .companion {
-    opacity: 0.45;
   }
   .capture-actions {
     flex-direction: column;
@@ -3725,20 +3714,3 @@ body.modal-open { overflow: hidden; }
 .notification-flyout.warning .notification-icon {
   color: #9b6611;
 }
-/* Companion pet: reused as a quiet state cue, never a second dashboard card. */
-.companion-pet { width: 48px; height: 48px; color: var(--ink); }
-.companion-pet path, .companion-pet circle { vector-effect: non-scaling-stroke; }
-.companion-pet .pet-shadow { fill: rgba(24, 32, 24, .12); stroke: none; }
-.companion-pet .pet-body, .companion-pet .pet-ear { fill: #273526; stroke: #182018; stroke-width: 2.5; stroke-linejoin: round; }
-.companion-pet .pet-arm { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }
-.companion-pet .pet-panel { fill: #d8f5a9; stroke: #182018; stroke-width: 2; stroke-linejoin: round; }
-.companion-pet .pet-screen { fill: #d8f5a9; stroke: #182018; stroke-width: 2.5; }
-.companion-pet .pet-tail, .companion-pet .pet-badge, .companion-pet .pet-focus { fill: none; stroke: #182018; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.companion-pet .pet-face { fill: none; stroke: #182018; stroke-width: 2.5; stroke-linecap: round; }
-.companion-pet .pet-face circle { fill: #182018; stroke: none; }
-.companion-pet .pet-spark { fill: #a8f15b; stroke: #182018; stroke-width: 1.5; stroke-linejoin: round; }
-.companion-pet.pose-sleep { opacity: .72; }
-.companion-pet.pose-alert .pet-screen { fill: #ffdf8f; }
-.companion-pet.pose-rest .pet-screen { fill: #c9e1f2; }
-.companion-pet.pose-eod .pet-screen { fill: #efc7ba; }
-.companion-pet-inline { width: 42px; height: 42px; flex: 0 0 auto; }

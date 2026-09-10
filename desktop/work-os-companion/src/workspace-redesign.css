@@ -820,21 +820,9 @@ body {
   color: #6c7569;
 }
 
-.companion {
-  width: min(36%, 270px);
-  right: 6px;
-  bottom: -24px;
-  opacity: 0.96;
-  animation: companion-settle 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.hero-companion-art { position: absolute; right: 10px; bottom: 0; width: min(40%, 290px); height: 100%; pointer-events: none; }
-.hero-companion-art .companion { width: 100%; right: 0; }
-.hero-companion-art .companion-pet-inline { position: absolute; z-index: 1; top: 24px; right: 18px; transform: rotate(5deg); }
-.tasks-companion-cue { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 10px; color: var(--muted); font-size: 11px; }
-.tasks-companion-cue .companion-pet-inline { width: 36px; height: 36px; }
+.hero-companion-art { position: absolute; right: 16px; bottom: 16px; width: min(30%, 224px); display: grid; place-items: center; pointer-events: none; }
 .eod-title-with-pet { display: flex; align-items: flex-start; gap: 10px; }
-.eod-title-with-pet .companion-pet-inline { width: 40px; height: 40px; margin-top: 2px; }
+.eod-title-with-pet .otto-eod { margin-top: 2px; }
 
 .pulse-card {
   grid-area: pulse;
@@ -3199,7 +3187,6 @@ button:not(:disabled):active {
 @media (prefers-reduced-motion: reduce) {
   .day-grid,
   .page,
-  .companion,
   .active-day-page,
   .progress-flyout {
     animation: none;
@@ -4715,12 +4702,6 @@ button:not(:disabled):active {
   color: var(--muted);
   font-size: 9.5px;
   font-style: normal;
-}
-
-/* Calmer companion art: present, quiet, never displacing content. */
-.hero-card .companion {
-  width: min(26%, 200px);
-  opacity: 0.9;
 }
 
 /* Responsive stacking — appended last so it wins the cascade at every width. */

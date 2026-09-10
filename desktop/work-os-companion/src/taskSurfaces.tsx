@@ -7,7 +7,7 @@ import { BOTTLENECK_QUESTION, composeEodMarkdown, hasBottleneckAnswer } from "./
 import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
-import { CompanionPet } from "./CompanionPet";
+import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
 
@@ -385,7 +385,7 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
-      <div className="eod-title-with-pet"><CompanionPet pose="eod" className="companion-pet-inline" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
+      <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
       <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button>

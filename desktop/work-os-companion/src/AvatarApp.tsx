@@ -20,7 +20,7 @@ import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
-import { CompanionPet } from "./CompanionPet";
+import { Otto } from "./Otto";
 import {
   avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
@@ -844,7 +844,7 @@ export default function AvatarApp(): React.ReactElement {
           <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
-            <CompanionPet pose="sleep" className="avatar-pet" />
+            <Otto pose="sleep" className="avatar-pet" />
           </button>
           </div>
         )}
@@ -873,7 +873,7 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-track" />
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
-          <CompanionPet pose={petPose} className="avatar-pet" />
+          <Otto pose={petPose} className="avatar-pet" />
           {showBadge && <span className="avatar-badge" />}
         </button>
         {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}

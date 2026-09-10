@@ -1,0 +1,359 @@
+/* Otto — the Work OS focus robot.
+   One rounded body, one signal-green visor, a lamp antenna, hover hands.
+   Every pose is a real workday state; all motion is removed under
+   prefers-reduced-motion. */
+
+.otto {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  overflow: visible;
+  --otto-ink: #182018;
+  --otto-visor: #14180f;
+  --otto-paper: #f7f8f2;
+  --otto-signal: #a8f15b;
+}
+
+.otto-shadow {
+  fill: rgba(24, 32, 24, 0.12);
+}
+
+.otto-antenna {
+  fill: none;
+  stroke: var(--otto-ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.otto-bulb {
+  fill: var(--otto-signal);
+}
+
+.otto-shell {
+  fill: var(--otto-paper);
+  stroke: var(--otto-ink);
+  stroke-width: 2.5;
+}
+
+.otto-visor {
+  fill: var(--otto-visor);
+}
+
+.otto-eye,
+.otto-dot {
+  fill: var(--otto-signal);
+}
+
+.otto-ring {
+  fill: none;
+  stroke: var(--otto-signal);
+  stroke-width: 2;
+}
+
+.otto-line {
+  fill: none;
+  stroke: var(--otto-signal);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+.otto-moon {
+  fill: var(--otto-signal);
+}
+
+.otto-hand {
+  fill: var(--otto-paper);
+  stroke: var(--otto-ink);
+  stroke-width: 2.5;
+}
+
+.otto-foot {
+  stroke: var(--otto-ink);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.otto-badge {
+  fill: none;
+  stroke: var(--otto-signal);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.otto-sparkles {
+  fill: var(--otto-signal);
+}
+
+.otto-concern {
+  fill: none;
+  stroke: #d4493f;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.otto-figure {
+  transform-origin: 48px 80px;
+}
+
+/* Pose motion -------------------------------------------------------------- */
+
+.otto[data-pose="idle"] .otto-figure {
+  animation: otto-breathe 4.2s ease-in-out infinite;
+}
+
+.otto[data-pose="sleep"] .otto-figure {
+  animation: otto-breathe 6s ease-in-out infinite;
+}
+
+.otto[data-pose="sleep"] .otto-bulb {
+  opacity: 0.35;
+}
+
+.otto[data-pose="focus"] .otto-figure {
+  animation: otto-breathe 3.4s ease-in-out infinite;
+}
+
+.otto[data-pose="focus"] .otto-bulb,
+.otto[data-pose="alert"] .otto-bulb,
+.otto[data-pose="think"] .otto-bulb {
+  animation: otto-glow 2.4s ease-in-out infinite;
+}
+
+.otto-eye,
+.otto-moon,
+.otto-ring {
+  transform-origin: 48px 54px;
+}
+
+.otto-eye {
+  animation: otto-blink 5.2s linear infinite;
+}
+
+.otto[data-pose="alert"] .ring-pulse {
+  animation: otto-ring 1.6s ease-out infinite;
+}
+
+.otto[data-pose="think"] .otto-dot {
+  animation: otto-think 1.2s ease-in-out infinite;
+}
+
+.otto[data-pose="think"] .dot-2 {
+  animation-delay: 0.15s;
+}
+
+.otto[data-pose="think"] .dot-3 {
+  animation-delay: 0.3s;
+}
+
+.otto[data-pose="celebrate"] .otto-figure {
+  animation: otto-hop 900ms cubic-bezier(0.2, 0.75, 0.25, 1) 2;
+}
+
+.otto[data-pose="celebrate"] .otto-sparkles {
+  animation: otto-sparkle 900ms ease-out 2;
+  transform-origin: 48px 40px;
+}
+
+.otto[data-pose="recover"] .otto-figure {
+  transform: rotate(-6deg);
+  animation: otto-settle 600ms ease-out both;
+}
+
+@keyframes otto-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  50% {
+    transform: scaleY(1.03);
+  }
+}
+
+@keyframes otto-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  95.5% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes otto-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes otto-ring {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+
+  70%,
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes otto-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  35% {
+    transform: translateY(-5px) rotate(3deg);
+  }
+
+  70% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes otto-sparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes otto-think {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes otto-settle {
+  from {
+    transform: rotate(-10deg);
+  }
+
+  to {
+    transform: rotate(-6deg);
+  }
+}
+
+/* Sizes -------------------------------------------------------------------- */
+
+.otto-inline {
+  width: 36px;
+  height: 36px;
+}
+
+.otto-eod {
+  width: 40px;
+  height: 40px;
+}
+
+.otto-hero {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  filter: drop-shadow(0 16px 28px rgba(24, 32, 24, 0.12));
+}
+
+.otto-connect {
+  --otto-ink: #f3f1e9;
+  width: clamp(180px, 22vw, 260px);
+  height: auto;
+  filter: drop-shadow(0 24px 44px rgba(0, 0, 0, 0.35));
+}
+
+.otto-connect .otto-bulb,
+.otto-connect .otto-eye {
+  filter: drop-shadow(0 0 7px rgba(168, 241, 91, 0.55));
+}
+
+.otto-celebrate {
+  width: 64px;
+  height: 64px;
+}
+
+.avatar-pet.otto {
+  width: 44px;
+  height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otto .otto-figure,
+  .otto .otto-eye,
+  .otto .otto-ring,
+  .otto .otto-dot,
+  .otto .otto-bulb,
+  .otto .otto-sparkles {
+    animation: none !important;
+  }
+}
+
+/* Otto preview fixture ------------------------------------------------------ */
+
+.otto-preview-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.otto-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.otto-preview-sizes {
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+}
+
+.otto-preview-cell {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.otto-preview-cell small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.otto-preview-figure {
+  width: 72px;
+  height: 72px;
+}
+
+.otto-preview-dark {
+  background: #171914;
+  border-color: #2a2d26;
+}
+
+.otto-preview-dark .card-title span {
+  color: #f3f1e9;
+}

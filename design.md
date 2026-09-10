@@ -461,10 +461,37 @@ composer remains a flat warm, accessible Work OS surface with standard controls 
 plain-language status, free of scanline texture. The console is draggable from its compact body and expanded
 header, with a visible keyboard-operable composer once opened.
 
-The `CompanionPet` is the reusable visual identity for that console: a compact,
-friendly retro desk robot with state-specific poses. It may appear as a small quiet cue
-beside the Today, Tasks, and EOD contexts, but never replaces a status label,
-becomes a dashboard card, or competes with a page's primary task action.
+**Otto** is the reusable visual identity for that console
+(`desktop/work-os-companion/src/Otto.tsx`, `otto.css`): a compact focus robot
+with one rounded ovoid body, a single signal-green visor, a lamp antenna, two
+hover hands, and a pose per real workday state.
+
+- **Silhouette rules.** Readable at 16px. One rounded body, one large visor,
+  antenna, hover hands; no boxy panels or screen grilles. The visor is the only
+  glowing element.
+- **Palette.** Exactly three colors: ink `#182018`, paper `#f7f8f2`, signal
+  `#a8f15b`. Failed states may add the danger red for a single concern mark.
+- **Pose matrix.**
+
+| Pose | Visor | Used when |
+|---|---|---|
+| `idle` | steady dot, blinks | Connect screen and neutral presence |
+| `sleep` | closed curve, dim antenna | Off shift / workday closed |
+| `focus` | bright dot with ring | Active shift, EOD review header |
+| `alert` | pulsing ring | Attention due / unfinished work |
+| `rest` | crescent | Paused shift |
+| `think` | three cycling dots | Interpreting or refining in flight |
+| `celebrate` | wink + sparkles | Task completed, plan confirmed, EOD submitted |
+| `recover` | downcast line, tilted body | Failed save, offline, degraded provider |
+
+- **Behavior.** Otto guides, reassures, and celebrates — never guilt-trips,
+  never competes with primary work, never replaces a status label, and never
+  becomes a dashboard card. It appears as a small quiet cue beside the Today,
+  Tasks, EOD, and avatar contexts, with one large appearance on the connect
+  screen. It celebrates only after work is actually recorded.
+- **Motion.** Breathing, blink, and antenna glow are slow (1.6–6s) and subtle;
+  celebrate is a short two-beat hop. All Otto motion is removed under
+  `prefers-reduced-motion`, leaving the pose silhouette intact.
 
 ## 9. Navigation and tabs
 

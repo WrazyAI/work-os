@@ -12,6 +12,7 @@ import TodayPreview from "./TodayPreview";
 import PlanningPreview from "./PlanningPreview";
 import LoadingPreview from "./LoadingPreview";
 import SkeletonsPreview from "./SkeletonsPreview";
+import OttoPreview from "./OttoPreview";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ import "./styles.css";
 import "./sessionGate.css";
 import "./workspace-redesign.css";
 import "./loading.css";
+import "./otto.css";
 import "./work-os-chat.css";
 import "./avatar.css";
 
@@ -39,6 +41,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
         : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
           : import.meta.env.DEV && params.has("preview-loading") ? LoadingPreview
               : import.meta.env.DEV && params.has("preview-skeletons") ? SkeletonsPreview
+                : import.meta.env.DEV && params.has("preview-otto") ? OttoPreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview
               : App;
