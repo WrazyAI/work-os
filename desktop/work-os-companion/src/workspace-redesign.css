@@ -4434,6 +4434,20 @@ button:not(:disabled):active {
   justify-self: center;
 }
 
+/* Explicit column pinning: conditional cells (ring, due, menu) must never
+   shift the status pill or the menu. Historical rows keep the same tracks. */
+.task-records .workspace-task > .task-check { grid-column: 1; }
+.task-records .workspace-task > .task-row-body { grid-column: 2; }
+.task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; }
+.task-records .workspace-task > .task-due { grid-column: 4; justify-self: end; text-align: right; }
+.task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; }
+.task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; }
+
+@media (max-width: 700px) {
+  .task-records .workspace-task > .task-state { grid-column: 3; }
+  .task-records .workspace-task > .workspace-task-menu { grid-column: 4; }
+}
+
 .task-records .workspace-task:hover {
   border-color: transparent;
   background: #f3f6ef;
@@ -4524,6 +4538,11 @@ button:not(:disabled):active {
   gap: 12px;
 }
 
+/* Strip sits below the active-day card inside the same page column. */
+.active-day-page .kpi-strip {
+  margin-top: 14px;
+}
+
 .kpi-card {
   display: grid;
   min-width: 0;
@@ -4547,6 +4566,7 @@ button:not(:disabled):active {
 
 .kpi-card:disabled {
   cursor: default;
+  opacity: 1;
 }
 
 .kpi-card small {

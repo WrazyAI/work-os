@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
@@ -1690,13 +1690,8 @@ export default function App() {
           </div><div className="hero-companion-art"><CompanionPet pose="sleep" className="companion-pet-inline" /><img className="companion" src={assetUrl(companionArt)} alt="Focused desk with a task checklist" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
-        <section className="kpi-strip" aria-label="Today at a glance">
-          <button className="kpi-card" onClick={() => { setTaskView("today"); setView("tasks"); }}><small><ListChecks size={13} aria-hidden="true" /> Scheduled today</small><strong>{todayParentTasks.length}</strong><em>{todayParentTasks.length ? "Open the day view" : "Plan your day"}</em></button>
-          <button className="kpi-card" disabled={!yesterdayDueTasks.length} onClick={() => { setCarryOverOpen(true); setView("tasks"); }}><small><AlertTriangle size={13} aria-hidden="true" /> Due from yesterday</small><strong className={yesterdayDueTasks.length ? "kpi-danger" : undefined}>{yesterdayDueTasks.length}</strong><em className={yesterdayDueTasks.length ? "kpi-attention" : undefined}>{yesterdayDueTasks.length ? "Review unfinished work" : "Nothing carried forward"}</em></button>
-          <button className="kpi-card" disabled={!todayCompletedCount} onClick={() => { setTaskView("completed"); setView("tasks"); }}><small><CheckCircle2 size={13} aria-hidden="true" /> Completed today</small><strong>{todayCompletedCount}</strong><em>{todayCompletedCount ? "Review the record" : "Finish a task first"}</em></button>
-          <button className="kpi-card" disabled={!visibleDay?.proposals?.length} onClick={() => setView("review")}><small><FileCheck2 size={13} aria-hidden="true" /> Reviews pending</small><strong>{visibleDay?.proposals?.length ?? 0}</strong><em>{visibleDay?.proposals?.length ? "Needs your decision" : "Nothing awaiting review"}</em></button>
-        </section>
-        <section className="panel dashboard-tasks-card">
+        <KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />
+                <section className="panel dashboard-tasks-card">
           <div className="card-title"><span><BriefcaseBusiness size={17} /> Today’s tasks</span><button onClick={() => { setTaskView("today"); setView("tasks"); }}>View all <ChevronRight size={14} /></button></div>
           {dashboardTopTasks.length ? <div className="dashboard-task-grid">{dashboardTopTasks.map((task) => <DashboardTaskCard key={String(task.provider_task_id || task.id)} task={task} currentDate={visibleDay?.shiftDate ?? ""} onOpen={() => void openTaskDetails(task)} />)}</div> : <div className="dashboard-task-empty"><strong>{yesterdayDueTasks.length ? "Nothing scheduled yet" : "Your agenda is open"}</strong><span>{yesterdayDueTasks.length ? "Review unfinished work or add today’s first priority." : "Add your first priority — the composer below plans without clocking you in."}</span></div>}
         </section>
@@ -1733,6 +1728,7 @@ export default function App() {
           void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
         }}
         onClockOut={() => setClockOutConfirmation(true)}
+        kpiStrip={<KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
       {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
@@ -1867,12 +1863,12 @@ function TaskLifecycleMenu({ task, busy, initialOpen = false, onEdit, onArchive,
   </EllipsisMenu></div>;
 }
 
-export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut }: {
+export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, otherTasks, elapsed, progressPercent, shiftStart, shiftEnd, remaining, timezone, attendance, providerBreakSeconds, reviews, initialDetailView = null, initialDetailsMenuOpen = false, initialTaskMenuId = null, paused, busy, observedOnly = false, canPause, canClockOut = true, onEditFocus, onAddTask, onManageTasks, onOpenOverdue, currentDate = "", onOpenTask, onToggleTask, onEditTask, onArchiveTask, onDeleteTask, onPause, onClockOut, kpiStrip = null }: {
   focus: string; focusSource: string; tasks: TaskRow[]; previousTasks: TaskRow[]; otherTasks: TaskRow[]; elapsed: string; progressPercent: number;
   shiftStart: string; shiftEnd: string; remaining: string; timezone?: string; attendance: DayData["attendance"] | null; providerBreakSeconds: number; reviews: number;
   initialDetailView?: "shift" | "worktivity" | null; initialDetailsMenuOpen?: boolean; initialTaskMenuId?: string | null; paused: boolean; busy: boolean; observedOnly?: boolean; canPause: boolean; canClockOut?: boolean;
   onEditFocus: () => void; onAddTask: () => void; onManageTasks: () => void; onOpenOverdue?: () => void; currentDate?: string; onOpenTask: (task: TaskRow) => void; onToggleTask: (task: TaskRow, completed: boolean) => void;
-  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void;
+  onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void; kpiStrip?: ReactNode;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const [detailsMenuOpen, setDetailsMenuOpen] = useState(initialDetailsMenuOpen || initialDetailView !== null);
@@ -1900,7 +1896,20 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
       <div className="active-task-list">{displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); return <article className={task.completed ? "completed" : ""} key={taskId}><button className="task-check" aria-label={task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={busy} onClick={() => onToggleTask(task, !task.completed)}>{task.completed && <Check size={15} />}</button><button className="active-task-copy" onClick={() => onOpenTask(task)}><strong>{task.title}</strong><small>{task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button><span className={`task-status ${task.completed ? "done" : "open"}`}>{task.completed ? "Done" : "Open"}</span><TaskLifecycleMenu task={task} busy={busy} initialOpen={initialTaskMenuId === taskId} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} /></article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
       <footer className="active-day-footer"><span>Changes save to your workday record.</span><button className="workspace-link-button" onClick={onManageTasks}><span>Open full Tasks workspace</span><ChevronRight size={14} aria-hidden="true" /></button></footer>
     </section>
+    {kpiStrip}
   </main>;
+}
+
+export function KpiStrip({ scheduledCount, yesterdayDueCount, completedCount, reviewCount, onScheduled, onYesterday, onCompleted, onReviews }: {
+  scheduledCount: number; yesterdayDueCount: number; completedCount: number; reviewCount: number;
+  onScheduled: () => void; onYesterday: () => void; onCompleted: () => void; onReviews: () => void;
+}) {
+  return <section className="kpi-strip" aria-label="Today at a glance">
+    <button className="kpi-card" onClick={onScheduled}><small><ListChecks size={13} aria-hidden="true" /> Scheduled today</small><strong>{scheduledCount}</strong><em>{scheduledCount ? "Open the day view" : "Plan your day"}</em></button>
+    <button className="kpi-card" disabled={!yesterdayDueCount} onClick={onYesterday}><small><AlertTriangle size={13} aria-hidden="true" /> Due from yesterday</small><strong className={yesterdayDueCount ? "kpi-danger" : undefined}>{yesterdayDueCount}</strong><em className={yesterdayDueCount ? "kpi-attention" : undefined}>{yesterdayDueCount ? "Review unfinished work" : "Nothing carried forward"}</em></button>
+    <button className="kpi-card" disabled={!completedCount} onClick={onCompleted}><small><CheckCircle2 size={13} aria-hidden="true" /> Completed today</small><strong>{completedCount}</strong><em>{completedCount ? "Review the record" : "Finish a task first"}</em></button>
+    <button className="kpi-card" disabled={!reviewCount} onClick={onReviews}><small><FileCheck2 size={13} aria-hidden="true" /> Reviews pending</small><strong>{reviewCount}</strong><em>{reviewCount ? "Needs your decision" : "Nothing awaiting review"}</em></button>
+  </section>;
 }
 
 export function DashboardTaskCard({ task, currentDate, onOpen }: { task: TaskRow; currentDate: string; onOpen: () => void }) {

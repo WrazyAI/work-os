@@ -75,6 +75,16 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
   });
 
+  it("pins task row columns so the status pill aligns across every row shape", () => {
+    expect(app).toContain("function KpiStrip");
+    expect(app).toContain("kpiStrip={<KpiStrip");
+    expect(app).toContain("kpiStrip?: ReactNode");
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .task-state { grid-column: 5;");
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .task-due { grid-column: 4;");
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .workspace-task-menu { grid-column: 6;");
+    expect(styles).toContain("grid-template-columns: 24px minmax(0, 1fr) 64px 104px 76px 30px !important");
+  });
+
   it("keeps focus contextual and task lifecycle actions consistent", () => {
     expect(app).toContain('className={`panel task-agenda-strip');
     expect(app).toContain("agenda-strip-chip");
