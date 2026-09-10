@@ -209,6 +209,7 @@ export default function App() {
   const syncBypass = debugScenario.enabled && debugScenario.syncBypass;
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
+  const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen;
@@ -463,6 +464,55 @@ export default function App() {
     setRefreshing(true);
     try { return await refreshInternal(options); } finally { setRefreshing(false); }
   }, [refreshInternal]);
+
+  const reloadOpenTaskDetails = useCallback(async () => {
+    const openTask = taskDetails?.task as Record<string, unknown> | undefined;
+    const taskId = openTask ? String(openTask.provider_task_id || openTask.id || "") : "";
+    if (!taskId) return;
+    const details = await loadTaskDetails(taskId);
+    setTaskDetails({ ...details, task: details.task ?? openTask, subtasks: Array.isArray(details.subtasks) ? details.subtasks : [], moveTargets: Array.isArray(details.moveTargets) ? details.moveTargets : [] });
+  }, [taskDetails]);
+
+  /** The masthead refresh revalidates the page the employee is looking at —
+   * never a blanket app refresh. The Day view also asks the provider to sync. */
+  const refreshActiveView = useCallback(async () => {
+    if (syncBypassRef.current) {
+      setRefreshing(true);
+      window.setTimeout(() => setRefreshing(false), 300);
+      return;
+    }
+    setRefreshing(true);
+    try {
+      switch (view) {
+        case "day":
+          await refresh({ refreshProviders: true, refreshAttendance: true });
+          return;
+        case "tasks": {
+          const work: Promise<unknown>[] = [refresh({ dayOnly: true, details: true }), historyQuery.refetch()];
+          if (planHistoryDate && planHistoryDate !== visibleDay?.shiftDate) work.push(historicalQuery.refetch());
+          if (taskDetails) work.push(reloadOpenTaskDetails());
+          await Promise.allSettled(work);
+          return;
+        }
+        case "review":
+        case "evidence":
+          await Promise.allSettled([refresh({ dayOnly: true, details: true })]);
+          return;
+        case "insights":
+          if (debugScenario.enabled) {
+            if (visibleDay) setInsights(insightsFixture(visibleDay, insightRange));
+          } else {
+            await Promise.allSettled([insightsQuery.refetch()]);
+          }
+          return;
+        case "settings":
+          await Promise.allSettled([queryClient.fetchQuery({ queryKey: workOsKeys.onboarding(), queryFn: fetchOnboarding, staleTime: 0 })]);
+          return;
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [debugScenario.enabled, historicalQuery, historyQuery, insightRange, insightsQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, setInsights, taskDetails, view, visibleDay]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -903,7 +953,15 @@ export default function App() {
   }
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
-  const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  // Only the record for the selected range and shift day may render: switching
+  // tabs shows the skeleton instead of the previous range's data.
+  const activeInsights = useMemo(() => {
+    if (!insights) return null;
+    const through = visibleDay?.shiftDate ?? "";
+    return insights.range === insightRange && (!through || insights.through === through) ? insights : null;
+  }, [insights, insightRange, visibleDay?.shiftDate]);
+  const activeInsightsLoading = insightsLoading || (insightsQuery.isFetching && !activeInsights);
 
   // The workspace shows skeletons until the data for the active view exists;
   // the empty copy only ever appears after a completed load found nothing.
@@ -1854,7 +1912,7 @@ export default function App() {
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh the workday" disabled={refreshing} onClick={() => void refresh({ refreshProviders: true })}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
@@ -1932,7 +1990,7 @@ export default function App() {
         />}
       {view === "review" && eodSubmitted && <main className="page"><section className="panel eod-submitted" role="status"><CheckCircle2 size={26} aria-hidden="true" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section></main>}
       {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="Prepare your EOD for review" body="Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft()}>{eodRedrafting ? "Preparing…" : "Create EOD draft"}</button></div></section></main>}
-      {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
+      {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && (
         <main className="page">
