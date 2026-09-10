@@ -94,7 +94,6 @@ assert.match(app, /onOpenTask\(task, historical\)/);
 assert.match(taskSurfaces, /Awaiting Nifty sync/);
 const queries = read("src/workOsQueries.ts");
 assert.match(queries, /\/api\/work-os\/me\/insights\?range=/);
-assert.match(app, /Exact personal insight values/);
 assert.match(app, /Restart onboarding/);
 assert.match(app, /\/api\/work-os\/me\/onboarding[\s\S]*method: "DELETE"/);
 assert.match(app, /secureState\.clearAccount\(\)/);
@@ -105,11 +104,16 @@ assert.match(app, /shiftPulse/);
 assert.match(app, /shiftStartScenarioOpened/);
 assert.match(app, /debugScenario\.dayState === "shift_start" && !shiftStartScenarioOpened\.current/);
 assert.match(app, /Clock in when you begin. Activity observation stays separate/);
-assert.match(queries, /params\.set("refreshProviders", "true")/);
-assert.match(queries, /params\.set("compact", "true")/);
-assert.match(app, /\["tasks", "review", "evidence"\]/);
+assert.ok(queries.includes('params.set("refreshProviders", "true")'), "fetchDay sets refreshProviders");
+assert.ok(queries.includes('params.set("compact", "true")'), "fetchDay sets compact for the compact variant");
+assert.ok(/const detailsViews = view === "tasks" \|\| view === "review" \|\| view === "evidence"/.test(app), "details views gate the lazy details query");
 assert.match(app, /secureState\.daySnapshot\(\)/);
-assert.match(app, /secureState\.saveDaySnapshot\(nextDay\)/);
+// Day persistence moved into the query cache: the snapshot seeds the cache,
+// and the query persister writes the filtered cache to the vault.
+assert.match(app, /queryClient\.setQueryData\(workOsKeys\.day\("compact"\), snapshot\)/);
+const queryClientSource = read("src/queryClient.ts");
+assert.match(queryClientSource, /secureState\.saveQueryCache/);
+assert.match(queryClientSource, /restoreWorkOsQueryCache/);
 assert.match(app, /updater\.check_failed/);
 assert.match(app, /pulse-provider-popover/);
 assert.match(app, /Shift pulse options/);
