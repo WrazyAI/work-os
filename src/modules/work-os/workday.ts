@@ -168,13 +168,23 @@ export function prioritizePlanCandidates<T extends { id?: string | null; provide
   items: T[], shiftDate: string, carryOver: ReadonlyMap<string, CarryOverSelection>,
 ): Array<T & { source: PlanCandidateSource; disposition: PlanCandidateDisposition; rank: number }> {
   const sourceOrder: Record<PlanCandidateSource, number> = { carry_over: 0, overdue: 1, due_today: 2, existing: 3 };
+  const dateKey = (value: unknown): string | null => {
+    if (value instanceof Date) {
+      return Number.isFinite(value.getTime())
+        ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
+        : null;
+    }
+    const match = typeof value === "string" ? value.match(/^\d{4}-\d{2}-\d{2}/) : null;
+    return match ? match[0] : null;
+  };
   return dedupePlanCandidates(items).map((task) => {
+    const dueDate = dateKey(task.due_date);
     const previous = task.id ? carryOver.get(task.id) : undefined;
     const source: PlanCandidateSource = previous
       ? "carry_over"
-      : task.due_date && task.due_date < shiftDate
+      : dueDate && dueDate < shiftDate
         ? "overdue"
-        : task.due_date === shiftDate
+        : dueDate === shiftDate
           ? "due_today"
           : "existing";
     return { task, source, disposition: previous?.disposition ?? "selected", previousRank: previous?.rank ?? Number.MAX_SAFE_INTEGER };

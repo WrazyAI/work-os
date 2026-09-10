@@ -50,6 +50,18 @@ export interface WorkOsPromptDecision {
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
+/** Date columns arrive as Date objects from the Postgres client; compare as
+ * plain YYYY-MM-DD keys instead of stringifying Date instances. */
+function dateKey(value: unknown): string | null {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime())
+      ? `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+      : null;
+  }
+  const match = typeof value === "string" ? value.match(/^\d{4}-\d{2}-\d{2}/) : null;
+  return match ? match[0] : null;
+}
+
 function localParts(at: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -76,8 +88,7 @@ function localParts(at: Date, timezone: string) {
   };
 }
 
-function shiftDate(date: string, days: number) {
-  const value = new Date(`${date}T12:00:00Z`);
+function shiftDate(date: string, days: number) {  const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 }
@@ -161,7 +172,7 @@ function candidateShiftWindows(
       const local = localParts(at, rule.timezone);
       const date = shiftDate(local.date, offset);
       const weekday = (local.weekday + offset + 7) % 7;
-      const exception = exceptions.find((item) => item.exception_date === date);
+      const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
       if (!exception && !ruleApplies(rule, date, weekday)) continue;
       if (exception && exception.kind !== "leave" && !ruleApplies(rule, date, weekday) && exception.kind !== "working_day") continue;
       const window = buildWindow(rule, date, exception);
