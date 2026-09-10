@@ -54,6 +54,7 @@ function PlanningDocumentText({
   label,
   maxLength,
   onOpenAnnotation,
+  onDocumentInput,
   onChange,
 }: {
   className: string;
@@ -64,6 +65,7 @@ function PlanningDocumentText({
   label: string;
   maxLength: number;
   onOpenAnnotation?: (ids: string[], element: Element) => void;
+  onDocumentInput?: () => void;
   onChange: (value: string) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -86,6 +88,7 @@ function PlanningDocumentText({
         event.currentTarget.textContent = value;
         return;
       }
+      onDocumentInput?.();
       onChange(next);
     }}
   >{editing ? value : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
@@ -287,8 +290,8 @@ export function PlanningSession({
 
   /** Selection is valid only inside one semantic text block. */
   const captureDocumentSelection = () => {
-    // Annotation lives in the reading state; text editing suspends capture.
-    if (feedbackMode) return;
+    // Selection annotates in every mode; typing in the draft dismisses the pill
+    // so selecting text to replace is never hijacked.
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) return;
     const range = selection.getRangeAt(0);
@@ -310,6 +313,12 @@ export function PlanningSession({
     setPendingSelection({ target, quote, start, end, rect: { top: box.top, left: box.left, width: box.width, height: box.height, bottom: box.bottom } });
     setOpenAnnotation(null);
     setFeedbackDirty(true);
+  };
+
+  const clearTransientAnnotator = () => {
+    setPendingSelection(null);
+    setPendingComment("");
+    setOpenAnnotation(null);
   };
 
   const openAnnotationCard = (ids: string[], element: Element) => {
@@ -354,13 +363,13 @@ export function PlanningSession({
             </div>
           </div>
           {deleteArmed && <p className="planning-notice planning-delete-notice" role="status"><Trash2 size={15} /><span>Delete this draft and start over? Click the trash button again to confirm.</span></p>}
-          {hasDraft && <p className="planning-status planning-feedback-hint" role="status"><Pencil size={15} /><span>{feedbackMode ? "Editing the draft. Finish editing to annotate text again." : "Select text to attach feedback, or switch to Edit to change the wording."}</span></p>}
-          {pendingSelection && <SelectionAnnotator quote={pendingSelection.quote} anchor={pendingSelection.rect} value={pendingComment} canSave={pendingValid} disabled={working} onChange={(value) => { setPendingComment(value); setFeedbackDirty(true); }} onSave={() => { flushPendingAnnotation(annotations); }} onCancel={() => { setPendingSelection(null); setPendingComment(""); }} />}
+          {hasDraft && <p className="planning-status planning-feedback-hint" role="status"><Pencil size={15} /><span>{feedbackMode ? "Editing the draft — select text to attach feedback, or keep typing." : "Select text to attach feedback, or switch to Edit to change the wording."}</span></p>}
+          {pendingSelection && <SelectionAnnotator quote={pendingSelection.quote} anchor={pendingSelection.rect} value={pendingComment} canSave={pendingValid} disabled={working} autoFocus={!feedbackMode} onChange={(value) => { setPendingComment(value); setFeedbackDirty(true); }} onSave={() => { flushPendingAnnotation(annotations); }} onCancel={() => { setPendingSelection(null); setPendingComment(""); }} />}
           {openAnnotation && (() => {
             const annotationsForCard = annotations.filter((annotation) => openAnnotation.ids.includes(annotation.id));
             return annotationsForCard.length ? <AnnotationPopover annotations={annotationsForCard} anchor={openAnnotation.rect} onEdit={updateAnnotation} onDelete={deleteAnnotation} onClose={() => setOpenAnnotation(null)} /> : null;
           })()}
-          <div className="planning-document-summary-row"><PlanningDocumentText className="planning-document-summary" target="summary" value={effectiveSummary} annotations={annotations} editing={feedbackMode} label="Plan summary" maxLength={500} onOpenAnnotation={openAnnotationCard} onChange={(value) => { setEditedSummary(value); setFeedbackDirty(true); }} />{!feedbackMode && annotationsForTarget(annotations, "summary").length > 0 && <span className="planning-annotation-bubble" aria-label={`${annotationsForTarget(annotations, "summary").length} annotations on the summary`}>{annotationsForTarget(annotations, "summary").length}</span>}</div>
+          <div className="planning-document-summary-row"><PlanningDocumentText className="planning-document-summary" target="summary" value={effectiveSummary} annotations={annotations} editing={feedbackMode} label="Plan summary" maxLength={500} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => { setEditedSummary(value); setFeedbackDirty(true); }} />{!feedbackMode && annotationsForTarget(annotations, "summary").length > 0 && <span className="planning-annotation-bubble" aria-label={`${annotationsForTarget(annotations, "summary").length} annotations on the summary`}>{annotationsForTarget(annotations, "summary").length}</span>}</div>
           {interpretation.commitments.map((commitment, index) => {
             const targetTitle = `title:${commitment.clientId}`;
             const targetObjective = `objective:${commitment.clientId}`;
@@ -371,11 +380,11 @@ export function PlanningSession({
             return <article key={commitment.clientId}>
               <b><span className="planning-review-index">{String(index + 1).padStart(2, "0")}</span>{!feedbackMode && bubbleCount > 0 && <span className="planning-annotation-bubble" aria-label={`${bubbleCount} annotations on this commitment`}>{bubbleCount}</span>}</b>
               <div>
-                <PlanningDocumentText className="planning-document-title" target={targetTitle} value={fields.title} annotations={annotations} editing={editable} label={`Commitment ${index + 1} title`} maxLength={240} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { title: value })} />
-                <PlanningDocumentText className="planning-document-objective" target={targetObjective} value={fields.objective} annotations={annotations} editing={editable} label={`Commitment ${index + 1} objective`} maxLength={1000} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { objective: value })} />
+                <PlanningDocumentText className="planning-document-title" target={targetTitle} value={fields.title} annotations={annotations} editing={editable} label={`Commitment ${index + 1} title`} maxLength={240} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { title: value })} />
+                <PlanningDocumentText className="planning-document-objective" target={targetObjective} value={fields.objective} annotations={annotations} editing={editable} label={`Commitment ${index + 1} objective`} maxLength={1000} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { objective: value })} />
                 {(editable || fields.successCriteria.length > 0) && <>
                   <small>Done when</small>
-                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} onOpenAnnotation={openAnnotationCard} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
+                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
                 </>}
               </div>
             </article>;

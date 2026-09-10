@@ -37,19 +37,20 @@ function useFloatingPosition(anchor: SelectionRect | null, width: number) {
   return { ref, style };
 }
 /** ChatGPT-style floating annotation composer anchored at the text selection. */
-export function SelectionAnnotator({ quote, anchor, value, canSave, disabled = false, onChange, onSave, onCancel }: {
+export function SelectionAnnotator({ quote, anchor, value, canSave, disabled = false, autoFocus = true, onChange, onSave, onCancel }: {
   quote: string;
   anchor: SelectionRect;
   value: string;
   canSave: boolean;
   disabled?: boolean;
+  autoFocus?: boolean;
   onChange: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
   const { ref, style } = useFloatingPosition(anchor, 344);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => { if (autoFocus) textareaRef.current?.focus(); }, [autoFocus]);
   useEffect(() => {
     const node = textareaRef.current;
     if (!node) return;

@@ -586,12 +586,12 @@ export default function App() {
     } finally { setEodRedrafting(false); }
   };
 
-  const refineEod = async (markdown: string, feedback: string) => {
+  const refineEod = async (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }> = []) => {
     if (!visibleDay || syncBypassRef.current) return false;
     setEodRedrafting(true);
     try {
       const result = await apiRequest<{ markdown: string }>('/api/work-os/me/eod/ai-draft', {
-        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate, draft: stripBottleneckSection(markdown), feedback }),
+        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate, draft: stripBottleneckSection(markdown), feedback, annotations }),
       });
       setEodDraft((current) => current ? { ...current, markdown: result.markdown, source: "ai" } : { markdown: result.markdown, source: "ai" });
       notifications.success("The draft was refined from your feedback. Your bottleneck answer was not changed.", "Draft refined");
@@ -1838,7 +1838,7 @@ export default function App() {
   }
 
   if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
-  if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
       retry={() => void refresh()}
@@ -1930,7 +1930,7 @@ export default function App() {
           onRefine={refineEod}
           onSubmit={submitEod}
         />}
-      {view === "review" && eodSubmitted && <main className="page"><section className="panel"><Empty title="EOD submitted" body="Your report is with your manager. You are done for today." /></section></main>}
+      {view === "review" && eodSubmitted && <main className="page"><section className="panel eod-submitted" role="status"><CheckCircle2 size={26} aria-hidden="true" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section></main>}
       {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="Prepare your EOD for review" body="Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft()}>{eodRedrafting ? "Preparing…" : "Create EOD draft"}</button></div></section></main>}
       {view === "insights" && <PersonalInsights data={insights} loading={insightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
@@ -2006,7 +2006,7 @@ function moveDate(date: string, amount: number) {
 }
 
 
-export function ConnectScreen({ apiBase, setApiBase, connecting, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
+export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><div className="connect-stack"><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button><details className="connect-settings"><summary>Server settings</summary><div className="connect-settings-row"><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" aria-label="Workspace server URL" /><button onClick={() => void onSave()}>Save</button></div></details></div></section><aside className="connect-art"><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
 export function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) {
   return <main className="loading"><div className="loading-shell">
     <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>

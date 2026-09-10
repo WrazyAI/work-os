@@ -400,6 +400,22 @@
   font-size: 11px;
 }
 
+.quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #898d83;
+  cursor: pointer;
+}
+
+.quiet:hover {
+  color: #cfd3c8;
+}
+
 /* Connect screen: entrance + connecting state ------------------------------ */
 
 .connect > section {
