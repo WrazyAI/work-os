@@ -34,7 +34,9 @@ type Filter = { kind: "op"; col: string; op: string; val: unknown; negate?: bool
 type EmbedSpec = {
   alias: string;
   table: string;
+  inner: boolean;
   columns: string[] | "*";
+  embeds: EmbedSpec[];
 };
 
 type ParsedSelect = {
@@ -42,13 +44,12 @@ type ParsedSelect = {
   embeds: EmbedSpec[];
 };
 
-function parseSelect(spec: string | undefined): ParsedSelect {
-  if (!spec || spec.trim() === "*" || spec.trim() === "") return { base: "*", embeds: [] };
+/** Splits a select spec on top-level commas, keeping nested parentheses intact. */
+export function splitTopLevel(input: string): string[] {
   const parts: string[] = [];
-  const embeds: EmbedSpec[] = [];
   let depth = 0;
   let cur = "";
-  for (const ch of spec) {
+  for (const ch of input) {
     if (ch === "(") depth++;
     if (ch === ")") depth--;
     if (ch === "," && depth === 0) {
@@ -57,20 +58,29 @@ function parseSelect(spec: string | undefined): ParsedSelect {
     } else cur += ch;
   }
   if (cur.trim()) parts.push(cur.trim());
-  const embedRe = /^([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\(([\s\S]*)\)$/;
+  return parts.filter(Boolean);
+}
+
+/** Parses a PostgREST-style select spec, including nested embeds and `!inner`. */
+export function parseSelect(spec: string | undefined): ParsedSelect {
+  if (!spec || spec.trim() === "*" || spec.trim() === "") return { base: "*", embeds: [] };
   const baseParts: string[] = [];
-  for (const part of parts) {
-    const embedMatch = part.match(embedRe);
-    if (embedMatch) {
-      const [, alias, table, cols] = embedMatch;
-      embeds.push({
-        alias,
-        table,
-        columns: cols.trim() === "*" ? "*" : cols.split(",").map((c) => c.trim()).filter(Boolean),
-      });
-    } else {
+  const embeds: EmbedSpec[] = [];
+  for (const part of splitTopLevel(spec)) {
+    const match = part.match(/^([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)(![a-z]+)?\(([\s\S]*)\)$/);
+    if (!match) {
       baseParts.push(part);
+      continue;
     }
+    const [, alias, table, modifier, inner] = match;
+    const nested = parseSelect(inner);
+    embeds.push({
+      alias,
+      table,
+      inner: modifier === "!inner",
+      columns: nested.base === "*" ? "*" : splitTopLevel(nested.base),
+      embeds: nested.embeds,
+    });
   }
   return { base: baseParts.length ? baseParts.join(", ") : "*", embeds };
 }
@@ -496,19 +506,6 @@ async function resolveRelation(parentTable: string, childTable: string): Promise
   return rel;
 }
 
-const columnsCache = new Map<string, string[]>();
-
-async function tableColumns(table: string): Promise<string[]> {
-  if (columnsCache.has(table)) return columnsCache.get(table)!;
-  const res = await getPool().query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
-    [table],
-  );
-  const cols = res.rows.map((r) => r.column_name as string);
-  columnsCache.set(table, cols);
-  return cols;
-}
-
 const colTypeCache = new Map<string, string | null>();
 
 async function columnDataType(table: string, column: string): Promise<string | null> {
@@ -523,39 +520,75 @@ async function columnDataType(table: string, column: string): Promise<string | n
   return t;
 }
 
+/** Resolves embeds with one batched query per embed table per level instead of
+ * one query per parent row. Nested embeds recurse on the fetched child rows. */
 async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[], embeds: EmbedSpec[]): Promise<Record<string, unknown>[]> {
-  const out = rows.map((r) => ({ ...r }));
+  if (!embeds.length || !rows.length) return rows;
+  let out = rows.map((r) => ({ ...r }));
   for (const e of embeds) {
     const rel = await resolveRelation(parentTable, e.table);
     if (!rel) throw new Error(`cannot resolve relation ${parentTable} <- ${e.table}`);
-    const childCols = e.columns === "*" ? await tableColumns(e.table) : e.columns;
-    const colList = childCols.map(ident).join(", ");
-    for (const row of out) {
-      if (rel.kind === "to-one") {
-        // FK is on the parent row (belongs-to): match the embed table's PK.
-        const fkVal = row[rel.fkColumn];
-        if (fkVal == null) {
-          row[e.alias] = null;
+    const requested = e.columns === "*" ? "*" : e.columns;
+    const pk = await primaryKeyColumn(e.table);
+    const selected: string[] | "*" = requested === "*" ? "*" : [...new Set([...requested, pk])];
+    const selectedSql = selected === "*" ? "*" : selected.map(ident).join(", ");
+
+    if (rel.kind === "to-one") {
+      const fk = rel.fkColumn;
+      const values = [...new Set(out.map((row) => row[fk]).filter((value) => value !== null && value !== undefined))];
+      let childRows: Record<string, unknown>[] = [];
+      if (values.length) {
+        const res = await getPool().query(`SELECT ${selectedSql} FROM public.${ident(e.table)} WHERE ${ident(pk)} = ANY($1)`, [values]);
+        childRows = res.rows as Record<string, unknown>[];
+      }
+      const resolved = await resolveEmbeds(e.table, childRows, e.embeds);
+      const byPk = new Map(resolved.map((row) => [row[pk], row]));
+      const missing: Record<string, unknown>[] = [];
+      for (const row of out) {
+        const child = row[fk] === null || row[fk] === undefined ? null : byPk.get(row[fk]) ?? null;
+        if (!child && e.inner) {
+          missing.push(row);
           continue;
         }
-        const embedPk = await primaryKeyColumn(e.table);
-        const res = await getPool().query(
-          `SELECT ${colList} FROM public.${ident(e.table)} WHERE ${ident(embedPk)} = $1 LIMIT 1`,
-          [fkVal],
-        );
-        row[e.alias] = res.rows[0] ?? null;
-      } else {
-        // FK is on the embed table (has-many): match against the parent row's PK.
-        const pkCol = await primaryKeyColumn(parentTable);
-        const res = await getPool().query(
-          `SELECT ${colList} FROM public.${ident(e.table)} WHERE ${ident(rel.fkColumn)} = $1`,
-          [row[pkCol]],
-        );
-        row[e.alias] = res.rows;
+        row[e.alias] = child ? stripInternalColumns(child, selected, requested) : null;
       }
+      if (missing.length) out = out.filter((row) => !missing.includes(row));
+      continue;
+    }
+
+    const parentPk = await primaryKeyColumn(parentTable);
+    const parentIds = [...new Set(out.map((row) => row[parentPk]).filter((value) => value !== null && value !== undefined))];
+    const grouped = new Map<unknown, Record<string, unknown>[]>();
+    if (parentIds.length) {
+      const res = await getPool().query(`SELECT ${selectedSql} FROM public.${ident(e.table)} WHERE ${ident(rel.fkColumn)} = ANY($1)`, [parentIds]);
+      for (const child of res.rows as Record<string, unknown>[]) {
+        const key = child[rel.fkColumn];
+        const list = grouped.get(key) ?? [];
+        list.push(child);
+        grouped.set(key, list);
+      }
+    }
+    const resolvedFlat = await resolveEmbeds(e.table, [...grouped.values()].flat(), e.embeds);
+    const resolvedByPk = new Map(resolvedFlat.map((row) => [row[pk], row]));
+    for (const row of out) {
+      const children = grouped.get(row[parentPk]) ?? [];
+      row[e.alias] = children.map((child) => {
+        const resolvedChild = resolvedByPk.get(child[pk]) ?? child;
+        return selected === "*" || requested === "*" ? resolvedChild : stripInternalColumns(resolvedChild, selected, requested);
+      });
     }
   }
   return out;
+}
+
+/** Removes columns that were fetched only to support nested embed resolution. */
+function stripInternalColumns(row: Record<string, unknown>, selected: string[] | "*", requested: string[] | "*"): Record<string, unknown> {
+  if (selected === "*" || requested === "*") return row;
+  const extra = selected.filter((column) => !requested.includes(column));
+  if (!extra.length) return row;
+  const copy = { ...row };
+  for (const column of extra) delete copy[column];
+  return copy;
 }
 
 const pkCache = new Map<string, string>();

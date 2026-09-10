@@ -205,9 +205,11 @@ assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /open_debug_
 
 const companionModules = ["day-view", "checkins", "proposals", "eod", "employee-tasks", "schedules"];
 const companionServer = companionModules.map((m) => readFileSync(resolve(import.meta.dirname, `../src/lib/work-os-${m}.ts`), "utf8")).join("\n");
-assert.match(companionServer, /refreshNiftyMirror/);
-assert.match(companionServer, /syncing: !niftyFresh/);
+assert.match(companionServer, /dedupedProviderRefresh/);
+assert.match(companionServer, /void dedupedProviderRefresh/);
+assert.match(companionServer, /syncing: options\.refreshNifty \|\| providerRefreshRunning \|\| !niftyFresh/);
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
+assert.doesNotMatch(companionServer, /await niftySyncPromise/);
 assert.match(companionServer, /role", "admin"/);
 assert.match(companionServer, /administrators may assign only their own worker profile/);
 assert.match(taskSurfaces, /No assignable Nifty-mapped members were found/);

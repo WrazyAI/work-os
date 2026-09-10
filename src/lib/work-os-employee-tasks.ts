@@ -52,35 +52,68 @@ async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
   if (error) throw new Error(`load task employee mapping: ${error.message}`);
   const assignedToPerson = Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId as string);
   if (!assignedToPerson && !isNiftyTaskAttributableToMember(task, person.nifty_member_id as string | null)) throw new Error("Task is not available to this employee");
-  return { ownerId, task };
+  return { ownerId, task, niftyMemberId: person.nifty_member_id as string | null };
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+const TASK_DETAIL_PROVIDER_REFRESH_MS = 5_000;
+const TASK_DETAIL_MIRROR_FRESH_MS = 2 * 60_000;
+
 export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
-  const initial = await employeeTaskContext(access, taskId);
-  await syncNiftyTask(initial.ownerId, initial.task.provider_task_id as string);
-  const { ownerId, task } = await employeeTaskContext(access, taskId);
+  const { ownerId, task, niftyMemberId } = await employeeTaskContext(access, taskId);
+  const providerTaskId = task.provider_task_id as string;
+  const syncedAtMs = task.synced_at ? Date.parse(String(task.synced_at)) : 0;
+  let currentTask = task;
+  // The mirror is authoritative enough within the freshness window. Outside
+  // it, refresh from Nifty quickly and fall back to the mirror on timeout —
+  // opening a task must never hang on a provider round-trip.
+  if (!syncedAtMs || Date.now() - syncedAtMs > TASK_DETAIL_MIRROR_FRESH_MS) {
+    try {
+      await withTimeout(syncNiftyTask(ownerId, providerTaskId), TASK_DETAIL_PROVIDER_REFRESH_MS, "Nifty task refresh");
+      currentTask = await getTaskByLocalOrProviderId(ownerId, taskId);
+    } catch (error) {
+      console.warn("[work-os] task detail provider refresh skipped", { taskId, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
   const { data: subtasks, error } = await db().from("work_tasks")
     .select("*, project:work_projects(id,name,provider_project_id)")
     .eq("organization_id", access.organizationId)
-    .eq("parent_provider_task_id", task.provider_task_id as string)
+    .eq("parent_provider_task_id", providerTaskId)
     .not("status", "in", "(archived,deleted)")
     .order("completed", { ascending: true })
     .order("provider_created_at", { ascending: true });
   if (error) throw new Error(`load task subtasks: ${error.message}`);
-  const available = await listPersonTasks(ownerId, access.personId as string, { includeLedgerHistory: true, limit: 500 });
-  const moveTargets = (available ?? []).filter((candidate) =>
-    candidate.completed !== true
-    && candidate.status !== "archived"
-    && candidate.status !== "deleted"
-    && !candidate.parent_provider_task_id
-    && candidate.provider_project_id === task.provider_project_id
-    && candidate.provider_task_id !== task.provider_task_id
-  ).map((candidate) => ({
+  // Move targets are a bounded same-project parent set; attribution is filtered
+  // in JS exactly like listPersonTasks did, without its per-task embed fan-out.
+  const { data: moveRows, error: moveError } = await db().from("work_tasks")
+    .select("id,provider_task_id,title,assignee_person_ids,raw")
+    .eq("organization_id", access.organizationId)
+    .eq("provider_project_id", (currentTask.provider_project_id as string) ?? "")
+    .is("parent_provider_task_id", null)
+    .eq("completed", false)
+    .not("status", "in", "(archived,deleted)")
+    .order("provider_created_at", { ascending: false })
+    .limit(200);
+  if (moveError) throw new Error(`load task move targets: ${moveError.message}`);
+  const moveTargets = (moveRows ?? []).filter((candidate: Record<string, unknown>) => {
+    if (candidate.provider_task_id === providerTaskId) return false;
+    const assignedToPerson = Array.isArray(candidate.assignee_person_ids) && candidate.assignee_person_ids.includes(access.personId as string);
+    return assignedToPerson || isNiftyTaskAttributableToMember(candidate, niftyMemberId);
+  }).slice(0, 50).map((candidate: Record<string, unknown>) => ({
     id: candidate.id,
     provider_task_id: candidate.provider_task_id,
     title: candidate.title,
   }));
-  const hydrated = await hydrateTaskAssignees(ownerId, [task, ...(subtasks ?? [])] as Json[]);
+  const hydrated = await hydrateTaskAssignees(ownerId, [currentTask, ...(subtasks ?? [])] as Json[]);
   return { task: hydrated[0], subtasks: hydrated.slice(1), moveTargets };
 }
 

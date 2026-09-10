@@ -222,6 +222,8 @@ function queryString(params?: NiftyListParams): string {
   return qs ? `?${qs}` : "";
 }
 
+const NIFTY_REQUEST_TIMEOUT_MS = Number(process.env.NIFTY_REQUEST_TIMEOUT_MS ?? 20_000);
+
 async function niftyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const makeRequest = async (token: string) => fetch(`${niftyApiBase()}${path}`, {
     ...init,
@@ -232,6 +234,8 @@ async function niftyRequest<T>(path: string, init?: RequestInit): Promise<T> {
       Authorization: `Bearer ${token}`,
     },
     cache: "no-store",
+    // Provider calls must never hang a request path indefinitely.
+    signal: init?.signal ?? AbortSignal.timeout(NIFTY_REQUEST_TIMEOUT_MS),
   });
 
   let res = await makeRequest(await getAccessToken());

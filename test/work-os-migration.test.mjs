@@ -34,6 +34,7 @@ const migrations = [
     "neon/migrations/0033_adaptive_planning.sql",
     "neon/migrations/0034_adaptive_planning_atomic_save.sql",
     "neon/migrations/0035_ai_plan_build_confirmation_gate.sql",
+    "neon/migrations/0036_work_os_query_indexes.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
