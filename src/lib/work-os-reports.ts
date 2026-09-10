@@ -23,9 +23,9 @@ export async function createEodReport(userId: string, body: Json) {
 
   const tasks = await listTasks(userId, { personId });
   const dayTasks = (tasks as Json[]).filter((task) => {
-    const due = task.due_date as string | null;
-    const completedAt = task.completed_at as string | null;
-    return due === reportDate || (completedAt && completedAt.slice(0, 10) === reportDate) || (!task.completed && (!due || due <= reportDate));
+    const due = dateOnly(task.due_date);
+    const completedAt = dateOnly(task.completed_at);
+    return due === reportDate || (completedAt !== null && completedAt === reportDate) || (!task.completed && (!due || due <= reportDate));
   });
   const evidence = await listEvidence(userId, { personId, date: reportDate }) as Json[];
   const evidenceClass = (item: Json) => (item.metrics as Json | undefined)?.evidenceClass;

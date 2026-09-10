@@ -1,6 +1,7 @@
 import { listPersonTasks } from "@/lib/work-os";
 import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 
 type Json = Record<string, unknown>;
 
@@ -36,7 +37,7 @@ function taskContext(rows: Json[]): PlanningTask[] {
       id: row.id as string,
       title: row.title as string,
       description: asText(row.description),
-      dueDate: asText(row.due_date, 10),
+      dueDate: dateOnly(row.due_date),
       status: asText(row.status, 120),
       blockedReason: asText(row.blocked_reason),
     }));
@@ -95,7 +96,7 @@ export async function buildPlanningContext(access: WorkOsAccess, date: string): 
     recentUpdates: (updateResult.data ?? []).map((row: Json) => asText(row.input_text, 600)).filter((item): item is string => !!item),
     githubEvidence: (githubResult.data ?? []).flatMap((row: Json) => {
       const title = asText(row.title, 240);
-      const evidenceDate = asText(row.evidence_date, 10);
+      const evidenceDate = dateOnly(row.evidence_date);
       if (!title || !evidenceDate) return [];
       return [{ title, summary: asText(row.summary, 600), url: asText(row.url, 1_000), date: evidenceDate }];
     }),

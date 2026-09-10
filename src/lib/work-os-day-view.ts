@@ -9,7 +9,7 @@ import { getWorkday } from "@/lib/work-os-workday";
 import { loadPersistedWorktivityAttendance, observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
-import { db, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { db, dateOnly, loadShiftData, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { suppressPromptForSubmittedEod } from "@/modules/work-os/workday";
 
@@ -119,7 +119,7 @@ export async function getWorkOsDay(
     employeeUpdates: 0,
     outputEvidence: evidenceRows.filter((item: any) => item.source !== "worktivity").length,
     activityContext: evidenceRows.filter((item: any) => item.source === "worktivity").length || (attendance.attendance.state === "active" || attendance.attendance.state === "paused" ? 1 : 0),
-    completedTasks: historyRows.filter((item) => item.completed === true && String(item.completed_at ?? "").slice(0, 10) === shiftDate).length,
+    completedTasks: historyRows.filter((item) => item.completed === true && dateOnly(item.completed_at) === shiftDate).length,
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
   const workdayPrompt = suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined);

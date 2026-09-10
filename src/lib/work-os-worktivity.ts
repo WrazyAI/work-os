@@ -122,25 +122,34 @@ export async function syncWorktivityEvidence(userId: string, date = today(), per
       }, { onConflict: "organization_id,provider,external_event_id" }).select("*"),
       "upsert Worktivity activity event",
     );
+    const evidenceFields = {
+      user_id: userId,
+      organization_id: personRow.organization_id,
+      person_id: personRow.id,
+      evidence_event_id: event.id,
+      evidence_date: date,
+      source: "worktivity",
+      title: `Worktivity activity: ${(person as { display_name: string }).display_name}`,
+      summary: `${Math.round(totalMinutes)} tracked minutes across ${apps.length} apps/sites.`,
+      metrics: {
+        totalMinutes,
+        topApps: apps.slice(0, 10),
+        categories: [...categories.entries()].map(([category, minutes]) => ({ category, minutes })),
+      },
+      raw: { apps },
+      updated_at: new Date().toISOString(),
+    };
+    // The uniqueness guarantee on evidence_event_id is a partial index, which
+    // ON CONFLICT cannot target through the query shim. Select, then update.
+    const existingEvidence = await ensureNoError(
+      supabase.from("work_evidence").select("id").eq("evidence_event_id", event.id).maybeSingle(),
+      "load existing Worktivity evidence",
+    );
     await ensureNoError(
-      supabase.from("work_evidence").upsert({
-        user_id: userId,
-        organization_id: personRow.organization_id,
-        person_id: personRow.id,
-        evidence_event_id: event.id,
-        evidence_date: date,
-        source: "worktivity",
-        title: `Worktivity activity: ${(person as { display_name: string }).display_name}`,
-        summary: `${Math.round(totalMinutes)} tracked minutes across ${apps.length} apps/sites.`,
-        metrics: {
-          totalMinutes,
-          topApps: apps.slice(0, 10),
-          categories: [...categories.entries()].map(([category, minutes]) => ({ category, minutes })),
-        },
-        raw: { apps },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "evidence_event_id" }),
-      "insert Worktivity evidence",
+      existingEvidence?.id
+        ? supabase.from("work_evidence").update(evidenceFields).eq("id", existingEvidence.id)
+        : supabase.from("work_evidence").insert(evidenceFields),
+      existingEvidence?.id ? "update Worktivity evidence" : "insert Worktivity evidence",
     );
     count += 1;
   }

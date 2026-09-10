@@ -173,7 +173,7 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
   const pending = tasks.filter((task) => task.completed !== true && !["archived", "deleted"].includes(String(task.status ?? "")));
   const selected = (view === "overdue"
     ? pending.filter((task) => {
-      const due = dateOnly(typeof task.due_date === "string" ? task.due_date : null);
+      const due = dateOnly(task.due_date);
       return !!due && due < currentDate;
     })
     : pending)

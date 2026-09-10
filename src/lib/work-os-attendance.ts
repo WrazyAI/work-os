@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
-import { activeSession, syncWorktivitySession } from "@/lib/work-os-workday";
+import { activeSession, clockIn, insertHistoricalWorktivitySession, syncWorktivitySession, transitionSession } from "@/lib/work-os-workday";
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
@@ -269,6 +269,11 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
   let session = existing;
   if (projection.source === "worktivity" && !projection.stale) {
     await persistAttendanceObservation(access, timezone, projection);
+    // A session left open on an earlier day would otherwise block today's
+    // clock-in forever; close it from the stored observations first.
+    await closeStaleWorktivitySessions(access).catch((error) => {
+      console.error("[work-os] stale Worktivity session repair failed", { personId: access.personId, message: error instanceof Error ? error.message : "unknown" });
+    });
     session = await syncWorktivitySession(access, projection);
     session = await persistProviderBreaks(access, session, activityLogs, projection.observedAt, false);
     if (projection.status === "break") projection.message = "Worktivity OnBreak observed; the active workday and provider break time are synchronized.";
@@ -346,3 +351,162 @@ export async function syncDueWorktivityAttendance(limit = 8) {
 
 // Keep the old name for callers outside the focused checkout.
 export const reconcileWorktivityAttendance = observeWorktivityAttendance;
+
+/* ── Historical reconciliation ───────────────────────────────────────────────
+ * The live observer only ever runs for "now", so a session left open (or
+ * never created) on a past day blocks every later session and disappears from
+ * observed-time insights. These helpers repair history from authentic provider
+ * data only: stored five-minute observations, or the provider's own activity
+ * logs for days before observations existed. Nothing is fabricated. */
+
+const MIN_RECONCILED_SESSION_MS = 5 * 60_000;
+
+/** pg returns `date` columns as local-midnight Date objects; normalize without
+ * any timezone re-interpretation. */
+function dateOnlyString(value: unknown): string {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+  return String(value ?? "").slice(0, 10);
+}
+
+type AttendanceObservationRow = {
+  observed_at: string;
+  state: string | null;
+  status: string | null;
+  clocked_in_at: string | null;
+  clocked_out_at: string | null;
+};
+
+/** First/last observed active moment for one employee-local day. Idle and
+ * break captures still belong to the observed workday; off-shift does not.
+ * Always returns ISO strings: pg may hand back Date objects, and the session
+ * writers only accept string timestamps. */
+export function activeObservationWindow(observations: Array<Pick<AttendanceObservationRow, "observed_at" | "state">>) {
+  const toIso = (value: unknown) => value instanceof Date ? value.toISOString() : String(value);
+  const active = observations
+    .filter((observation) => observation.state === "active" || observation.state === "paused")
+    .sort((left, right) => Date.parse(toIso(left.observed_at)) - Date.parse(toIso(right.observed_at)));
+  if (!active.length) return null;
+  const clockedInAt = toIso(active[0].observed_at);
+  const clockedOutAt = toIso(active[active.length - 1].observed_at);
+  if (Date.parse(clockedOutAt) - Date.parse(clockedInAt) < MIN_RECONCILED_SESSION_MS) return null;
+  return { clockedInAt, clockedOutAt };
+}
+
+async function observationsForLocalDate(access: WorkOsAccess, date: string) {
+  const { data, error } = await db().from("work_attendance_observations")
+    .select("observed_at,state,status,clocked_in_at,clocked_out_at")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+    .eq("provider", "worktivity").eq("local_date", date)
+    .order("observed_at", { ascending: true });
+  if (error) throw new Error(`load Worktivity observations for repair: ${error.message}`);
+  return (data ?? []) as AttendanceObservationRow[];
+}
+
+/** Provider activity logs for one employee-local day (used before persisted
+ * observations existed). */
+export async function fetchWorktivityActivityForLocalDate(employeeId: string, timezone: string, date: string) {
+  const start = zonedDateTimeToUtc(date, "00:00", timezone).toISOString();
+  const end = zonedDateTimeToUtc(nextLocalDate(date), "00:00", timezone).toISOString();
+  const logs = await loadActivityHistory(employeeId, start, end);
+  return normalizeWorktivityActivityLogs(logs, employeeId);
+}
+
+async function providerSessionWindow(employeeId: string, timezone: string, date: string) {
+  const logs = await fetchWorktivityActivityForLocalDate(employeeId, timezone, date);
+  const dayEnd = zonedDateTimeToUtc(nextLocalDate(date), "00:00", timezone).toISOString();
+  const window = deriveWorktivitySessionWindow(logs, dayEnd);
+  const lastActive = logs
+    .filter((log) => [0, 1, 2, 3].includes(log.Status) && Number.isFinite(Date.parse(log.CreateDate)))
+    .map((log) => log.CreateDate)
+    .sort((left, right) => Date.parse(left) - Date.parse(right))
+    .at(-1) ?? null;
+  const clockedInAt = window.clockedInAt ?? lastActive;
+  const clockedOutAt = window.clockedOutAt ?? lastActive;
+  if (!clockedInAt || !clockedOutAt) return null;
+  if (Date.parse(clockedOutAt) - Date.parse(clockedInAt) < MIN_RECONCILED_SESSION_MS) return null;
+  return { clockedInAt, clockedOutAt };
+}
+
+/** Close every open session that belongs to a day before the employee's local
+ * today, using that day's last observed active moment. A stale eod_due session
+ * otherwise blocks all future Worktivity clock-ins for the employee. */
+export async function closeStaleWorktivitySessions(access: WorkOsAccess) {
+  if (!access.personId) return { closed: 0 };
+  const { data: onboarding, error: onboardingError } = await db().from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).maybeSingle();
+  if (onboardingError) throw new Error(`load repair timezone: ${onboardingError.message}`);
+  const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
+  const today = localDateForTimezone(new Date(), timezone);
+  const { data: open, error } = await db().from("work_sessions").select("id,shift_date")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+    .is("clocked_out_at", null).neq("correction_status", "needs_correction")
+    .lt("shift_date", today);
+  if (error) throw new Error(`load stale work sessions: ${error.message}`);
+  let closed = 0;
+  for (const session of open ?? []) {
+    const date = dateOnlyString(session.shift_date);
+    const window = activeObservationWindow(await observationsForLocalDate(access, date));
+    if (!window) continue;
+    await transitionSession(access, { action: "clock_out", observed_at: window.clockedOutAt, extended_acknowledged: true }, `worktivity:repair:clock-out:${session.id}`, "worktivity", true);
+    closed += 1;
+  }
+  return { closed };
+}
+
+/** Create or close the one session for an employee-local day from authentic
+ * provider evidence. Idempotent: existing closed sessions are left untouched,
+ * and the transition keys make re-runs safe. */
+export async function reconcileWorktivitySessionForDate(access: WorkOsAccess, date: string, options: { preferProvider?: boolean } = {}) {
+  if (!access.personId || !worktivityConfigured()) return { status: "skipped" as const };
+  const [{ data: person, error: personError }, { data: onboarding, error: onboardingError }] = await Promise.all([
+    db().from("work_people").select("worktivity_employee_id").eq("organization_id", access.organizationId).eq("id", access.personId as string).single(),
+    db().from("work_employee_onboarding").select("timezone").eq("organization_id", access.organizationId).eq("person_id", access.personId as string).maybeSingle(),
+  ]);
+  if (personError) throw new Error(`load repair person mapping: ${personError.message}`);
+  if (onboardingError) throw new Error(`load repair timezone: ${onboardingError.message}`);
+  const employeeId = person.worktivity_employee_id as string | null;
+  const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
+
+  const { data: existing, error: existingError } = await db().from("work_sessions").select("id,shift_date,clocked_out_at,correction_status")
+    .eq("organization_id", access.organizationId).eq("person_id", access.personId as string).eq("shift_date", date)
+    .order("created_at", { ascending: true });
+  if (existingError) throw new Error(`load repair sessions: ${existingError.message}`);
+  const rows = existing ?? [];
+  const openRows = rows.filter((row) => !row.clocked_out_at && row.correction_status !== "needs_correction");
+  if (rows.length && !openRows.length) return { status: "present" as const };
+
+  const observations = await observationsForLocalDate(access, date);
+  let window = activeObservationWindow(observations);
+  if (!window && employeeId && (options.preferProvider === true || !observations.length)) {
+    window = await providerSessionWindow(employeeId, timezone, date);
+  }
+  if (!window) return { status: "no_window" as const };
+
+  if (openRows.length) {
+    await transitionSession(access, { action: "clock_out", observed_at: window.clockedOutAt, extended_acknowledged: true }, `worktivity:repair:clock-out:${openRows[0].id}`, "worktivity", true);
+    return { status: "closed" as const };
+  }
+
+  await closeStaleWorktivitySessions(access);
+  const live = await activeSession(access);
+  if (live) {
+    // A live session (today) blocks the normal clock-in path. A closed
+    // historical row does not violate the one-active-session invariant.
+    await insertHistoricalWorktivitySession(access, { date, clockedInAt: window.clockedInAt, clockedOutAt: window.clockedOutAt, timezone });
+    return { status: "created_closed" as const };
+  }
+  await clockIn(access, {
+    observed_at: window.clockedInAt,
+    source: "worktivity",
+    late_acknowledged: true,
+    exception_acknowledged: true,
+    exception_reason: "Backfilled from stored Worktivity activity",
+  }, `worktivity:repair:clock-in:${access.personId}:${date}`);
+  const created = await activeSession(access);
+  if (created && dateOnlyString(created.shift_date) === date) {
+    await transitionSession(access, { action: "clock_out", observed_at: window.clockedOutAt, extended_acknowledged: true }, `worktivity:repair:clock-out:${created.id}`, "worktivity", true);
+  }
+  return { status: "created" as const };
+}

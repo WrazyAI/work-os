@@ -1,6 +1,7 @@
 import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import { hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 
@@ -85,7 +86,7 @@ export async function recordTaskDayEvent(
 }
 
 const db = () => createAdminClient();
-const dateOf = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+const dateOf = (value: unknown) => dateOnly(value);
 
 function cursorValue(row: DailyWorkspaceTaskRow) {
   const createdAt = Date.parse(String(row.provider_created_at ?? row.created_at ?? ""));
@@ -104,7 +105,7 @@ export function decodeWorkspaceCursor(value: string | null | undefined) {
 
 export function resolveTaskDayAttribution(task: Json, events: Json[], date: string) {
   const byType = (eventType: string) => events.find((event) => event.event_type === eventType);
-  if (task.due_date === date) return { reason: "due_date" as const, event: null };
+  if (dateOf(task.due_date) === date) return { reason: "due_date" as const, event: null };
   const surfaced = byType("surfaced");
   if (surfaced) return { reason: "surfaced" as const, event: surfaced };
   const completed = byType("completed");
@@ -244,14 +245,15 @@ export async function resolveDailyWorkspace(
     ? encodeWorkspaceCursor(cursorValue(page[page.length - 1]))
     : null;
 
-  const overdue = parents.filter((task) => task.completed !== true && task.due_date && task.due_date < date);
+  const overdue = parents.filter((task) => task.completed !== true && dateOf(task.due_date) !== null && dateOf(task.due_date)! < date);
   const yesterday = addDays(date, -1);
   const carryMap = new Map<string, { label: string; tasks: Json[] }>();
   for (const task of overdue) {
-    const key = task.due_date === yesterday ? "yesterday" : task.due_date >= addDays(date, -7) ? String(task.due_date) : "older";
+    const due = dateOf(task.due_date)!;
+    const key = due === yesterday ? "yesterday" : due >= addDays(date, -7) ? due : "older";
     const label = key === "yesterday" ? "Yesterday" : key === "older" ? "Older" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${key}T12:00:00Z`));
     const group = carryMap.get(key) ?? { label, tasks: [] };
-    group.tasks.push({ ...task, carryReason: `Overdue since ${task.due_date}` });
+    group.tasks.push({ ...task, carryReason: `Overdue since ${due}` });
     carryMap.set(key, group);
   }
   const carryOverGroups = [...carryMap.entries()]

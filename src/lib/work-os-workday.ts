@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { WorkOsConflictError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { listPersonTasks } from "@/lib/work-os";
+import { dateOnly } from "@/lib/work-os-internal";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
@@ -164,7 +165,8 @@ async function loadCarryOverItems(access: WorkOsAccess, shiftDate: string) {
 export async function ensureDailyPlan(access: WorkOsAccess, session: Record<string, any>) {
   const existing = await loadPlan(access, session.id as string);
   if (existing) return existing;
-  const shiftDate = String(session.shift_date);
+  const shiftDate = dateOnly(session.shift_date);
+  if (!shiftDate) throw new Error("Work session is missing its shift date");
   const dated = await loadPlanByDate(access, shiftDate);
   if (dated) {
     if (dated.session_id !== session.id || dated.status === "closed") {
@@ -368,6 +370,54 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     }
   }
   return existing;
+}
+
+/** Insert a finished Worktivity-attributed interval for historical repair while
+ * a current-day session may be live. A closed row does not violate the
+ * one-active-session invariant. Idempotent through its clock-in/out keys. */
+export async function insertHistoricalWorktivitySession(access: WorkOsAccess, input: { date: string; clockedInAt: string; clockedOutAt: string; timezone: string }) {
+  const shift = await shiftFor(access, new Date(input.clockedInAt), "upcoming").catch(() => null);
+  const now = new Date().toISOString();
+  const inserted = await db().from("work_sessions").insert({
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    schedule_id: shift?.scheduleId ?? null,
+    shift_date: input.date,
+    state: "clocked_out",
+    timezone: shift?.timezone ?? input.timezone,
+    scheduled_starts_at: shift?.startsAt ?? null,
+    scheduled_ends_at: shift?.endsAt ?? null,
+    clocked_in_at: input.clockedInAt,
+    clocked_out_at: input.clockedOutAt,
+    source: "worktivity",
+    clock_in_idempotency_key: `worktivity:repair:clock-in:${access.personId}:${input.date}`,
+    clock_out_idempotency_key: `worktivity:repair:clock-out:${access.personId}:${input.date}`,
+    exception_acknowledged_at: now,
+    exception_reason: "Backfilled from stored Worktivity activity",
+    correction_status: "valid",
+    created_by: access.ctx.user.id,
+    updated_at: now,
+  }).select("id").single();
+  if (inserted.error) {
+    if (/duplicate|unique/i.test(inserted.error.message)) return;
+    throw new Error(`insert historical Worktivity session: ${inserted.error.message}`);
+  }
+  const sessionId = (inserted.data as { id?: string } | null)?.id;
+  if (!sessionId) return;
+  const event = await db().from("work_session_events").insert({
+    organization_id: access.organizationId,
+    person_id: access.personId,
+    session_id: sessionId,
+    event_type: "clock_out",
+    from_state: "clocked_in",
+    to_state: "clocked_out",
+    source: "worktivity",
+    observed_at: input.clockedOutAt,
+    actor_user_id: access.ctx.user.id,
+    idempotency_key: `worktivity:repair:event:${access.personId}:${input.date}`,
+    metadata: { backfill: true, clockedInAt: input.clockedInAt, clockedOutAt: input.clockedOutAt },
+  });
+  if (event.error && !/duplicate/i.test(event.error.message)) throw new Error(`record historical session event: ${event.error.message}`);
 }
 
 export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" | "worktivity" = "desktop", allowProviderBreakTransitions = false) {

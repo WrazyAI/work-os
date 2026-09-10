@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api";
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
+import { dateOnly } from "@/lib/work-os-internal";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 
 type Json = Record<string, any>;
@@ -93,11 +94,11 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
 
   const days = dates.map((date, index) => {
     const workspace = workspaces[index];
-    const daySessions = sessions.filter((item: any) => item.shift_date === date);
-    const plan = plans.find((item: any) => item.shift_date === date) as Json | undefined;
+    const daySessions = sessions.filter((item: any) => dateOnly(item.shift_date) === date);
+    const plan = plans.find((item: any) => dateOnly(item.shift_date) === date) as Json | undefined;
     const items = Array.isArray(plan?.items) ? (plan.items as Json[]) : [];
-    const dayCheckIns = checkIns.filter((item: any) => item.shift_date === date && item.substantive === true);
-    const dayEvidence = evidence.filter((item: any) => item.evidence_date === date);
+    const dayCheckIns = checkIns.filter((item: any) => dateOnly(item.shift_date) === date && item.substantive === true);
+    const dayEvidence = evidence.filter((item: any) => dateOnly(item.evidence_date) === date);
     const references = [
       ...(plan ? [{ type: "plan", id: plan.id, date, label: `Goal for ${date}`, target: `/work-os?view=tasks&date=${date}` }] : []),
       ...workspace.tasks.map((item) => ({ type: "task", id: item.id, date, label: item.title, target: `/work-os?view=tasks&date=${date}&task=${item.provider_task_id}` })),
