@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
@@ -31,7 +31,7 @@ import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parent
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
 import { CompanionPet } from "./CompanionPet";
@@ -321,16 +321,58 @@ export default function App() {
   useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
 
   const queryClient = useQueryClient();
-  const invalidateTaskData = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });
-    void queryClient.invalidateQueries({ queryKey: ["work-os", "task"] });
-    void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
-    void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
-  }, [queryClient]);
   const invalidateDayData = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
     void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
+  }, [queryClient]);
+
+  const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
+  const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
+    taskRowId(task) === rowId ? { ...task, ...patch } : task;
+
+  /** Surgical cache updates: a task write patches exactly the cached rows it
+   * touched instead of invalidating every list and refetching the page. */
+  const patchTaskCaches = useCallback((rowId: string, patch: Record<string, any>) => {
+    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+      ...current,
+      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.map((task) => patchTaskRow(task, rowId, patch)) })),
+    } : current);
+    for (const variant of ["compact", "details"] as const) {
+      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
+        ...current,
+        tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
+      } : current);
+    }
+  }, [queryClient]);
+
+  const removeTaskFromCaches = useCallback((rowId: string) => {
+    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+      ...current,
+      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.filter((task) => taskRowId(task) !== rowId) })),
+    } : current);
+    for (const variant of ["compact", "details"] as const) {
+      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
+        ...current,
+        tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
+      } : current);
+    }
+  }, [queryClient]);
+
+  const insertTaskIntoCaches = useCallback((task: Record<string, any>) => {
+    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => {
+      if (!current || !current.pages.length) return current;
+      const exists = current.pages.some((page) => page.tasks.some((row) => taskRowId(row) === taskRowId(task)));
+      if (exists) return current;
+      return { ...current, pages: [{ ...current.pages[0], tasks: [task, ...current.pages[0].tasks] }, ...current.pages.slice(1)] };
+    });
+    for (const variant of ["compact", "details"] as const) {
+      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => {
+        if (!current) return current;
+        if (current.tasks.some((row) => taskRowId(row) === taskRowId(task))) return current;
+        return { ...current, tasks: [task, ...current.tasks] };
+      });
+    }
   }, [queryClient]);
   const signedIn = !!session;
   const detailsViews = view === "tasks" || view === "review" || view === "evidence";
@@ -679,17 +721,19 @@ export default function App() {
     }
     if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
       await action();
-      // Precise cache invalidation replaces blanket refetches: task/workspace
-      // writes touch task lists and details; everything else refreshes the day.
-      if (label.startsWith("task.") || label.startsWith("workspace.")) invalidateTaskData();
-      else invalidateDayData();
+      // Task/workspace writes already patched the caches surgically; just mark
+      // them for the next natural revalidation (focus, TTL, view entry) so the
+      // page never refetches everything for one row. Everything else (shift,
+      // report, proposal, check-in) materially changes the day and refreshes it.
+      if (label.startsWith("task.") || label.startsWith("workspace.")) {
+        void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory(), refetchType: "none" });
+        void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details"), refetchType: "none" });
+        void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"], refetchType: "none" });
+      } else {
+        invalidateDayData();
+        await refresh();
+      }
       const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
-      // A failed refresh after a committed write must not present the action
-      // as failed — the write is done; surface success and refresh lazily.
-      await refresh().catch((refreshError) => {
-        diagnostics.warn("ui.action.refresh_after_action", refreshError instanceof Error ? refreshError.message : "post-action refresh failed", { action: label, activeView: view });
-        return null;
-      });
       void emit("work-os://main-day-changed");
       diagnostics.info("ui.action.completed", label, { activeView: view });
       notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
@@ -859,6 +903,14 @@ export default function App() {
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  // The workspace shows skeletons until the data for the active view exists;
+  // the empty copy only ever appears after a completed load found nothing.
+  const viewingHistorical = !!planHistoryDate && planHistoryDate !== (visibleDay?.shiftDate ?? "");
+  const tasksInitialLoading = !visibleDay
+    || (viewingHistorical
+      ? historicalQuery.isPending && !historicalQuery.data
+      : taskView !== "today" && historyQuery.isPending && !historyQuery.data);
 
   useEffect(() => {
     // Scenario/offline insights are computed on-device; live insights come
@@ -1264,6 +1316,7 @@ export default function App() {
     }
     void act("task.create", async () => {
       const result = await apiRequest<{ task: Record<string, any>; providerStatus: string; mirrorStatus: string }>("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: taskComposerTitle.trim(), description: taskComposerDescription.trim() || undefined, assignee_person_ids: taskComposerAssignees }) });
+      if (result.task) insertTaskIntoCaches(result.task);
       setTaskComposerTitle(""); setTaskComposerDescription(""); setTaskComposerAssignees([]);
       if (result.providerStatus !== "nifty_confirmed") notifications.info(`Task submitted · ${result.mirrorStatus}`, "Provider confirmation pending");
       setTaskComposerOpen(false);
@@ -1293,6 +1346,7 @@ export default function App() {
     }
     void act(completed ? "task.complete" : "task.reopen", async () => {
       await updateTaskCompletion(taskId, completed);
+      patchTaskCaches(taskId, { completed, status: completed ? "completed" : "open" });
       if (refreshDetails && taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
         setTaskDetails(await loadTaskDetails(parentId));
@@ -1321,6 +1375,7 @@ export default function App() {
     const taskId = String(editRequest.task.provider_task_id || editRequest.task.id);
     void act("task.update", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ name: editTitle.trim(), description: editDescription }) });
+      patchTaskCaches(taskId, { title: editTitle.trim(), description: editDescription });
       setEditRequest(null);
       if (taskDetails) {
         const parentId = String(taskDetails.task.provider_task_id || taskDetails.task.id);
@@ -1365,6 +1420,7 @@ export default function App() {
     const taskId = String(task.provider_task_id || task.id);
     void act(mode === "delete" ? "task.delete" : "task.archive", async () => {
       await apiRequest(`/api/work-os/me/tasks/${encodeURIComponent(taskId)}?mode=${mode}`, { method: "DELETE" });
+      removeTaskFromCaches(taskId);
       setDeleteRequest(null);
       if (closeParent) setTaskDetails(null);
       else if (taskDetails) setTaskDetails(await loadTaskDetails(String(taskDetails.task.provider_task_id || taskDetails.task.id)));
@@ -1812,7 +1868,7 @@ export default function App() {
         onClockOut={() => setClockOutConfirmation(true)}
         kpiStrip={<KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={!visibleDay} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
       {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
           title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
           body={eodGate.detail}
@@ -2323,7 +2379,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
         </div>}
       </div>
     </section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{loading ? <TaskListSkeleton rows={6} /> : displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
+    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;

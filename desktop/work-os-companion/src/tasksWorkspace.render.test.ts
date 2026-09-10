@@ -43,4 +43,45 @@ describe("Tasks workspace filters", () => {
     expect(markup).toContain('aria-label="Filter from date"');
     expect(markup).toContain('aria-label="Filter to date"');
   });
+
+  it("shows a skeleton while a view is loading and only then the empty state", () => {
+    const base = {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-26",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null as const,
+      suggestion: null,
+      saveState: "saved" as const,
+      taskView: "unfinished" as const,
+      todayTasks: [],
+      taskHistory: [],
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: false,
+      busy: false,
+      onTaskView: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onDeleteTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    };
+    const loading = renderToStaticMarkup(createElement(TasksWorkspace, { ...base, loading: true }));
+    expect(loading).toContain('aria-label="Loading tasks"');
+    expect(loading).not.toContain("No unfinished work");
+
+    const loadedEmpty = renderToStaticMarkup(createElement(TasksWorkspace, { ...base, loading: false }));
+    expect(loadedEmpty).not.toContain('aria-label="Loading tasks"');
+    expect(loadedEmpty).toContain("No unfinished work");
+  });
 });
