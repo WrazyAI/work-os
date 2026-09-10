@@ -1680,6 +1680,17 @@ Charts reserve their geometry while loading, include exact accessible text, and
 fall back to a table at narrow widths. Stale data remains visible with a local
 freshness notice rather than disappearing behind a spinner.
 
+Selecting a range must render that range's record or a skeleton — never the
+previous range's chart and table. A record whose `range`/`through` does not
+match the active selection is treated as absent; the synthesis narrative resets
+with it. Refreshing revalidates the active range only.
+
+Activity context is an explicit evidence class: tracked app/site minutes from
+Worktivity summaries may appear as a `Tracked` column, an aggregated top-app
+list for the range, and a grounding line in the brief. It is always labeled as
+neutral observed context, is never combined into a score, and never implies
+task completion or productivity.
+
 ### 29.3 Evidence
 
 Evidence is provenance-first. Default to a structured list or timeline with:
