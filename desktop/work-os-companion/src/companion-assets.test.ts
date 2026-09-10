@@ -62,6 +62,18 @@ describe("floating companion integration", () => {
     const capability = JSON.parse(readFileSync(resolve(root, "src-tauri/capabilities/avatar.json"), "utf8"));
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
 
+    expect(capability.permissions).toContain("allow-avatar-commands");
+    const avatarCommands = readFileSync(resolve(root, "src-tauri/permissions/allow-avatar-commands.toml"), "utf8");
+    expect(avatarCommands).toContain("hide_avatar");
+    expect(avatarCommands).toContain("show_avatar");
+    const rustShell = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    expect(rustShell).toContain("fn hide_avatar");
+    expect(rustShell).toContain("fn show_avatar");
+    expect(rustShell).toContain("fn toggle_companion");
+    expect(rustShell).toContain('"companion"');
+    expect(avatar).toContain('invoke("hide_avatar")');
+    expect(avatar).toContain("avatar-hide");
+    expect(avatar).toContain("avatar-close-hide");
     expect(capability.permissions).toContain("core:window:allow-start-dragging");
     // The avatar reads the shared cached day query instead of its own fetch.
     expect(avatar).toContain('workOsKeys.day("compact")');

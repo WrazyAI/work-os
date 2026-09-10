@@ -265,6 +265,43 @@ body.avatar-window {
 }
 .avatar-close:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
 
+.avatar-close-hide {
+  color: #8a3f34;
+}
+
+.avatar-close-hide:hover {
+  background: rgba(180, 61, 45, 0.1);
+  color: #8a3f34;
+}
+
+/* Compact orb dismiss: visible on hover or keyboard focus. */
+.avatar-hide {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 4;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(23, 25, 20, 0.82);
+  color: #f6f4ee;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.avatar-compact:hover .avatar-hide,
+.avatar-compact:focus-within .avatar-hide,
+.avatar-hide:focus-visible {
+  opacity: 1;
+}
+
+
 .avatar-chat {
   flex: 1;
   overflow-y: auto;

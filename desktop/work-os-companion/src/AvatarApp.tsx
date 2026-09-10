@@ -841,7 +841,7 @@ export default function AvatarApp(): React.ReactElement {
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
           <div className="avatar-compact">
-          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
+          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
             <Otto pose="sleep" className="avatar-pet" />
@@ -850,7 +850,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button></header>
+            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse to orb" title="Collapse to orb">–</button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -863,7 +863,7 @@ export default function AvatarApp(): React.ReactElement {
       {!expanded && (
         <div className="avatar-compact">
         {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
-        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span>
+        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
         <button
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
@@ -885,7 +885,7 @@ export default function AvatarApp(): React.ReactElement {
             <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
             {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
             {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
-            <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion">×</button>
+            <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse to orb" title="Collapse to orb">–</button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
           </header>
           <div className="avatar-tabs">
             <ChatTabs
