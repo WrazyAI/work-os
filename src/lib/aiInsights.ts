@@ -17,7 +17,7 @@ export interface InsightSource {
   attention: string[];
   nextFocus: string[];
   totals: Record<string, number>;
-  days: Array<{ date: string; observedSeconds: number; planned: number; plannedCompleted: number; tasksCompleted: number }>;
+  days: Array<{ date: string; observedSeconds: number; planned: number; plannedCompleted: number; tasksCompleted: number; trackedMinutes?: number }>;
 }
 
 export interface InsightSelection { winIds: string[]; attentionIds: string[]; nextFocusIds: string[] }
@@ -77,7 +77,7 @@ export function renderInsightSelection(selection: InsightSelection, data: Pick<I
 export function buildInsightSynthesisPrompt(data: InsightSource): string {
   const hours = (seconds: number) => `${Math.round(seconds / 360) / 10}h`;
   const dayLines = data.days.map((day) =>
-    `- ${day.date}: ${hours(day.observedSeconds)} observed, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
+    `- ${day.date}: ${hours(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
   ).join("\n");
   return [
     `Write a personal work synthesis for ${data.from} → ${data.through} (${data.range}).`,
@@ -87,7 +87,7 @@ export function buildInsightSynthesisPrompt(data: InsightSource): string {
     `Wins: ${insightFacts(data).wins.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
     `Needs attention: ${insightFacts(data).attention.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "nothing flagged"}`,
     `Next focus: ${insightFacts(data).focus.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
-    `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items.`,
+    `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items.`,
     "Daily record:",
     dayLines || "(no days recorded)",
     "",
@@ -138,7 +138,7 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     totals: data.totals,
     days: data.days.map((day) => ({
       date: day.date, observedSeconds: day.observedSeconds, planned: day.planned,
-      plannedCompleted: day.plannedCompleted, tasksCompleted: day.tasksCompleted,
+      plannedCompleted: day.plannedCompleted, tasksCompleted: day.tasksCompleted, trackedMinutes: Number((day as { trackedMinutes?: number }).trackedMinutes ?? 0),
     })),
   });
   try {

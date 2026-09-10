@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deterministicInsightBrief, effectiveBreakObservation, insightDateWindow } from "../src/lib/work-os-insights";
+import { activityEvidenceRollup, deterministicInsightBrief, effectiveBreakObservation, insightDateWindow } from "../src/lib/work-os-insights";
 
 test("personal insight ranges are inclusive and deterministic", () => {
   assert.deepEqual(insightDateWindow("day", "2026-08-20"), { from: "2026-08-20", through: "2026-08-20", count: 1 });
@@ -22,4 +22,20 @@ test("authoritative insights use provider breaks and expose stale or unknown pro
   assert.deepEqual(effectiveBreakObservation({ paused_seconds: 99, provider_break_seconds: 600, provider_break_observed_at: "2026-08-21T11:00:00Z" }, now, true), { seconds: 600, freshness: "stale" });
   assert.deepEqual(effectiveBreakObservation({ paused_seconds: 99 }, now, true), { seconds: 0, freshness: "unknown" });
   assert.deepEqual(effectiveBreakObservation({ paused_seconds: 99 }, now, false), { seconds: 99, freshness: "manual" });
+});
+
+test("activity context rollup stays neutral and only aggregates Worktivity app summaries", () => {
+  const rollup = activityEvidenceRollup([
+    { source: "worktivity", metrics: { totalMinutes: 120, topApps: [{ name: "Figma", minutes: 80 }, { name: "Chrome", minutes: 40 }] } },
+    { source: "worktivity", metrics: { totalMinutes: 30, topApps: [{ name: "Figma", minutes: 30 }] } },
+    { source: "manual", metrics: { totalMinutes: 999, topApps: [{ name: "Payroll", minutes: 999 }] } },
+  ]);
+  assert.deepEqual(rollup, { trackedMinutes: 150, topApps: [{ name: "Figma", minutes: 110 }, { name: "Chrome", minutes: 40 }] });
+  assert.equal(activityEvidenceRollup([]).trackedMinutes, 0);
+});
+
+test("deterministic brief reports tracked activity context without a productivity score", () => {
+  const brief = deterministicInsightBrief([{ tasksCompleted: 1, plannedCompleted: 1, planned: 1, trackedMinutes: 90 }], []);
+  assert.match(brief.wins.join(" "), /90 tracked minutes of app\/site activity context/i);
+  assert.match(brief.wins.join(" "), /not a productivity score/i);
 });

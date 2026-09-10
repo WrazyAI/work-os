@@ -65,6 +65,9 @@ export interface InsightDay {
   updates: number;
   outputEvidence: number;
   activityContext: number;
+  /** Worktivity app/site summary minutes for the day (neutral activity context). */
+  trackedMinutes?: number;
+  topApps?: Array<{ name: string; minutes: number }>;
   tasksCompleted: number;
   tasksOpen: number;
   goal?: { text: string | null; provenance: string | null };

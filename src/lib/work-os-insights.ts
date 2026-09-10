@@ -15,8 +15,29 @@ function validDate(value: string | null | undefined) {
   return Number.isNaN(parsed.getTime()) ? null : value;
 }
 
-export function effectiveBreakObservation(session: Json, now: Date, authoritative: boolean) {
-  if (!authoritative) return { seconds: Number(session.paused_seconds ?? 0), freshness: "manual" as const };
+/** Neutral activity context from stored Worktivity app/site summaries. This is
+ * observed context only — never a productivity or pay judgement. */
+export function activityEvidenceRollup(evidence: Json[]) {
+  const byApp = new Map<string, number>();
+  let trackedMinutes = 0;
+  for (const item of evidence) {
+    if (String(item.source ?? "") !== "worktivity") continue;
+    const metrics = item.metrics && typeof item.metrics === "object" && !Array.isArray(item.metrics) ? item.metrics as Json : null;
+    if (!metrics) continue;
+    trackedMinutes += Number(metrics.totalMinutes ?? 0) || 0;
+    for (const app of Array.isArray(metrics.topApps) ? metrics.topApps as Json[] : []) {
+      const name = typeof app.name === "string" && app.name.trim() ? app.name.trim() : null;
+      const minutes = Number(app.minutes ?? 0) || 0;
+      if (name && minutes > 0) byApp.set(name, (byApp.get(name) ?? 0) + minutes);
+    }
+  }
+  return {
+    trackedMinutes: Math.round(trackedMinutes),
+    topApps: [...byApp.entries()].map(([name, minutes]) => ({ name, minutes: Math.round(minutes) })).sort((left, right) => right.minutes - left.minutes).slice(0, 5),
+  };
+}
+
+export function effectiveBreakObservation(session: Json, now: Date, authoritative: boolean) {  if (!authoritative) return { seconds: Number(session.paused_seconds ?? 0), freshness: "manual" as const };
   const observedAt = Date.parse(String(session.provider_break_observed_at ?? ""));
   if (!Number.isFinite(observedAt)) return { seconds: 0, freshness: "unknown" as const };
   const active = !session.clocked_out_at;
@@ -43,9 +64,11 @@ export function deterministicInsightBrief(days: Json[], references: Json[]) {
   const progressed = days.reduce((sum, day) => sum + Number(day.progressed ?? 0), 0);
   const carried = days.reduce((sum, day) => sum + Number(day.carried ?? day.carryOver ?? 0), 0);
   const deferred = days.reduce((sum, day) => sum + Number(day.deferred ?? 0), 0);
+  const tracked = days.reduce((sum, day) => sum + Number(day.trackedMinutes ?? 0), 0);
   const wins = [
     completed ? `${completed} task outcome${completed === 1 ? "" : "s"} completed in this range.` : "No completed Nifty outcomes were recorded in this range.",
     progressed ? `${progressed} substantive progress update${progressed === 1 ? "" : "s"} recorded.` : "No substantive progress updates were recorded.",
+    tracked ? `${tracked} tracked minute${tracked === 1 ? "" : "s"} of app/site activity context recorded (observed context, not a productivity score).` : "No Worktivity app/site activity context was recorded in this range.",
   ];
   const attention = [
     carried ? `${carried} carried or overdue item${carried === 1 ? "" : "s"} remained visible.` : "No carry-over pressure is visible.",
@@ -77,7 +100,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       .eq("organization_id", access.organizationId).eq("person_id", personId).gte("shift_date", from).lte("shift_date", through),
     db().from("work_check_ins").select("id,shift_date,substantive,input_text,update_kind").eq("organization_id", access.organizationId)
       .eq("person_id", personId).gte("shift_date", from).lte("shift_date", through),
-    db().from("work_evidence").select("id,evidence_date,source,title").eq("user_id", ownerId).eq("person_id", personId)
+    db().from("work_evidence").select("id,evidence_date,source,title,metrics").eq("user_id", ownerId).eq("person_id", personId)
       .gte("evidence_date", from).lte("evidence_date", through),
     db().from("work_organizations").select("nifty_synced_at,nifty_sync_error,feature_flags").eq("id", access.organizationId).single(),
     Promise.all(dates.map((date) => resolveDailyWorkspace(access, date, { limit: 100, now }))),
@@ -99,6 +122,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     const items = Array.isArray(plan?.items) ? (plan.items as Json[]) : [];
     const dayCheckIns = checkIns.filter((item: any) => dateOnly(item.shift_date) === date && item.substantive === true);
     const dayEvidence = evidence.filter((item: any) => dateOnly(item.evidence_date) === date);
+    const activity = activityEvidenceRollup(dayEvidence as Json[]);
     const references = [
       ...(plan ? [{ type: "plan", id: plan.id, date, label: `Goal for ${date}`, target: `/work-os?view=tasks&date=${date}` }] : []),
       ...workspace.tasks.map((item) => ({ type: "task", id: item.id, date, label: item.title, target: `/work-os?view=tasks&date=${date}&task=${item.provider_task_id}` })),
@@ -129,12 +153,14 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
       updates: dayCheckIns.length,
       outputEvidence: dayEvidence.filter((item: any) => item.source !== "worktivity").length,
       activityContext: dayEvidence.filter((item: any) => item.source === "worktivity").length,
+      trackedMinutes: activity.trackedMinutes,
+      topApps: activity.topApps,
       tasksCompleted: workspace.completed,
       tasksOpen: Math.max(0, workspace.total - workspace.completed),
       references,
     };
   });
-  const numericKeys = ["observedSeconds", "pausedSeconds", "planned", "plannedCompleted", "completed", "progressed", "deferred", "carried", "unplanned", "carryOver", "overdue", "updates", "outputEvidence", "activityContext", "tasksCompleted", "tasksOpen"] as const;
+  const numericKeys = ["observedSeconds", "pausedSeconds", "planned", "plannedCompleted", "completed", "progressed", "deferred", "carried", "unplanned", "carryOver", "overdue", "updates", "outputEvidence", "activityContext", "trackedMinutes", "tasksCompleted", "tasksOpen"] as const;
   const totals = Object.fromEntries(numericKeys.map((key) => [key, days.reduce((sum, day) => sum + Number(day[key]), 0)]));
   const observed = sessions.map((item: any) => item.attendance_observed_at).filter(Boolean).sort().at(-1) ?? null;
   const niftySyncedAt = orgResult.data?.nifty_synced_at ?? null;

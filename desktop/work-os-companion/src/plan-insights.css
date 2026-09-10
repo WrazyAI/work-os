@@ -499,3 +499,40 @@
 .trend-legend small { font-size: 10px; line-height: 1.35; }
 .trend-bars > i > span,
 .trend-bars > b > span { font-size: 9px; }
+
+/* Activity context — neutral Worktivity app/site summary, never a score */
+.insight-activity .activity-app-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.insight-activity .activity-app-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  font-size: 12px;
+}
+.insight-activity .activity-app-list li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insight-activity .activity-app-list li b {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+.insight-activity .activity-provenance {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
