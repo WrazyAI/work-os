@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
@@ -135,7 +136,7 @@ export function TaskComposerModal({ busy, title, description, assignees, options
         <label><span>Task title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} placeholder="Give the task a clear outcome" /></label>
         <label><span>Description <em>optional</em></span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} placeholder="Add context, expectations, links, or a definition of done…" /></label>
         <fieldset><legend><UserRound size={14} /> Assignees <em>optional</em></legend>
-          {optionsLoading ? <p>Loading your organization…</p> : options.length ? <div className="assignee-grid">{options.map((person) => {
+          {optionsLoading ? <div className="assignee-skeleton">{[0, 1, 2].map((index) => <Skeleton key={index} className="skeleton-assignee" />)}</div> : options.length ? <div className="assignee-grid">{options.map((person) => {
             const selected = assignees.includes(person.id);
             return <label className={selected ? "selected" : ""} key={person.id}><input type="checkbox" checked={selected} onChange={() => onToggleAssignee(person.id)} /><span><strong>{person.displayName}</strong><small>{person.email || "Nifty member"}</small></span><Check size={14} /></label>;
           })}</div> : <p>No assignable Nifty-mapped members were found. You can still create this task unassigned.</p>}
@@ -195,7 +196,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
     <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
       <header><div><span>{task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{safeTaskText(task.title, "Untitled Nifty task")}</h2></div><button aria-label="Close task details" disabled={busy} onClick={onClose}><X size={18} /></button></header>
       <div className="task-modal-body">
-        {loading ? <p className="task-loading">Loading task details…</p> : <>
+        {loading ? <TaskDetailSkeleton /> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
           <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, "Nifty")}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
           <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <CompletionRingInline completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} />}</header>

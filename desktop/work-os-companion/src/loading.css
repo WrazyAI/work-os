@@ -1,0 +1,468 @@
+/* ============ Loading language ============ */
+/* Wave for major waits, FadeArc for minor ones, shimmer skeletons for content.
+   All motion is disabled under prefers-reduced-motion. */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes loading-ui-wave {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  50% {
+    transform: scaleY(0.6);
+  }
+}
+
+.loading-wave {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 96px;
+  height: 30px;
+  color: var(--signal);
+}
+
+.loading-wave-bar {
+  display: inline-block;
+  width: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: loading-ui-wave var(--duration, 1s) ease-in-out infinite;
+}
+
+@keyframes loading-ui-fade-arc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-arc {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+@keyframes loading-ui-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.skeleton {
+  display: block;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(226, 231, 222, 0.55) 25%, rgba(244, 247, 241, 0.95) 45%, rgba(226, 231, 222, 0.55) 65%);
+  background-size: 220% 100%;
+  animation: loading-ui-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 10px;
+  margin: 0;
+}
+
+.skeleton-line.skeleton-kicker {
+  width: 84px;
+  height: 8px;
+}
+
+.skeleton-line.skeleton-title {
+  width: min(320px, 62%);
+  height: 20px;
+  border-radius: 9px;
+}
+
+.skeleton-line.skeleton-value {
+  width: 64px;
+  height: 24px;
+  border-radius: 9px;
+}
+
+.skeleton-line.skeleton-body {
+  width: min(420px, 78%);
+}
+
+.skeleton-line.skeleton-body.short {
+  width: min(280px, 55%);
+}
+
+.skeleton-line.skeleton-meta {
+  width: 120px;
+  height: 8px;
+}
+
+.skeleton-line.skeleton-button {
+  width: 118px;
+  height: 36px;
+  margin-top: 6px;
+  border-radius: 10px;
+}
+
+.skeleton-line.skeleton-chip {
+  width: 108px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.skeleton-line.skeleton-ticks {
+  width: 148px;
+  height: 10px;
+  margin-top: 4px;
+}
+
+.skeleton-check {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+}
+
+.skeleton-pill {
+  width: 62px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+/* Dashboard skeleton ------------------------------------------------------- */
+
+.dashboard-skeleton {
+  width: min(100%, 1200px);
+  display: grid;
+  gap: 16px;
+}
+
+.skeleton-grid,
+.skeleton-kpi-row,
+.skeleton-card-row {
+  display: grid;
+  gap: 12px;
+}
+
+.skeleton-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+}
+
+.skeleton-kpi-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.skeleton-card-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.skeleton-block {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.skeleton-hero {
+  min-height: 210px;
+  align-content: center;
+  gap: 12px;
+  padding: 28px 30px;
+}
+
+.skeleton-pulse {
+  min-height: 210px;
+  align-content: center;
+}
+
+.skeleton-kpi {
+  min-height: 88px;
+  align-content: center;
+  gap: 8px;
+  padding: 14px 18px;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
+  align-content: start;
+  padding: 14px 15px;
+  border: 1px solid #e2e7de;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+/* Tasks skeleton ----------------------------------------------------------- */
+
+.skeleton-task-list {
+  display: grid;
+}
+
+.skeleton-task-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 76px;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.skeleton-task-row:first-child {
+  border-top: 0;
+}
+
+.skeleton-task-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.skeleton-task-title {
+  height: 12px;
+}
+
+.skeleton-task-meta {
+  height: 8px;
+}
+
+/* Task detail + insights skeleton ----------------------------------------- */
+
+.skeleton-detail {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.skeleton-subtask-rows {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.skeleton-subtask-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.skeleton-insights {
+  display: grid;
+  gap: 12px;
+}
+
+.skeleton-insights .skeleton-kpi-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.skeleton-chart {
+  min-height: 220px;
+}
+
+.skeleton-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+  height: 150px;
+  margin-top: 8px;
+}
+
+.skeleton-bar {
+  width: 100%;
+  border-radius: 7px;
+}
+
+.skeleton-assignee {
+  width: 100%;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.assignee-skeleton {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.eod-drafting {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 26px 28px;
+}
+
+.eod-drafting .loading-wave-large {
+  margin: 4px 0 10px;
+}
+
+.eod-drafting strong {
+  font-size: 18px;
+}
+
+.eod-drafting p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Pre-app loading surface --------------------------------------------------- */
+
+.loading {
+  background:
+    radial-gradient(circle at 50% 32%, rgba(168, 241, 91, 0.08), transparent 24rem),
+    #171914;
+}
+
+.loading-shell {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 32px;
+  animation: loading-shell-enter 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes loading-shell-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.loading-shell .wordmark-badge {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+  margin-bottom: 20px;
+}
+
+.loading-shell .wordmark-badge img {
+  width: 38px;
+  height: 38px;
+}
+
+.loading-shell h1 {
+  margin: 0 0 6px;
+  font: 600 26px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.loading-shell p {
+  margin: 0;
+  color: #8d9187;
+  font-size: 13px;
+}
+
+.loading-wave-large {
+  width: 128px;
+  height: 38px;
+  margin: 26px 0 4px;
+}
+
+.loading-wave-large .loading-wave-bar {
+  width: 6px;
+}
+
+.loading-stage {
+  margin-top: 22px;
+  color: #6f7469;
+  font-size: 11px;
+}
+
+/* Connect screen: entrance + connecting state ------------------------------ */
+
+.connect > section {
+  animation: connect-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.connect > aside {
+  animation: connect-enter 520ms 60ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes connect-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Seamless transition: the app content fades in over the loading surface. */
+.workspace {
+  animation: app-enter 300ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+@keyframes app-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .skeleton-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skeleton-card-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-wave-bar,
+  .loading-arc,
+  .skeleton,
+  .loading-shell,
+  .connect > section,
+  .connect > aside,
+  .workspace {
+    animation: none !important;
+  }
+
+  .skeleton {
+    background: rgba(226, 231, 222, 0.6);
+  }
+}

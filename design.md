@@ -1307,6 +1307,32 @@ no dictation, no model picker, and no rainbow sweep — ambient motion,
 saturated multicolor gradients, and unbacked controls violate §§2.4,
 2.6, and 6.4. Send is 36px per §28.1, not the reference 28px.
 
+### 25.12 Loading states
+
+One loading language for the whole companion
+(`desktop/work-os-companion/src/LoadingUi.tsx`, `loading.css`):
+
+- **Wave** (five bars, brand green) carries every major wait: launch and the
+  pre-app gate, the vault unlock, and first-day synchronization. It sits on
+  the dark pre-app shell under one short truthful sentence; it never replaces
+  a failure message.
+- **FadeArc** (gradient spinner) carries minor inline waits: the refresh
+  control, `Load older tasks`, connect-workspace while the browser opens, and
+  button-level busy states.
+- **Skeletons** (soft shimmer, content-shaped) reserve layout for first
+  payloads: dashboard (hero, pulse, KPI strip, task cards), the Tasks list,
+  task details, assignee options, and Insights. Skeletons must mirror the real
+  anatomy with the same grid; they never show fabricated values.
+- Waiting surfaces keep their real layout: a skeleton replaces content inside
+  the established shell, so the swap does not move the page.
+- **Transitions:** the pre-app shell stays dark; entering the app crossfades
+  once (~300ms app fade-in over the loading surface) and skeletons hand off to
+  real content without a blank frame. There is no ConnectScreen flash while the
+  vault resolves — the branded loader covers boot.
+- All wave, arc, and shimmer motion is removed under
+  `prefers-reduced-motion`; skeletons fall back to a static fill and the
+  spinner stops.
+
 ## 26. Today page blueprint
 
 ### 26.1 Pre-shift composition

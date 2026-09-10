@@ -32,6 +32,7 @@ import { secureState, type WorkOsConversationTurn } from "./vault";
 import companionArt from "./assets/work-os-task-stack-v2.png";
 import wordmark from "./assets/work-os-mark.png";
 import { CompanionPet } from "./CompanionPet";
+import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import "./plan-insights.css";
@@ -154,6 +155,8 @@ export default function App() {
   const [apiBase, setApiBase] = useState("");
   const [autoStart, setAutoStart] = useState(false);
   const [updateStatus, setUpdateStatus] = useState("");
+  const [vaultReady, setVaultReady] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [connecting, setConnecting] = useState(false);
@@ -278,7 +281,7 @@ export default function App() {
     return () => { window.cancelAnimationFrame(frame); document.removeEventListener("pointerdown", onPointerDown); if (previousFocus?.isConnected) previousFocus.focus(); };
   }, [moveMenuId, subtaskMenuId]);
 
-  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
+  const refreshInternal = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
     if (syncBypassRef.current) return null;
     const dayQuery = new URLSearchParams();
     if (options.refreshProviders) dayQuery.set("refreshProviders", "true");
@@ -331,6 +334,11 @@ export default function App() {
     return nextDay;
   }, [showError]);
 
+  const refresh = useCallback(async (options: { refreshProviders?: boolean; refreshAttendance?: boolean; dayOnly?: boolean; details?: boolean } = {}) => {
+    setRefreshing(true);
+    try { return await refreshInternal(options); } finally { setRefreshing(false); }
+  }, [refreshInternal]);
+
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
@@ -346,7 +354,7 @@ export default function App() {
         launchUpdateCheckRef.current = true;
         void checkForUpdates({ silent: true });
       }
-    }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable"));
+    }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable")).finally(() => setVaultReady(true));
     void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
@@ -1663,6 +1671,7 @@ export default function App() {
     });
   }
 
+  if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onDebug={() => void openDebugger()} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
@@ -1679,9 +1688,9 @@ export default function App() {
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh the workday" onClick={() => void refresh({ refreshProviders: true })}><RefreshCw size={17} /></button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh the workday" disabled={refreshing} onClick={() => void refresh({ refreshProviders: true })}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
-      {view === "day" && (!active ? <main className="day-grid off-shift-day">
+      {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
           <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions"><button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button></div>
@@ -1730,12 +1739,12 @@ export default function App() {
         onClockOut={() => setClockOutConfirmation(true)}
         kpiStrip={<KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleDay?.tasks ?? []} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={!visibleDay} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} />}
       {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
           title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
           body={eodGate.detail}
         /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
-      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel"><Empty title="Drafting your EOD…" body="Checking today’s recorded work and writing a draft for you to review." /></section></main>}
+      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking today’s recorded work and writing a draft for you to review.</p></section></main>}
       {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
           reportId={String(visibleDay.report.id ?? "unknown")}
           initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
@@ -1819,13 +1828,24 @@ export default function App() {
   </div>;
 }
 
-function ConnectScreen({ apiBase, setApiBase, connecting, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}><LogIn size={17} /> {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
-function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) { return <main className="loading"><img src={assetUrl(wordmark)} alt="" /><h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1><p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>{failed && <><button className="primary" onClick={retry}>Retry</button><div className="loading-alternatives"><button onClick={onOffline}>Continue offline</button><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></div><small>Offline mode uses local fixtures only — nothing reaches the server.</small></>}</main>; }
 function Empty({ title, body }: { title: string; body: string }) { return <div className="empty"><Sparkles size={20} /><strong>{title}</strong><p>{body}</p></div>; }
 function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) { return <header className="page-intro"><span>{eyebrow}</span><h2>{title}</h2><p>{body}</p></header>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
 function moveDate(date: string, amount: number) {
   return shiftWorkOsDate(date, amount);
+}
+
+
+export function ConnectScreen({ apiBase, setApiBase, connecting, onDebug, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onDebug: () => void; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button><details><summary>Server settings</summary><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" /><button onClick={() => void onSave()}>Save</button></details><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></section><aside><img src={assetUrl(companionArt)} alt="A welcoming focused workspace" /></aside></main>; }
+export function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) {
+  return <main className="loading"><div className="loading-shell">
+    <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>
+    <h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1>
+    <p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>
+    {failed
+      ? <><button className="primary" onClick={retry}>Retry</button><div className="loading-alternatives"><button onClick={onOffline}>Continue offline</button><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></div><small>Offline mode uses local fixtures only — nothing reaches the server.</small></>
+      : <><Wave className="loading-wave-large" /><small className="loading-stage">Connecting to your workspace</small></>}
+  </div></main>;
 }
 
 function CompletionRing({ completed, total, label, compact = false }: { completed: number; total: number; label: string; compact?: boolean }) {
@@ -2104,7 +2124,7 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
+export function TasksWorkspace({ currentDate, historyDate, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
@@ -2112,7 +2132,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void; onTaskCompletion: (task: TaskRow, completed: boolean) => void; onCarryOverOpen: (open: boolean) => void; onLoadMore: () => void;
-  initialTaskMenuId?: string | null; initialSearch?: string; initialFiltersOpen?: boolean;
+  initialTaskMenuId?: string | null; initialSearch?: string; initialFiltersOpen?: boolean; loading?: boolean;
 }) {
   const [taskMenuId, setTaskMenuId] = useState<string | null>(initialTaskMenuId);
   const [taskSearch, setTaskSearch] = useState(initialSearch);
@@ -2230,7 +2250,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
         </div>}
       </div>
     </section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
+    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{loading ? <TaskListSkeleton rows={6} /> : displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;
@@ -2249,7 +2269,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
       const stateLabel = state === "complete" ? "Done" : sentence(state);
       const syncPending = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
       return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}`} role="button" tabIndex={0} key={taskId} aria-selected={isSelected} onClick={() => onOpenTask(task, historical)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><button className="task-check" aria-label={task.completed ? `Reopen ${title}` : `Complete ${title}`} disabled={busy || historical} onClick={(event) => { event.stopPropagation(); onTaskCompletion(task, !task.completed); }}>{task.completed && <Check size={14} />}</button><div className="task-row-body"><div className="task-row-line primary-line"><h3>{title}</h3>{isSelected && <span className="surfaced-tag">On today</span>}</div>{(metaParts.length > 0 || description || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{description && <p className="task-row-desc">{description}</p>}</div>{progress.total > 0 && <span className="task-row-ring"><CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" /></span>}{dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}<span className={`task-state ${state}`}>{stateLabel}</span>{!historical && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}</article>;
-    })}</section>) : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? "Loading more tasks…" : "Load older tasks"}</button>}</section>
+    })}</section>) : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading older tasks…</> : "Load older tasks"}</button>}</section>
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }
@@ -2289,7 +2309,7 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
         <button disabled={synthesis?.status === "loading"} onClick={synthesize}>{synthesis?.status === "loading" ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}</button></header>
         {synthesis?.status === "ready" ? <p className="synthesis-text">{synthesis.text}</p> : synthesis?.status === "failed" ? <p className="synthesis-fallback">The assistant is unavailable — the deterministic brief and exact values below stand as-is.</p> : <p className="synthesis-hint">A calm narrative grounded strictly in the exact values on this page. Never invented.</p>}
       </section>}
-      {loading && !data ? <section className="panel"><Empty title="Building your work record" body="Loading daily goals, sessions, task outcomes, updates, and evidence." /></section> : data ? <>
+      {loading && !data ? <section className="panel"><InsightsSkeleton /></section> : data ? <>
       <div className="metric-grid"><Metric icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} /><article className="metric"><ListChecks size={18} /><small>Daily tasks</small><CompletionRing compact completed={data.totals.plannedCompleted} total={data.totals.planned} label="complete" /></article><Metric icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} /><Metric icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} /></div>
       <section className="panel insight-brief"><header><div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div><small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small></header><div><section><strong>Wins</strong>{data.brief.wins.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Needs attention</strong>{data.brief.attention.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Next focus</strong>{data.brief.nextFocus.map((item) => <p key={item}>{item}</p>)}</section></div></section>
       <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>
