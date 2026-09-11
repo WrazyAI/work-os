@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
+  agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
 } from "./avatarLogic";
 
@@ -201,5 +202,31 @@ describe("mergeAvatarChatEntries", () => {
     expect(serializeAvatarChatEntry({ id: "a-1", role: "assistant", text: "Hi.", operations: [{ ...op }] }))
       .toMatchObject({ id: "a-1", operations: [{ op: "complete_task" }] });
     expect(serializeAvatarChatEntry({ id: "s-1", role: "system", text: "Nope." })).toBeNull();
+  });
+});
+
+describe("agenda auto-expand", () => {
+  const key = agendaAutoExpandKey("2026-08-31", "draft");
+
+  it("expands once when the agenda first becomes due", () => {
+    const first = nextAgendaAutoExpand(null, true, key);
+    expect(first).toEqual({ expand: true, key });
+  });
+
+  it("does not re-expand after the employee collapses the companion", () => {
+    const first = nextAgendaAutoExpand(null, true, key);
+    // A later render sees the same key (already expanded), even though the
+    // composer is now collapsed — it must leave the collapse alone.
+    expect(nextAgendaAutoExpand(first.key, true, key)).toEqual({ expand: false, key });
+  });
+
+  it("re-expands only when the shift or plan state changes", () => {
+    const first = nextAgendaAutoExpand(null, true, key);
+    const nextKey = agendaAutoExpandKey("2026-09-01", "draft");
+    expect(nextAgendaAutoExpand(first.key, true, nextKey)).toEqual({ expand: true, key: nextKey });
+  });
+
+  it("clears the key once the agenda is no longer due", () => {
+    expect(nextAgendaAutoExpand("2026-08-31:draft", false, key)).toEqual({ expand: false, key: null });
   });
 });

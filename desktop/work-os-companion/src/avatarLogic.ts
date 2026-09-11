@@ -51,6 +51,26 @@ export function clearRecordedUpdatePrompt<T extends CompanionDayFacts>(facts: T)
   return { ...facts, promptRequired: false, promptKind: null, nextPromptAt: null };
 }
 
+/** Identity for one agenda-due period: a shift plus its plan status. */
+export function agendaAutoExpandKey(shiftDate: string, planStatus: string | null): string {
+  return `${shiftDate}:${planStatus ?? ""}`;
+}
+
+/** Agenda auto-expand is edge-triggered: the composer opens once when the
+ * agenda first becomes due, then never again for the same shift/plan state.
+ * This keeps an explicit collapse by the employee from being fought by the
+ * effect, while still surfacing a genuinely new agenda. Cleared (returns a null
+ * key) as soon as the agenda is no longer due. */
+export function nextAgendaAutoExpand(
+  previousKey: string | null,
+  agendaDue: boolean,
+  key: string,
+): { expand: boolean; key: string | null } {
+  if (!agendaDue) return { expand: false, key: null };
+  if (previousKey === key) return { expand: false, key };
+  return { expand: true, key };
+}
+
 const SNOOZE_STEPS_MS = [10 * 60_000, 20 * 60_000];
 
 /** Delay before the next re-prompt for a snoozed prompt instance. null = the

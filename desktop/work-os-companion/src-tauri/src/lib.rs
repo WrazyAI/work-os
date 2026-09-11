@@ -100,6 +100,7 @@ fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: Stri
                 }
                 if window_target == "avatar" {
                     let _ = app_handle.emit_to("avatar", "avatar://expand", ());
+                    sync_companion_item(&app_handle, true);
                 }
                 if target == "eod" {
                     let _ = app_handle.emit_to("main", "work-os://avatar-open-eod", ());
@@ -147,12 +148,29 @@ fn focus_main(app: tauri::AppHandle) {
     show_main(&app);
 }
 
+/// The floating companion's tray item, held in managed state so every show/hide
+/// path can keep its label truthful about the window's real visibility.
+struct CompanionTrayItem(std::sync::Mutex<Option<MenuItem<tauri::Wry>>>);
+
+/// Keeps the tray label in step with the avatar window. Collapsed-to-orb still
+/// counts as visible; only a full hide reads "Show companion".
+fn sync_companion_item(app: &tauri::AppHandle, visible: bool) {
+    if let Some(state) = app.try_state::<CompanionTrayItem>() {
+        if let Ok(guard) = state.0.lock() {
+            if let Some(item) = guard.as_ref() {
+                let _ = item.set_text(if visible { "Hide companion" } else { "Show companion" });
+            }
+        }
+    }
+}
+
 /// Hides the floating companion without quitting the app. Recover it from the
 /// tray's "Show companion" item.
 #[tauri::command]
 fn hide_avatar(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("avatar") {
         let _ = window.hide();
+        sync_companion_item(&app, false);
     }
 }
 
@@ -161,22 +179,23 @@ fn show_avatar(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("avatar") {
         let _ = window.show();
         let _ = window.set_focus();
+        sync_companion_item(&app, true);
     }
 }
 
-fn toggle_companion(app: &tauri::AppHandle, item: &MenuItem<tauri::Wry>) {
+fn toggle_companion(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("avatar") else {
         return;
     };
     match window.is_visible() {
         Ok(true) => {
             let _ = window.hide();
-            let _ = item.set_text("Show companion");
+            sync_companion_item(app, false);
         }
         _ => {
             let _ = window.show();
             let _ = window.set_focus();
-            let _ = item.set_text("Hide companion");
+            sync_companion_item(app, true);
         }
     }
 }
@@ -226,7 +245,7 @@ pub fn run() {
             let capture = MenuItem::with_id(app, "capture", "Quick update", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &companion, &capture, &quit])?;
-            let companion_item = companion.clone();
+            app.manage(CompanionTrayItem(std::sync::Mutex::new(Some(companion.clone()))));
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("Work OS Companion");
@@ -235,7 +254,7 @@ pub fn run() {
             }
             tray.on_menu_event(move |app, event| match event.id.as_ref() {
                 "show" => show_main(app),
-                "companion" => toggle_companion(app, &companion_item),
+                "companion" => toggle_companion(app),
                 "capture" => {
                     show_main(app);
                     let _ = app.emit("work-os://capture", ());

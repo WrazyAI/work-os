@@ -1300,8 +1300,13 @@ Anatomy, top to bottom:
    and `Tasks` (with a quiet open-task count); `Tasks` renders the reusable
    task selection card over the live task options with `loading`, specific
    empty, and degraded states, and delegates completion to the existing
-   propose-selected flow. Actions are Lucide icon buttons: clear/new/close
-   in the dock, new/close in the companion.
+   propose-selected flow. Actions are Lucide icon buttons grouped at the right:
+   clear/new/close in the dock, and retry/new/minimize/close in the companion.
+   The companion separates two distinct window states: **minimize** collapses
+   the panel to the floating orb (the window stays on screen and is still
+   draggable), while **close** hides the window entirely. Close is always
+   recoverable from the tray. The two controls sit adjacent in one
+   `.avatar-head-actions` group with equal 28px hit targets.
 2. **Thread:** a fixed scroll region. User turns stay right-aligned soft
    blocks; assistant sections fade up on arrival. Provenance, receipts,
    approval cards, selection cards, and navigation buttons render exactly
@@ -1328,6 +1333,15 @@ motion is 180–220ms with the product easing; all of it is removed under
 draft value (newline or labeled action), never from field measurement —
 placeholder wrap changes with width, so measurement feeds back into
 itself and oscillates.
+
+Companion window state lives in one place. The tray item is truthful at all
+times: it reads `Hide companion` whenever the window is on screen — including
+the collapsed orb — and `Show companion` only when the window is fully hidden.
+Every show/hide path (the in-panel close, the orb's hover close, the tray item,
+and an activated Windows toast) updates that label in the same operation, so
+the tray never lies about what a click will do. Separately, a due agenda opens
+the composer **once** per shift/plan state; the auto-expand is edge-triggered
+and must never fight an employee's deliberate minimize.
 
 Deliberate deviations from the exploration reference: no autoplay demo,
 no dictation, no model picker, and no rainbow sweep — ambient motion,

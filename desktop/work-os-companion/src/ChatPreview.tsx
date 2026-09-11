@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Minus, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatTabs, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
@@ -167,9 +168,14 @@ function AvatarSection() {
               </div>
             </div>
           </div>
-          <button className="avatar-close" aria-label="Collapse companion">
-            ×
-          </button>
+          <div className="avatar-head-actions">
+            <button className="avatar-close" aria-label="Minimize to orb">
+              <Minus size={16} aria-hidden="true" />
+            </button>
+            <button className="avatar-close avatar-close-hide" aria-label="Hide companion">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         </header>
         <div className="avatar-tabs">
           <ChatTabs

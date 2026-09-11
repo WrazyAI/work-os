@@ -70,10 +70,15 @@ describe("floating companion integration", () => {
     expect(rustShell).toContain("fn hide_avatar");
     expect(rustShell).toContain("fn show_avatar");
     expect(rustShell).toContain("fn toggle_companion");
+    expect(rustShell).toMatch(/fn hide_avatar[\s\S]*sync_companion_item/);
+    expect(rustShell).toMatch(/fn show_avatar[\s\S]*sync_companion_item/);
     expect(rustShell).toContain('"companion"');
     expect(avatar).toContain('invoke("hide_avatar")');
     expect(avatar).toContain("avatar-hide");
     expect(avatar).toContain("avatar-close-hide");
+    expect(avatar).toContain("avatar-head-actions");
+    expect(avatar).toContain("nextAgendaAutoExpand");
+    expect(avatar).toContain('from "lucide-react"');
     expect(capability.permissions).toContain("core:window:allow-start-dragging");
     // The avatar reads the shared cached day query instead of its own fetch.
     expect(avatar).toContain('workOsKeys.day("compact")');

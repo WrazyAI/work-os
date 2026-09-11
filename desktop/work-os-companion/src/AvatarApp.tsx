@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { Minus, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
@@ -22,7 +23,7 @@ import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { Otto } from "./Otto";
 import {
-  avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
+  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -149,6 +150,9 @@ export default function AvatarApp(): React.ReactElement {
   const dayLoadInFlight = useRef(false);
   const chatRef = useRef<ChatEntry[]>([]);
   const avatarToolsSig = useRef("");
+  // The agenda auto-expand key last acted on, so a deliberate collapse is never
+  // fought by a re-render. Reset when the agenda stops being due.
+  const autoExpandedAgenda = useRef<string | null>(null);
 
   useEffect(() => { dayRef.current = facts; }, [facts]);
   useEffect(() => { chatRef.current = chat; }, [chat]);
@@ -425,8 +429,13 @@ export default function AvatarApp(): React.ReactElement {
   // ── Expanded/collapsed window sizing ──
   const toggleExpanded = useCallback(async (open: boolean): Promise<void> => {
     setExpanded(open);
+    const size = open ? AVATAR_EXPANDED : AVATAR_COLLAPSED;
+    // Resize first, on its own: a monitor/position failure must never leave the
+    // window stuck at the wrong size (which kept the companion from collapsing).
     try {
-      const size = open ? AVATAR_EXPANDED : AVATAR_COLLAPSED;
+      await win.setSize(new LogicalSize(size.width, size.height));
+    } catch { /* sizing is cosmetic */ }
+    try {
       const monitor = await currentMonitor();
       const scaleFactor = await win.scaleFactor();
       const outer = await win.outerPosition();
@@ -437,7 +446,6 @@ export default function AvatarApp(): React.ReactElement {
         y = Math.max(0, Math.min(monitor.size.height - size.height, y));
       }
       await win.setPosition(new LogicalPosition(x, y));
-      await win.setSize(new LogicalSize(size.width, size.height));
     } catch { /* sizing is cosmetic */ }
   }, [win]);
 
@@ -819,9 +827,17 @@ export default function AvatarApp(): React.ReactElement {
         : daySyncState === "stale" ? "Showing last update"
           : formatWorkOsDate(facts.shiftDate);
 
+  // Agenda opens the composer once when it first becomes due; an explicit
+  // collapse is respected until the shift or plan state actually changes.
   useEffect(() => {
-    if (agendaDue && !expanded) void toggleExpanded(true);
-  }, [agendaDue, expanded, toggleExpanded]);
+    const decision = nextAgendaAutoExpand(
+      autoExpandedAgenda.current,
+      agendaDue,
+      agendaAutoExpandKey(facts.shiftDate, facts.planStatus),
+    );
+    autoExpandedAgenda.current = decision.key;
+    if (decision.expand && !expanded) void toggleExpanded(true);
+  }, [agendaDue, expanded, facts.shiftDate, facts.planStatus, toggleExpanded]);
 
   function clearAvatarConversation() {
     setChat([]);
@@ -841,7 +857,7 @@ export default function AvatarApp(): React.ReactElement {
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
           <div className="avatar-compact">
-          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
+          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
             <Otto pose="sleep" className="avatar-pet" />
@@ -850,7 +866,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse to orb" title="Collapse to orb">–</button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button></header>
+            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><div className="avatar-head-actions"><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -863,7 +879,7 @@ export default function AvatarApp(): React.ReactElement {
       {!expanded && (
         <div className="avatar-compact">
         {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
-        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
+        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
@@ -883,9 +899,12 @@ export default function AvatarApp(): React.ReactElement {
         <div className="avatar-panel">
           <header className="avatar-head">
             <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
-            {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
-            {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
-            <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Collapse to orb" title="Collapse to orb">–</button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion">×</button>
+            <div className="avatar-head-actions">
+              {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
+              {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
+              <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button>
+              <button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button>
+            </div>
           </header>
           <div className="avatar-tabs">
             <ChatTabs

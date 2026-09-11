@@ -207,12 +207,13 @@ body.avatar-window {
 .avatar-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 58px;
   padding: 11px 12px;
   border-bottom: 1px solid rgba(23, 25, 20, 0.08);
 }
-.avatar-drag-zone { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: grab; user-select: none; }
+.avatar-head-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.avatar-drag-zone { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; cursor: grab; user-select: none; }
 .avatar-drag-zone:active { cursor: grabbing; }
 .avatar-drag-zone > span:last-child { color: var(--avatar-console-edge); font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .08em; }
 .avatar-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -232,7 +233,7 @@ body.avatar-window {
 .avatar-head strong { display: block; font-size: 13px; color: var(--avatar-ink); letter-spacing: 0.01em; }
 .avatar-head small { font-size: 10.5px; color: #8f9289; }
 .avatar-retry {
-  margin-left: auto;
+  margin-left: 0;
   border: 1px solid #cad6b8;
   border-radius: 7px;
   background: #f4f8ed;
@@ -243,7 +244,7 @@ body.avatar-window {
 }
 .avatar-retry:hover, .avatar-retry:focus-visible { background: #e7f1d8; }
 .avatar-clear {
-  margin-left: auto;
+  margin-left: 0;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -255,12 +256,15 @@ body.avatar-window {
 .avatar-retry + .avatar-clear { margin-left: 0; }
 .avatar-clear:hover, .avatar-clear:focus-visible { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
 .avatar-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   background: transparent;
-  font-size: 18px;
   color: #6a6d64;
   cursor: pointer;
-  padding: 2px 8px;
   border-radius: 8px;
 }
 .avatar-close:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
