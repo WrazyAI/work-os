@@ -318,6 +318,65 @@ its latest `routine_runs` entries say `Codex reported an incomplete workflow`.
 The dashboard may build and render while the full Codex operating loop,
 provider coverage, personalization, and monitoring remain incomplete.
 
+## Cross-repo convergence (work-os ↔ agent-os)
+
+This platform lives in two GitHub repositories that have **no shared history**
+and must be reconciled by content, not by git merge:
+
+- **`WrazyAI/work-os`** (this clone's `origin`; `/home/maigreeks/projects/work-os`)
+  is canonical for the Work OS product surface: the desktop companion
+  (`desktop/work-os-companion`), the Work OS web app (`src/app/api/work-os/**`,
+  `src/lib/work-os-*`), `design.md`, tests, and the Windows release workflow.
+- **`WrazyAI/agent-os`** (second remote `agentos`; VPS checkout
+  `/home/dev/agent-os`) is the **deployed operations repository**: the agent
+  platform surfaces (Claude / Antigravity / chat routes, Hermes/SEO tooling,
+  cron, notebooks, `local-seo/`) plus a copy of the Work OS surface for the live
+  app at `app.wrazyos.com`.
+
+Whenever a change touches a path that exists in **both** repositories, apply it
+to both in the same task, taking the newest functional version per file. Never
+assume one repo is entirely ahead — each side has fixes the other lacks.
+
+Convergence procedure:
+
+1. Before editing a shared file, check the other side:
+   `git fetch agentos && git diff agentos/main origin/main -- <path>`
+   (and `git diff origin/main agentos/main -- <path>` for the reverse).
+2. Shared paths are the repo surface that exists in both: `src/`, `desktop/`,
+   `supabase/`, `test/`, `scripts/`, and the root configs. Repo-unique surfaces
+   stay: agent-os keeps `cron/`, `local-seo/`, `config/hermes/`, the notebooks,
+   and legacy agent routes; work-os keeps `design.md` and the release workflow.
+   When in doubt, treat any path present in both trees as shared.
+3. When a file diverged **structurally** (one side refactored a module into
+   several), port the behavior fix, not the whole file. Never revert a refactor
+   just because the other side's file is newer by timestamp.
+4. Verify both sides before claiming convergence: here, `npm run work-os:typecheck`
+   and `npm run work-os:test`; on agent-os, `npm run redeploy` plus a live probe
+   against `http://127.0.0.1:3000`.
+5. Never rewrite either repo's history to force a match. Converge content with
+   normal commits on each side and record both commit SHAs in the handoff.
+
+Recent shared-feature reconciliations (the pattern to follow):
+
+- **Nifty access recovery** — `src/lib/integrations/nifty.ts` gained the static
+  `NIFTY_ACCESS_TOKEN` fallback when an org refresh fails; and
+  `src/lib/work-os-proposals.ts` stopped blocking proposal drafting on a full
+  provider sync (it used the cached task view; approval re-syncs). Work-os
+  commits `202747f` / `1b3955a`; agent-os commits `d533dfff7` / `62f20afd2`.
+- **Task selection completion** — `desktop/work-os-companion/src/TaskSelectionCard.tsx`
+  and `src/interpretation.ts` (`pendingApprovalCount`) so checking tasks files
+  real proposals and no "Approve & record 0 tool calls" ever renders. Ship it as
+  companion release 0.2.86 and keep the agent-os copy in step on redeploy.
+- **Desktop build portability** — `src-tauri/tauri.conf.json`
+  `beforeBuildCommand` must never hardcode a local Node path (release 0.2.82),
+  and the companion's `vite.config.ts` keeps the repo-root `postcss.config.mjs`
+  out of its build (0.2.84). These break the Windows CI when regressed.
+- **Auth/storage fixes that lived only in agent-os** were ported into work-os:
+  `src/lib/auth.ts` (`withSchema("neon_auth")` plus the 5-minute signed session
+  cookie cache) and `src/lib/db/storage.ts` (lazy, `turbopackIgnore`d Node
+  builtins), along with `src/modules/work-os/date-format.ts` and the
+  token-styled `src/app/work-os/desktop/connect/DesktopConnect.tsx`.
+
 ## Logging progress tasks in Nifty
 
 **Workflow rule:** BEFORE starting any work for the user, FIRST log the tasks in

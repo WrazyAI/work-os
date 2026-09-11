@@ -5,8 +5,21 @@
 // Selection via OBJECT_STORAGE_DRIVER ("r2" | "local"); defaults to "r2"
 // when R2 credentials are present, else "local".
 // See docs/NEON-MIGRATION-PLAN.md §3 (Storage).
-import { promises as fs } from "node:fs";
-import path from "node:path";
+// Node builtins are loaded lazily with turbopackIgnore so this module stays
+// bundle-safe for Edge instrumentation (see scripts/neon docs).
+import type { promises as FsPromises } from "node:fs";
+import type PathMod from "node:path";
+
+let fsP: typeof FsPromises | null = null;
+async function fs(): Promise<typeof FsPromises> {
+  if (!fsP) fsP = (await import(/* turbopackIgnore: true */ "node:fs/promises")) as typeof FsPromises;
+  return fsP;
+}
+let pathM: typeof PathMod | null = null;
+async function pathMod(): Promise<typeof PathMod> {
+  if (!pathM) pathM = (await import(/* turbopackIgnore: true */ "node:path")) as typeof PathMod;
+  return pathM;
+}
 
 export type StorageUploadOptions = {
   contentType?: string;
@@ -46,7 +59,7 @@ async function getR2(): Promise<{ mod: R2Module; client: S3LikeClient } | null> 
     R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
   };
   if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) return null;
-  const mod = (await import("@aws-sdk/client-s3")) as unknown as R2Module;
+  const mod = (await import(/* turbopackIgnore: true */ "@aws-sdk/client-s3")) as unknown as R2Module;
   const client = new mod.S3Client({
     region: "auto",
     endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -120,11 +133,20 @@ const r2: StorageBackend = {
 
 // ── Local filesystem driver ──
 
-const localRoot = path.join(process.cwd(), ".storage-data");
+let localRootCache: string | null = null;
+async function localRoot(): Promise<string> {
+  if (!localRootCache) {
+    const path = await pathMod();
+    localRootCache = path.join(path.resolve(process.cwd()), ".storage-data");
+  }
+  return localRootCache;
+}
 
-function localPath(bucket: string, objectPath: string): string {
-  const full = path.resolve(localRoot, bucket, objectPath);
-  if (!full.startsWith(path.resolve(localRoot) + path.sep)) {
+async function localPath(bucket: string, objectPath: string): Promise<string> {
+  const path = await pathMod();
+  const root = await localRoot();
+  const full = path.resolve(root, bucket, objectPath);
+  if (!full.startsWith(path.resolve(root) + path.sep)) {
     throw new Error("invalid storage path");
   }
   return full;
@@ -133,9 +155,11 @@ function localPath(bucket: string, objectPath: string): string {
 const local: StorageBackend = {
   async upload(bucket, objectPath, body, options) {
     try {
-      const full = localPath(bucket, objectPath);
-      await fs.mkdir(path.dirname(full), { recursive: true });
-      await fs.writeFile(full, body);
+      const full = await localPath(bucket, objectPath);
+      const path = await pathMod();
+      const fsp = await fs();
+      await fsp.mkdir(path.dirname(full), { recursive: true });
+      await fsp.writeFile(full, body);
       void options;
       return { data: { path: objectPath }, error: null };
     } catch (err) {
@@ -144,7 +168,8 @@ const local: StorageBackend = {
   },
   async download(bucket, objectPath) {
     try {
-      const body = await fs.readFile(localPath(bucket, objectPath));
+      const fsp = await fs();
+      const body = await fsp.readFile(await localPath(bucket, objectPath));
       return {
         data: {
           arrayBuffer: body.buffer.slice(
@@ -161,7 +186,8 @@ const local: StorageBackend = {
   },
   async remove(bucket, objectPaths) {
     try {
-      await Promise.all(objectPaths.map((p) => fs.rm(localPath(bucket, p), { force: true })));
+      const fsp = await fs();
+      await Promise.all(objectPaths.map(async (p) => fsp.rm(await localPath(bucket, p), { force: true })));
       return { data: { message: "Deleted" }, error: null };
     } catch (err) {
       return { data: null, error: { message: err instanceof Error ? err.message : String(err) } };

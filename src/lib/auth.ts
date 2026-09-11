@@ -16,13 +16,13 @@ const authPool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 5,
 });
-authPool.on("connect", (client) => {
-  void client.query("SET search_path TO neon_auth, public");
-});
 
+// withSchema fully qualifies every generated table reference into neon_auth.
+// (A search_path connect-hook raced Better Auth's first query on fresh pool
+// connections and a startup `options` param is rejected by Neon's pooler.)
 const kysely = new Kysely<AnyDB>({
   dialect: new PostgresDialect({ pool: authPool }),
-});
+}).withSchema("neon_auth");
 
 const trustedOrigins = [
   "http://localhost:3000",
@@ -33,6 +33,10 @@ export const auth = betterAuth({
   database: kyselyAdapter(kysely, { type: "postgres" }),
   // neon_auth tables use uuid primary keys — make Better Auth emit uuids.
   advanced: { database: { generateId: "uuid" } },
+  // Cache the session in a signed cookie for 5 minutes: every API route's
+  // requireUser() then avoids a DB round-trip (major transfer/CU saver).
+  // Trade-off: bans/revocations take effect within ≤5 minutes.
+  session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
   trustedOrigins,
   emailAndPassword: {
     enabled: true,

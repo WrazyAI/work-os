@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createNiftyTask, listNiftyTasks, withNiftyOrganization } from "@/lib/integrations/nifty";
+import { listNiftyTasks, withNiftyOrganization } from "@/lib/integrations/nifty";
+import { createTask, getWorkOsOrganizationOwnerId } from "@/lib/work-os";
 import { requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -72,8 +73,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await withNiftyOrganization(auth.access.organizationId, () => createNiftyTask(record));
-    return NextResponse.json({ task: result }, { status: 201 });
+    // Do not expose an unmirrored provider write. The orchestration layer reads
+    // Nifty back and upserts the local task record before confirming success.
+    const ownerId = await getWorkOsOrganizationOwnerId(auth.access.organizationId);
+    const result = await createTask(ownerId, record);
+    return NextResponse.json({ task: result, providerStatus: "nifty_confirmed", mirrorStatus: "mirrored" }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 502 });
   }
