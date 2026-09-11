@@ -24,6 +24,59 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
 }
 
+export type EodSectionItem = { id: string; title: string; provenance: string | null };
+
+/** Day-scoped EOD facts. Completed and deferred work comes from the day's own
+ * events; carried work is only what the day itself surfaced, deferred, or left
+ * due — never the employee's whole overdue backlog. */
+export function selectDayEodWork(input: { events: Json[]; tasks: Json[] }): { completed: EodSectionItem[]; deferred: EodSectionItem[]; carried: EodSectionItem[] } {
+  const titleOf = (value: unknown) => {
+    const title = String((value as Json | null)?.title ?? "").trim();
+    return title || null;
+  };
+  const collect = (eventType: "completed" | "deferred") => {
+    const byTask = new Map<string, EodSectionItem>();
+    for (const event of input.events) {
+      if (String(event.event_type ?? "") !== eventType) continue;
+      const title = titleOf(event.task_snapshot);
+      if (!title) continue;
+      const id = String(event.task_id ?? `${title}:${event.id ?? ""}`);
+      const provenance = typeof event.provenance === "string" ? event.provenance : null;
+      const existing = byTask.get(id);
+      if (!existing || (provenance === "nifty_exact" && existing.provenance !== "nifty_exact")) byTask.set(id, { id, title, provenance });
+    }
+    return [...byTask.values()];
+  };
+  const carriedByTask = new Map<string, EodSectionItem>();
+  for (const event of input.events) {
+    if (String(event.event_type ?? "") !== "carried") continue;
+    const title = titleOf(event.task_snapshot);
+    if (!title) continue;
+    const id = String(event.task_id ?? `${title}:${event.id ?? ""}`);
+    carriedByTask.set(id, { id, title, provenance: typeof event.provenance === "string" ? event.provenance : null });
+  }
+  for (const task of input.tasks) {
+    if (task.completed === true) continue;
+    const id = String(task.id ?? task.provider_task_id ?? "");
+    if (!id || carriedByTask.has(id)) continue;
+    const attribution = task.dayAttribution as { reason?: unknown } | null | undefined;
+    const reason = String(attribution?.reason ?? "");
+    const dueDate = dateOnly(task.due_date);
+    const carriedForward = reason === "carried" || task.dayDisposition === "deferred" || (reason === "due_date" && !!dueDate);
+    if (!carriedForward) continue;
+    carriedByTask.set(id, { id, title: titleOf(task) ?? "Untitled task", provenance: null });
+  }
+  return { completed: collect("completed"), deferred: collect("deferred"), carried: [...carriedByTask.values()] };
+}
+
+const EOD_SECTION_LIMIT = 25;
+
+function limitedSection(items: Array<Record<string, any>>): Json[] {
+  return items.length > EOD_SECTION_LIMIT
+    ? [...items.slice(0, EOD_SECTION_LIMIT), { id: "more", title: `…and ${items.length - EOD_SECTION_LIMIT} more (see the full record)` }]
+    : items;
+}
+
 async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
   const [workspace, personResult, evidenceRows, checkInsResult, eventsResult] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
@@ -32,7 +85,7 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     listEvidence(ownerId, { personId, date: reportDate }),
     db().from("work_check_ins").select("id,input_text,update_kind,substantive").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("shift_date", reportDate).eq("substantive", true),
-    db().from("work_task_day_events").select("id,event_type,task_snapshot").eq("organization_id", access.organizationId)
+    db().from("work_task_day_events").select("id,task_id,event_type,task_snapshot").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("local_date", reportDate),
   ]);
   if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
@@ -41,10 +94,11 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   const evidence = (evidenceRows ?? []) as Json[];
   const updates = (checkInsResult.data ?? []) as Json[];
   const events = (eventsResult.data ?? []) as Json[];
-  const completed = workspace.tasks.filter((task) => task.completed);
+  const dayWork = selectDayEodWork({ events, tasks: workspace.tasks });
+  const completed = dayWork.completed;
   const progressed = updates.filter((item) => ["continuing", "material_progress"].includes(String(item.update_kind)));
-  const deferred = events.filter((item) => item.event_type === "deferred");
-  const carried = workspace.carryOverGroups.flatMap((group) => group.tasks);
+  const deferred = dayWork.deferred;
+  const carried = dayWork.carried;
   const unplanned = workspace.tasks.filter((task) => task.dayAttribution.reason === "creation_observed" && !task.due_date);
   const outputEvidence = evidence.filter((item) => item.source !== "worktivity");
   const activityEvidence = evidence.filter((item) => item.source === "worktivity");
@@ -61,19 +115,19 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     workspace.sessionQuality.status === "needs_correction" ? `Session quality: ${workspace.sessionQuality.message}` : "Session quality: valid or not applicable",
     "",
     "## Completed Work",
-    ...lineItems(completed, "No completed Nifty tasks were attributed to this date."),
+    ...lineItems(limitedSection(completed), "No tasks were completed on this date."),
     "",
     "## Progressed Work",
     ...lineItems(progressed, "No substantive progress updates were recorded."),
     "",
     "## Deferred Work",
-    ...lineItems(deferred, "No work was explicitly deferred."),
+    ...lineItems(limitedSection(deferred), "No work was explicitly deferred."),
     "",
     "## Carried Work",
-    ...lineItems(carried, "No overdue carry-over remained."),
+    ...lineItems(limitedSection(carried), "Nothing carries over from this day."),
     "",
     "## Unplanned Work",
-    ...lineItems(unplanned, "No unplanned task creation was observed."),
+    ...lineItems(limitedSection(unplanned), "No unplanned task creation was observed."),
     "",
     "## Output Evidence",
     ...lineItems(outputEvidence, "No output evidence was recorded."),

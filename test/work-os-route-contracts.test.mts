@@ -30,6 +30,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const workdayService = await source("src/lib/work-os-workday.ts");
   assert.doesNotMatch(workdayService, /already confirmed on another device/);
   assert.match(workdayService, /The AI build is invalid, expired, already used/);
+  const eodService = await source("src/lib/work-os-eod.ts");
+  assert.match(eodService, /selectDayEodWork/);
+  assert.doesNotMatch(eodService, /workspace\.carryOverGroups/);
+  assert.match(eodService, /No tasks were completed on this date/);
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
   const nifty = await source("src/lib/integrations/nifty.ts");
   const workOs = await source("src/lib/work-os-tasks.ts");

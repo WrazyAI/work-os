@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { EodOutstandingBell } from "./EodOutstanding";
 import { EodComposer } from "./taskSurfaces";
 import type { OutstandingEodDay } from "./types";
@@ -39,7 +39,7 @@ export default function EodOutstandingPreview() {
   const [open, setOpen] = useState(state !== "selected");
   const days = state === "empty" || state === "loading" ? [] : state === "dense" ? DENSE : NORMAL;
   const masthead = <header className="masthead">
-    <div><p>September 11</p><h1>{state === "selected" ? "EOD Review" : "My Day"}</h1></div>
+    <div><p>September 11</p><div className="masthead-title-row"><h1>{state === "selected" ? "EOD Review" : "My Day"}</h1>{days.length > 0 && <button type="button" className="eod-attention-pill"><AlertTriangle size={12} />{days.length} prior EOD{days.length === 1 ? "" : "s"} need attention</button>}</div></div>
     <div className="mast-actions">
       <span className="provider nifty-state fresh">Nifty current</span>
       <EodOutstandingBell

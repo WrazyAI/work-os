@@ -34,7 +34,7 @@ import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { Otto } from "./Otto";
-import { EodOutstandingBell } from "./EodOutstanding";
+import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { MemorySettings } from "./MemorySettings";
@@ -1161,6 +1161,7 @@ export default function App() {
   const allReviewTasksCompleted = eodDate
     ? reviewParentTasks.length > 0 && reviewParentTasks.every((task) => task.completed === true)
     : allTodayTasksCompleted;
+  const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
@@ -1966,7 +1967,7 @@ export default function App() {
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
         days={outstandingQuery.data?.days ?? []}
         loading={outstandingQuery.isFetching && !outstandingQuery.data}
         error={outstandingQuery.error ? errorMessage(outstandingQuery.error, "Outstanding EODs could not be loaded.") : null}
@@ -2053,11 +2054,36 @@ export default function App() {
                     screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
+                    onRefresh={reviewDay.report.status === "draft" || reviewDay.report.status === "rejected" ? () => void createEodDraft(reviewDay) : undefined}
                     onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
                     onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
                   />
                   : eodSubmitted ? <section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>{eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p></section>
-                    : !reviewDay?.report ? <section className="panel"><Empty title="Prepare your EOD for review" body={eodDate ? `Create a draft from ${formatWorkOsDate(eodDate)}'s recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything.` : "Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything."} /><div className="today-actions">{!eodDate && <button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}<button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft(reviewDay)}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button></div></section>
+                    : !reviewDay?.report ? <section className="panel eod-start">
+                        <header className="eod-start-head">
+                          <FileCheck2 size={20} />
+                          <div>
+                            <h2>{eodDate ? `Draft the EOD for ${formatWorkOsDate(eodDate)}` : "Prepare today’s EOD"}</h2>
+                            <p>{eodDate ? "Build the report from that day’s recorded work, review every line, then submit it. Drafting does not submit anything." : "Build the report from today’s recorded work, review every line, then submit it. Drafting does not submit anything."}</p>
+                          </div>
+                        </header>
+                        {!eodDate && outstandingDays.length > 0 ? <section className="eod-start-earlier" aria-label="Earlier days without a submitted EOD">
+                          <header><strong>Earlier days</strong><small>{outstandingDays.length} still need an EOD</small></header>
+                          <ul>{outstandingDays.slice(0, 5).map((day) => {
+                            const status = OUTSTANDING_STATUS_META[day.status];
+                            return <li key={day.date}><button type="button" onClick={() => setEodDate(day.date)}>
+                              <span className="eod-start-earlier-main"><strong>{formatWorkOsDate(day.date)}</strong><small>{outstandingRowMeta(day) || "Recorded workday"}</small></span>
+                              <span className={`eod-pill ${status.className}`}>{status.label}</span>
+                              <ChevronRight size={14} />
+                            </button></li>;
+                          })}</ul>
+                          {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setEodListOpen(true)}>Show all {outstandingDays.length} days</button> : null}
+                        </section> : null}
+                        <div className="eod-start-actions">
+                          {!eodDate && <button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
+                          <button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft(reviewDay)}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button>
+                        </div>
+                      </section>
                       : null}
       </main>}
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}

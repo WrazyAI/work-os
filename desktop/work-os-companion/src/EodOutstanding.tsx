@@ -6,7 +6,7 @@ import { formatWorkOsDate } from "./dateFormat";
 import { useAnchoredMenu } from "./taskSurfaces";
 import type { OutstandingEodDay, OutstandingEodStatus } from "./types";
 
-const STATUS_LABELS: Record<OutstandingEodStatus, { label: string; className: string }> = {
+export const OUTSTANDING_STATUS_META: Record<OutstandingEodStatus, { label: string; className: string }> = {
   no_draft: { label: "Needs draft", className: "needs-draft" },
   draft_unsubmitted: { label: "Draft not submitted", className: "draft-open" },
   changes_requested: { label: "Changes requested", className: "changes-requested" },
@@ -116,7 +116,7 @@ export function EodOutstandingBell({ days, loading, error, open, onToggle, onClo
             : !count && error ? <div className="eod-outstanding-notice" role="status"><span>{error}</span><button type="button" onClick={onRetry}><RefreshCw size={14} /> Try again</button></div>
               : !count ? <div className="eod-outstanding-empty"><strong>You&apos;re caught up</strong><span>No past workday is missing a submitted EOD.</span></div>
                 : <ul className="eod-outstanding-list">{days.map((day) => {
-                  const status = STATUS_LABELS[day.status];
+                  const status = OUTSTANDING_STATUS_META[day.status];
                   return <li key={day.date}>
                     <button type="button" className="eod-outstanding-row" onClick={() => onSelect(day)}>
                       <span className="eod-outstanding-row-main">

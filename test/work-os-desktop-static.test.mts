@@ -132,6 +132,8 @@ assert.match(app, /onRefine=\{\(markdown, feedback, annotations\) => refineEod\(
 assert.match(app, /allTasksCompleted=\{allReviewTasksCompleted\}/);
 assert.match(app, /EodOutstandingBell/);
 assert.match(app, /resyncPlanFromServer/);
+assert.match(app, /eod-attention-pill/);
+assert.match(app, /prior EOD/);
 const planningSession = read("src/PlanningSession.tsx");
 assert.match(planningSession, /newer confirmed plan/);
 assert.match(app, /useOutstandingEodsQuery/);
@@ -145,6 +147,8 @@ assert.match(eodOutstanding, /eod-pill/);
 const queryLayer = read("src/workOsQueries.ts");
 assert.match(queryLayer, /\/api\/work-os\/me\/eod\/outstanding\?days=14/);
 assert.match(queryLayer, /fetchDay\(\{ variant: "details", date: options\.date! \}\)/);
+assert.match(taskSurfaces, /Refresh from record/);
+assert.match(app, /eod-start-earlier/);
 assert.match(taskSurfaces, /Refine this draft/);
 assert.match(taskSurfaces, /Your bottleneck answer stays separate/);
 assert.match(app, /task-row-line/);
