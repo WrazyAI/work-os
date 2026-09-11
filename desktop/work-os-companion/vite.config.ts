@@ -7,6 +7,11 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { dedupe: ["react", "react-dom"] },
+  // The monorepo root has its own postcss.config.mjs (for the web app). This
+  // inline config stops Vite/Vitest from searching upward and trying to load
+  // plugins that the companion package does not install. Tailwind here comes
+  // from @tailwindcss/vite, not PostCSS.
+  css: { postcss: { plugins: [] } },
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   envPrefix: ["VITE_", "TAURI_"],
