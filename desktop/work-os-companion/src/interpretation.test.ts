@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, proposalApprovalCommand, toolCallKey } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, pendingApprovalCount, proposalApprovalCommand, toolCallKey } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -213,5 +213,22 @@ describe("toolCallKey", () => {
     const updated = mergeToolResults(merged, [{ op, status: "failed", message: "Nope." }]);
     expect(updated).toHaveLength(2);
     expect(updated.find((item) => item.op === op)?.status).toBe("failed");
+  });
+});
+
+describe("pendingApprovalCount", () => {
+  const op = (overrides: Record<string, unknown>) => ({ op: "complete_task", statement: "Done.", enabled: true, ...overrides }) as never;
+  it("counts only enabled mutating proposals that have no result yet", () => {
+    expect(pendingApprovalCount([op({}), op({ enabled: false })])).toBe(1);
+  });
+  it("ignores display-only operations so an approve bar never reads 0 tool calls", () => {
+    expect(pendingApprovalCount([op({ op: "display_overdue_tasks" })])).toBe(0);
+    expect(pendingApprovalCount([op({ op: "navigate_to_page", page: "review" })])).toBe(0);
+  });
+  it("drops proposals that already have a matching result", () => {
+    const operations = [op({ proposalId: "p-1" })];
+    const results = [{ op: operations[0], status: "recorded", message: "Recorded." }] as never;
+    expect(pendingApprovalCount(operations, results)).toBe(0);
+    expect(pendingApprovalCount(operations)).toBe(1);
   });
 });

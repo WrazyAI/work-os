@@ -8,7 +8,7 @@ import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay } from "./workOsQueries";
-import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, pendingApprovalCount, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
@@ -1003,10 +1003,10 @@ export default function AvatarApp(): React.ReactElement {
                                 }} onDeny={() => denyOperation(entry.id, op)} />
                               );
                             })}
-                            <button className="op-approve" disabled={filing || !entry.operations.some((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op))}
+                            {pendingApprovalCount(entry.operations, entry.toolResults) > 0 && <button className="op-approve" disabled={filing}
                               onClick={() => void approveOperations(entry.id, entry.operations!)}>
-                              {filing ? "Filing…" : `Approve & record ${entry.operations.filter((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op)).length} tool call${entry.operations.filter((op) => op.enabled && !entry.toolResults?.some((item) => item.op === op)).length === 1 ? "" : "s"}`}
-                            </button>
+                              {filing ? "Filing…" : `Approve & record ${pendingApprovalCount(entry.operations, entry.toolResults)} tool call${pendingApprovalCount(entry.operations, entry.toolResults) === 1 ? "" : "s"}`}
+                            </button>}
                           </div>
                         )}
                         </div>

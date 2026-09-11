@@ -71,6 +71,20 @@ export function isMutatingToolOp(op: Pick<ProposedOperation, "op">): boolean {
   return !isDisplayToolOp(op) && op.op !== "navigate_to_page";
 }
 
+/** How many mutating proposals still need an approval decision. Zero means the
+ *  approval bar must not render at all — a display-only or fully filed turn has
+ *  nothing to approve, and a "0 tool calls" button is a lie. */
+export function pendingApprovalCount(
+  operations: readonly ProposedOperation[],
+  results?: readonly ToolCallResult[],
+): number {
+  return operations.filter((op) =>
+    isMutatingToolOp(op) &&
+    op.enabled &&
+    !results?.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)),
+  ).length;
+}
+
 /** The exact Work OS request an approved assistant proposal will make. */
 export function operationToolCall(op: ProposedOperation, context: ApprovedOpContext): { tool: string; command: string } {
   if (op.proposalId) {
