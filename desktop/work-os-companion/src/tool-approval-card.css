@@ -70,4 +70,105 @@
 .navigate-button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-approval-card.is-failed .tool-approval-state { color: #af4138; }
 
-@media (prefers-reduced-motion: reduce) { .tool-approval-card { transition: none; } }
+/* Shared one-at-a-time review flow. The technical request remains available,
+ * but the employee decision leads the card instead of transport details. */
+.approval-flow,
+.approval-results {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d3d9cf;
+  border-radius: 14px;
+  background: #fbfcf8;
+  color: #182018;
+  box-shadow: 0 1px 2px rgba(20, 30, 18, .035), 0 7px 24px rgba(20, 30, 18, .045);
+}
+
+.approval-flow > header,
+.approval-results > header {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e6df;
+  background: #f5f7f2;
+}
+
+.approval-flow > header div { min-width: 0; }
+.approval-flow > header small { display: block; color: #7b8278; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.approval-flow > header strong { display: block; margin-top: 2px; font-size: 13px; line-height: 1.35; }
+.approval-flow > header > span,
+.approval-results > header span { flex: 0 0 auto; border-radius: 999px; background: #e8ede4; padding: 4px 8px; color: #586255; font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.approval-flow.is-destructive { border-color: #e3aaa2; }
+.approval-flow.is-destructive > header { background: #fff6f4; }
+
+.approval-flow-body { display: grid; gap: 10px; padding: 12px; }
+.approval-flow-body label { display: grid; gap: 5px; }
+.approval-flow-body label > span { color: #626a61; font-size: 10px; font-weight: 700; }
+.approval-flow-body textarea,
+.approval-flow-body select { width: 100%; min-height: 38px; border: 1px solid #d3d9cf; border-radius: 9px; background: #fff; color: #182018; font: 500 12px/1.45 Manrope, Inter, sans-serif; outline: none; }
+.approval-flow-body textarea { min-height: 64px; padding: 9px 10px; resize: vertical; }
+.approval-flow-body select { padding: 0 10px; }
+.approval-flow-body textarea:focus,
+.approval-flow-body select:focus { border-color: #7cc936; box-shadow: 0 0 0 3px rgba(168, 241, 91, .23); }
+.approval-flow-body details { color: #626a61; font-size: 10px; }
+.approval-flow-body summary { display: inline-flex; min-height: 28px; align-items: center; gap: 4px; cursor: pointer; font-weight: 700; list-style: none; }
+.approval-flow-body summary::-webkit-details-marker { display: none; }
+.approval-flow-body details[open] summary svg { transform: rotate(180deg); }
+.approval-flow-body code { display: block; overflow-wrap: anywhere; padding: 9px; border-radius: 8px; background: #182018; color: #e7f7ca; font: 9px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+
+.approval-flow > footer { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-top: 1px solid #e2e6df; }
+.approval-step-nav,
+.approval-actions { display: flex; align-items: center; gap: 6px; }
+.approval-step-nav button,
+.approval-actions button,
+.approval-back,
+.approval-submit { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 9px; font: 700 11px/1 Manrope, Inter, sans-serif; cursor: pointer; }
+.approval-step-nav button { width: 32px; padding: 0; background: transparent; color: #626a61; }
+.approval-actions button,
+.approval-back { padding: 0 10px; background: transparent; color: #626a61; }
+.approval-actions button:hover,
+.approval-step-nav button:hover:not(:disabled),
+.approval-back:hover { background: rgba(24, 32, 24, .055); color: #182018; }
+.approval-actions .approval-approve,
+.approval-submit { padding: 0 13px; background: #a8f15b; color: #182018; }
+.approval-actions button.is-selected { box-shadow: inset 0 0 0 1px #a5ada1; }
+.approval-actions .approval-approve.is-selected { box-shadow: inset 0 0 0 1px #70a832; }
+.approval-flow button:focus-visible,
+.approval-flow summary:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
+.approval-flow button:disabled { cursor: default; opacity: .42; }
+.approval-hint { margin: -2px 12px 10px; color: #626a61; font-size: 10px; }
+
+.approval-summary-list { display: grid; padding: 6px; }
+.approval-summary-list button { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; min-height: 38px; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 6px 8px; color: #182018; text-align: left; cursor: pointer; }
+.approval-summary-list button:hover { background: rgba(24, 32, 24, .055); }
+.approval-summary-list strong { overflow: hidden; font-size: 11.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.approval-summary-list em { color: #626a61; font-size: 10px; font-style: normal; }
+.approval-decision-dot { width: 8px; height: 8px; border: 1px solid #a8afa5; border-radius: 50%; }
+.approval-decision-dot.is-approve { border-color: #659b32; background: #a8f15b; }
+.approval-decision-dot.is-skip { background: #d9ded5; }
+
+.approval-results > header strong { font-size: 12.5px; }
+.approval-results > div { display: grid; }
+.approval-results article { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 9px 11px; border-bottom: 1px solid #e2e6df; }
+.approval-results article:last-child { border-bottom: 0; }
+.approval-results article > span { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 6px; background: #e8f4da; color: #3f7d20; }
+.approval-results article.is-failed > span { background: #f8ded8; color: #af4138; }
+.approval-results article strong { display: block; font-size: 11.5px; }
+.approval-results article p { margin: 2px 0 0; color: #626a61; font-size: 10.5px; line-height: 1.4; }
+.approval-results article em { border-radius: 999px; background: #edf0ea; padding: 3px 7px; color: #626a61; font-size: 9px; font-style: normal; font-weight: 750; }
+.approval-results article.is-recorded em { background: #e8f4da; color: #3f7d20; }
+.approval-results article.is-queued em { background: #fff3d1; color: #8a6410; }
+.approval-results article.is-failed em { background: #f8ded8; color: #af4138; }
+
+@media (max-width: 560px) {
+  .approval-flow > footer { align-items: stretch; flex-direction: column; }
+  .approval-step-nav { align-self: flex-start; }
+  .approval-actions { width: 100%; }
+  .approval-actions button { flex: 1; min-height: 40px; }
+  .approval-submit { width: 100%; min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .tool-approval-card, .approval-flow *, .approval-results * { transition: none !important; animation: none !important; } }

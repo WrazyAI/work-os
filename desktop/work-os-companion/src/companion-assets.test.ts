@@ -86,10 +86,10 @@ describe("floating companion integration", () => {
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");
-    expect(avatar).toContain("ToolApprovalCard");
+    expect(avatar).toContain("ApprovalFlow");
     expect(avatar).toContain("avatar-drag-surface");
     expect(avatar).toContain("/api/work-os/me/proposals");
-    expect(avatar).toContain("denyOperation");
+    expect(avatar).toContain('decision: "reject"');
     expect(avatar).toContain("TaskSelectionCard");
     expect(avatar).toContain("proposeAvatarSelectedCompletions");
   });
@@ -102,7 +102,7 @@ describe("floating companion integration", () => {
     expect(vault).toContain("saveConversation");
     expect(vault).toContain("clearConversation");
     expect(main).toContain("composerConversationScope");
-    expect(main).toContain("ToolApprovalCard");
+    expect(main).toContain("ApprovalFlow");
     expect(avatar).toContain("avatarConversationScope");
     expect(main).toContain("workday:${visibleSession.organizationId}:${visibleDay.access.personId}:${visibleDay.shiftDate}");
     expect(avatar).toContain("workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}");

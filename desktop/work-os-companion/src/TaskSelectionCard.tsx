@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { AlertTriangle, Check, CircleAlert, ListChecks, RefreshCw } from "lucide-react";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText } from "./taskWorkspace";
@@ -25,6 +25,7 @@ export type TaskSelectionCardProps = {
   errorMessage?: string;
   onRetry?: () => void;
   dense?: boolean;
+  presentation?: "list" | "table";
   maxHeight?: number;
   emptyTitle?: string;
   emptyMessage?: string;
@@ -45,6 +46,7 @@ export function TaskSelectionCard({
   errorMessage = "Could not load tasks. Try again.",
   onRetry,
   dense = false,
+  presentation = "list",
   maxHeight = 320,
   emptyTitle = "No pending tasks",
   emptyMessage = "Tasks waiting to be completed will appear here.",
@@ -60,6 +62,8 @@ export function TaskSelectionCard({
   const taskIdsKey = listedTasks.map((task) => task.id).join("\u0000");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirming, setConfirming] = useState(false);
+  const [filter, setFilter] = useState<"all" | "pending" | "overdue">("all");
+  const uid = useId();
 
   useEffect(() => {
     setSelectedIds((current) => new Set([...current].filter((id) => knownIds.has(id))));
@@ -69,8 +73,15 @@ export function TaskSelectionCard({
   const selectedTasks = listedTasks.filter((task) => selectedIds.has(task.id));
   const loading = status === "loading";
   const failed = status === "error";
-  const contentId = "task-selection-card-content";
+  const contentId = `${uid}-content`;
+  const titleId = `${uid}-title`;
   const canConfirm = !loading && !failed && selectedTasks.length > 0;
+  const filteredTasks = listedTasks.filter((task) => filter === "all" || (filter === "overdue" ? task.state === "overdue" : task.state !== "overdue"));
+  const filterOptions = [
+    { key: "all" as const, label: "All", count: listedTasks.length },
+    { key: "pending" as const, label: "Pending", count: listedTasks.filter((task) => task.state !== "overdue").length },
+    { key: "overdue" as const, label: "Overdue", count: listedTasks.filter((task) => task.state === "overdue").length },
+  ];
 
   const toggle = (taskId: string) => {
     setConfirming(false);
@@ -99,15 +110,16 @@ export function TaskSelectionCard({
       className={cx(
         "chat-task-card flex w-full min-w-0 flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-card",
         dense && "is-dense",
+        presentation === "table" && "is-table",
         confirming && "is-confirming",
       )}
-      aria-labelledby="task-selection-card-title"
+      aria-labelledby={titleId}
       aria-busy={loading}
     >
       <header className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <span className="block text-[9px] font-bold uppercase tracking-[0.08em] text-ink-3">Task selection</span>
-          <h2 id="task-selection-card-title" title={title} className="m-0 truncate text-[13px] font-semibold text-ink">
+          <h2 id={titleId} title={title} className="m-0 truncate text-[13px] font-semibold text-ink">
             {title}
           </h2>
         </div>
@@ -166,6 +178,47 @@ export function TaskSelectionCard({
             </span>
             <strong className="text-[13px] font-semibold text-ink">{emptyTitle}</strong>
             <p className="m-0 max-w-[38ch] text-[11.5px] leading-snug text-ink-2">{emptyMessage}</p>
+          </div>
+        ) : presentation === "table" ? (
+          <div className="chat-task-table-wrap">
+            <nav className="chat-task-filters" aria-label="Filter tasks">
+              {filterOptions.map((option) => (
+                <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)}>
+                  {option.key !== "all" ? <span className={`task-filter-dot is-${option.key}`} aria-hidden="true" /> : null}
+                  {option.label}<em>{option.count}</em>
+                </button>
+              ))}
+            </nav>
+            {filteredTasks.length ? (
+              <div className="chat-task-table" role="table" aria-label={title}>
+                <div className="chat-task-table-head" role="row">
+                  <span role="columnheader" aria-label="Select" />
+                  <span role="columnheader">Task</span>
+                  <span role="columnheader">Due</span>
+                  <span role="columnheader">Status</span>
+                  <span role="columnheader">Project</span>
+                </div>
+                {filteredTasks.map((task) => {
+                  const titleText = safeTaskText(task.title, "Untitled Nifty task");
+                  const overdue = task.state === "overdue";
+                  const selected = selectedIds.has(task.id);
+                  return (
+                    <label key={task.id} className={cx("chat-task-table-row", selected && "is-selected")} role="row">
+                      <span role="cell" className="chat-task-check">
+                        <input type="checkbox" className="peer sr-only" checked={selected} onChange={() => toggle(task.id)} aria-label={`Select ${titleText}`} />
+                        <span aria-hidden="true"><Check size={12} strokeWidth={3} /></span>
+                      </span>
+                      <span role="cell" className="chat-task-table-title" title={task.description ? safeTaskText(task.description, "") : titleText}><strong>{titleText}</strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</span>
+                      <span role="cell" className={overdue ? "is-overdue" : ""}>{task.dueDate ? formatWorkOsDate(task.dueDate) : "No date"}</span>
+                      <span role="cell"><em className={overdue ? "is-overdue" : "is-pending"}>{overdue ? "Overdue" : "Pending"}</em></span>
+                      <span role="cell" title={task.projectName ?? "Nifty"}>{task.projectName ? safeTaskText(task.projectName, "Nifty") : "Nifty"}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="chat-task-filter-empty" role="status"><ListChecks size={16} aria-hidden="true" /><strong>No {filter} tasks</strong><span>Choose another filter to see the remaining work.</span></div>
+            )}
           </div>
         ) : (
           <ul className="m-0 list-none p-0">
@@ -231,14 +284,14 @@ export function TaskSelectionCard({
           {confirming ? (
             <>
               <button
-                className="min-h-[32px] rounded-[9px] px-2.5 text-[11.5px] font-semibold text-ink-2 transition-colors hover:bg-hover hover:text-ink"
+                className="task-selection-secondary min-h-[32px] rounded-[9px] px-2.5 text-[11.5px] font-semibold text-ink-2 transition-colors hover:bg-hover hover:text-ink"
                 type="button"
                 onClick={() => setConfirming(false)}
               >
                 Back
               </button>
               <button
-                className="inline-flex min-h-[32px] items-center gap-1.5 rounded-[9px] bg-ink px-3 text-[11.5px] font-semibold text-white transition-transform enabled:active:scale-[0.97] disabled:cursor-default disabled:bg-line disabled:text-ink-2"
+                className="task-selection-primary inline-flex min-h-[32px] items-center gap-1.5 rounded-[9px] bg-ink px-3 text-[11.5px] font-semibold text-white transition-transform enabled:active:scale-[0.97] disabled:cursor-default disabled:bg-line disabled:text-ink-2"
                 type="button"
                 disabled={!canConfirm}
                 onClick={confirmDone}
@@ -248,7 +301,7 @@ export function TaskSelectionCard({
             </>
           ) : (
             <button
-              className="inline-flex min-h-[32px] items-center gap-1.5 rounded-[9px] bg-ink px-3 text-[11.5px] font-semibold text-white transition-transform enabled:active:scale-[0.97] disabled:cursor-default disabled:bg-line disabled:text-ink-2"
+              className="task-selection-primary inline-flex min-h-[32px] items-center gap-1.5 rounded-[9px] bg-ink px-3 text-[11.5px] font-semibold text-white transition-transform enabled:active:scale-[0.97] disabled:cursor-default disabled:bg-line disabled:text-ink-2"
               type="button"
               disabled={!canConfirm}
               onClick={() => setConfirming(true)}

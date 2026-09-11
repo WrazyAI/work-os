@@ -49,4 +49,13 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("<h2");
     expect(markup).toContain("title=");
   });
+
+  it("uses a filterable task table for the in-app presentation", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, presentation: "table", onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain('role="table"');
+    expect(markup).toContain('aria-label="Filter tasks"');
+    expect(markup).toContain("Project");
+    expect(markup).toContain("Work OS");
+    expect(markup).toContain("is-table");
+  });
 });

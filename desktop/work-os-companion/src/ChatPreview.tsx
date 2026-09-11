@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Minus, Sparkles, X } from "lucide-react";
+import { Minus, X } from "lucide-react";
 import { ProgressComposer } from "./App";
-import { ChatMarkdown } from "./ChatMarkdown";
-import { ChatTabs, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
-import { ToolApprovalCard } from "./ToolApprovalCard";
+import { ApprovalFlow } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
+import { Otto } from "./Otto";
 import type { WorkOsConversationTurn } from "./vault";
 
 /** DEV-only visual review surface for the shared chat language
@@ -26,6 +26,31 @@ export default function ChatPreview() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
         <InAppSection />
+      </div>
+    );
+  }
+  if (isolate === "tools") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <InAppToolsSection />
+      </div>
+    );
+  }
+  if (isolate === "orb") {
+    return (
+      <div style={{ minHeight: 300, padding: 28, background: "#dde3d8" }}>
+        <div className="avatar-compact">
+          {params.has("prompt") ? <button className="avatar-prompt-bubble"><strong>Quick check-in</strong><span>What changed since your last update?</span></button> : null}
+          <span className="avatar-drag-surface" aria-hidden="true">•••</span>
+          <button className="avatar-hide" aria-label="Hide companion"><X size={13} /></button>
+          <button className={`avatar-orb ${params.has("prompt") ? "due pulse" : "live"}`} aria-label="Open Otto companion">
+            <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /><circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={44} /></svg>
+            <Otto pose="focus" className="avatar-pet" />
+            <span className="avatar-orb-state">{params.has("prompt") ? "Check in" : "Focused"}</span>
+            <span className="avatar-badge" />
+          </button>
+          <span className="avatar-day-time">3h 12m left</span>
+        </div>
       </div>
     );
   }
@@ -133,7 +158,11 @@ function InAppToolsSection() {
           reply: "Review the selected task completions before anything changes.",
           results: [{
             op: operations[2]!, status: "recorded", message: "Pending tasks loaded.",
-            data: { provider_result: { view: "pending", tasks: [{ id: "t-9", title: "Document release evidence", due_date: null }] } },
+            data: { provider_result: { view: "pending", tasks: [
+              { id: "t-9", title: "Document release evidence", description: "Capture the screenshots and validation states.", due_date: null, project_name: "Work OS", state: "pending" },
+              { id: "t-10", title: "Repair provider sync", description: "Verify the Nifty readback before release.", due_date: "2026-09-06", project_name: "Platform", state: "overdue" },
+              { id: "t-11", title: "Prepare companion handoff", due_date: "2026-09-11", project_name: "Desktop", state: "pending" },
+            ] } },
           }],
         }}
         toolContext={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
@@ -159,11 +188,9 @@ function AvatarSection() {
         <header className="avatar-head">
           <div className="avatar-drag-zone">
             <div className="avatar-title">
-              <span className="avatar-head-mark" aria-hidden="true">
-                WO
-              </span>
+              <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="focus" /></span>
               <div>
-                <strong>On shift · 2h 14m</strong>
+                <strong>Otto <em className="avatar-live-dot is-live" /> <span>On shift · 2h 14m</span></strong>
                 <small>Next update 3:05 PM</small>
               </div>
             </div>
@@ -200,19 +227,9 @@ function AvatarSection() {
           </div>
         ) : (
           <div className="avatar-chat workos-thread">
-            <div className="chat-turn">
-              <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
-              <div className="chat-turn-body">
-                <ChatMarkdown text="Share an update, or tell me to create, complete, or block tasks." />
-              </div>
-            </div>
-            <div className="chat-turn-user">
-              <ChatMarkdown text="Show my pending tasks" />
-            </div>
-            <div className="chat-turn">
-              <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
-              <div className="chat-turn-body">
-                <ChatMarkdown text="Here are your open tasks — viewing never needs approval." />
+            <ChatTurn role="assistant" text="Share an update, or tell me to create, complete, or block tasks." />
+            <ChatTurn role="user" text="Show my pending tasks" />
+            <ChatTurn role="assistant" text="Here are your open tasks. Viewing never needs approval.">
                 <TaskSelectionCard
                   title="Pending tasks"
                   tasks={AVATAR_TASKS}
@@ -222,20 +239,20 @@ function AvatarSection() {
                   emptyMessage="Tasks waiting to be completed will appear here."
                 />
                 <div className="chat-operations">
-                  <ToolApprovalCard
-                    op={{ op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", enabled: true }}
+                  <ApprovalFlow
+                    operations={[
+                      { op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "preview-approval-1", enabled: true },
+                      { op: "record_progress", statement: "Documented release evidence.", taskId: "t-open", taskTitle: "Document release evidence", proposalId: "preview-approval-2", enabled: true },
+                    ]}
                     context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
-                    index={0}
-                    total={2}
+                    taskOptions={AVATAR_TASKS.map((task) => ({ id: task.id, title: task.title }))}
+                    onSubmit={() => undefined}
                   />
                   <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />
                 </div>
-              </div>
-            </div>
+            </ChatTurn>
             {entries.map((entry) => (
-              <div key={entry.id} className="chat-turn-user">
-                <ChatMarkdown text={entry.text} />
-              </div>
+              <ChatTurn key={entry.id} role="user" text={entry.text} />
             ))}
           </div>
         )}

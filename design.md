@@ -466,14 +466,16 @@ Custom artwork should reinforce the Work OS identity through abstract work, orga
 
 Do not generate a new asset when an existing mark, illustration, or icon system can serve the purpose.
 
-The persistent floating companion may use a compact retro-console treatment to
-differentiate it from ordinary application chrome: a dark instrument face,
-signal-green status readout, and restrained scanline/grid texture on the
-collapsed orb only. This treatment
-is limited to the companion's identity and bounded-progress display; its expanded
-composer remains a flat warm, accessible Work OS surface with standard controls and
-plain-language status, free of scanline texture. The console is draggable from its compact body and expanded
-header, with a visible keyboard-operable composer once opened.
+The persistent floating companion may use a compact instrument treatment to
+differentiate it from ordinary application chrome: a dark rounded face, a
+signal-green progress ring, a large Otto silhouette, and a short plain-language
+state label. The collapsed surface must read as one status object rather than a
+miniature application window. Its expanded composer remains a warm, accessible
+Work OS surface with standard controls and no decorative texture. The companion
+is draggable from its compact grab handle and expanded header, with a visible
+keyboard-operable composer once opened. A prompt bubble may overlap the upper
+portion of the collapsed object, but must preserve Otto's state label, progress
+ring, and the remaining-time pill.
 
 **Otto** is the reusable visual identity for that console
 (`desktop/work-os-companion/src/Otto.tsx`, `otto.css`): a compact focus robot
@@ -1256,6 +1258,13 @@ and dense rows. At narrow widths, status labels may hide, metadata wraps, and th
 footer action becomes full width. Checkbox focus remains visible and all
 non-essential motion is removed with reduced motion.
 
+When the card renders inside the in-app assistant at wide or compact desktop
+widths, `presentation="table"` adds filter chips for All, Pending, and Overdue,
+then uses Task, Due, Status, and Project columns. Filtering is local and never
+fetches or mutates. Below 560px those semantic rows reflow to a two-line compact
+layout with no horizontal page overflow. The floating companion always uses the
+stacked-row presentation because its 400px window is the compact surface.
+
 ### 25.8 Assistant thinking trace
 
 When the floating companion performs multi-step assistant work (interpreting an
@@ -1279,7 +1288,7 @@ Contract:
 - All motion (shimmer, spinner, expand) is removed under
   `prefers-reduced-motion`, leaving the stage labels and receipt visible.
 - The trace never replaces the approval barrier: proposals still require
-  explicit review in `ToolApprovalCard` before anything is recorded.
+  explicit review in `ApprovalFlow` before anything is recorded.
 
 ### 25.9 Approval-free assistant tools
 
@@ -1312,6 +1321,21 @@ completion proposals. Changing the selection or the underlying list resets the
 confirmation. The confirmation step names the count and states that proposals
 still need approval — checking a box never marks anything done by itself.
 
+### 25.10.1 Assistant approval flow
+
+Mutating assistant proposals use one `ApprovalFlow` in both chat surfaces. It
+shows exactly one action at a time, names the provider-facing outcome as a
+question, and keeps proposed wording and task mapping editable before review.
+Technical command details are collapsed by default. Approve and Skip only set
+local decisions and advance to the next action. No provider write happens until
+the final review has no undecided actions and the employee activates its single
+commit button. The final review lists every action and decision and allows any
+row to be reopened. After commit, `ApprovalResults` reports Recorded, Queued,
+Skipped, or Failed per action; a successful process exit is never substituted
+for provider confirmation. Destructive actions name the target and use the
+danger treatment. Keyboard focus and reduced-motion behavior follow the shared
+card rules.
+
 ### 25.11 Assistant chat panel and prompt bar
 
 The in-app dock composer and the floating companion panel share one chat
@@ -1342,9 +1366,9 @@ Anatomy, top to bottom:
    replies reveal word-by-word out of a soft blur and finish with real Copy and
    (when the parent can resend) Resend actions; the full text is exposed to
    assistive technology in one `aria-live` node on first render. Older/history
-   turns render statically. Provenance, receipts, approval cards, selection
-   cards, and navigation buttons render exactly as before — only the container
-   language is shared.
+   turns render statically. Provenance, receipts, the staged approval flow,
+   selection cards, and navigation buttons use the same container language in
+   both delivery surfaces.
 3. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
    context `+` button, an auto-growing field, an optional labeled footer action
    (the dock's `Focus` button), and a 36px square 11px-radius dark ink send on a

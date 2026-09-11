@@ -33,7 +33,7 @@ describe("ProgressComposer post-approve state", () => {
       onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
       onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
     }));
-    expect(markup).toContain("Tool call results");
+    expect(markup).toContain("Action results");
     expect(markup).toContain("Pending tasks");
     expect(markup).toContain("Work on the Work OS Review Page");
     expect(markup).toContain("Some random task");

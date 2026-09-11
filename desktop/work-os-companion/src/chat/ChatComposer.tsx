@@ -219,6 +219,7 @@ export function ChatComposer({
   };
 
   const wide = isWideDraft(value, !!footerLeft);
+  const hasFooter = !!footerLeft;
   const menuLabel = menu === "at" ? "Work OS context" : "Work OS commands";
 
   return (
@@ -253,7 +254,7 @@ export function ChatComposer({
         />
         <div
           className={`grid items-end gap-x-1 gap-y-1.5 ${
-            wide && footerLeft
+            wide && hasFooter
               ? "grid-cols-[36px_auto_minmax(0,1fr)_36px]"
               : "grid-cols-[36px_minmax(0,1fr)_36px]"
           }`}
@@ -313,7 +314,7 @@ export function ChatComposer({
             disabled={!canSend || busy}
             onClick={send}
             className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong disabled:cursor-default ${
-              wide ? "col-start-4 row-start-2" : "col-start-4 row-start-1"
+              wide && hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-1"
             } ${canSend && !busy ? "bg-ink text-white hover:-translate-y-px" : "bg-line text-ink-2"}`}
           >
             <ArrowUp size={16} strokeWidth={2.4} aria-hidden="true" />

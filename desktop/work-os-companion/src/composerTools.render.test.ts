@@ -43,11 +43,11 @@ describe("ProgressComposer tool rendering", () => {
       },
     }));
     expect(markup.length).toBeGreaterThan(500);
-    expect(markup).toContain("Review assistant tool calls");
+    expect(markup).toContain("Review action");
     expect(markup).not.toContain("Assistant shortcuts");
     expect(markup).toContain("navigate-button");
     expect(markup).toContain("Open Review &amp; EOD");
-    expect(markup).toContain("Review assistant tool calls");
+    expect(markup).toContain("Mark “Finish it.” done?");
   });
 
   it("renders fetched task selections inline with results", () => {

@@ -2,19 +2,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Minus, Sparkles, X } from "lucide-react";
+import { Minus, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay } from "./workOsQueries";
-import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, pendingApprovalCount, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
-import { ToolApprovalCard } from "./ToolApprovalCard";
+import { ApprovalFlow } from "./ApprovalFlow";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, StreamingText, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
@@ -555,21 +554,27 @@ export default function AvatarApp(): React.ReactElement {
     }
   }, [input, thinkingTrace, filing, facts.planIntent, facts.shiftDate, chat]);
 
-  const approveOperations = useCallback(async (entryId: string, operations: ProposedOperation[]) => {
-    const enabled = operations.filter((op) => op.enabled);
-    if (!enabled.length || filing) return;
+  const approveOperations = useCallback(async (entryId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => {
+    if ((!approved.length && !rejected.length) || filing) return;
     setFiling(true);
     try {
-      const outcome = await fileApprovedOperations(enabled, {
-        reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-      });
-      const summary = [
-        outcome.recorded ? `Recorded ${outcome.recorded}` : null,
-        outcome.queued ? `${outcome.queued} queued` : null,
-        outcome.failed.length ? `${outcome.failed.length} failed` : null,
-      ].filter(Boolean).join(" · ") || "Nothing to record";
+      const [outcome, rejectionResults] = await Promise.all([
+        approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), {
+          reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+        }) : Promise.resolve({ recorded: 0, queued: 0, failed: [], results: [] }),
+        Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
+          try {
+            if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
+            await apiRequest(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }) });
+            return { op: { ...op, enabled: false }, status: "denied", message: "Skipped. This action was not recorded." };
+          } catch (value) {
+            return { op, status: "failed", message: value instanceof Error ? value.message : "This action could not be skipped." };
+          }
+        })),
+      ]);
+      const results = [...outcome.results, ...rejectionResults];
       setChat((current) => current.map((entry) => entry.id === entryId
-        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(entry.toolResults ?? [], outcome.results), receipt: null }
+        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(entry.toolResults ?? [], results), receipt: null }
         : entry));
       const filed = chatRef.current.find((entry) => entry.id === entryId);
       const entries = chatRef.current;
@@ -578,8 +583,8 @@ export default function AvatarApp(): React.ReactElement {
       void shareAvatarTools({
         input: precedingUser?.text ?? "",
         reply: filed?.text,
-        operations: (filed?.operations ?? enabled).map((op) => ({ ...op, enabled: false })),
-        results: mergeToolResults(filed?.toolResults ?? [], outcome.results),
+        operations: (filed?.operations ?? [...approved, ...rejected]).map((op) => ({ ...op, enabled: false })),
+        results: mergeToolResults(filed?.toolResults ?? [], results),
         taskOptions: [],
       });
       if (outcome.recorded > 0) setFacts((current) => clearRecordedUpdatePrompt(current));
@@ -596,7 +601,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setFiling(false);
     }
-  }, [facts.shiftDate, facts.personId, filing, loadDay, toggleExpanded]);
+  }, [filing, loadDay, shareAvatarTools]);
 
   const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
     if (!taskIds.length || filing) return;
@@ -620,28 +625,6 @@ export default function AvatarApp(): React.ReactElement {
     }).catch((value) => setChat((current) => [...current, { id: `completion-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not create completion proposals." }]))
       .finally(() => setFiling(false));
   }, [facts.taskOptions, filing]);
-
-  const denyOperation = useCallback((entryId: string, operation: ProposedOperation) => {
-    if (!operation.proposalId) return;
-    void apiRequest(`/api/work-os/proposals/${encodeURIComponent(operation.proposalId)}`, {
-      method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }),
-    }).then(() => {
-      const denied: ToolCallResult = { op: operation, status: "denied", message: "Denied. This tool call will not run." };
-      setChat((current) => current.map((entry) => entry.id === entryId ? {
-        ...entry,
-        operations: entry.operations?.map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
-        toolResults: [...(entry.toolResults ?? []), denied],
-      } : entry));
-      const deniedEntry = chatRef.current.find((entry) => entry.id === entryId);
-      void shareAvatarTools({
-        input: "",
-        reply: deniedEntry?.text,
-        operations: (deniedEntry?.operations ?? [operation]).map((op) => op.proposalId === operation.proposalId ? { ...op, enabled: false } : op),
-        results: [...(deniedEntry?.toolResults ?? []), denied],
-        taskOptions: [],
-      });
-    }).catch((value) => setChat((current) => [...current, { id: `deny-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not deny this tool call." }]));
-  }, []);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
   /** Persists only an agenda that the planning service successfully built. */
@@ -863,12 +846,13 @@ export default function AvatarApp(): React.ReactElement {
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
             <Otto pose="sleep" className="avatar-pet" />
+            <span className="avatar-orb-state">Connect</span>
           </button>
           </div>
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>Work OS companion</strong><small>Not connected</small></div></div><span aria-hidden="true">Move</span></div><div className="avatar-head-actions"><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button></div></header>
+            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="sleep" /></span><div><strong>Otto</strong><small>Connect Work OS to begin</small></div></div><span aria-hidden="true">Move</span></div><div className="avatar-head-actions"><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -892,6 +876,7 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
           <Otto pose={petPose} className="avatar-pet" />
+          <span className="avatar-orb-state">{attentionDue ? "Check in" : !onShift ? "Resting" : facts.sessionState === "paused" ? "Paused" : "Focused"}</span>
           {showBadge && <span className="avatar-badge" />}
         </button>
         {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
@@ -900,7 +885,7 @@ export default function AvatarApp(): React.ReactElement {
       {expanded && (
         <div className="avatar-panel">
           <header className="avatar-head">
-            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark" aria-hidden="true">WO</span><div><strong>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
+            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} /></span><div><strong>Otto <em className={`avatar-live-dot is-${ringClass}`} /> <span>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</span></strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
             <div className="avatar-head-actions">
               {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
               {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
@@ -951,23 +936,19 @@ export default function AvatarApp(): React.ReactElement {
           )}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
-              <div className="chat-turn assistant"><p>{attentionDue
+              <ChatTurn role="assistant" text={attentionDue
                 ? contextualPrompt.body
-                : "Share an update, or tell me to create, complete, or block tasks."}</p></div>
+                : "Share an update, or tell me to create, complete, or block tasks."} />
             )}
             {
               collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
               const streams = entryIndex === allEntries.length - 1 && entry.role === "assistant" && !entry.operations && !entry.toolResults && !entry.receipt && !entry.id.startsWith("prompt:");
               return (
-              <div key={entry.id} className={entry.role === "user" ? "chat-turn-user" : `chat-turn ${entry.role}`}>
-                <ChatSectionBoundary label="avatar chat message">
-                {entry.role === "user" ? <ChatMarkdown text={entry.text} />
-                  : entry.role === "system" ? <div className="chat-system"><ChatMarkdown text={entry.text} /></div>
-                    : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
-                      : <>
-                        <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
-                        <div className="chat-turn-body">
-                        {streams ? <StreamingText text={entry.text} stream onSettled={bumpSweep} /> : <ChatMarkdown text={entry.text} />}
+              <ChatSectionBoundary key={entry.id} label="avatar chat message">
+                {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
+                  : entry.role === "system" ? <ChatTurn role="system" text={entry.text} />
+                    : entry.receipt ? <ChatTurn role="assistant" receipt text={entry.receipt} />
+                      : <ChatTurn role="assistant" text={entry.text} stream={streams} onSettled={bumpSweep}>
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}
@@ -989,34 +970,32 @@ export default function AvatarApp(): React.ReactElement {
                           })).filter((task) => !!task.id) : [];
                           return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
-                        {entry.operations && (
+                        {entry.operations?.length ? (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => {
                               const result = entry.toolResults?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId));
                               if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={index} page={op.page} statement={op.statement} onNavigate={(page) => void navigateToPage(page)} />;
                               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
-                              return (
-                              <ToolApprovalCard key={index} op={op} context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }} result={result} index={index} total={entry.operations!.length} onToggle={() => {
-                                if (entry.toolResults?.some((item) => item.op === op)) return;
-                                  const next = entry.operations!.map((candidate, i) => i === index ? { ...candidate, enabled: !candidate.enabled } : candidate);
-                                  setChat((current) => current.map((e) => e.id === entry.id ? { ...e, operations: next } : e));
-                                }} onDeny={() => denyOperation(entry.id, op)} />
-                              );
+                              return null;
                             })}
-                            {pendingApprovalCount(entry.operations, entry.toolResults) > 0 && <button className="op-approve" disabled={filing}
-                              onClick={() => void approveOperations(entry.id, entry.operations!)}>
-                              {filing ? "Filing…" : `Approve & record ${pendingApprovalCount(entry.operations, entry.toolResults)} tool call${pendingApprovalCount(entry.operations, entry.toolResults) === 1 ? "" : "s"}`}
-                            </button>}
+                            {entry.operations.some(isMutatingToolOp) ? <ApprovalFlow
+                              operations={entry.operations}
+                              results={entry.toolResults}
+                              taskOptions={entry.taskOptions}
+                              context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}
+                              busy={filing}
+                              onEdit={(operationIndex, statement) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, statement } : op) } : candidate))}
+                              onRemap={(operationIndex, taskId) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, taskId, taskTitle: candidate.taskOptions?.find((task) => task.id === taskId)?.title ?? op.taskTitle } : op) } : candidate))}
+                              onSubmit={(approved, rejected) => void approveOperations(entry.id, approved, rejected)}
+                            /> : null}
                           </div>
-                        )}
-                        </div>
-                      </>
+                        ) : null}
+                      </ChatTurn>
                 }
-                </ChatSectionBoundary>
-              </div>
+              </ChatSectionBoundary>
               );
             })}
-            {thinkingTrace && <div className="chat-turn assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></div>}
+            {thinkingTrace && <ChatTurn role="assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
             {agendaReview && (
               <AgendaReviewCard
                 clarifications={agendaReview.interpretation.clarifications}
