@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseInterpretation } from "../src/lib/aiInterpret";
+import { INTERPRET_RESPONSE_SCHEMA, parseInterpretation } from "../src/lib/aiInterpret";
 
 const TASKS = [
   { id: "t-1", title: "Ship the debugger fix", completed: false },
@@ -49,4 +49,33 @@ test("empty model output stays a valid empty interpretation", () => {
   assert.equal(parsed?.operations.length, 0);
   const empty = parseInterpretation({}, "update", TASKS);
   assert.equal(empty?.operations.length, 0);
+});
+
+function assertStrictRequired(node: unknown, path = "root") {
+  if (!node || typeof node !== "object") return;
+  const schema = node as { properties?: Record<string, unknown>; required?: unknown[]; items?: unknown };
+  if (schema.properties) {
+    const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+    for (const key of Object.keys(schema.properties)) {
+      assert.ok(required.includes(key), `${path}.${key} must be required for strict json_schema`);
+      assertStrictRequired(schema.properties[key], `${path}.${key}`);
+    }
+  }
+  if (schema.items) assertStrictRequired(schema.items, `${path}[]`);
+}
+
+test("strict response schema requires every declared property", () => {
+  assertStrictRequired(INTERPRET_RESPONSE_SCHEMA.schema);
+});
+
+test("strict-schema nulls for optional fields are normalized away", () => {
+  const parsed = parseInterpretation({
+    reply: "Got it.",
+    taskMatches: [],
+    claims: [{ kind: "progress", statement: "Still working.", taskId: null }],
+    operations: [{ op: "record_progress", statement: "Still working on it.", taskId: null, taskTitle: null, taskGroupId: null, limit: null, page: null }],
+  }, "still working", TASKS);
+  assert.equal(parsed?.reply, "Got it.");
+  assert.equal(parsed?.claims[0]?.taskId, undefined);
+  assert.equal(parsed?.operations.length, 0);
 });

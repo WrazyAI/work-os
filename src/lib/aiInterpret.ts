@@ -3,7 +3,7 @@ import { listPersonTasks } from "@/lib/work-os";
 export const INTERPRET_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const INTERPRET_TIMEOUT_MS = 45_000;
-const INTERPRET_RESPONSE_SCHEMA = {
+export const INTERPRET_RESPONSE_SCHEMA = {
   name: "work_os_candidate_update",
   strict: true,
   schema: {
@@ -11,10 +11,10 @@ const INTERPRET_RESPONSE_SCHEMA = {
     additionalProperties: false,
     required: ["reply", "taskMatches", "claims", "operations"],
     properties: {
-      reply: { type: "string", maxLength: 600 },
+      reply: { type: "string" },
       taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
-      claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" } } }, maxItems: 20 },
-      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" }, taskGroupId: { type: "string" }, limit: { type: "integer" }, page: { type: "string" } } }, maxItems: 20 },
+      claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement", "taskId"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: ["string", "null"] } } }, maxItems: 20 },
+      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement", "taskId", "taskTitle", "taskGroupId", "limit", "page"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: ["string", "null"] }, taskTitle: { type: ["string", "null"] }, taskGroupId: { type: ["string", "null"] }, limit: { type: ["integer", "null"] }, page: { type: ["string", "null"] } } }, maxItems: 20 },
     },
   },
 } as const;
