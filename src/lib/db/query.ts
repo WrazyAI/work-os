@@ -307,7 +307,13 @@ export class PostgrestQuery {
   async exec(): Promise<ExecResult> {
     if (this.mode === "rpc") {
       const keys = Object.keys(this.rpcArgs);
-      const params = keys.map((k) => this.rpcArgs[k]);
+      let argTypes = new Map<string, string>();
+      try {
+        argTypes = await functionArgTypes(this.rpcName!);
+      } catch {
+        argTypes = new Map();
+      }
+      const params = encodeRpcParams(this.rpcArgs, argTypes);
       const named = keys.map((k, i) => `${ident(k)} := $${i + 1}`).join(", ");
       const sql = `SELECT * FROM ${ident(this.rpcName!)}(${named})`;
       return this.runSql(sql, params);
@@ -518,6 +524,39 @@ async function columnDataType(table: string, column: string): Promise<string | n
   const t = (res.rows[0]?.data_type as string | undefined) ?? null;
   colTypeCache.set(key, t);
   return t;
+}
+
+/** Pre-serializes json/jsonb RPC arguments. pg turns JS arrays into Postgres
+ * array literals, which jsonb rejects with "invalid input syntax for type json";
+ * array-typed parameters (text[], uuid[]) must stay arrays. */
+export function encodeRpcParams(args: Record<string, unknown>, argTypes: Map<string, string>): unknown[] {
+  return Object.keys(args).map((key) => {
+    const value = args[key] ?? null;
+    const type = argTypes.get(key);
+    if ((type === "json" || type === "jsonb") && value !== null && (typeof value === "object" || typeof value === "string")) {
+      return JSON.stringify(value);
+    }
+    return value;
+  });
+}
+
+const fnArgTypeCache = new Map<string, Map<string, string>>();
+
+async function functionArgTypes(fnName: string): Promise<Map<string, string>> {
+  if (fnArgTypeCache.has(fnName)) return fnArgTypeCache.get(fnName)!;
+  const res = await getPool().query(
+    `SELECT p.proargnames[i] AS name, format_type(p.proargtypes[i - 1], NULL) AS type
+       FROM pg_proc p
+       CROSS JOIN generate_series(1, p.pronargs) AS i
+      WHERE p.proname = $1 AND pg_function_is_visible(p.oid)`,
+    [fnName],
+  );
+  const types = new Map<string, string>();
+  for (const row of res.rows as { name: string | null; type: string | null }[]) {
+    if (row.name && row.type && !types.has(row.name)) types.set(row.name, row.type);
+  }
+  fnArgTypeCache.set(fnName, types);
+  return types;
 }
 
 /** Resolves embeds with one batched query per embed table per level instead of

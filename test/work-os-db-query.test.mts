@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSelect, splitTopLevelList } from "../src/lib/db/query";
+import { encodeRpcParams, parseSelect, splitTopLevelList } from "../src/lib/db/query";
 
 test("or-spec splitting respects nested and()/or() groups", () => {
   assert.deepEqual(splitTopLevelList("a.eq.1,b.eq.2"), ["a.eq.1", "b.eq.2"]);
@@ -39,4 +39,44 @@ test("plain selects produce no embeds", () => {
   assert.deepEqual(parsed.embeds, []);
   assert.equal(parsed.base, "id, title, completed");
   assert.deepEqual(parseSelect("*"), { base: "*", embeds: [] });
+});
+
+test("RPC json/jsonb params are serialized while array-typed params stay arrays", () => {
+  const argTypes = new Map<string, string>([
+    ["p_items", "jsonb"],
+    ["p_interpretation_metadata", "jsonb"],
+    ["p_payload", "json"],
+    ["p_suggestion_task_ids", "text[]"],
+    ["p_remove_outcome_ids", "uuid[]"],
+  ]);
+  const params = encodeRpcParams(
+    {
+      p_items: [{ id: "a", title: "goal" }],
+      p_interpretation_metadata: { source: "desktop" },
+      p_payload: { nested: [1, 2] },
+      p_suggestion_task_ids: ["t1", "t2"],
+      p_remove_outcome_ids: [],
+      p_confirm: true,
+      p_freeform_intent: null,
+    },
+    argTypes,
+  );
+  assert.equal(params[0], JSON.stringify([{ id: "a", title: "goal" }]));
+  assert.equal(params[1], JSON.stringify({ source: "desktop" }));
+  assert.equal(params[2], JSON.stringify({ nested: [1, 2] }));
+  assert.deepEqual(params[3], ["t1", "t2"]);
+  assert.deepEqual(params[4], []);
+  assert.equal(params[5], true);
+  assert.equal(params[6], null);
+});
+
+test("RPC encoding quotes string json params and normalizes undefined", () => {
+  const params = encodeRpcParams({ p_note: "plain", p_missing: undefined }, new Map([["p_note", "jsonb"]]));
+  assert.equal(params[0], '"plain"');
+  assert.equal(params[1], null);
+});
+
+test("RPC encoding without known param types passes arrays through", () => {
+  const params = encodeRpcParams({ p_ids: ["a", "b"] }, new Map());
+  assert.deepEqual(params[0], ["a", "b"]);
 });
