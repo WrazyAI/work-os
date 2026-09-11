@@ -155,13 +155,37 @@ async function loadOrganizationToken(organizationId: string): Promise<CachedToke
   return null;
 }
 
+/** A configured static token is the last-resort recovery when an organization
+ *  credential has expired and its refresh token is no longer valid. It is
+ *  cached briefly so a stale org credential does not re-attempt (and re-fail)
+ *  the OAuth exchange on every provider call. */
+function staticAccessTokenFallback(organizationId: string, refreshToken?: string): string | null {
+  const token = env("NIFTY_ACCESS_TOKEN");
+  if (!token) return null;
+  organizationTokens.set(organizationId, { accessToken: token, refreshToken, expiresAt: Date.now() + 5 * 60_000 });
+  return token;
+}
+
 async function getAccessToken(): Promise<string> {
   const organizationId = organizationContext.getStore();
   if (organizationId) {
     const token = await loadOrganizationToken(organizationId);
     if (token) {
       if (Date.now() < token.expiresAt - 60_000) return token.accessToken;
-      if (token.refreshToken) return (await refreshNiftyAccessToken()).access_token;
+      if (token.refreshToken) {
+        try {
+          return (await refreshNiftyAccessToken()).access_token;
+        } catch (error) {
+          const fallback = staticAccessTokenFallback(organizationId, token.refreshToken);
+          if (fallback) {
+            console.warn(`[nifty] organization token refresh failed; using the configured access token instead: ${error instanceof Error ? error.message : String(error)}`);
+            return fallback;
+          }
+          throw error;
+        }
+      }
+      const fallback = staticAccessTokenFallback(organizationId, token.refreshToken);
+      if (fallback) return fallback;
       throw new Error("This organization's Nifty access token expired and must be reconnected");
     }
   }

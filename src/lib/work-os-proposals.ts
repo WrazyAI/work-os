@@ -194,7 +194,15 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
   const operations = interpretedOperations(body.operations);
   const personId = access.personId as string;
   const ownerId = await organizationOwnerId(access.organizationId);
-  await syncNifty(ownerId);
+  // Drafting a proposal is a local, cached-data operation. Provider refresh is
+  // best-effort here (the same contract as the day view): a stale Nifty
+  // credential must not stop the employee from reviewing a proposal. Filing
+  // still requires the provider and surfaces its own error truthfully.
+  try {
+    await syncNifty(ownerId);
+  } catch (error) {
+    console.warn(`[work-os] proposal provider refresh skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const available = await listPersonTasks(ownerId, personId, { includeLedgerHistory: true, limit: 500 }) as Json[];
   const byId = new Map(available.flatMap((task) => [[String(task.id), task], [text(task.provider_task_id) ?? "", task]]));
   const proposals: Array<Json & { client_operation_index: number }> = [];
