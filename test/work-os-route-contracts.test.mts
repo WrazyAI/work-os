@@ -211,3 +211,17 @@ test("web Insights follows the selected historical workspace date", async () => 
   assert.match(employeeHome, /employee-insights", insightRange, insightsThrough/);
   assert.match(employeeHome, /through=\$\{encodeURIComponent\(insightsThrough \?\? ""\)\}/);
 });
+
+test("web employee drafts EODs for outstanding historical days", async () => {
+  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  const outstanding = await source("src/modules/work-os/EmployeeEodOutstanding.tsx");
+  assert.match(employeeHome, /eod\/outstanding\?days=14/);
+  assert.match(employeeHome, /\/api\/work-os\/me\/day\?date=\$\{encodeURIComponent\(selectedTaskDate\)\}/);
+  assert.match(employeeHome, /const eodDay = historical \? selectedDay\.data/);
+  assert.match(employeeHome, /body: JSON\.stringify\(\{ date: eodDay\.shiftDate \}\)/);
+  assert.match(employeeHome, /employee-eod-panel/);
+  assert.match(employeeHome, /Draft EOD for \$\{calendarDateLabel\(selectedTaskDate\)\}/);
+  assert.match(outstanding, /aria-label="Outstanding EODs/);
+  assert.match(outstanding, /role="dialog"/);
+  assert.match(outstanding, /outstandingRowMeta/);
+});

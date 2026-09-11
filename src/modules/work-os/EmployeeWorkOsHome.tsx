@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
+import { EmployeeEodOutstandingBell, calendarDateLabel, type OutstandingEodDay, type OutstandingEodsResponse } from "@/modules/work-os/EmployeeEodOutstanding";
 
 type AnyRow = Record<string, any>;
 
@@ -111,6 +112,7 @@ export default function EmployeeWorkOsHome() {
   const [input, setInput] = useState("");
   const [goal, setGoal] = useState("");
   const [selectedTaskDate, setSelectedTaskDate] = useState("");
+  const [eodListOpen, setEodListOpen] = useState(false);
   const [insightRange, setInsightRange] = useState<"day" | "7d" | "30d">("7d");
   const [taskMenuId, setTaskMenuId] = useState<string | null>(null);
   const [subtaskMenuId, setSubtaskMenuId] = useState<string | null>(null);
@@ -153,6 +155,18 @@ export default function EmployeeWorkOsHome() {
     enabled: !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate,
     staleTime: 5 * 60_000,
   });
+  const selectedDay = useQuery<DayResponse>({
+    queryKey: ["work-os", "my-day", selectedTaskDate],
+    queryFn: () => fetchJson(`/api/work-os/me/day?date=${encodeURIComponent(selectedTaskDate)}`),
+    enabled: !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate,
+    staleTime: 2 * 60_000,
+  });
+  const outstanding = useQuery<OutstandingEodsResponse>({
+    queryKey: ["work-os", "eod-outstanding"],
+    queryFn: () => fetchJson("/api/work-os/me/eod/outstanding?days=14"),
+    staleTime: 2 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
   const insightsThrough = selectedTaskDate || day.data?.shiftDate;
   const insights = useQuery<InsightsResponse>({
     queryKey: ["work-os", "employee-insights", insightRange, insightsThrough],
@@ -164,10 +178,6 @@ export default function EmployeeWorkOsHome() {
   useEffect(() => {
     if (day.data?.shiftDate) setSelectedTaskDate((current) => current || day.data!.shiftDate);
   }, [day.data?.shiftDate]);
-
-  useEffect(() => {
-    setReportMarkdown(day.data?.report?.markdown ?? "");
-  }, [day.data?.report?.id, day.data?.report?.markdown]);
 
   useEffect(() => {
     const historicalGoal = historicalWorkspace.data?.workspace.goal.text;
@@ -200,6 +210,7 @@ export default function EmployeeWorkOsHome() {
       queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "task-day"] }),
       queryClient.invalidateQueries({ queryKey: ["work-os", "employee-insights"] }),
+      queryClient.invalidateQueries({ queryKey: ["work-os", "eod-outstanding"] }),
     ]);
   };
   const saveOnboarding = useMutation({
@@ -294,17 +305,20 @@ export default function EmployeeWorkOsHome() {
     onSuccess: () => { setTaskCreateOpen(false); setTaskCreateTitle(""); setTaskCreateDescription(""); void refresh(); },
   });
   const draftEod = useMutation({
-    mutationFn: () => fetchJson("/api/work-os/reports/eod", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify({ date: day.data?.shiftDate }),
-    }),
+    mutationFn: () => {
+      if (!eodDay?.shiftDate) throw new Error("Load the day before drafting its EOD");
+      return fetchJson("/api/work-os/reports/eod", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+        body: JSON.stringify({ date: eodDay.shiftDate }),
+      });
+    },
     onSuccess: () => void refresh(),
   });
   const submitEod = useMutation({
     mutationFn: () => {
-      if (!day.data?.report?.id) throw new Error("Draft the EOD report before submitting it");
-      return fetchJson(`/api/work-os/reports/${day.data.report.id}/submit`, {
+      if (!eodReport?.id) throw new Error("Draft the EOD report before submitting it");
+      return fetchJson(`/api/work-os/reports/${eodReport.id}/submit`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
         body: JSON.stringify({ markdown: reportMarkdown }),
@@ -321,6 +335,12 @@ export default function EmployeeWorkOsHome() {
   });
 
   const historical = !!selectedTaskDate && selectedTaskDate !== day.data?.shiftDate;
+  const eodDay = historical ? selectedDay.data ?? null : day.data ?? null;
+  const eodReport = eodDay?.report ?? null;
+  const eodPanelVisible = historical || day.data?.prompt.kind === "eod" || !!day.data?.report;
+  useEffect(() => {
+    setReportMarkdown(eodReport?.markdown ?? "");
+  }, [eodReport?.id, eodReport?.markdown]);
   const displayedWorkspace = historical ? historicalWorkspace.data?.workspace : day.data?.workspaceSummary;
   const tasks = historical ? historicalWorkspace.data?.tasks ?? [] : day.data?.tasks ?? [];
   const proposals = day.data?.proposals ?? [];
@@ -363,6 +383,16 @@ export default function EmployeeWorkOsHome() {
                 <p className="text-[var(--text-tertiary)]">{timezone}</p>
               </div>
             ) : null}
+            <EmployeeEodOutstandingBell
+              days={outstanding.data?.days ?? []}
+              loading={outstanding.isFetching && !outstanding.data}
+              error={outstanding.error ? outstanding.error.message : null}
+              open={eodListOpen}
+              onToggle={() => { const next = !eodListOpen; setEodListOpen(next); if (next) void outstanding.refetch(); }}
+              onClose={() => setEodListOpen(false)}
+              onSelect={(selected: OutstandingEodDay) => { setEodListOpen(false); setSelectedTaskDate(selected.date); window.requestAnimationFrame(() => document.getElementById("employee-eod-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}
+              onRetry={() => void outstanding.refetch()}
+            />
             <button
               aria-label="Refresh My Day"
               title="Refresh My Day"
@@ -494,37 +524,45 @@ export default function EmployeeWorkOsHome() {
           </section>
 
 
-          {(day.data?.prompt.kind === "eod" || day.data?.report) ? (
-            <section className="border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-              <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-                <h2 className="flex items-center gap-2 text-sm font-semibold"><FileCheck2 size={16} style={{ color: "var(--accent)" }} /> EOD report</h2>
-                <span className="text-[10px] font-semibold uppercase text-[var(--text-tertiary)]">{day.data?.report?.status || "Not drafted"}</span>
+          {eodPanelVisible ? (
+            <section id="employee-eod-panel" className="border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold"><FileCheck2 size={16} style={{ color: "var(--accent)" }} /> EOD report</h2>
+                  {historical ? <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Drafting for {calendarDateLabel(selectedTaskDate)}. <button type="button" className="font-semibold underline" onClick={() => setSelectedTaskDate(day.data?.shiftDate ?? "")}>Back to today</button></p> : null}
+                </div>
+                <span className="text-[10px] font-semibold uppercase text-[var(--text-tertiary)]">{eodReport?.status || (historical && selectedDay.isLoading ? "Loading" : "Not drafted")}</span>
               </div>
-              {day.data?.report ? (
-                <>
-                  <textarea
-                    value={reportMarkdown}
-                    onChange={(event) => setReportMarkdown(event.target.value)}
-                    rows={16}
-                    className="w-full resize-y border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-5 text-[var(--text-primary)] outline-none"
-                    disabled={day.data.report.status === "pending_review" || day.data.report.status === "approved"}
-                  />
-                  <div className="flex justify-end border-t p-3" style={{ borderColor: "var(--border)" }}>
-                    <button
-                      disabled={!reportMarkdown.trim() || day.data.report.status === "pending_review" || day.data.report.status === "approved" || submitEod.isPending}
-                      onClick={() => submitEod.mutate()}
-                      className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50"
-                      style={{ background: "var(--accent)", color: "var(--text-inverse)" }}
-                    >
-                      <Send size={14} /> Submit for review
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <button onClick={() => draftEod.mutate()} disabled={draftEod.isPending} className="m-4 inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>
-                  <FileCheck2 size={14} /> Draft EOD
-                </button>
-              )}
+              {historical && selectedDay.isLoading && !selectedDay.data ? <p className="px-4 py-4 text-[12px] text-[var(--text-tertiary)]">Loading that day’s record…</p>
+                : historical && selectedDay.error && !selectedDay.data ? <div className="flex flex-wrap items-center gap-3 px-4 py-4 text-[12px] text-[var(--status-warn)]"><span>That day could not be loaded.</span><button type="button" className="border px-2.5 py-1.5 text-[11px] font-semibold text-[var(--text-primary)]" style={{ borderColor: "var(--border)" }} onClick={() => void selectedDay.refetch()}>Try again</button></div>
+                  : eodReport ? (
+                    <>
+                      <textarea
+                        value={reportMarkdown}
+                        onChange={(event) => setReportMarkdown(event.target.value)}
+                        rows={16}
+                        className="w-full resize-y border-0 bg-transparent px-4 py-3 font-mono text-[12px] leading-5 text-[var(--text-primary)] outline-none"
+                        disabled={eodReport.status === "pending_review" || eodReport.status === "approved"}
+                      />
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t p-3" style={{ borderColor: "var(--border)" }}>
+                        <span className="text-[11px] text-[var(--text-tertiary)]">{eodReport.status === "pending_review" ? "Submitted — waiting for review." : eodReport.status === "approved" ? "Approved." : eodReport.status === "rejected" ? "Changes were requested. Update the report and resubmit it." : "Nothing is filed until you submit."}</span>
+                        <button
+                          disabled={!reportMarkdown.trim() || eodReport.status === "pending_review" || eodReport.status === "approved" || submitEod.isPending}
+                          onClick={() => submitEod.mutate()}
+                          className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50"
+                          style={{ background: "var(--accent)", color: "var(--text-inverse)" }}
+                        >
+                          <Send size={14} /> Submit for review
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-4">
+                      <button onClick={() => draftEod.mutate()} disabled={draftEod.isPending || (historical && !selectedDay.data)} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>
+                        <FileCheck2 size={14} /> {historical ? `Draft EOD for ${calendarDateLabel(selectedTaskDate)}` : "Draft EOD"}
+                      </button>
+                    </div>
+                  )}
             </section>
           ) : null}
           {proposals.length ? (
