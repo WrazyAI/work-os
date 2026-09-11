@@ -4,7 +4,7 @@
   "version": "0.2.81",
   "identifier": "com.wrazy.workos.pilot",
   "build": {
-    "beforeBuildCommand": "PATH=/home/zahemen/.nvm/versions/node/v22.14.0/bin:$PATH /home/zahemen/.nvm/versions/node/v22.14.0/bin/npm run build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
