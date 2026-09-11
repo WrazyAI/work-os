@@ -63,6 +63,12 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: desktop/work-os-companion/src-tauri -> target
+          shared-key: work-os-companion-windows-release
+
       - name: Resolve and validate release metadata
         id: release
         env:
@@ -124,15 +130,10 @@ jobs:
           if ($env:UPDATER_PUBLIC_KEY.Trim() -ne $configuredPublicKey.Trim()) { throw "TAURI_UPDATER_PUBLIC_KEY does not match the public key committed in tauri.conf.json" }
 
       - name: Install locked dependencies
-        run: npm ci
-
-      - name: Install pinned CI-only Node typings
-        run: npm install --no-save --ignore-scripts --package-lock=false @types/node@22.18.3
+        run: npm ci --no-audit --no-fund
 
       - name: Test packaged frontend
-        run: |
-          npm test
-          npm run build
+        run: npm test
 
       - name: Build unsigned MSI, NSIS, and updater artifacts
         env:
