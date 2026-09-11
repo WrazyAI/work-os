@@ -30,6 +30,8 @@ export interface RecordMemoryInput {
   occurredAt?: string;
   localDate?: string | null;
   consentPurpose?: string | null;
+  reviewStatus?: "candidate" | "confirmed" | "rejected";
+  factKey?: string | null;
 }
 
 export interface RecallOptions {
@@ -70,6 +72,8 @@ export async function recordWorkMemory(scope: MemoryScope, input: RecordMemoryIn
         metadata: input.metadata ?? {},
         content_hash: contentHash,
         consent_purpose: input.consentPurpose ?? null,
+        review_status: input.reviewStatus ?? "confirmed",
+        fact_key: input.factKey ?? null,
       })
       .select("id")
       .single();
@@ -179,6 +183,7 @@ export async function recallWorkMemory(scope: MemoryScope, query: string, option
     .eq("organization_id", scope.organizationId)
     .eq("person_id", scope.personId)
     .eq("kind", "profile_fact")
+    .eq("review_status", "confirmed")
     .order("occurred_at", { ascending: false })
     .limit(12);
   const profileFacts = (facts ?? []) as MemoryItem[];
@@ -232,4 +237,101 @@ export async function buildMemoryPromptBlock(scope: MemoryScope, query: string, 
 
 export function memoryEnabled(featureFlags: Record<string, boolean> = {}): boolean {
   return featureFlags.work_memory === true || process.env.WORK_OS_MEMORY_ENABLED === "true";
+}
+
+export interface MemoryFactRow {
+  id: string;
+  content: string;
+  summary: string | null;
+  review_status: "candidate" | "confirmed" | "rejected";
+  fact_key: string | null;
+  local_date: string | null;
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface MemoryRecentRow {
+  id: string;
+  kind: WorkMemoryKind;
+  content: string;
+  summary: string | null;
+  local_date: string | null;
+  occurred_at: string;
+  source_table: string;
+  created_at: string;
+}
+
+/** Self-scoped memory view for the companion: profile facts awaiting review
+ * plus the most recent episodic memories. */
+export async function listWorkMemory(scope: MemoryScope, limit = 30): Promise<{ facts: MemoryFactRow[]; recent: MemoryRecentRow[] }> {
+  const db = createAdminClient();
+  const capped = Math.min(Math.max(limit, 1), 100);
+  const [factsResult, recentResult] = await Promise.all([
+    db
+      .from("work_memory_items")
+      .select("id,content,summary,review_status,fact_key,local_date,occurred_at,created_at")
+      .eq("organization_id", scope.organizationId)
+      .eq("person_id", scope.personId)
+      .eq("kind", "profile_fact")
+      .neq("review_status", "rejected")
+      .order("occurred_at", { ascending: false })
+      .limit(capped),
+    db
+      .from("work_memory_items")
+      .select("id,kind,content,summary,local_date,occurred_at,source_table,created_at")
+      .eq("organization_id", scope.organizationId)
+      .eq("person_id", scope.personId)
+      .neq("kind", "profile_fact")
+      .neq("kind", "digest")
+      .order("occurred_at", { ascending: false })
+      .limit(capped),
+  ]);
+  if (factsResult.error) throw new Error(`load memory facts: ${factsResult.error.message}`);
+  if (recentResult.error) throw new Error(`load recent memory: ${recentResult.error.message}`);
+  return {
+    facts: (factsResult.data ?? []) as MemoryFactRow[],
+    recent: (recentResult.data ?? []) as MemoryRecentRow[],
+  };
+}
+
+export async function reviewWorkMemoryFact(scope: MemoryScope, id: string, status: "confirmed" | "rejected"): Promise<{ id: string; review_status: string } | null> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("work_memory_items")
+    .update({ review_status: status })
+    .eq("organization_id", scope.organizationId)
+    .eq("person_id", scope.personId)
+    .eq("id", id)
+    .eq("kind", "profile_fact")
+    .select("id,review_status")
+    .maybeSingle();
+  if (error) throw new Error(`review memory fact: ${error.message}`);
+  return data ? { id: String(data.id), review_status: String(data.review_status) } : null;
+}
+
+export async function deleteWorkMemoryItem(scope: MemoryScope, id: string): Promise<boolean> {
+  const db = createAdminClient();
+  const { data: item, error } = await db
+    .from("work_memory_items")
+    .select("id,source_table,source_id")
+    .eq("organization_id", scope.organizationId)
+    .eq("person_id", scope.personId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`load memory item: ${error.message}`);
+  if (!item) return false;
+  const { error: deleteError } = await db
+    .from("work_memory_items")
+    .delete()
+    .eq("organization_id", scope.organizationId)
+    .eq("person_id", scope.personId)
+    .eq("id", id);
+  if (deleteError) throw new Error(`delete memory item: ${deleteError.message}`);
+  await db
+    .from("work_memory_jobs")
+    .delete()
+    .eq("organization_id", scope.organizationId)
+    .eq("source_table", String(item.source_table))
+    .eq("source_id", String(item.source_id));
+  return true;
 }

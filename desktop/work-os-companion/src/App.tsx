@@ -37,6 +37,7 @@ import { Otto } from "./Otto";
 import { EodOutstandingBell } from "./EodOutstanding";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
+import { MemorySettings } from "./MemorySettings";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import "./plan-insights.css";
 
@@ -2055,6 +2056,7 @@ export default function App() {
             <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
             <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button className="danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
           </section>
+          <MemorySettings />
         </main>
       )}
       {(view === "day" || view === "tasks" && planHistoryDate === visibleDay?.shiftDate) && <ProgressComposer

@@ -9,6 +9,7 @@ import {
   type MemoryItem,
 } from "../src/lib/work-memory-core";
 import { formatTodaySnapshot } from "../src/lib/work-memory-today";
+import { factSourceId, normalizeFactDrafts } from "../src/lib/work-memory-facts";
 
 function item(overrides: Partial<MemoryItem> & { id: string }): MemoryItem {
   return {
@@ -103,4 +104,26 @@ test("today snapshot formats agenda, completions, updates, and shift", () => {
 test("today snapshot with no activity still anchors the date", () => {
   const block = formatTodaySnapshot({ date: "2026-09-11", commitments: [], completed: [], deferred: [], updates: [] });
   assert.equal(block, "Today so far (2026-09-11) — live facts:");
+});
+
+test("fact drafts are normalized to stable keys and bounded values", () => {
+  const drafts = normalizeFactDrafts({
+    facts: [
+      { key: "Prefers Deep Work!", value: "  Prefers   deep work before noon. " },
+      { key: "x", value: "short" },
+      { key: "empty_value", value: "   " },
+      { key: "role", value: "Owns the checkout reporting surface." },
+    ],
+  });
+  assert.deepEqual(drafts, [
+    { key: "prefers_deep_work", value: "Prefers deep work before noon." },
+    { key: "role", value: "Owns the checkout reporting surface." },
+  ]);
+  assert.equal(normalizeFactDrafts(null).length, 0);
+});
+
+test("fact source ids are deterministic per person and case-insensitive value", () => {
+  const draft = { key: "role", value: "Owns checkout reporting." };
+  assert.equal(factSourceId("p1", draft), factSourceId("p1", { key: "role", value: "owns checkout reporting." }));
+  assert.notEqual(factSourceId("p1", draft), factSourceId("p2", draft));
 });
