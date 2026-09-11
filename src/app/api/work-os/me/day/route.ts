@@ -15,13 +15,24 @@ export async function GET(req: Request) {
     });
     if (auth.response) return auth.response;
     const url = new URL(req.url);
+    const dateValue = url.searchParams.get("date");
+    let localDate: string | null = null;
+    if (dateValue !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return NextResponse.json({ error: "date must be a valid calendar date" }, { status: 400 });
+      const parsed = new Date(`${dateValue}T12:00:00Z`);
+      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateValue) {
+        return NextResponse.json({ error: "date must be a valid calendar date" }, { status: 400 });
+      }
+      localDate = dateValue;
+    }
     const atValue = url.searchParams.get("at");
-    const at = atValue ? new Date(atValue) : new Date();
+    const at = localDate ? new Date(`${localDate}T12:00:00Z`) : atValue ? new Date(atValue) : new Date();
     if (Number.isNaN(at.getTime())) return NextResponse.json({ error: "at must be a valid timestamp" }, { status: 400 });
     const day = await getWorkOsDay(auth.access, auth.access.personId as string, at, {
       refreshNifty: url.searchParams.get("refreshProviders") === "true",
       refreshAttendance: url.searchParams.get("refreshAttendance") === "true",
       compact: url.searchParams.get("compact") === "true",
+      localDate,
     }) as Record<string, unknown>;
     return NextResponse.json({
       ...day,

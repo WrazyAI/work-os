@@ -7,7 +7,7 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
@@ -28,12 +28,13 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow, type TaskSection } from "./taskWorkspace";
-import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData } from "./types";
+import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { Otto } from "./Otto";
+import { EodOutstandingBell } from "./EodOutstanding";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
@@ -122,6 +123,8 @@ export default function App() {
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
+  const [eodListOpen, setEodListOpen] = useState(false);
+  const [eodDate, setEodDate] = useState<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
     // The interpreter returns Work OS local IDs. Keep that canonical identifier
@@ -327,6 +330,9 @@ export default function App() {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
     void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
   }, [queryClient]);
+  const invalidateOutstandingEods = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
+  }, [queryClient]);
 
   const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
   const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
@@ -387,6 +393,8 @@ export default function App() {
   const historyQuery = useTaskHistoryQuery({ enabled: signedIn && !syncBypass });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
+  const outstandingQuery = useOutstandingEodsQuery({ enabled: signedIn && !syncBypass });
+  const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
 
   useEffect(() => {
     if (compactDayQuery.data) applyDayPayload(compactDayQuery.data);
@@ -426,6 +434,9 @@ export default function App() {
       setHistoricalTasks(historicalQuery.data.tasks);
     }
   }, [historicalQuery.data]);
+  useEffect(() => {
+    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false);
+  }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
   }, [historicalQuery.error, showError]);
@@ -494,6 +505,12 @@ export default function App() {
           return;
         }
         case "review":
+          await Promise.allSettled([
+            refresh({ dayOnly: true, details: true }),
+            outstandingQuery.refetch(),
+            eodDate ? reportDayQuery.refetch() : Promise.resolve(),
+          ]);
+          return;
         case "evidence":
           await Promise.allSettled([refresh({ dayOnly: true, details: true })]);
           return;
@@ -511,7 +528,7 @@ export default function App() {
     } finally {
       setRefreshing(false);
     }
-  }, [debugScenario.enabled, historicalQuery, historyQuery, insightRange, insightsQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, setInsights, taskDetails, view, visibleDay]);
+  }, [debugScenario.enabled, eodDate, historicalQuery, historyQuery, insightRange, insightsQuery, outstandingQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, reportDayQuery, setInsights, taskDetails, view, visibleDay]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -607,22 +624,22 @@ export default function App() {
     setDay((current) => current ?? (applyDayScenario(null, debugScenario) as DayData));
   }, [day, debugScenario, syncBypass]);
 
-  const redraftEod = async () => {
-    if (!visibleDay?.report) return;
+  const redraftEod = async (target: DayData | null) => {
+    if (!target?.report) return;
     if (syncBypassRef.current) {
-      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
+      setEodDraft({ markdown: simulateAiEod({ tasks: target.tasks, plan: target.plan, shiftDate: target.shiftDate }), source: "simulated" });
       notifications.success("Simulated an assistant draft on-device — nothing reached the server.", "AI draft (playground)");
       return;
     }
     setEodRedrafting(true);
     try {
       const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
-        method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: visibleDay.shiftDate }),
+        method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
       });
       setEodGate(null);
       setEodClockedOut(result.clockedOut === true);
       setEodDraft({ markdown: result.markdown, source: "ai", screenshots: result.screenshots ?? null, screenshotSyncUnavailable: result.screenshotSyncUnavailable === true });
-      notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from today's record. Review every line.", "AI draft ready");
+      notifications.success(result.clockedOut ? "You were clocked out automatically and the assistant drafted your EOD. Review every line." : "The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
     } catch (value) {
       if (value instanceof ApiRequestError && (value as { status?: number | null }).status === 409) {
         const message = value instanceof Error ? value.message : "EOD drafting is gated";
@@ -630,17 +647,17 @@ export default function App() {
         setEodDraft(null);
         return;
       }
-      setEodDraft({ markdown: visibleDay.report.markdown ?? "", source: "deterministic" });
+      setEodDraft({ markdown: target.report.markdown ?? "", source: "deterministic" });
       notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
     } finally { setEodRedrafting(false); }
   };
 
-  const refineEod = async (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }> = []) => {
-    if (!visibleDay || syncBypassRef.current) return false;
+  const refineEod = async (target: DayData | null, markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }> = []) => {
+    if (!target || syncBypassRef.current) return false;
     setEodRedrafting(true);
     try {
       const result = await apiRequest<{ markdown: string }>('/api/work-os/me/eod/ai-draft', {
-        method: "POST", body: JSON.stringify({ date: visibleDay.shiftDate, draft: stripBottleneckSection(markdown), feedback, annotations }),
+        method: "POST", body: JSON.stringify({ date: target.shiftDate, draft: stripBottleneckSection(markdown), feedback, annotations }),
       });
       setEodDraft((current) => current ? { ...current, markdown: result.markdown, source: "ai" } : { markdown: result.markdown, source: "ai" });
       notifications.success("The draft was refined from your feedback. Your bottleneck answer was not changed.", "Draft refined");
@@ -651,10 +668,18 @@ export default function App() {
     } finally { setEodRedrafting(false); }
   };
 
-  const createEodDraft = async () => {
-    if (!visibleDay) return;
+  const applyReportToDay = useCallback((date: string | null, report: NonNullable<DayData["report"]>) => {
+    if (!date) {
+      setDay((current) => current ? { ...current, report } : current);
+      return;
+    }
+    queryClient.setQueryData<DayData>(workOsKeys.reportDay(date), (current) => current ? { ...current, report } : current);
+  }, [queryClient]);
+
+  const createEodDraft = async (target: DayData | null) => {
+    if (!target) return;
     if (syncBypassRef.current) {
-      setEodDraft({ markdown: simulateAiEod({ tasks: visibleDay.tasks, plan: visibleDay.plan, shiftDate: visibleDay.shiftDate }), source: "simulated" });
+      setEodDraft({ markdown: simulateAiEod({ tasks: target.tasks, plan: target.plan, shiftDate: target.shiftDate }), source: "simulated" });
       return;
     }
     setEodRedrafting(true);
@@ -662,11 +687,12 @@ export default function App() {
       const result = await apiRequest<{ report: NonNullable<DayData["report"]> }>("/api/work-os/reports/eod", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ date: visibleDay.shiftDate }),
+        body: JSON.stringify({ date: target.shiftDate }),
       });
-      setDay((current) => current ? { ...current, report: result.report } : current);
+      applyReportToDay(eodDate, result.report);
       setEodDraft({ markdown: String(result.report.markdown ?? ""), source: "deterministic" });
       setEodGate(null);
+      invalidateOutstandingEods();
       notifications.success("Your EOD draft is ready for review. Nothing has been submitted.", "EOD draft ready");
     } catch (value) {
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
@@ -675,11 +701,13 @@ export default function App() {
 
 
 
-  function submitEod(markdown: string, idempotencyKey: string) {
-    const reportId = String(visibleDay?.report?.id ?? "");
+  function submitEod(target: DayData | null, markdown: string, idempotencyKey: string) {
+    const reportId = String(target?.report?.id ?? "");
     if (!reportId) return;
     const finish = () => {
       setEodSubmitted(true);
+      invalidateOutstandingEods();
+      if (eodDate) void queryClient.invalidateQueries({ queryKey: workOsKeys.reportDay(eodDate) });
     };
     if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
       finish();
@@ -1111,6 +1139,11 @@ export default function App() {
   const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
   const openTasks = todayParentTasks.filter((task) => !task.completed);
   const allTodayTasksCompleted = todayParentTasks.length > 0 && openTasks.length === 0;
+  const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
+  const reviewParentTasks = parentTasks(reviewDay?.tasks ?? []);
+  const allReviewTasksCompleted = eodDate
+    ? reviewParentTasks.length > 0 && reviewParentTasks.every((task) => task.completed === true)
+    : allTodayTasksCompleted;
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
     ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
@@ -1911,7 +1944,16 @@ export default function App() {
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
     <section className="stage">
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><h1>{views.find((item) => item.id === view)?.label}</h1></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
+        days={outstandingQuery.data?.days ?? []}
+        loading={outstandingQuery.isFetching && !outstandingQuery.data}
+        error={outstandingQuery.error ? errorMessage(outstandingQuery.error, "Outstanding EODs could not be loaded.") : null}
+        open={eodListOpen}
+        onToggle={() => { const next = !eodListOpen; setEodListOpen(next); if (next) void outstandingQuery.refetch(); }}
+        onClose={() => setEodListOpen(false)}
+        onSelect={(day: OutstandingEodDay) => { setEodListOpen(false); setEodDate(day.date); setView("review"); }}
+        onRetry={() => void outstandingQuery.refetch()}
+      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
@@ -1967,28 +2009,35 @@ export default function App() {
         kpiStrip={<KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={[...pendingTaskRows, ...(visibleDay?.tasks ?? [])]} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
-      {view === "review" && eodGate && !eodSubmitted && <main className="page"><section className="panel"><Empty
-          title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
-          body={eodGate.detail}
-        /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section></main>}
-      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && eodRedrafting && !eodDraft && <main className="page"><section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking today’s recorded work and writing a draft for you to review.</p></section></main>}
-      {view === "review" && !eodGate && visibleDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) && <EodComposer
-          reportId={String(visibleDay.report.id ?? "unknown")}
-          initialMarkdown={eodDraft?.markdown ?? String(visibleDay.report.markdown ?? "")}
-          source={eodDraft?.source ?? "deterministic"}
-          suggestedBottleneck={visibleDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
-          allTasksCompleted={allTodayTasksCompleted}
-          redrafting={eodRedrafting}
-          clockedOut={eodClockedOut}
-          screenshotContext={eodDraft?.screenshots ?? null}
-          screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
-          busy={busy}
-          onRedraft={() => void redraftEod()}
-          onRefine={refineEod}
-          onSubmit={submitEod}
-        />}
-      {view === "review" && eodSubmitted && <main className="page"><section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section></main>}
-      {view === "review" && !visibleDay?.report && !eodSubmitted && <main className="page"><section className="panel"><Empty title="Prepare your EOD for review" body="Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything." /><div className="today-actions"><button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button><button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft()}>{eodRedrafting ? "Preparing…" : "Create EOD draft"}</button></div></section></main>}
+      {view === "review" && <main className="page">
+        {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
+        {eodDate && reportDayQuery.isLoading ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Loading that day…</strong><p>Fetching the recorded work for {formatWorkOsDate(eodDate)}.</p></section>
+          : eodDate && reportDayQuery.error ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={() => void reportDayQuery.refetch()}>Try again</button></div></section>
+            : eodGate && !eodSubmitted ? <section className="panel"><Empty
+                title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
+                body={eodGate.detail}
+              /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(reviewDay); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section>
+              : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking {eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.</p></section>
+                : reviewDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) ? <EodComposer
+                    reportId={String(reviewDay.report.id ?? "unknown")}
+                    initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
+                    source={eodDraft?.source ?? "deterministic"}
+                    dayLabel={eodDate ? formatWorkOsDate(eodDate) : "today"}
+                    suggestedBottleneck={reviewDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
+                    allTasksCompleted={allReviewTasksCompleted}
+                    redrafting={eodRedrafting}
+                    clockedOut={eodClockedOut}
+                    screenshotContext={eodDraft?.screenshots ?? null}
+                    screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
+                    busy={busy}
+                    onRedraft={() => void redraftEod(reviewDay)}
+                    onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
+                    onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
+                  />
+                  : eodSubmitted ? <section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>{eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p></section>
+                    : !reviewDay?.report ? <section className="panel"><Empty title="Prepare your EOD for review" body={eodDate ? `Create a draft from ${formatWorkOsDate(eodDate)}'s recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything.` : "Create a draft from today's recorded work, then review and submit it when it is accurate. Creating a draft does not submit anything."} /><div className="today-actions">{!eodDate && <button onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}<button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft(reviewDay)}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button></div></section>
+                      : null}
+      </main>}
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : "Output evidence"}</span><div><h3>{item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
       {view === "settings" && (

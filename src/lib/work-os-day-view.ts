@@ -53,7 +53,7 @@ export async function getWorkOsDay(
   access: WorkOsAccess,
   personId: string,
   at = new Date(),
-  options: { refreshNifty?: boolean; refreshAttendance?: boolean; compact?: boolean } = {},
+  options: { refreshNifty?: boolean; refreshAttendance?: boolean; compact?: boolean; localDate?: string | null } = {},
 ) {
   // External provider calls are started immediately but never block the
   // response: the dashboard renders current (timestamped, truthful) data and
@@ -70,7 +70,7 @@ export async function getWorkOsDay(
   const shift = resolveShiftWindow(rules, exceptions, at);
   // Upcoming-shift display must not advance task/history attribution into the
   // next day after the current shift ends.
-  const shiftDate = localDateForTimezone(at, timezone);
+  const shiftDate = options.localDate ?? localDateForTimezone(at, timezone);
   const ownerId = await ownerIdPromise;
   const [latestTaskResult, latestProjectResult, organizationSyncResult] = await Promise.all([
     db().from("work_tasks").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),

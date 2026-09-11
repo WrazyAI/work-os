@@ -1679,7 +1679,6 @@ replaces `Build my plan` only once a draft exists, and stays disabled while
 annotations exist, while feedback edits are unsaved, or while clarification
 questions are unanswered. Each state carries one plain-language hint naming the
 exact unblock action.
-
 Draft review carries pencil (edit mode) and trash (two-tap delete, local discard
 only) controls. Reading is the annotation state: highlighting text inside one
 semantic block (summary, title, objective, or criteria) raises a floating
@@ -1698,6 +1697,34 @@ Refining sends the draft plus annotations and field diffs and
 returns a fresh draft; annotations are single-use and clear on each new draft.
 A failed refinement keeps the current draft. The only exception is an
 AI-outage off-shift save, which preserves the raw planning note without a draft.
+
+### 29.1c Outstanding EOD days
+
+A bell control in the masthead is the persistent home for prior workdays whose
+EOD was never submitted to a manager. It is an icon-only control with an
+accessible name and an amber count badge while days are outstanding; the badge
+is absent at zero.
+
+Activating the bell opens a detached card (up to 380px, anchored to the
+trigger's trailing edge) titled `Outstanding EODs`. Each row names the calendar
+date, one metadata line (weekday, observed minutes, completed Nifty outcomes),
+and exactly one status pill: `Needs draft` (amber), `Draft not submitted`
+(neutral), or `Changes requested` (danger-soft). Rows open the Review workspace
+for that day. Submitted, pending, and approved days never appear, and days
+without a recorded session or plan are not treated as outstanding. The list
+looks back 14 days and never counts today, which Review already covers.
+
+Selecting a row loads that day's record and shows a local `Back to today`
+context strip above the composer. The composer keeps its existing refine,
+annotation, bottleneck, and submit contracts but receives the selected day's
+label, so copy never says `today` while the report belongs to another date.
+Creating a draft updates the row's status; submitting removes it. The badge
+refreshes after either action.
+
+States follow §31: skeleton rows while the list loads; `You're caught up` when
+none remain; a local retry notice that keeps cached rows visible when a refresh
+fails; `Back to today` returns to the live day. Observed minutes remain neutral
+activity context, never productivity, and copy avoids guilt framing.
 
 ### 29.2 Insights
 

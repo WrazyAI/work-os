@@ -262,3 +262,21 @@ export interface OfflineAction {
   failureKind?: "conflict" | "permanent" | "retry_exhausted";
   statusCode?: number;
 }
+
+export type OutstandingEodStatus = "no_draft" | "draft_unsubmitted" | "changes_requested";
+
+export interface OutstandingEodDay {
+  date: string;
+  status: OutstandingEodStatus;
+  reportId: string | null;
+  observedMinutes: number;
+  completedTasks: number;
+  hasPlan: boolean;
+}
+
+export interface OutstandingEodsData {
+  from: string;
+  through: string;
+  count: number;
+  days: OutstandingEodDay[];
+}

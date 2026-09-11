@@ -295,10 +295,11 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
-export function EodComposer({ reportId, initialMarkdown, source, suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onRefine, onSubmit }: {
-  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; suggestedBottleneck: string | null;
+export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "today", suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onRefine, onSubmit }: {
+  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; suggestedBottleneck: string | null;
   allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
+  const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
   const [feedback, setFeedback] = useState("");
@@ -387,11 +388,11 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
     <header className="eod-composer-header">
       <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
-      <small>{source === "ai" ? "Drafted by the assistant from today's record — review every line before submitting." : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : "Standard draft from today's record."} Report id {reportId.slice(0, 8)}…</small></div></div>
+      <small>{source === "ai" ? `Drafted by the assistant from ${dayReference} record — review every line before submitting.` : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : `Standard draft from ${dayReference} record.`} Report id {reportId.slice(0, 8)}…</small></div></div>
       <button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button>
     </header>
     {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><div className="eod-screenshot-body"><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</div></details>}
-    {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses today&apos;s recorded work only.</p>}
+    {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses {dayReference} recorded work only.</p>}
     <section className="eod-report" aria-label="Report draft">
       <div className="eod-report-head">
         <span>Report</span>
@@ -420,8 +421,8 @@ export function EodComposer({ reportId, initialMarkdown, source, suggestedBottle
       <div className="eod-refine-actions"><button disabled={!refineReady} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
     </section>
     <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
-      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? "Every task in today's list is complete." : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
-      <small>{allTasksCompleted ? "Every task in today’s list is complete, so no reason is needed or sent with this report." : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
+      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? `Every task in ${dayReference} list is complete.` : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
+      <small>{allTasksCompleted ? `Every task in ${dayReference} list is complete, so no reason is needed or sent with this report.` : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
     </label>
     <footer><small>Nothing is filed until you submit.</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
     {pending && <SelectionAnnotator quote={pending.quote} anchor={pending.rect} value={pendingComment} canSave={isAnnotationCommentValid(pendingComment)} disabled={busy || redrafting || refining} onChange={setPendingComment} onSave={addAnnotation} onCancel={() => { setPending(null); setPendingComment(""); }} />}

@@ -18,6 +18,8 @@ export const workOsKeys = {
   taskDetails: (taskId: string) => ["work-os", "task", taskId] as const,
   insights: (range: string, through: string) => ["work-os", "insights", range, through] as const,
   historicalDay: (date: string) => ["work-os", "historical", date] as const,
+  reportDay: (date: string) => ["work-os", "report-day", date] as const,
+  outstandingEods: () => ["work-os", "eod-outstanding"] as const,
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
 };

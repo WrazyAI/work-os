@@ -11,7 +11,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { DailyPlan, DayData, InsightsData, OnboardingData } from "./types";
+import type { DailyPlan, DayData, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -39,10 +39,11 @@ export function normalizeDay(rawDay: DayData): DayData {
   };
 }
 
-export async function fetchDay(options: { variant: "compact" | "details"; refreshProviders?: boolean; refreshAttendance?: boolean }): Promise<DayData> {
+export async function fetchDay(options: { variant: "compact" | "details"; refreshProviders?: boolean; refreshAttendance?: boolean; date?: string }): Promise<DayData> {
   const params = new URLSearchParams();
   if (options.refreshProviders) params.set("refreshProviders", "true");
   if (options.refreshAttendance) params.set("refreshAttendance", "true");
+  if (options.date) params.set("date", options.date);
   if (options.variant === "compact") params.set("compact", "true");
   const rawDay = await apiRequest<DayData>(`/api/work-os/me/day${params.size ? `?${params}` : ""}`, {
     // A provider refresh can legitimately take longer; a compact read is bounded.
@@ -130,5 +131,24 @@ export function useTaskOptionsQuery(options: { enabled: boolean }) {
     enabled: options.enabled,
     staleTime: TASK_OPTIONS_STALE_MS,
     queryFn: () => apiRequest<{ people: Array<{ id: string; displayName: string; email: string | null }> }>("/api/work-os/me/tasks?view=options"),
+  });
+}
+
+/** Historical day payload for drafting an EOD on a day other than today. */
+export function useReportDayQuery(options: { date: string | null; currentDate: string }) {
+  return useQuery({
+    queryKey: workOsKeys.reportDay(options.date ?? "none"),
+    enabled: !!options.date && options.date !== options.currentDate,
+    staleTime: DAY_DETAILS_STALE_MS,
+    queryFn: () => fetchDay({ variant: "details", date: options.date! }),
+  });
+}
+
+export function useOutstandingEodsQuery(options: { enabled: boolean }) {
+  return useQuery({
+    queryKey: workOsKeys.outstandingEods(),
+    enabled: options.enabled,
+    staleTime: DAY_DETAILS_STALE_MS,
+    queryFn: () => apiRequest<OutstandingEodsData>("/api/work-os/me/eod/outstanding?days=14"),
   });
 }
