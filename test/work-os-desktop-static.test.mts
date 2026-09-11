@@ -265,7 +265,7 @@ assert.match(tauri, /"useHttpsScheme": true/);
 assert.match(tauri, /"label": "debug"[\s\S]*"url": "debug\.html"[\s\S]*"visible": false/);
 assert.doesNotMatch(tauri, /localhost:1420/);
 assert.match(tauri, /com\.wrazy\.workos\.pilot/);
-assert.match(tauri, /\/home\/zahemen\/\.nvm\/versions\/node\/v22\.14\.0\/bin\/npm/);
+assert.match(tauri, /"beforeBuildCommand": "npm run build"/);
 assert.match(updaterPublicKey, /minisign public key: 84E0D8F6FBD888F/);
 
 const msi = read("installer/windows-pilot.wxs");
