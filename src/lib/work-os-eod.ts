@@ -2,6 +2,7 @@ import { canAccessWorkOsPerson, type WorkOsAccess } from "@/lib/work-os-api";
 import { listEvidence, reviewReport } from "@/lib/work-os";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { audit, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { recordWorkMemory } from "@/lib/work-memory";
 
 function dateOnly(value: unknown) {
   const match = String(value ?? "").match(/^\d{4}-\d{2}-\d{2}/);
@@ -171,6 +172,19 @@ export async function submitWorkOsEod(access: WorkOsAccess, reportId: string, bo
   }
   await saveReportVersion(access, submitted as Json, "employee_submission", markdown, submissionKey);
   await audit(access, "report.submitted", "report", reportId, { personId: report.person_id, submittedAt });
+  await recordWorkMemory(
+    { organizationId: access.organizationId, personId: String(report.person_id) },
+    {
+      kind: "eod",
+      sourceTable: "work_reports",
+      sourceId: reportId,
+      content: markdown,
+      summary: markdown.replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim().slice(0, 200),
+      metadata: { reportDate: report.report_date, submittedAt },
+      localDate: dateOnly(report.report_date) ?? new Date().toISOString().slice(0, 10),
+      occurredAt: submittedAt,
+    },
+  );
   return submitted;
 }
 

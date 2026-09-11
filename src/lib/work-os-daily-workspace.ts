@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { hydrateTaskAssignees, isNiftyTaskAttributableToMember } from "@/lib/work-os";
 import { localDateForTimezone } from "@/modules/work-os/companion";
+import { recordWorkMemory } from "@/lib/work-memory";
 
 type Json = Record<string, any>;
 
@@ -83,6 +84,21 @@ export async function recordTaskDayEvent(
     idempotency_key: options.idempotencyKey,
   }, { onConflict: "organization_id,idempotency_key", ignoreDuplicates: true });
   if (error) throw new Error(`record task day event: ${error.message}`);
+  if (options.provenance === "employee_explicit") {
+    await recordWorkMemory(
+      { organizationId: access.organizationId, personId: access.personId as string },
+      {
+        kind: "task_event",
+        sourceTable: "work_task_day_events",
+        sourceId: options.idempotencyKey,
+        content: `${eventType}: ${String(task.title ?? "task")}`,
+        summary: `${eventType} — ${String(task.title ?? "task")}`.slice(0, 160),
+        metadata: { eventType, taskId: String(task.id), providerTaskId: String(task.provider_task_id ?? "") },
+        localDate,
+        occurredAt: observedAt,
+      },
+    );
+  }
 }
 
 const db = () => createAdminClient();

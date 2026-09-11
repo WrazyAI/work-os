@@ -9,8 +9,9 @@ const INTERPRET_RESPONSE_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["taskMatches", "claims", "operations"],
+    required: ["reply", "taskMatches", "claims", "operations"],
     properties: {
+      reply: { type: "string", maxLength: 600 },
       taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
       claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" } } }, maxItems: 20 },
       operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: "string" }, taskTitle: { type: "string" }, taskGroupId: { type: "string" }, limit: { type: "integer" }, page: { type: "string" } } }, maxItems: 20 },
@@ -36,6 +37,7 @@ export interface CandidateOperation {
 
 export interface CandidateWorkUpdate {
   originalInput: string;
+  reply: string;
   taskMatches: Array<{ taskId: string; confidence: number }>;
   claims: Array<{ kind: CandidateClaimKind; statement: string; taskId?: string }>;
   operations: CandidateOperation[];
@@ -115,21 +117,40 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
     }
   }
 
-  return { originalInput, taskMatches, claims, operations };
+  return { originalInput, reply: text(source.reply, 600) ?? "", taskMatches, claims, operations };
 }
 
-function buildPrompt(input: string, tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>, planIntent: string | null, today: string): string {
+export interface InterpretContext {
+  memoryBlock?: string;
+  conversation?: Array<{ role: string; content: string }>;
+}
+
+function buildPrompt(
+  input: string,
+  tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>,
+  planIntent: string | null,
+  today: string,
+  context?: InterpretContext,
+): string {
   const taskList = tasks.map((task) => `- id: ${task.id} | title: ${task.title} | ${task.completed ? "completed" : "open"}`).join("\n") || "(no tasks)";
+  const conversation = (context?.conversation ?? [])
+    .slice(-8)
+    .map((turn) => `${turn.role === "user" ? "Employee" : "Assistant"}: ${turn.content.replace(/\s+/g, " ").trim().slice(0, 1000)}`)
+    .filter((line) => line.length > 10)
+    .join("\n");
   return [
     `Today is ${today}. The employee wrote this update:`,
     `"""${input}"""`,
     planIntent ? `Their stated plan for today: "${planIntent}".` : "",
+    conversation ? `Recent conversation:\n${conversation}` : "",
+    context?.memoryBlock ? `Recalled memory (dated history only — never current facts or completion evidence):\n${context.memoryBlock}` : "",
     "Their tasks:",
     taskList,
     "",
     "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
-    '{"taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review"}]}',
+    '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review"}]}',
+    "- reply is 1-2 short, warm, plain sentences that acknowledge the update and point to the proposed next step. Never claim an action already happened or was approved.",
     "- Only reference taskIds from the list above; never invent ids.",
     "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",
     "- Use navigate_to_page when the employee should go somewhere in the app (page is one of: day, tasks, review, insights, evidence, settings). Attach it for time-sensitive destinations like a due EOD report so they get a direct button (page review).",
@@ -150,7 +171,11 @@ export interface InterpretResult {
 }
 
 /** Calls the configured provider and returns a validated interpretation. */
-export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: unknown; today?: unknown }, tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>): Promise<InterpretResult> {
+export async function interpretWorkUpdate(
+  body: { input?: unknown; planIntent?: unknown; today?: unknown },
+  tasks: Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>,
+  context?: InterpretContext,
+): Promise<InterpretResult> {
   const key = process.env.OPENROUTER_API_KEY;
   const input = text(body.input, 4000);
   if (!input) return { ok: false, reason: "ai_malformed", detail: "input is required" };
@@ -167,7 +192,7 @@ export async function interpretWorkUpdate(body: { input?: unknown; planIntent?: 
         model: INTERPRET_MODEL,
         messages: [
           { role: "system", content: "You are the Work OS assistant. You translate employee work updates into structured, reviewable operations. You never invent task ids and you output only valid JSON." },
-          { role: "user", content: buildPrompt(input, tasks, planIntent, today) },
+          { role: "user", content: buildPrompt(input, tasks, planIntent, today, context) },
         ],
         temperature: 0.2,
         max_tokens: 1200,

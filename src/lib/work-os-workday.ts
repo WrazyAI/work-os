@@ -4,6 +4,7 @@ import { listPersonTasks } from "@/lib/work-os";
 import { dateOnly } from "@/lib/work-os-internal";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
+import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
@@ -747,12 +748,42 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   }
   const result = Array.isArray(mutation) ? mutation[0] : mutation;
   if (!result) throw new Error("save daily plan draft atomically: no mutation result");
-  if (result.replayed !== true) await auditPlan(access, confirm ? "plan.confirmed" : "plan.draft_saved", String(plan.id), {
-    shiftDate, revision: expectedRevision + 1, idempotencyKey,
-    confirmed: confirm,
-    goalProvenance: freeformIntent ? requestedProvenance ?? "employee" : null,
-    suggestionTaskIds: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
-  });
+  if (result.replayed !== true) {
+    await auditPlan(access, confirm ? "plan.confirmed" : "plan.draft_saved", String(plan.id), {
+      shiftDate, revision: expectedRevision + 1, idempotencyKey,
+      confirmed: confirm,
+      goalProvenance: freeformIntent ? requestedProvenance ?? "employee" : null,
+      suggestionTaskIds: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
+    });
+    const committedItems = submitted ? preparedItems : Array.isArray(plan.items) ? plan.items as Json[] : [];
+    const itemTitles = committedItems
+      .map((item) => value(item.title_snapshot))
+      .filter((title): title is string => Boolean(title))
+      .slice(0, 12);
+    const intentText = freeformIntent;
+    const parts = [
+      intentText ? `Focus: ${intentText}` : null,
+      itemTitles.length ? `Plan items: ${itemTitles.join("; ")}` : null,
+    ].filter(Boolean);
+    if (parts.length) {
+      await recordWorkMemory(
+        { organizationId: access.organizationId, personId: access.personId as string },
+        {
+          kind: "plan",
+          sourceTable: "work_daily_plans",
+          sourceId: `${String(plan.id)}:${expectedRevision + 1}`,
+          content: parts.join("\n"),
+          summary: intentText ? intentText.slice(0, 160) : `Plan saved with ${itemTitles.length} item(s)`,
+          metadata: {
+            confirmed: confirm,
+            revision: expectedRevision + 1,
+            goalProvenance: freeformIntent ? requestedProvenance ?? "employee" : null,
+          },
+          localDate: shiftDate,
+        },
+      );
+    }
+  }
   return loadPlanByDate(access, shiftDate);
 }
 
