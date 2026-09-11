@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  conversationTurnFromHistory,
   formatMemoryContext,
   fuseMemoryRanks,
   memoryContentHash,
@@ -66,4 +67,12 @@ test("memory context labels recalled facts and respects the character budget", (
 
 test("empty memory context renders nothing", () => {
   assert.equal(formatMemoryContext({ items: [], profileFacts: [] }), "");
+});
+
+test("history normalization accepts web content and desktop text fields", () => {
+  assert.deepEqual(conversationTurnFromHistory({ role: "user", content: "web turn" }), { role: "user", content: "web turn" });
+  assert.deepEqual(conversationTurnFromHistory({ role: "assistant", text: "desktop turn" }), { role: "assistant", content: "desktop turn" });
+  assert.equal(conversationTurnFromHistory({ role: "system", text: "ignored" }), null);
+  assert.equal(conversationTurnFromHistory({ role: "user", text: "   " }), null);
+  assert.equal(conversationTurnFromHistory(null), null);
 });

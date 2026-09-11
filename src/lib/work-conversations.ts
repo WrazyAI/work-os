@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordWorkMemory, type MemoryScope } from "@/lib/work-memory";
-import { memoryScopeKey } from "@/lib/work-memory-core";
+import { memoryScopeKey, conversationTurnFromHistory } from "@/lib/work-memory-core";
 
 export interface ConversationScope extends MemoryScope {
   localDate: string;
@@ -115,11 +115,9 @@ export async function appendConversationTurn(scope: ConversationScope, turn: Con
 export async function persistInterpretHistory(scope: ConversationScope, history: unknown, latestInput: string): Promise<void> {
   const entries = Array.isArray(history) ? history.slice(-24) : [];
   for (const entry of entries) {
-    if (!entry || typeof entry !== "object") continue;
-    const role = (entry as { role?: unknown }).role;
-    const content = (entry as { content?: unknown }).content;
-    if ((role === "user" || role === "assistant") && typeof content === "string" && content.trim()) {
-      await appendConversationTurn(scope, { role, content, metadata: { source: "interpret_history" } });
+    const turn = conversationTurnFromHistory(entry);
+    if (turn) {
+      await appendConversationTurn(scope, { role: turn.role, content: turn.content, metadata: { source: "interpret_history" } });
     }
   }
   if (latestInput.trim()) {

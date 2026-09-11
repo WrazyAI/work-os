@@ -36,6 +36,22 @@ export function memoryScopeKey(organizationId: string, personId: string, localDa
   return `${organizationId}:${personId}:${localDate}`;
 }
 
+/** Normalizes a client history entry. Web sends `content`, the desktop
+ * companion sends `text`; both must persist. */
+export function conversationTurnFromHistory(entry: unknown): { role: "user" | "assistant"; content: string } | null {
+  if (!entry || typeof entry !== "object") return null;
+  const raw = entry as { role?: unknown; content?: unknown; text?: unknown };
+  const role = raw.role === "user" || raw.role === "assistant" ? raw.role : null;
+  const content =
+    typeof raw.content === "string" && raw.content.trim()
+      ? raw.content
+      : typeof raw.text === "string" && raw.text.trim()
+        ? raw.text
+        : null;
+  if (!role || !content) return null;
+  return { role, content };
+}
+
 const RRF_K = 60;
 
 /** Reciprocal-rank fusion of vector and lexical candidates with recency decay.
