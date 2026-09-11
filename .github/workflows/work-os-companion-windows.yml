@@ -135,6 +135,9 @@ jobs:
       - name: Test packaged frontend
         run: npm test
 
+      - name: Build frontend assets
+        run: npm run build
+
       - name: Build unsigned MSI, NSIS, and updater artifacts
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
