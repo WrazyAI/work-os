@@ -393,7 +393,7 @@ export function PlanningSession({
         </section>}
         {state === "ai_unavailable" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error} {hasDraft ? "Your current draft is kept." : active ? "Try building again — confirming needs an AI-built plan while on shift." : "You can still save your own planning note."}</span></div>}
         {state === "offline_fallback" && <div className="planning-notice"><AlertTriangle size={16} /><span>{interpretation ? "Your structured plan is queued locally. It is not confirmed until sync succeeds." : "Your raw planning note is queued locally."}</span></div>}
-        {state === "conflict" && <div className="planning-notice"><AlertTriangle size={16} /><span>This plan changed elsewhere. Refresh before saving again.</span></div>}
+        {state === "conflict" && <div className="planning-notice"><AlertTriangle size={16} /><span>Your workspace has a newer confirmed plan, and it is showing now. Close this and reopen the focus editor to change it.</span></div>}
         {state === "save_error" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error || "Your plan was not saved. Check the connection or correct the plan and try again."}</span></div>}
         {state === "saved" && <div className="planning-confirmed"><CheckCircle2 size={17} /><span>Your plan is saved. Confirm it when your shift starts.</span></div>}
         {state === "confirmed" && <div className="planning-confirmed"><CheckCircle2 size={17} /><span>Your daily commitments are confirmed.</span></div>}

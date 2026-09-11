@@ -476,6 +476,17 @@ export default function App() {
     try { return await refreshInternal(options); } finally { setRefreshing(false); }
   }, [refreshInternal]);
 
+  /** A conflicting write means the workspace holds an authoritative newer plan;
+   * drop the rejected local draft and render the server record instead of
+   * retrying the same payload. */
+  const resyncPlanFromServer = useCallback(() => {
+    planDirtyRef.current = false;
+    appliedPlanKeyRef.current = "none";
+    setPlanDirty(false);
+    setPlanSaveState("saved");
+    void refresh({ dayOnly: true, details: true });
+  }, [refresh]);
+
   const reloadOpenTaskDetails = useCallback(async () => {
     const openTask = taskDetails?.task as Record<string, unknown> | undefined;
     const taskId = openTask ? String(openTask.provider_task_id || openTask.id || "") : "";
@@ -757,12 +768,17 @@ export default function App() {
         }
       }).catch((value) => {
         const message = errorMessage(value, "Your daily goal could not be saved.");
-        setPlanSaveState(/changed on another device/i.test(message) ? "conflict" : "offline");
+        if (/changed on another device/i.test(message)) {
+          resyncPlanFromServer();
+          notifications.info("Showing the saved plan from your workspace. Reopen the focus editor to change it.", "Plan refreshed");
+          return;
+        }
+        setPlanSaveState("offline");
         showError(message, message, "Goal not saved");
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, showError, suggestionTaskIds]);
+  }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, resyncPlanFromServer, showError, suggestionTaskIds]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -1319,8 +1335,13 @@ export default function App() {
       return "confirmed";
     } catch (value) {
       const message = errorMessage(value, "Your plan could not be saved.");
-      setPlanSaveState(/changed on another device/i.test(message) ? "conflict" : "offline");
-      return /changed on another device/i.test(message) ? "conflict" : "failed";
+      if (/changed on another device/i.test(message)) {
+        resyncPlanFromServer();
+        notifications.info("Showing the saved plan from your workspace. Close and reopen the focus editor to change it.", "Plan refreshed");
+        return "conflict";
+      }
+      setPlanSaveState("offline");
+      return "failed";
     } finally {
       setBusy(false);
     }

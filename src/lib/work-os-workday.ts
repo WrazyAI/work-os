@@ -646,7 +646,6 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
   const confirm = body.confirm === true;
   if (confirm && !session) throw new Error("Clock in before confirming a plan.");
-  if (confirm && plan.status === "confirmed" && plan.confirmation_idempotency_key !== idempotencyKey) throw new WorkOsConflictError("This plan was already confirmed on another device. Refresh before saving again.");
   const expectedRevision = Number(body.revision ?? plan.revision ?? 1);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("A valid plan revision is required.");
   const submitted = Array.isArray(body.items) ? body.items as DraftItem[] : null;
