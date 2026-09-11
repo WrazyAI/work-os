@@ -1,13 +1,10 @@
-import { canAccessWorkOsPerson, type WorkOsAccess } from "@/lib/work-os-api";
+import { canAccessWorkOsPerson, WorkOsConflictError, type WorkOsAccess } from "@/lib/work-os-api";
 import { listEvidence, reviewReport } from "@/lib/work-os";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
-import { audit, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { addDaysIso } from "@/lib/work-os-dates";
+import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { recordWorkMemory } from "@/lib/work-memory";
-
-function dateOnly(value: unknown) {
-  const match = String(value ?? "").match(/^\d{4}-\d{2}-\d{2}/);
-  return match?.[0] ?? null;
-}
+import { localDateForTimezone } from "@/modules/work-os/companion";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -27,9 +24,7 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
 }
 
-async function createDailyWorkspaceEod(access: WorkOsAccess, personId: string, body: Json) {
-  const reportDate = dateOnly(body.date) ?? new Date().toISOString().slice(0, 10);
-  const ownerId = await organizationOwnerId(access.organizationId);
+async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
   const [workspace, personResult, evidenceRows, checkInsResult, eventsResult] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
     db().from("work_people").select("display_name,role_profile:work_role_profiles(name)")
@@ -88,6 +83,45 @@ async function createDailyWorkspaceEod(access: WorkOsAccess, personId: string, b
     "",
     "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
   ].join("\n");
+  return {
+    title,
+    markdown,
+    metrics: { completed: completed.length, progressed: progressed.length, deferred: deferred.length, carried: carried.length, unplanned: unplanned.length },
+  };
+}
+
+async function persistDailyWorkspaceEod(access: WorkOsAccess, personId: string, reportDate: string, draftKey: string | null) {
+  const ownerId = await organizationOwnerId(access.organizationId);
+  const content = await buildDailyWorkspaceEodContent(access, personId, reportDate, ownerId);
+  const { data: existing, error: existingError } = await db().from("work_reports").select("*")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
+    .eq("report_date", reportDate)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (existingError) throw new Error(`load existing daily EOD: ${existingError.message}`);
+  if (existing) {
+    if (!["draft", "rejected"].includes(String(existing.status))) {
+      throw new WorkOsConflictError("This day's EOD was already submitted and is read-only unless a manager requests changes.");
+    }
+    const { data: updated, error: updateError } = await db().from("work_reports").update({
+      status: "draft",
+      title: content.title,
+      markdown: content.markdown,
+      metrics: content.metrics,
+      missing_evidence: [],
+      updated_at: new Date().toISOString(),
+      ...(draftKey ? { draft_idempotency_key: draftKey } : {}),
+    }).eq("organization_id", access.organizationId).eq("id", existing.id)
+      .in("status", ["draft", "rejected"]).select("*").maybeSingle();
+    if (updateError) throw new Error(`refresh daily workspace EOD: ${updateError.message}`);
+    if (updated) return updated as Json;
+    const { data: current, error: currentError } = await db().from("work_reports").select("*")
+      .eq("organization_id", access.organizationId).eq("id", existing.id).maybeSingle();
+    if (currentError) throw new Error(`reload daily workspace EOD: ${currentError.message}`);
+    if (current && !["draft", "rejected"].includes(String(current.status))) {
+      throw new WorkOsConflictError("This day's EOD was already submitted and is read-only unless a manager requests changes.");
+    }
+    throw new Error("EOD report changed while it was being drafted");
+  }
   const { data, error } = await db().from("work_reports").insert({
     user_id: ownerId,
     organization_id: access.organizationId,
@@ -95,13 +129,22 @@ async function createDailyWorkspaceEod(access: WorkOsAccess, personId: string, b
     report_date: reportDate,
     kind: "eod",
     status: "draft",
-    title,
-    markdown,
-    metrics: { completed: completed.length, progressed: progressed.length, deferred: deferred.length, carried: carried.length, unplanned: unplanned.length },
+    title: content.title,
+    markdown: content.markdown,
+    metrics: content.metrics,
     missing_evidence: [],
-    draft_idempotency_key: text(body.draft_idempotency_key),
+    draft_idempotency_key: draftKey,
   }).select("*").single();
-  if (error) throw new Error(`create daily workspace EOD: ${error.message}`);
+  if (error) {
+    if (/duplicate key|daily_eod/i.test(error.message)) {
+      const { data: raced, error: racedError } = await db().from("work_reports").select("*")
+        .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
+        .eq("report_date", reportDate).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (racedError) throw new Error(`reload raced daily EOD: ${racedError.message}`);
+      if (raced) return raced as Json;
+    }
+    throw new Error(`create daily workspace EOD: ${error.message}`);
+  }
   return data as Json;
 }
 
@@ -116,19 +159,148 @@ export async function draftWorkOsEod(access: WorkOsAccess, personId: string, bod
       return existing;
     }
   }
-  let report: Json;
-  try {
-    report = await createDailyWorkspaceEod(access, personId, body);
-  } catch (error) {
-    if (!draftKey) throw error;
-    const { data: reconciled } = await db().from("work_reports").select("*")
-      .eq("organization_id", access.organizationId).eq("draft_idempotency_key", draftKey).maybeSingle();
-    if (!reconciled) throw error;
-    report = reconciled as Json;
-  }
+  const reportDate = dateOnly(body.date) ?? new Date().toISOString().slice(0, 10);
+  const report = await persistDailyWorkspaceEod(access, personId, reportDate, draftKey);
   await saveReportVersion(access, report, "draft", text(report.markdown) ?? "", draftKey);
   await audit(access, "report.drafted", "report", report.id as string, { personId, reportDate: report.report_date });
   return report;
+}
+
+export type OutstandingEodStatus = "no_draft" | "draft_unsubmitted" | "changes_requested";
+
+export type OutstandingEodDay = {
+  date: string;
+  status: OutstandingEodStatus;
+  reportId: string | null;
+  observedMinutes: number;
+  completedTasks: number;
+  hasPlan: boolean;
+};
+
+export type OutstandingEodCandidate = {
+  date: string;
+  hasSession: boolean;
+  observedMinutes: number;
+  hasPlan: boolean;
+  completedTasks: number;
+  report: { id: string; status: string; submitted: boolean } | null;
+};
+
+/** A day only counts as outstanding when something was recorded for it and no
+ * submitted report exists; a draft or rejected report keeps the day visible. */
+export function classifyOutstandingEodDays(candidates: OutstandingEodCandidate[]): OutstandingEodDay[] {
+  return candidates.flatMap((candidate) => {
+    const report = candidate.report;
+    let status: OutstandingEodStatus | null = null;
+    if (report?.status === "rejected") status = "changes_requested";
+    else if (report && (report.submitted || ["pending_review", "approved"].includes(report.status))) return [];
+    else if (report) status = "draft_unsubmitted";
+    else if (candidate.hasSession || candidate.hasPlan) status = "no_draft";
+    else return [];
+    return [{
+      date: candidate.date,
+      status,
+      reportId: report?.id ?? null,
+      observedMinutes: candidate.observedMinutes,
+      completedTasks: candidate.completedTasks,
+      hasPlan: candidate.hasPlan,
+    }];
+  });
+}
+
+const OUTSTANDING_EOD_DEFAULT_DAYS = 14;
+const OUTSTANDING_EOD_MAX_DAYS = 31;
+
+function observedSeconds(session: Json) {
+  const start = Date.parse(String(session.clocked_in_at ?? ""));
+  if (!Number.isFinite(start) || !session.clocked_out_at) return 0;
+  const end = Date.parse(String(session.clocked_out_at));
+  if (!Number.isFinite(end)) return 0;
+  const paused = Number(session.paused_seconds ?? 0) || 0;
+  return Math.max(0, Math.round((end - start) / 1000) - paused);
+}
+
+async function employeeTimezone(access: WorkOsAccess, personId: string) {
+  const { data, error } = await db().from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).maybeSingle();
+  if (error) throw new Error(`load employee timezone: ${error.message}`);
+  return typeof data?.timezone === "string" && data.timezone.trim() ? data.timezone : "UTC";
+}
+
+/** Worked or planned days in the lookback window whose EOD is not submitted.
+ * Today is excluded; unresolved past sessions contribute no observed time. */
+export async function listOutstandingEods(access: WorkOsAccess, requestedDays = OUTSTANDING_EOD_DEFAULT_DAYS) {
+  const personId = access.personId as string;
+  const lookback = Number.isFinite(requestedDays)
+    ? Math.min(OUTSTANDING_EOD_MAX_DAYS, Math.max(1, Math.floor(requestedDays)))
+    : OUTSTANDING_EOD_DEFAULT_DAYS;
+  const timezone = await employeeTimezone(access, personId);
+  const today = localDateForTimezone(new Date(), timezone);
+  const from = addDaysIso(today, -lookback);
+  const through = addDaysIso(today, -1);
+  const [sessionsResult, plansResult, reportsResult, eventsResult] = await Promise.all([
+    db().from("work_sessions").select("shift_date,clocked_in_at,clocked_out_at,paused_seconds,correction_status")
+      .eq("organization_id", access.organizationId).eq("person_id", personId)
+      .gte("shift_date", from).lte("shift_date", through),
+    db().from("work_daily_plans").select("shift_date")
+      .eq("organization_id", access.organizationId).eq("person_id", personId)
+      .gte("shift_date", from).lte("shift_date", through),
+    db().from("work_reports").select("id,report_date,status,submitted_at,created_at")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
+      .gte("report_date", from).lte("report_date", through),
+    db().from("work_task_day_events").select("id,local_date,provider_task_id")
+      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("event_type", "completed")
+      .gte("local_date", from).lte("local_date", through),
+  ]);
+  for (const [label, result] of [["sessions", sessionsResult], ["plans", plansResult], ["reports", reportsResult], ["events", eventsResult]] as const) {
+    if (result.error) throw new Error(`load outstanding EOD ${label}: ${result.error.message}`);
+  }
+  const observedByDate = new Map<string, number>();
+  const sessionDates = new Set<string>();
+  for (const session of (sessionsResult.data ?? []) as Json[]) {
+    const date = dateOnly(session.shift_date);
+    if (!date) continue;
+    sessionDates.add(date);
+    observedByDate.set(date, (observedByDate.get(date) ?? 0) + observedSeconds(session));
+  }
+  const planDates = new Set<string>();
+  for (const plan of (plansResult.data ?? []) as Json[]) {
+    const date = dateOnly(plan.shift_date);
+    if (date) planDates.add(date);
+  }
+  const reportByDate = new Map<string, Json>();
+  for (const report of (reportsResult.data ?? []) as Json[]) {
+    const date = dateOnly(report.report_date);
+    if (!date) continue;
+    const current = reportByDate.get(date);
+    const createdAt = Date.parse(String(report.created_at ?? ""));
+    const currentCreatedAt = current ? Date.parse(String(current.created_at ?? "")) : Number.NEGATIVE_INFINITY;
+    if (!current || (Number.isFinite(createdAt) && createdAt >= currentCreatedAt)) reportByDate.set(date, report);
+  }
+  const completedByDate = new Map<string, Set<string>>();
+  for (const event of (eventsResult.data ?? []) as Json[]) {
+    const date = dateOnly(event.local_date);
+    if (!date) continue;
+    const key = String(event.provider_task_id ?? event.id);
+    const set = completedByDate.get(date) ?? new Set<string>();
+    set.add(key);
+    completedByDate.set(date, set);
+  }
+  const candidates: OutstandingEodCandidate[] = [];
+  for (let offset = lookback; offset >= 1; offset -= 1) {
+    const date = addDaysIso(today, -offset);
+    const report = reportByDate.get(date) ?? null;
+    candidates.push({
+      date,
+      hasSession: sessionDates.has(date),
+      observedMinutes: Math.round((observedByDate.get(date) ?? 0) / 60),
+      hasPlan: planDates.has(date),
+      completedTasks: completedByDate.get(date)?.size ?? 0,
+      report: report ? { id: String(report.id), status: String(report.status ?? "draft"), submitted: !!report.submitted_at } : null,
+    });
+  }
+  const days = classifyOutstandingEodDays(candidates);
+  return { from, through, count: days.length, days };
 }
 
 export async function submitWorkOsEod(access: WorkOsAccess, reportId: string, body: Json) {

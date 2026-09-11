@@ -53,6 +53,12 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(insights, /requirePerson: true/);
   assert.match(insights, /day.*7d.*30d/);
   assert.match(day, /compact: url\.searchParams\.get\("compact"\) === "true"/);
+  const outstandingEod = await source("src/app/api/work-os/me/eod/outstanding/route.ts");
+  assert.match(outstandingEod, /requireWorkOsAccess/);
+  assert.match(outstandingEod, /requirePerson: true/);
+  assert.match(outstandingEod, /employee_companion/);
+  assert.match(outstandingEod, /listOutstandingEods/);
+  assert.match(outstandingEod, /days must be between 1 and 31/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /sanitizeEodAnnotations/);
   assert.match(await source("src/lib/aiEod.ts"), /export function sanitizeEodAnnotations/);
