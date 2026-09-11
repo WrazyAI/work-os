@@ -148,6 +148,14 @@ Good motion:
 
 Avoid ambient motion, looping decoration, large spring effects, overshoot, or animation that delays access to controls.
 
+**Chat acknowledgement exception.** The assistant chat surfaces may use two
+bounded, non-ambient flourishes to acknowledge real events: a one-shot WebGL
+colour sweep across the composer interior on send and again when a streamed
+reply settles, and a word-by-word reveal of the reply text. Neither loops, both
+are removed under `prefers-reduced-motion`, and the reply text is exposed to
+assistive technology in full on first render regardless of the visual reveal.
+Everything else on the surface still follows the limits above.
+
 ## 3. Information hierarchy
 
 ### 3.1 Application shell
@@ -376,6 +384,12 @@ Meet WCAG AA contrast for text and essential controls. Do not communicate state 
 ### 6.4 Gradients
 
 Gradients should be subtle atmospheric reinforcement, not the main content treatment. The active focus surface may use a restrained green radial wash over a warm neutral base. Avoid saturated multicolor gradients and glossy effects.
+
+**Chat sweep exception.** The assistant composer's one-shot sweep (§2.6, §25.11)
+is a full-spectrum WebGL band rendered on an overlay canvas. It is transient
+acknowledgement, never a fill, never behind text, and never used to carry
+meaning; it is absent at rest and entirely removed under `prefers-reduced-motion`.
+This is the only permitted saturated multicolor treatment in the product.
 
 ## 7. Surfaces, borders, radius, and elevation
 
@@ -667,6 +681,8 @@ Reference durations:
 - Popover enter/exit: 160–240ms.
 - Progress interpolation: 300–420ms.
 - Page-level transition: 180–260ms.
+- Chat reply word reveal: ~32ms per token (capped, or instant under reduced motion).
+- Chat composer sweep: ~620ms traversal plus ~90ms outro, one-shot per event.
 
 Reference easing:
 
@@ -864,6 +880,17 @@ On shift:
 ### 20.1 Tokens first
 
 Use shared CSS variables or theme tokens for color, spacing, radius, shadow, and motion. Do not reproduce raw values across unrelated components when a token exists.
+
+The assistant chat surfaces are the one place that uses **Tailwind v4** to express
+these tokens. It is wired scoped and preflight-free (`@tailwindcss/vite`, no
+`preflight.css`, `@source` limited to `desktop/work-os-companion/src/chat`), and
+its `@theme` block maps the foundation tokens — `ink`, `muted`, `canvas`,
+`surface`, `field`, `inset`, `hover`, `line`, `signal`, `signal-strong`,
+`green`, `danger` — plus `radius-card/control/chip` and
+`shadow-hairline/card/raised/btn`. The companion's older stylesheets are
+unlayered, so they resolve above Tailwind's cascade layers; a small, explicitly
+scoped unlayered bridge in `chat.css` lets the chat surfaces win where they
+must. Do not extend Tailwind beyond the chat surfaces without the same scoping.
 
 ### 20.2 Reusable patterns
 
@@ -1288,8 +1315,8 @@ still need approval — checking a box never marks anything done by itself.
 ### 25.11 Assistant chat panel and prompt bar
 
 The in-app dock composer and the floating companion panel share one chat
-language (`desktop/work-os-companion/src/WorkOsChat.tsx`,
-`work-os-chat.css`), one interaction with contextual modes per §28 — not
+language (`desktop/work-os-companion/src/chat/*`, re-exported through
+`WorkOsChat.tsx`), one interaction with contextual modes per §28 — not
 lookalike input bars.
 
 Anatomy, top to bottom:
@@ -1307,13 +1334,23 @@ Anatomy, top to bottom:
    draggable), while **close** hides the window entirely. Close is always
    recoverable from the tray. The two controls sit adjacent in one
    `.avatar-head-actions` group with equal 28px hit targets.
-2. **Thread:** a fixed scroll region. User turns stay right-aligned soft
-   blocks; assistant sections fade up on arrival. Provenance, receipts,
-   approval cards, selection cards, and navigation buttons render exactly
-   as before — only the container language is shared.
-3. **Composer:** context `+` button, auto-growing field, optional labeled
-   action (the dock's `Focus` button), and a 36px square 11px-radius dark
-   ink send (§28.1). Typing `@` filters Work OS context (today's tasks,
+2. **Thread:** a fixed scroll region. User turns render as right-aligned
+   `chat-turn-user` bubbles. Assistant turns render as `chat-turn`: a small
+   accent mark, then a body column. A meta line above the body is shown
+   **only when real data exists** (a recorded/`review` note, or a real elapsed
+   trace time) — labels and durations are never invented. Newly arrived live
+   replies reveal word-by-word out of a soft blur and finish with real Copy and
+   (when the parent can resend) Resend actions; the full text is exposed to
+   assistive technology in one `aria-live` node on first render. Older/history
+   turns render statically. Provenance, receipts, approval cards, selection
+   cards, and navigation buttons render exactly as before — only the container
+   language is shared.
+3. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
+   context `+` button, an auto-growing field, an optional labeled footer action
+   (the dock's `Focus` button), and a 36px square 11px-radius dark ink send on a
+   raised white shell. Its interior carries an invisible-at-rest WebGL canvas
+   that plays a one-shot sweep on send and on reply settle (§2.6, §6.4). Typing
+   `@` filters Work OS context (today's tasks,
    focus, EOD review, evidence, day summary) and inserts an `@name`
    mention as plain text — mentioning names context, it fetches nothing.
    Typing `/` filters commands: text commands (`/progress`, `/completed`,
@@ -1324,15 +1361,15 @@ Anatomy, top to bottom:
    on outside click and Escape, support arrow/Enter/Tab, and show a
    specific `No matches` state.
 
-Tokens and motion: semantic Work OS tokens only; shells keep their
-established borders, radius, and focus rings (the dock shell's ring means
-the dock field suppresses its own inner ring to avoid doubling; the
-companion shell has no ring, so its field keeps the global one). Entry
-motion is 180–220ms with the product easing; all of it is removed under
-`prefers-reduced-motion`. The two-row composer layout is derived from the
-draft value (newline or labeled action), never from field measurement —
-placeholder wrap changes with width, so measurement feeds back into
-itself and oscillates.
+Tokens and motion: the chat surfaces are built on Tailwind v4 scoped to
+`src/chat` (§20.1) with the `@theme` foundation mapping; shells keep their
+established borders, radius, and focus rings. The reply reveal runs ~32ms per
+token and caps out (rendering instantly) for very long replies; the sweep is
+~620ms + ~90ms outro and is one-shot. Both are fully removed under
+`prefers-reduced-motion`, which leaves the labels, receipt, and full reply text
+visible. The two-row composer layout is derived from the draft value (newline or
+labeled action), never from field measurement — placeholder wrap changes with
+width, so measurement feeds back into itself and oscillates.
 
 Companion window state lives in one place. The tray item is truthful at all
 times: it reads `Hide companion` whenever the window is on screen — including
@@ -1343,10 +1380,12 @@ the tray never lies about what a click will do. Separately, a due agenda opens
 the composer **once** per shift/plan state; the auto-expand is edge-triggered
 and must never fight an employee's deliberate minimize.
 
-Deliberate deviations from the exploration reference: no autoplay demo,
-no dictation, no model picker, and no rainbow sweep — ambient motion,
-saturated multicolor gradients, and unbacked controls violate §§2.4,
-2.6, and 6.4. Send is 36px per §28.1, not the reference 28px.
+Deliberate deviations from the exploration reference: no autoplay demo, no
+dictation, no model picker, no file attachments, and no fake sources, citations,
+confidence meters, brand connect chips, or follow-up suggestions — those are
+unbacked controls or invented data and violate §§2.4 and 18.2. The rainbow
+sweep, once rejected here, is now permitted within the bounded exception in
+§§2.6/6.4. Send is 36px per §28.1, not the reference 28px.
 
 ### 25.12 Loading states
 

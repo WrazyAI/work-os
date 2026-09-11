@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Minus, X } from "lucide-react";
+import { Minus, Sparkles, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
@@ -13,7 +13,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ToolApprovalCard } from "./ToolApprovalCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, StreamingText, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
@@ -146,6 +146,8 @@ export default function AvatarApp(): React.ReactElement {
   const deliveryKeys = useRef<Set<string>>(new Set());
   const notificationPermission = useRef(false);
   const chatScroll = useRef<HTMLDivElement | null>(null);
+  const [sweepSignal, setSweepSignal] = useState(0);
+  const bumpSweep = () => setSweepSignal((value) => value + 1);
   const dayRef = useRef<DayFacts>(facts);
   const dayLoadInFlight = useRef(false);
   const chatRef = useRef<ChatEntry[]>([]);
@@ -949,18 +951,23 @@ export default function AvatarApp(): React.ReactElement {
           )}
           <div className="avatar-chat" ref={chatScroll}>
             {!chat.length && (
-              <div className="chat-entry assistant"><p>{attentionDue
+              <div className="chat-turn assistant"><p>{attentionDue
                 ? contextualPrompt.body
                 : "Share an update, or tell me to create, complete, or block tasks."}</p></div>
             )}
-            {collapseConsecutiveAssistantDuplicates(chat).map((entry) => (
-              <div key={entry.id} className={`chat-entry ${entry.role}`}>
+            {
+              collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
+              const streams = entryIndex === allEntries.length - 1 && entry.role === "assistant" && !entry.operations && !entry.toolResults && !entry.receipt && !entry.id.startsWith("prompt:");
+              return (
+              <div key={entry.id} className={entry.role === "user" ? "chat-turn-user" : `chat-turn ${entry.role}`}>
                 <ChatSectionBoundary label="avatar chat message">
                 {entry.role === "user" ? <ChatMarkdown text={entry.text} />
                   : entry.role === "system" ? <div className="chat-system"><ChatMarkdown text={entry.text} /></div>
                     : entry.receipt ? <p className="chat-receipt">✓ {entry.receipt}</p>
                       : <>
-                        <ChatMarkdown text={entry.text} />
+                        <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
+                        <div className="chat-turn-body">
+                        {streams ? <StreamingText text={entry.text} stream onSettled={bumpSweep} /> : <ChatMarkdown text={entry.text} />}
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}
@@ -1002,12 +1009,14 @@ export default function AvatarApp(): React.ReactElement {
                             </button>
                           </div>
                         )}
+                        </div>
                       </>
                 }
                 </ChatSectionBoundary>
               </div>
-            ))}
-            {thinkingTrace && <div className="chat-entry assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></div>}
+              );
+            })}
+            {thinkingTrace && <div className="chat-turn assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></div>}
             {agendaReview && (
               <AgendaReviewCard
                 clarifications={agendaReview.interpretation.clarifications}
@@ -1021,8 +1030,9 @@ export default function AvatarApp(): React.ReactElement {
             )}
           </div>
           </>)}
-          {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer">
+          {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
             <WorkOsPromptBar
+              sweepSignal={sweepSignal}
               value={input}
               onChange={setInput}
               onSend={() => void (agendaDue ? submitAgenda() : sendUpdate())}

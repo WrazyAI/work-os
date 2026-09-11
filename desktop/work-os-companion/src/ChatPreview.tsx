@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Minus, X } from "lucide-react";
+import { Minus, Sparkles, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatTabs, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
@@ -200,40 +200,46 @@ function AvatarSection() {
           </div>
         ) : (
           <div className="avatar-chat workos-thread">
-            <div className="chat-entry assistant">
-              <ChatMarkdown text="Share an update, or tell me to create, complete, or block tasks." />
+            <div className="chat-turn">
+              <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
+              <div className="chat-turn-body">
+                <ChatMarkdown text="Share an update, or tell me to create, complete, or block tasks." />
+              </div>
             </div>
-            <div className="chat-entry user">
+            <div className="chat-turn-user">
               <ChatMarkdown text="Show my pending tasks" />
             </div>
-            <div className="chat-entry assistant">
-              <ChatMarkdown text="Here are your open tasks — viewing never needs approval." />
-              <TaskSelectionCard
-                title="Pending tasks"
-                tasks={AVATAR_TASKS}
-                onMarkSelectedDone={() => undefined}
-                maxHeight={250}
-                emptyTitle="No pending tasks"
-                emptyMessage="Tasks waiting to be completed will appear here."
-              />
-              <div className="chat-operations">
-                <ToolApprovalCard
-                  op={{ op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", enabled: true }}
-                  context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
-                  index={0}
-                  total={2}
+            <div className="chat-turn">
+              <span className="chat-turn-mark" aria-hidden="true"><Sparkles size={14} /></span>
+              <div className="chat-turn-body">
+                <ChatMarkdown text="Here are your open tasks — viewing never needs approval." />
+                <TaskSelectionCard
+                  title="Pending tasks"
+                  tasks={AVATAR_TASKS}
+                  onMarkSelectedDone={() => undefined}
+                  maxHeight={250}
+                  emptyTitle="No pending tasks"
+                  emptyMessage="Tasks waiting to be completed will appear here."
                 />
-                <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />
+                <div className="chat-operations">
+                  <ToolApprovalCard
+                    op={{ op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", enabled: true }}
+                    context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
+                    index={0}
+                    total={2}
+                  />
+                  <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />
+                </div>
               </div>
             </div>
             {entries.map((entry) => (
-              <div key={entry.id} className="chat-entry user">
+              <div key={entry.id} className="chat-turn-user">
                 <ChatMarkdown text={entry.text} />
               </div>
             ))}
           </div>
         )}
-        <footer className="avatar-composer">
+        <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
           <WorkOsPromptBar
             value={input}
             onChange={setInput}

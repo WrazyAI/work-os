@@ -150,9 +150,9 @@ describe("WorkOsPromptBar", () => {
     const markup = renderToStaticMarkup(
       createElement(WorkOsPromptBar, { ...base, canSend: true, sendLabel: "Review update type" }),
     );
-    expect(markup).toContain("workos-send ready");
+    expect(markup).toContain("bg-ink");
     expect(markup).toContain('aria-label="Review update type"');
-    expect(markup).not.toContain("disabled");
+    expect(markup).not.toContain('disabled=""');
   });
 
   it("keeps the focus action inside the composer grid", () => {
@@ -163,6 +163,7 @@ describe("WorkOsPromptBar", () => {
       }),
     );
     expect(markup).toContain("focus-dock-button");
-    expect(markup).toContain("has-footer");
+    // The labeled footer takes the roomy two-row grid.
+    expect(markup).toContain("grid-cols-[36px_auto_minmax(0,1fr)_36px]");
   });
 });

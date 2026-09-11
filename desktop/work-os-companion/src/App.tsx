@@ -21,7 +21,7 @@ import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, StreamingText, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -2263,6 +2263,8 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose, open]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const [sweepSignal, setSweepSignal] = useState(0);
+  const bumpSweep = () => setSweepSignal((value) => value + 1);
   useEffect(() => {
     const el = conversationRef.current;
     if (el) el.scrollTop = el.scrollHeight;

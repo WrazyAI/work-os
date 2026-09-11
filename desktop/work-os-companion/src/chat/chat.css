@@ -1,0 +1,237 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * Work OS chat surface language (design §25.11, overhaul).
+ *
+ * Scoped Tailwind v4: theme + utilities ONLY. Preflight is deliberately
+ * excluded so the companion's existing stylesheets are never reset. Source
+ * detection is limited to this directory, so utilities can only collide with
+ * existing class names that we actually reuse here.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source "./";
+
+@theme {
+  /* Surfaces */
+  --color-canvas: #eef1eb;
+  --color-stage: #f3f5f1;
+  --color-paper: #f8f8f3;
+  --color-surface: #fbfcf8;
+  --color-white: #ffffff;
+  --color-field: #f1f3ee;
+  --color-inset: #f3f5f1;
+  --color-hover: rgba(24, 32, 24, 0.055);
+  --color-hover-2: rgba(24, 32, 24, 0.09);
+  --color-line: #d9ded5;
+  --color-line-strong: #c3cabf;
+
+  /* Ink */
+  --color-ink: #182018;
+  --color-ink-2: #626a61;
+  --color-ink-3: #8a9288;
+
+  /* Signal + status */
+  --color-signal: #a8f15b;
+  --color-signal-strong: #7cc936;
+  --color-green: #2f9e5b;
+  --color-green-tint: #e8f4da;
+  --color-accent-ink: #3f7d20;
+  --color-accent-tint: #e4f4d3;
+  --color-orange: #d99216;
+  --color-danger: #d4493f;
+  --color-danger-tint: #f8ded8;
+
+  /* Geometry */
+  --radius-chip: 7px;
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-composer: 16px;
+
+  /* Elevation */
+  --shadow-hairline: 0 1px 2px rgba(20, 30, 18, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 30, 18, 0.035), 0 7px 24px rgba(20, 30, 18, 0.05);
+  --shadow-btn: 0 1px 2px rgba(20, 30, 18, 0.06), 0 2px 6px rgba(20, 30, 18, 0.05);
+  --shadow-raised: 0 18px 60px rgba(18, 27, 17, 0.14);
+
+  /* Type */
+  --font-sans: Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+@keyframes chat-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chat-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes chat-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chat-eq-bounce {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* ── Primitive component classes (used alongside utilities) ─────────────── */
+
+@layer components {
+  .chat-card-pad { padding: 14px 16px; }
+  .chat-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--color-line);
+  }
+  .chat-icon-button {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-ink-3);
+    cursor: pointer;
+    transition: background-color 140ms cubic-bezier(0.2, 0.8, 0.2, 1), color 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .chat-icon-button:hover { background: var(--color-hover); color: var(--color-ink); }
+  .chat-icon-button:focus-visible {
+    outline: 2px solid var(--color-signal-strong);
+    outline-offset: 1px;
+  }
+  .chat-icon-button:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Thread ─────────────────────────────────────────────────────────── */
+  .chat-turn-user {
+    @apply ml-auto w-fit max-w-[86%] rounded-[13px_13px_4px_13px] bg-field px-3 py-2 text-[13px] leading-[1.45] text-ink;
+  }
+  .chat-turn {
+    @apply flex w-full min-w-0 gap-2.5;
+  }
+  .chat-turn > svg,
+  .chat-welcome > svg {
+    @apply mt-0.5 size-6 shrink-0 rounded-[7px] bg-accent-tint p-1 text-accent-ink;
+  }
+  .chat-turn > div,
+  .chat-welcome > div {
+    @apply min-w-0 flex-1;
+  }
+  .chat-turn-body .chat-markdown,
+  .chat-turn .chat-markdown { min-width: 0; }
+  .chat-turn .chat-markdown p {
+    @apply m-0 text-[13px] leading-[1.55] text-ink;
+    text-wrap: pretty;
+  }
+  .chat-turn .chat-markdown p + p { @apply mt-2; }
+  .chat-turn .chat-markdown ul {
+    @apply mt-2 list-disc pl-4 text-[13px] leading-[1.55] text-ink;
+  }
+  .chat-turn .chat-markdown li + li { @apply mt-1; }
+  .chat-turn .chat-markdown code {
+    @apply rounded-[4px] bg-hover px-1 py-px font-mono text-[0.9em] font-semibold;
+  }
+  .chat-turn > div > strong,
+  .chat-turn strong { @apply text-[13px] font-semibold text-ink; }
+  .chat-turn > div > p { @apply mt-1 text-[12px] leading-[1.5] text-ink-2; }
+  .chat-turn > p { @apply text-[13px] leading-[1.55] text-ink-2; }
+  .chat-turn-note { @apply mt-1 block text-[11px] text-ink-2; }
+
+  .chat-receipt {
+    @apply flex items-start gap-2 rounded-[12px] border border-line bg-surface px-3 py-2.5 text-ink;
+  }
+  .chat-receipt strong { @apply text-[12.5px] font-semibold; }
+  .chat-receipt p { @apply mt-0.5 text-[12px] leading-[1.5] text-ink-2; }
+
+  .chat-kind-options { @apply mt-2.5 flex flex-wrap gap-1.5; }
+  .chat-kind-options button {
+    @apply min-h-[31px] rounded-[9px] border border-line bg-white px-2.5 text-[11px] font-semibold text-ink-2
+      transition-colors duration-150 hover:border-signal-strong hover:bg-accent-tint hover:text-accent-ink
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong;
+  }
+
+  .chat-welcome { @apply flex items-start gap-2.5 text-ink; }
+  .chat-welcome strong { @apply text-[13px] font-semibold; }
+  .chat-welcome p { @apply mt-0.5 text-[12px] leading-[1.5] text-ink-2; }
+
+  .chat-dock {
+    @apply relative z-20 w-full;
+  }
+
+  .chat-enter { animation: chat-fade-up 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .chat-enter-fast { animation: chat-fade-in 220ms ease-out both; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-anim,
+  .chat-enter,
+  .chat-enter-fast,
+  [class*="animate-"] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Bridge over legacy unlayered CSS.
+ *
+ * Companion stylesheets predate the chat language and are unlayered, so the
+ * cascade layers above resolve BELOW them for equal specificity. These few
+ * rules are intentionally unlayered and scoped to the new components so the
+ * chat UI wins where it must — nothing outside the chat surfaces is touched.
+ * The UA default border on textarea/button also has to be reset here.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+.chat-composer textarea {
+  border: 0;
+  background: transparent;
+}
+
+.chat-composer button {
+  border: 0;
+}
+
+/* UA button chrome on the shared tabs, in both surfaces. */
+.chat-tab {
+  border: 0;
+  background: transparent;
+}
+.chat-tab[aria-selected="true"] {
+  background: var(--color-field);
+}
+
+/* Shared tabs inside the legacy dock flyout header. */
+.progress-flyout header > .chat-tabs,
+.avatar-tabs .chat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.progress-flyout header .chat-tab {
+  width: auto;
+  height: auto;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-ink);
+  font: 600 13px/1.4 Manrope, Inter, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  opacity: 0.5;
+}
+
+.progress-flyout header .chat-tab:hover { opacity: 0.75; }
+.progress-flyout header .chat-tab[aria-selected="true"] {
+  background: var(--color-field);
+  opacity: 1;
+}

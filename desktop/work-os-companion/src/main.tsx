@@ -24,6 +24,7 @@ import "./workspace-redesign.css";
 import "./loading.css";
 import "./otto.css";
 import "./work-os-chat.css";
+import "./chat/chat.css";
 import "./avatar.css";
 
 installDiagnosticErrorHandlers();
