@@ -4,6 +4,7 @@ import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId } from "@/lib/work-os";
 import { persistInterpretHistory, recentConversationTurns } from "@/lib/work-conversations";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
     };
     const interpretContext = memoryEnabled(auth.access.featureFlags)
       ? {
+          todayBlock: await buildTodaySnapshot(conversationScope),
           memoryBlock: await buildMemoryPromptBlock(conversationScope, body.input, { limit: 8 }),
           conversation: await recentConversationTurns(conversationScope, 8),
         }

@@ -16,6 +16,7 @@ export interface EodGrounding {
   carried: string[];
   blockers: string[];
   commitments?: Array<{ title: string; status: "selected" | "deferred" | "completed" }>;
+  contextBlock?: string;
 }
 
 const BOTTLENECK_PLACEHOLDER = "(needs your input — what prevented you from completing your task list?)";
@@ -121,6 +122,7 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Bottleneck facts (recorded blockers):",
     fmt(facts.blocker, "none"),
     "",
+    grounding.contextBlock ? `Additional context (live day state and recalled history — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",
     "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, and blockerFactIds.",
     "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");

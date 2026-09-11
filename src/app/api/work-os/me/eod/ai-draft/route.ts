@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { draftEodNarrative, gatherEodGrounding, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +39,14 @@ export async function POST(req: Request) {
       if (feedback.trim().length < 3 && annotations.length === 0) {
         return NextResponse.json({ error: "feedback or annotations are required for refinement" }, { status: 400 });
       }
+    }
+    if (memoryEnabled(auth.access.featureFlags)) {
+      const scope = { organizationId: auth.access.organizationId, personId, localDate: date };
+      const [todayBlock, memoryBlock] = await Promise.all([
+        buildTodaySnapshot(scope),
+        buildMemoryPromptBlock(scope, feedback || "end of day summary of completed and carried work", { limit: 8 }),
+      ]);
+      grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
     }
     const result = hasRefinement
       ? await refineEodNarrative(grounding, body.draft as string, feedback, annotations)

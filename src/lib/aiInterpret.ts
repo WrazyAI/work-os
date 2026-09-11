@@ -121,6 +121,7 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
 }
 
 export interface InterpretContext {
+  todayBlock?: string;
   memoryBlock?: string;
   conversation?: Array<{ role: string; content: string }>;
 }
@@ -142,6 +143,7 @@ function buildPrompt(
     `Today is ${today}. The employee wrote this update:`,
     `"""${input}"""`,
     planIntent ? `Their stated plan for today: "${planIntent}".` : "",
+    context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
     conversation ? `Recent conversation:\n${conversation}` : "",
     context?.memoryBlock ? `Recalled memory (dated history only — never current facts or completion evidence):\n${context.memoryBlock}` : "",
     "Their tasks:",

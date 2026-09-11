@@ -13,6 +13,7 @@ import {
 } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { recordWorkMemory, buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
 
 const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
 const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
@@ -38,7 +39,7 @@ export function checkInCommitmentContext(rows: Json[]): CheckInCommitmentContext
   });
 }
 
-async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[], memoryBlock?: string): Promise<{ model: string; proposals: ParsedProposal[] }> {
+async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[], context?: { todayBlock?: string; memoryBlock?: string }): Promise<{ model: string; proposals: ParsedProposal[] }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is required to turn a check-in into task proposals");
   const taskContext = tasks.map((task) => ({
@@ -90,12 +91,13 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
             "You produce proposals for human review. Nifty is authoritative for tasks.",
             "Use an existing task when the text refers to one. Do not claim work, status, output, blockers, or completion unless the employee explicitly states it.",
             "Daily commitments are employee-reviewed planning context, not evidence. Never infer a commitment is completed or progressed from its presence.",
+            "The live day state is authoritative for what is currently planned, completed, and blocked today.",
             "Recalled memory is dated history for continuity only. Never treat it as evidence of current state, progress, or completion.",
             "Use complete_task only for explicit completion language. Activity alone never proves completion.",
             "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
           ].join("\n"),
         },
-        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments, ...(memoryBlock ? { memoryContext: memoryBlock } : {}) }) },
+        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments, ...(context?.todayBlock ? { todayContext: context.todayBlock } : {}), ...(context?.memoryBlock ? { memoryContext: context.memoryBlock } : {}) }) },
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
@@ -181,10 +183,13 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("shift_date", shiftDate).maybeSingle();
   if (planItems.error) throw new Error(`load check-in planning context: ${planItems.error.message}`);
   const commitments = checkInCommitmentContext(Array.isArray(planItems.data?.items) ? planItems.data.items as Json[] : []);
-  const memoryBlock = memoryEnabled(access.featureFlags)
-    ? await buildMemoryPromptBlock({ organizationId: access.organizationId, personId }, input || "recent progress and blockers", { limit: 8 })
+  const context = memoryEnabled(access.featureFlags)
+    ? {
+        todayBlock: await buildTodaySnapshot({ organizationId: access.organizationId, personId, localDate: shiftDate }),
+        memoryBlock: await buildMemoryPromptBlock({ organizationId: access.organizationId, personId }, input || "recent progress and blockers", { limit: 8 }),
+      }
     : undefined;
-  const parsed = input ? await parseCheckIn(input, tasks, commitments, memoryBlock) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
+  const parsed = input ? await parseCheckIn(input, tasks, commitments, context) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
   const { data: checkIn, error: checkInError } = await db().from("work_check_ins").insert({
     organization_id: access.organizationId,
     person_id: personId,
