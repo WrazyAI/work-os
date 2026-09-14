@@ -136,6 +136,7 @@ export default function AvatarApp(): React.ReactElement {
   const thinking = thinkingTrace !== null;
   const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
   const [filing, setFiling] = useState(false);
+  const [proposedTaskIds, setProposedTaskIds] = useState<Set<string>>(() => new Set());
   const [snoozeCount, setSnoozeCount] = useState<number>(() => {
     const s = readJson<{ count?: number; until?: number | null }>(SNOOZE_KEY, {});
     return typeof s.count === "number" ? s.count : 0;
@@ -588,6 +589,17 @@ export default function AvatarApp(): React.ReactElement {
         taskOptions: [],
       });
       if (outcome.recorded > 0) setFacts((current) => clearRecordedUpdatePrompt(current));
+      const resolvedTaskIds = results
+        .filter((result) => result.status === "recorded" || result.status === "denied")
+        .map((result) => result.op.taskId)
+        .filter((id): id is string => !!id);
+      if (resolvedTaskIds.length) {
+        setProposedTaskIds((current) => {
+          const next = new Set(current);
+          for (const id of resolvedTaskIds) next.delete(id);
+          return next;
+        });
+      }
       writeJson(SNOOZE_KEY, { count: 0, until: null });
       setSnoozeCount(0);
       setMissed(false);
@@ -603,7 +615,7 @@ export default function AvatarApp(): React.ReactElement {
     }
   }, [filing, loadDay, shareAvatarTools]);
 
-  const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
+  const proposeAvatarSelectedCompletions = useCallback(async (taskIds: string[]) => {
     if (!taskIds.length || filing) return;
     const titles = new Map(facts.taskOptions.map((task) => [task.id, task.title]));
     const operations = taskIds.map((taskId) => ({
@@ -613,17 +625,20 @@ export default function AvatarApp(): React.ReactElement {
       task_title: titles.get(taskId) ?? "selected task",
     }));
     setFiling(true);
-    void apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
-      method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ input_text: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, operations }),
-    }).then(({ proposals }) => {
+    try {
+      const { proposals } = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+        method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ input_text: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, operations }),
+      });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
       if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
+      setProposedTaskIds((current) => new Set([...current, ...taskIds]));
       setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
       void shareAvatarTools({ input: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
-    }).catch((value) => setChat((current) => [...current, { id: `completion-error-${Date.now()}`, role: "system", text: value instanceof Error ? value.message : "Could not create completion proposals." }]))
-      .finally(() => setFiling(false));
+    } finally {
+      setFiling(false);
+    }
   }, [facts.taskOptions, filing]);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
@@ -914,6 +929,8 @@ export default function AvatarApp(): React.ReactElement {
                   .filter((task) => !task.completed)
                   .map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: "pending" }))}
                 onMarkSelectedDone={proposeAvatarSelectedCompletions}
+                proposedTaskIds={[...proposedTaskIds]}
+                onReview={() => setAvatarTab("chat")}
                 degraded={daySyncState === "stale"}
                 emptyTitle="No open tasks"
                 emptyMessage="Tasks waiting to be completed will appear here."
@@ -928,6 +945,8 @@ export default function AvatarApp(): React.ReactElement {
                 title={taskContextTitle(taskContext)}
                 tasks={taskContext.visible.map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending" }))}
                 onMarkSelectedDone={proposeAvatarSelectedCompletions}
+                proposedTaskIds={[...proposedTaskIds]}
+                onReview={() => setAvatarTab("chat")}
                 degraded={daySyncState === "stale"}
                 emptyTitle="No open tasks"
                 emptyMessage="Tasks waiting to be completed will appear here."
@@ -968,7 +987,7 @@ export default function AvatarApp(): React.ReactElement {
                             priority: typeof task.priority === "string" ? task.priority : null,
                             state: selection.view === "overdue" ? "overdue" : "pending",
                           })).filter((task) => !!task.id) : [];
-                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
                         {entry.operations?.length ? (
                           <div className="chat-operations">

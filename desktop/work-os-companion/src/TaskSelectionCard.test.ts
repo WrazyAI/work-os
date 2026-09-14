@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { TaskSelectionCard } from "./TaskSelectionCard";
+import { TaskSelectionCard, taskSelectionSummaryText } from "./TaskSelectionCard";
 
 const tasks = [
   { id: "pending", title: "Finish release notes", description: "Capture the verified changes.", dueDate: "2026-09-03", projectName: "Work OS", state: "pending" as const },
@@ -57,5 +57,33 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("Project");
     expect(markup).toContain("Work OS");
     expect(markup).toContain("is-table");
+  });
+
+  it("exposes a collapse toggle and starts expanded", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("chat-task-toggle");
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("aria-controls=");
+    expect(markup).toContain("show or hide task list");
+    expect(markup).not.toContain("is-collapsed");
+  });
+
+  it("marks tasks that already have pending proposals and disables their checkbox", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, proposedTaskIds: ["pending"], onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("Proposed");
+    expect(markup).toContain("already has a pending proposal");
+    expect(markup).toContain("disabled");
+  });
+});
+
+describe("taskSelectionSummaryText", () => {
+  it("summarizes selected and proposed counts, and stays empty when there is nothing to add", () => {
+    expect(taskSelectionSummaryText({ selected: 0, proposed: 0, sentCount: 0, approvalLocation: "in Chat" })).toBe("");
+    expect(taskSelectionSummaryText({ selected: 2, proposed: 1, sentCount: 0, approvalLocation: "in Chat" })).toBe("2 selected · 1 proposed");
+  });
+
+  it("writes a singular and plural receipt for the approval location", () => {
+    expect(taskSelectionSummaryText({ selected: 1, proposed: 0, sentCount: 1, approvalLocation: "in Chat" })).toBe("1 completion proposal created — review and approve in Chat.");
+    expect(taskSelectionSummaryText({ selected: 2, proposed: 0, sentCount: 2, approvalLocation: "below" })).toBe("2 completion proposals created — review and approve below.");
   });
 });

@@ -1150,7 +1150,10 @@ export default function App() {
   const paused = sessionActive ? workSession?.state === "paused" : observedOnly && visibleDay?.attendance?.state === "paused";
   const hasVisibleSession = Boolean(visibleSession);
   useEffect(() => {
-    if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) return;
+    if (!hasVisibleSession || visibleOnboarding?.onboardingRequired || !gate.persistentMessage) {
+      notifications.clearPersistent("work-os-session-gate");
+      return;
+    }
     notifications.persistent("work-os-session-gate", gate.persistentMessage, gate.persistentTitle, "info");
   }, [gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
   const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
@@ -1862,20 +1865,21 @@ export default function App() {
     }).finally(() => setBusy(false));
   }
 
-  function proposeSelectedTaskCompletions(taskIds: string[]) {
+  async function proposeSelectedTaskCompletions(taskIds: string[]) {
     if (!taskIds.length || syncBypassRef.current) return;
     const titles = new Map(interpretationTaskOptions().map((task) => [task.id, task.title]));
     const tasks = taskIds.map((id) => ({ id, title: titles.get(id) ?? "selected task" }));
     const inputText = `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`;
     setBusy(true); setError("");
-    void apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
-      method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({
-        input_text: inputText,
-        operations: tasks.map((task) => ({ op: "complete_task", statement: `Employee confirmed completion of ${task.title}.`, task_id: task.id, task_title: task.title })),
-      }),
-    }).then(({ proposals }) => {
+    try {
+      const { proposals } = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          input_text: inputText,
+          operations: tasks.map((task) => ({ op: "complete_task", statement: `Employee confirmed completion of ${task.title}.`, task_id: task.id, task_title: task.title })),
+        }),
+      });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       const operations: ProposedOperation[] = tasks.map((task, index) => ({
         op: "complete_task", statement: `Employee confirmed completion of ${task.title}.`, taskId: task.id, taskTitle: task.title, proposalId: byIndex.get(index), enabled: true,
@@ -1886,8 +1890,9 @@ export default function App() {
         status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.",
       });
       void sharePendingTools({ input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
-    }).catch((value) => showError(value, "The completion proposals could not be saved. Nothing was marked done.", "Proposal update failed"))
-      .finally(() => setBusy(false));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
@@ -2306,6 +2311,10 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
   const mutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
   const hasResults = mutationResults.length > 0;
   const hasPendingMutations = mutating.some((op) => !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
+  const proposedTaskIds = interpretation.operations
+    .filter((op) => op.op === "complete_task" && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
+    .map((op) => op.taskId)
+    .filter((id): id is string => !!id);
   return <>
     <strong>{mutating.length ? (hasResults ? "Action results" : "Review proposed actions") : "Assistant shortcuts"}</strong>
     {interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}
@@ -2328,7 +2337,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
             priority: typeof task.priority === "string" ? task.priority : null,
             state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
           })).filter((task) => !!task.id) : [];
-          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} /> : null}
         {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} taskOptions={interpretation.taskOptions} context={toolContext} busy={busy} onEdit={onEditOperation} onRemap={onRemapOperation} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} /> : null}
