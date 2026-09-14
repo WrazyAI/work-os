@@ -44,7 +44,7 @@ export interface DailyPlan {
   focus_summary?: string | null;
   interpretation_metadata?: Record<string, unknown>;
   clarification_answers?: Record<string, string>;
-  goal_provenance?: "employee" | "suggested" | "accepted_suggestion" | null;
+  goal_provenance?: "employee" | "suggested" | "accepted_suggestion" | "ai_draft" | null;
   suggestion_task_ids?: string[];
   shift_date: string;
   revision: number;

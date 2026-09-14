@@ -658,7 +658,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   if (buildId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(buildId)) throw new Error("build_id must be a valid AI build id.");
   const intentFingerprint = confirm ? planIntentFingerprint(freeformIntent) : null;
   const requestedProvenance = body.goal_provenance === undefined ? value(plan.goal_provenance) : value(body.goal_provenance);
-  if (requestedProvenance && !["employee", "accepted_suggestion"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal or an accepted suggestion");
+  if (requestedProvenance && !["employee", "accepted_suggestion", "ai_draft"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal, an accepted suggestion, or an AI draft");
   const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
     ? [...new Set(body.suggestion_task_ids.filter((item): item is string => typeof item === "string" && !!item.trim()).map((item) => item.trim()))]
     : Array.isArray(plan.suggestion_task_ids) ? plan.suggestion_task_ids.filter((item: unknown): item is string => typeof item === "string") : [];
@@ -729,7 +729,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
     p_freeform_intent: freeformIntent,
     p_goal_provenance: freeformIntent ? requestedProvenance ?? "employee" : null,
     p_suggestion_task_ids: freeformIntent && requestedProvenance === "accepted_suggestion" ? suggestionTaskIds : [],
-    p_focus_summary: focusSummary ?? plan.focus_summary ?? null,
+    p_focus_summary: focusSummary === undefined ? plan.focus_summary ?? null : focusSummary,
     p_interpretation_metadata: metadata,
     p_clarification_answers: answers,
     p_items: submitted ? preparedItems : null,

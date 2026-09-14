@@ -131,7 +131,7 @@ export function PlanningSession({
 
   useEffect(() => {
     if (!open) return;
-    setInput(plan?.freeform_intent ?? "");
+    setInput(plan?.focus_summary ?? plan?.freeform_intent ?? "");
     setInterpretation(null);
     setClarificationAnswers(plan?.clarification_answers ?? {});
     setError("");

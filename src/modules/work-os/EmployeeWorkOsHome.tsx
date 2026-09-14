@@ -44,7 +44,7 @@ interface DayResponse {
   proposals: AnyRow[];
   report: AnyRow | null;
   session: AnyRow | null;
-  plan: { id: string; status: "draft" | "confirmed" | "closed"; freeform_intent: string | null; items: AnyRow[] } | null;
+  plan: { id: string; status: "draft" | "confirmed" | "closed"; freeform_intent: string | null; focus_summary?: string | null; items: AnyRow[] } | null;
   workspaceSummary?: {
     date: string; readOnly: boolean; completed: number; total: number; overdueCount: number;
     goal: { text: string | null; provenance: string | null; revision: number | null };
@@ -181,8 +181,8 @@ export default function EmployeeWorkOsHome() {
 
   useEffect(() => {
     const historicalGoal = historicalWorkspace.data?.workspace.goal.text;
-    setGoal(selectedTaskDate && selectedTaskDate !== day.data?.shiftDate ? historicalGoal ?? "" : day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "");
-  }, [selectedTaskDate, historicalWorkspace.data?.workspace.goal.text, day.data?.shiftDate, day.data?.workspaceSummary?.goal.text, day.data?.plan?.freeform_intent]);
+    setGoal(selectedTaskDate && selectedTaskDate !== day.data?.shiftDate ? historicalGoal ?? "" : day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.focus_summary ?? day.data?.plan?.freeform_intent ?? "");
+  }, [selectedTaskDate, historicalWorkspace.data?.workspace.goal.text, day.data?.shiftDate, day.data?.workspaceSummary?.goal.text, day.data?.plan?.focus_summary, day.data?.plan?.freeform_intent]);
 
   useEffect(() => {
     const profile = onboarding.data?.profile;
@@ -287,7 +287,7 @@ export default function EmployeeWorkOsHome() {
     mutationFn: () => fetchJson("/api/work-os/me/plan", {
       method: "PUT",
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify({ shift_date: day.data?.shiftDate, revision: day.data?.workspaceSummary?.goal.revision ?? 0, freeform_intent: goal, goal_provenance: goal.trim() ? "employee" : null, suggestion_task_ids: [] }),
+      body: JSON.stringify({ shift_date: day.data?.shiftDate, revision: day.data?.workspaceSummary?.goal.revision ?? 0, freeform_intent: goal, focus_summary: null, goal_provenance: goal.trim() ? "employee" : null, suggestion_task_ids: [] }),
     }),
     onSuccess: refresh,
   });
@@ -474,7 +474,7 @@ export default function EmployeeWorkOsHome() {
           </section>
           <section className="border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
             <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1"><h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> {historical ? `Workspace for ${selectedTaskDate}` : "Today’s workspace"}</h2><p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Goal · {displayedWorkspace?.goal.provenance === "accepted_suggestion" ? "accepted suggestion" : goal.trim() ? "written by you" : "optional"}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo size={16} style={{ color: "var(--accent)" }} /> {historical ? `Workspace for ${selectedTaskDate}` : "Today’s workspace"}</h2><p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Goal · {displayedWorkspace?.goal.provenance === "ai_draft" ? "drafted with Otto" : displayedWorkspace?.goal.provenance === "accepted_suggestion" ? "accepted suggestion" : goal.trim() ? "written by you" : "optional"}</p></div>
               <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full text-center text-[10px] font-semibold" style={{ background: `radial-gradient(circle at center, var(--bg-card) 56%, transparent 58%), conic-gradient(var(--accent) ${displayedWorkspace?.total ? displayedWorkspace.completed / displayedWorkspace.total * 360 : 0}deg, var(--border) 0deg)` }}><span>{displayedWorkspace?.completed ?? 0}<small className="block font-normal">of {displayedWorkspace?.total ?? tasks.length}</small></span></div>
             </div>
             <textarea value={goal} onChange={(event) => setGoal(event.target.value)} readOnly={historical} rows={2} maxLength={4000} placeholder="What will you do today?" className="mt-3 w-full resize-y border bg-transparent px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none" style={{ borderColor: "var(--border)" }} />

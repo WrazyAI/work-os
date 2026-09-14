@@ -18,6 +18,7 @@ import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
+import { buildPlanItemsFromInterpretation } from "./planItems";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { Otto } from "./Otto";
@@ -49,7 +50,7 @@ interface DayFacts extends CompanionDayFacts {
   niftySyncError: string | null;
   taskOptions: Array<{ id: string; title: string; dueDate: string | null; completed: boolean }>;
   planStatus: string | null;
-  planItemIds: string[];
+  planItems: Array<{ id: string; task_id: string | null; title_snapshot: string; disposition: string; item_kind: string; completion_state: string }>;
 }
 
 interface AvatarTrace {
@@ -131,7 +132,7 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
-    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItemIds: [],
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [],
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
@@ -229,7 +230,7 @@ export default function AvatarApp(): React.ReactElement {
         openTasks: Number(day?.signals?.openTasks ?? 0) || 0,
         eodSubmitted: typeof day?.report?.submitted_at === "string",
         personId: day?.access?.personId ?? null,
-        planIntent: day?.plan?.freeform_intent ?? null,
+        planIntent: day?.plan?.focus_summary ?? day?.plan?.freeform_intent ?? null,
         timezone: day?.shift?.timezone ?? null,
         displayName: day?.access?.displayName ?? null,
         niftySyncing: day?.niftySync?.syncing === true,
@@ -244,9 +245,16 @@ export default function AvatarApp(): React.ReactElement {
           }))
           .slice(0, 200) : [],
         planStatus: typeof day?.plan?.status === "string" ? day.plan.status : null,
-        planItemIds: Array.isArray(day?.plan?.items) ? day.plan.items
+        planItems: Array.isArray(day?.plan?.items) ? day.plan.items
           .filter((item: unknown): item is Record<string, unknown> => !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string")
-          .map((item: Record<string, unknown>) => String(item.id)) : [],
+          .map((item: Record<string, unknown>) => ({
+            id: String(item.id),
+            task_id: typeof item.task_id === "string" ? item.task_id : null,
+            title_snapshot: typeof item.title_snapshot === "string" ? item.title_snapshot : "",
+            disposition: item.disposition === "deferred" ? "deferred" : "selected",
+            item_kind: item.item_kind === "outcome" ? "outcome" : "nifty_task",
+            completion_state: item.completion_state === "completed" ? "completed" : "open",
+          })) : [],
       });
       setConnected(true);
       setDaySyncState("ready");
@@ -693,6 +701,7 @@ export default function AvatarApp(): React.ReactElement {
     try {
       if (interpretation) {
         if (!interpretation.buildId) throw new Error("Build the plan again before confirming it.");
+        const items = buildPlanItemsFromInterpretation(facts.planItems, interpretation, answers);
         await apiRequest("/api/work-os/me/plan", {
           method: "PUT",
           headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -701,7 +710,7 @@ export default function AvatarApp(): React.ReactElement {
             confirm: true,
             build_id: interpretation.buildId,
             freeform_intent: goal,
-            goal_provenance: "employee",
+            goal_provenance: "ai_draft",
             focus_summary: interpretation.summary,
             interpretation_metadata: {
               model: "work-os-plan", promptVersion: "work-os-plan-v1", interpretedAt: new Date().toISOString(),
@@ -710,6 +719,7 @@ export default function AvatarApp(): React.ReactElement {
               clarifications: interpretation.clarifications,
             },
             clarification_answers: answers,
+            items,
           }),
         });
       } else throw new Error("Planning assistance must build a plan before it can be confirmed.");
@@ -731,7 +741,7 @@ export default function AvatarApp(): React.ReactElement {
           : message,
       }]);
     } finally { setFiling(false); }
-  }, [facts.planItemIds, facts.shiftDate, loadDay]);
+  }, [facts.planItems, facts.shiftDate, loadDay]);
   /** Agenda entry: the assistant reviews the goal first and asks up to two
    * follow-up questions before anything is persisted. */
   const submitAgenda = useCallback(async () => {
