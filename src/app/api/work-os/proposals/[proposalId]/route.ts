@@ -20,7 +20,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ proposal
     const auth = await access(req);
     if (auth.response) return auth.response;
     const { proposalId } = await params;
-    return NextResponse.json({ proposal: await getWorkOsProposal(auth.access, proposalId) });
+    return NextResponse.json(
+      { proposal: await getWorkOsProposal(auth.access, proposalId) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return jsonError(error);
   }

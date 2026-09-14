@@ -197,6 +197,7 @@ describe("fileApprovedOperations", () => {
     expect(outcome.processing).toBe(0);
     expect(outcome.failed).toHaveLength(1);
     expect(outcome.results[0]?.message).toContain("safe to retry");
+    expect(outcome.results[0]?.retryable).toBe(true);
   });
 });
 

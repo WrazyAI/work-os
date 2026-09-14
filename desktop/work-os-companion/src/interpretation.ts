@@ -28,6 +28,8 @@ export interface ToolCallResult {
   status: "recorded" | "queued" | "processing" | "failed" | "denied";
   message: string;
   data?: unknown;
+  /** The stored proposal can be filed again with the same id (nothing claimed it). */
+  retryable?: boolean;
 }
 
 export interface CandidateReview {
@@ -314,11 +316,11 @@ export async function fileApprovedOperations(
           }
           // `pending` means no write claimed the proposal yet: nothing was
           // filed, and the server's claim is atomic, so a retry cannot
-          // double-apply. Say that instead of leaving a false failure.
+          // double-apply. Keep it actionable instead of leaving a dead failure.
           if (status === "pending") {
             const message = "Not filed. The server still shows this proposal as pending, so it is safe to retry.";
             outcome.failed.push({ op, message });
-            outcome.results.push({ op, status: "failed", message });
+            outcome.results.push({ op, status: "failed", message, retryable: true });
             continue;
           }
         } catch {

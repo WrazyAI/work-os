@@ -30,6 +30,15 @@ import "./avatar.css";
 type SessionInfo = { apiBase: string; token: string; organizationId: string; expiresAt: string };
 type DaySyncState = "loading" | "ready" | "stale" | "error";
 
+/** One filing transport for approvals and retries: the accept request plus the
+ * owner-scoped readback used to reconcile an interrupted response. */
+function proposalFilingTransport() {
+  return {
+    reviewProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+    readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+  };
+}
+
 interface DayFacts extends CompanionDayFacts {
   loaded: boolean;
   personId: string | null;
@@ -559,10 +568,7 @@ export default function AvatarApp(): React.ReactElement {
     setFiling(true);
     try {
       const [outcome, rejectionResults] = await Promise.all([
-        approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), {
-          reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-          readProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
-        }) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
+        approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
@@ -603,6 +609,25 @@ export default function AvatarApp(): React.ReactElement {
       setFiling(false);
     }
   }, [filing, loadDay, shareAvatarTools]);
+
+  const retryOperation = useCallback((entryId: string, result: ToolCallResult) => {
+    const op = { ...result.op, enabled: true };
+    if (!op.proposalId || filing) return;
+    setFiling(true);
+    void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+      setChat((current) => current.map((entry) => entry.id === entryId
+        ? { ...entry, toolResults: mergeToolResults(entry.toolResults ?? [], outcome.results) }
+        : entry));
+      if (outcome.recorded > 0) {
+        setFacts((current) => clearRecordedUpdatePrompt(current));
+        void loadDay(true);
+        void emit("work-os://avatar-day-changed");
+      }
+    }).catch((value) => setChat((current) => [...current, {
+      id: `retry-error-${Date.now()}`, role: "system",
+      text: value instanceof Error ? value.message : "The retry could not be filed.",
+    }])).finally(() => setFiling(false));
+  }, [filing, loadDay]);
 
   const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
     if (!taskIds.length || filing) return;
@@ -988,6 +1013,7 @@ export default function AvatarApp(): React.ReactElement {
                               onEdit={(operationIndex, statement) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, statement } : op) } : candidate))}
                               onRemap={(operationIndex, taskId) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, taskId, taskTitle: candidate.taskOptions?.find((task) => task.id === taskId)?.title ?? op.taskTitle } : op) } : candidate))}
                               onSubmit={(approved, rejected) => void approveOperations(entry.id, approved, rejected)}
+                              onRetry={(result) => retryOperation(entry.id, result)}
                             /> : null}
                           </div>
                         ) : null}

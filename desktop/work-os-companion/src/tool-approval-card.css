@@ -166,6 +166,20 @@
 .approval-results article.is-processing em { background: #e3eefb; color: #2d5c8f; }
 .approval-results article.is-processing > span { background: #e3eefb; color: #2d5c8f; }
 .approval-results article.is-failed em { background: #f8ded8; color: #af4138; }
+.approval-results article .approval-retry {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #9cc384;
+  border-radius: 8px;
+  background: #f2f9e8;
+  color: #315f17;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.approval-results article .approval-retry:hover { background: #e8f4da; }
+.approval-results article .approval-retry:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
 
 @media (max-width: 560px) {
   .approval-flow > footer { align-items: stretch; flex-direction: column; }

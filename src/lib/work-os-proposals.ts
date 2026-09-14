@@ -22,8 +22,13 @@ import {
   deleteWorkOsEmployeeTask,
   listWorkOsEmployeeTaskSelection,
   setWorkOsEmployeeTaskCompletion,
+  withTimeout,
 } from "@/lib/work-os-employee-tasks";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+
+/** A provider refresh inside an approval must be bounded: token refresh and
+ * nested requests can otherwise outlive the companion's filing timeout. */
+const STALENESS_REFRESH_TIMEOUT_MS = 5_000;
 
 type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
@@ -427,9 +432,15 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       const ownerId = await organizationOwnerId(access.organizationId);
       const target = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       // Refresh only this one provider task. A full org sync takes minutes and
-      // does not fit inside an approval request.
+      // does not fit inside an approval request. The refresh is bounded too:
+      // on timeout we compare against the last mirrored state and let the
+      // idempotent write proceed instead of failing the employee's decision.
       if (text(target.provider_task_id)) {
-        await syncNiftyTask(ownerId, String(target.provider_task_id));
+        try {
+          await withTimeout(syncNiftyTask(ownerId, String(target.provider_task_id)), STALENESS_REFRESH_TIMEOUT_MS, "Task refresh");
+        } catch {
+          // Degraded refresh: continue with the mirrored task state.
+        }
       }
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       const before = (proposal.before_state ?? {}) as Json;

@@ -123,9 +123,14 @@ timeout.
 1. One final full sync, then a reconciliation report (`docs/NIFTY-BACKFILL-REPORT.md`):
    counts by state, projects, assignments, due dates, subtasks, sample field diffs
    (Nifty API vs Neon).
-2. Confirm zero Work-OS-surfaced data classes live only in Nifty.
+2. Verify every `assignee_person_ids` value resolves to a `work_people.id` in the same
+   organization / `user_id` — array membership alone is not enough because `uuid[]`
+   only enforces UUID syntax. Report any unmatched assignment as a blocker before
+   Phase C.
+3. Confirm zero Work-OS-surfaced data classes live only in Nifty.
 
-**Acceptance:** report shows parity (or itemized, resolved gaps) for every table above.
+**Acceptance:** report shows parity (or itemized, resolved gaps) for every table above,
+with zero unresolved assignee-domain mismatches.
 
 ### Phase C — Local task authority (medium, dark launch)
 
@@ -145,7 +150,9 @@ timeout.
 4. Tests: local CRUD, mixed-provider listing, subtask progress, day events, proposals.
 
 **Acceptance:** with the flag off, behavior is byte-identical to today; with the flag on
-in a test org, the full desktop task lifecycle works with zero Nifty API calls.
+in a test org, the full desktop task lifecycle for new local rows works with zero Nifty
+API calls. Historical Nifty-backed rows may still refresh through the task-detail path
+until Phase D removes it; the mixed-provider test covers both row kinds explicitly.
 
 ### Phase D — Cutover and retirement (next pass recommended)
 
@@ -203,9 +210,12 @@ task state, desktop + web verified at wide/compact widths.
   disabled (reads are provider-agnostic); they are exported through the same one-way
   export tool defined for Phase D, or discarded with the test org. Rollback never
   hides a task that was created during the launch.
-- Phase D: flag off restores Nifty authority for historical tasks; tasks created while
-  local (if any) are exported to Nifty via the import tool before the window closes,
-  or the cutover is declared forward-only.
+- Phase D: flag off restores Nifty authority for historical tasks. Disabling the flag is
+  gated on a verified export of every locally created row: `updateTask`, `completeTask`,
+  `archiveTask`, `deleteTask`, and `moveTaskToParent` all operate through
+  `provider_task_id`, so a local row with a null provider id has no Nifty mutation path.
+  When export verification is incomplete, the cutover is explicitly forward-only and
+  local-row mutations are blocked with a clear message until the export lands.
 
 ---
 
