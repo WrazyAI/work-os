@@ -1,5 +1,7 @@
 import { getPersonalInsights, type InsightRange } from "@/lib/work-os-insights";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
 
 export const INSIGHTS_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
@@ -18,6 +20,8 @@ export interface InsightSource {
   nextFocus: string[];
   totals: Record<string, number>;
   days: Array<{ date: string; observedSeconds: number; planned: number; plannedCompleted: number; tasksCompleted: number; trackedMinutes?: number }>;
+  /** Live day state + recalled history; informational only, never selectable. */
+  contextBlock?: string;
 }
 
 export interface InsightSelection { winIds: string[]; attentionIds: string[]; nextFocusIds: string[] }
@@ -90,6 +94,7 @@ export function buildInsightSynthesisPrompt(data: InsightSource): string {
     `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items.`,
     "Daily record:",
     dayLines || "(no days recorded)",
+    ...(data.contextBlock ? ["", `Additional context (live day state and recalled history — informational only; never a selectable fact and never completion evidence):\n${data.contextBlock}`] : []),
     "",
     "Return ONLY JSON with winIds, attentionIds, and nextFocusIds. Select IDs from matching lists; do not emit prose, numbers, or facts.",
   ].filter(Boolean).join("\n");
@@ -127,6 +132,20 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "AI synthesis is not configured on this server" };
   const data = await getPersonalInsights(access, range, through);
+  let contextBlock: string | undefined;
+  if (memoryEnabled(access.featureFlags)) {
+    const scope = { organizationId: access.organizationId, personId: access.personId as string, localDate: data.through };
+    const focusQuery = [
+      String(data.brief.summary ?? ""),
+      ...(data.brief.wins ?? []).slice(0, 2),
+      ...(data.brief.attention ?? []).slice(0, 2),
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 500);
+    const [todayBlock, memoryBlock] = await Promise.all([
+      buildTodaySnapshot(scope),
+      buildMemoryPromptBlock(scope, focusQuery || "recent work history and patterns", { limit: 8, from: data.from }),
+    ]);
+    contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n") || undefined;
+  }
   const prompt = buildInsightSynthesisPrompt({
     range: data.range ?? range,
     from: data.from,
@@ -140,6 +159,7 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
       date: day.date, observedSeconds: day.observedSeconds, planned: day.planned,
       plannedCompleted: day.plannedCompleted, tasksCompleted: day.tasksCompleted, trackedMinutes: Number((day as { trackedMinutes?: number }).trackedMinutes ?? 0),
     })),
+    contextBlock,
   });
   try {
     const response = await fetch(OPENROUTER_URL, {

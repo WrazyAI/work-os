@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { interpretDailyPlan } from "@/lib/aiPlan";
+import { interpretDailyPlan, type PlanMemoryContext } from "@/lib/aiPlan";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { buildPlanningContext } from "@/lib/work-os-planning-context";
 import { issueDailyPlanBuild } from "@/lib/work-os-plan-build";
+import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import { persistInterpretHistory } from "@/lib/work-conversations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,10 +25,24 @@ export async function POST(req: Request) {
     }
     const date = body.date;
     const context = await buildPlanningContext(auth.access, date);
-    const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context);
+    let memory: PlanMemoryContext | undefined;
+    if (memoryEnabled(auth.access.featureFlags)) {
+      const scope = { organizationId: auth.access.organizationId, personId: auth.access.personId as string, localDate: date };
+      const [todayBlock, memoryBlock] = await Promise.all([
+        buildTodaySnapshot(scope),
+        buildMemoryPromptBlock(scope, typeof body.input === "string" ? body.input : "daily plan", { limit: 8 }),
+      ]);
+      memory = { todayBlock, memoryBlock };
+    }
+    const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context, memory);
     if (!result.ok) {
       return NextResponse.json({ error: result.detail, reason: result.reason }, { status: result.reason === "ai_unconfigured" ? 501 : 503 });
     }
+    await persistInterpretHistory(
+      { organizationId: auth.access.organizationId, personId: auth.access.personId as string, localDate: date },
+      body.conversation,
+      typeof body.input === "string" ? body.input : "",
+    );
     const buildId = await issueDailyPlanBuild(auth.access, date, result.interpretation.rawIntent);
     return NextResponse.json({
       interpretation: result.interpretation,

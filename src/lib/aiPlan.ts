@@ -101,10 +101,26 @@ export function parsePlanInterpretation(raw: unknown, rawIntent: string, context
   return { rawIntent, summary, commitments, clarifications, readiness };
 }
 
-export function buildPlanningPrompt(rawIntent: string, context: PlanningContext, conversation: Array<{ role: "user" | "assistant"; text: string }>) {
+export interface PlanMemoryContext {
+  /** Live day snapshot: agenda, completions, recent updates, shift state. */
+  todayBlock?: string;
+  /** Recalled episodic history and profile facts. Dated context, never evidence. */
+  memoryBlock?: string;
+}
+
+const MEMORY_RULE = "todayContext is the live day state; memoryContext is dated recalled history for continuity only — never treat it as evidence of completion, progress, or current state.";
+
+export function buildPlanningPrompt(
+  rawIntent: string,
+  context: PlanningContext,
+  conversation: Array<{ role: "user" | "assistant"; text: string }>,
+  memory?: PlanMemoryContext,
+) {
   return JSON.stringify({
     employeeInput: rawIntent,
     recentConversation: conversation.slice(-8),
+    ...(memory?.todayBlock ? { todayContext: memory.todayBlock } : {}),
+    ...(memory?.memoryBlock ? { memoryContext: memory.memoryBlock } : {}),
     context,
     rules: [
       "Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
@@ -112,6 +128,7 @@ export function buildPlanningPrompt(rawIntent: string, context: PlanningContext,
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
       "Ask only when missing information prevents a useful daily commitment. Use plain language.",
+      ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
     ],
     output: {
       summary: "string",
@@ -121,7 +138,11 @@ export function buildPlanningPrompt(rawIntent: string, context: PlanningContext,
   });
 }
 
-export async function interpretDailyPlan(input: { rawIntent: unknown; conversation?: unknown }, context: PlanningContext): Promise<PlanInterpretationResult> {
+export async function interpretDailyPlan(
+  input: { rawIntent: unknown; conversation?: unknown },
+  context: PlanningContext,
+  memory?: PlanMemoryContext,
+): Promise<PlanInterpretationResult> {
   const rawIntent = text(input.rawIntent, 4_000);
   if (!rawIntent) return { ok: false, reason: "ai_malformed", detail: "input is required" };
   const key = process.env.OPENROUTER_API_KEY;
@@ -141,7 +162,7 @@ export async function interpretDailyPlan(input: { rawIntent: unknown; conversati
         max_tokens: 1_400,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
-       { role: "user", content: buildPlanningPrompt(rawIntent, context, conversation) },
+       { role: "user", content: buildPlanningPrompt(rawIntent, context, conversation, memory) },
         ],
         response_format: { type: "json_object" },
       }),
@@ -159,12 +180,21 @@ export async function interpretDailyPlan(input: { rawIntent: unknown; conversati
   }
 }
 
-export function buildPlanRefinePrompt(rawIntent: string, draft: PlanRefineDraft, annotations: PlanDraftAnnotation[], edits: PlanDraftEdit[], context: PlanningContext) {
+export function buildPlanRefinePrompt(
+  rawIntent: string,
+  draft: PlanRefineDraft,
+  annotations: PlanDraftAnnotation[],
+  edits: PlanDraftEdit[],
+  context: PlanningContext,
+  memory?: PlanMemoryContext,
+) {
   return JSON.stringify({
     employeeInput: rawIntent,
     currentDraft: draft,
     annotationFeedback: annotations,
     employeeEdits: edits,
+    ...(memory?.todayBlock ? { todayContext: memory.todayBlock } : {}),
+    ...(memory?.memoryBlock ? { memoryContext: memory.memoryBlock } : {}),
     context,
     rules: [
       "Revise the current draft minimally to honor the annotation feedback and employee edits. Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
@@ -173,6 +203,7 @@ export function buildPlanRefinePrompt(rawIntent: string, draft: PlanRefineDraft,
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
       "Ask only when missing information prevents a useful daily commitment. Use plain language.",
+      ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
     ],
     output: {
       summary: "string",
@@ -182,7 +213,11 @@ export function buildPlanRefinePrompt(rawIntent: string, draft: PlanRefineDraft,
   });
 }
 
-export async function refinePlanDraft(input: { rawIntent: unknown; draft: unknown; annotations?: unknown; edits?: unknown }, context: PlanningContext): Promise<PlanInterpretationResult> {
+export async function refinePlanDraft(
+  input: { rawIntent: unknown; draft: unknown; annotations?: unknown; edits?: unknown },
+  context: PlanningContext,
+  memory?: PlanMemoryContext,
+): Promise<PlanInterpretationResult> {
   const rawIntent = text(input.rawIntent, 4_000);
   if (!rawIntent) return { ok: false, reason: "ai_malformed", detail: "input is required" };
   if (!input.draft || typeof input.draft !== "object") return { ok: false, reason: "ai_malformed", detail: "draft is required for refinement" };
@@ -240,7 +275,7 @@ export async function refinePlanDraft(input: { rawIntent: unknown; draft: unknow
         max_tokens: 1_400,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
-          { role: "user", content: buildPlanRefinePrompt(rawIntent, { summary, commitments: draftCommitments }, annotations, edits, context) },
+          { role: "user", content: buildPlanRefinePrompt(rawIntent, { summary, commitments: draftCommitments }, annotations, edits, context, memory) },
         ],
         response_format: { type: "json_object" },
       }),
