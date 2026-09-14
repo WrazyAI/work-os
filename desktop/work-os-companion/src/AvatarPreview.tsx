@@ -70,6 +70,8 @@ export default function AvatarPreview() {
               id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending",
             }))}
             onMarkSelectedDone={() => undefined}
+            proposedTaskIds={["t-overdue"]}
+            onReview={() => undefined}
             emptyTitle="No open tasks"
             emptyMessage="Tasks waiting to be completed will appear here."
           />

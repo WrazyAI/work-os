@@ -64,6 +64,7 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("chat-task-toggle");
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain("aria-controls=");
+    expect(markup).toContain("show or hide task list");
     expect(markup).not.toContain("is-collapsed");
   });
 

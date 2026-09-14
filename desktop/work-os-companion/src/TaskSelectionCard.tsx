@@ -178,6 +178,7 @@ export function TaskSelectionCard({
           <button
             type="button"
             className="chat-task-toggle flex w-full items-start gap-2 text-left"
+            aria-label={`${title}: show or hide task list`}
             aria-expanded={!collapsed}
             aria-controls={contentId}
             onClick={() => setCollapsed((value) => !value)}
@@ -205,7 +206,7 @@ export function TaskSelectionCard({
         </output>
       </header>
 
-      <div id={contentId} className="flex min-h-0 flex-col" hidden={collapsed}>
+      <div id={contentId} className={cx(collapsed ? "hidden" : "flex min-h-0 flex-col")} hidden={collapsed}>
         {degraded && !loading && !failed && (
           <p
             className="m-0 flex shrink-0 items-center gap-1.5 border-b border-line bg-danger-tint/40 px-3 py-1.5 text-[11px] leading-snug text-ink-2"
