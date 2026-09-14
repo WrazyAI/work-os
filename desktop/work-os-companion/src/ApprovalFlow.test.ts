@@ -10,19 +10,36 @@ const operations: ProposedOperation[] = [
 ];
 
 describe("ApprovalFlow", () => {
-  it("shows one bounded decision with editable wording and disclosed transport details", () => {
+  it("shows one bounded decision as read-only feedback with disclosed transport details", () => {
     const markup = renderToStaticMarkup(createElement(ApprovalFlow, {
       operations,
-      taskOptions: [{ id: "task-1", title: "Review launch" }],
       context: { shiftDate: "2026-09-11", personId: "person-1", promptKind: "optional" },
       onSubmit: () => undefined,
     }));
 
     expect(markup).toContain("Action 1 of 2");
     expect(markup).toContain("Mark “Review launch” done?");
-    expect(markup).toContain("Proposed wording");
+    expect(markup).toContain("Finish the review");
     expect(markup).toContain("Technical details");
+    // The card is feedback, not an editor: no wording field, no task remapping.
+    expect(markup).not.toContain("Proposed wording");
+    expect(markup).not.toContain("Apply to task");
+    expect(markup).not.toContain("<select");
+    expect(markup).not.toContain("<textarea");
     expect(markup).not.toContain("Shared the launch notes");
+  });
+
+  it("flags a mutating action that lost its task instead of offering an editable picker", () => {
+    const dangling: ProposedOperation[] = [
+      { op: "complete_task", statement: "Mark done", proposalId: "proposal-9", enabled: false },
+    ];
+    const markup = renderToStaticMarkup(createElement(ApprovalFlow, {
+      operations: dangling,
+      context: { shiftDate: "2026-09-11", personId: "person-1", promptKind: "optional" },
+      onSubmit: () => undefined,
+    }));
+    expect(markup).toContain("approval-unresolved");
+    expect(markup).toContain("no task attached");
   });
 
   it("renders truthful result states after recording", () => {

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cx } from "./cx";
 
 export interface GlideRow {
@@ -17,6 +17,7 @@ export function GlideMenu({
   engaged,
   label,
   className,
+  style,
   emptyText,
   footText,
   onHoverRow,
@@ -27,6 +28,7 @@ export function GlideMenu({
   engaged: boolean;
   label: string;
   className?: string;
+  style?: CSSProperties;
   emptyText?: string;
   footText?: string;
   onHoverRow: (index: number) => void;
@@ -42,7 +44,7 @@ export function GlideMenu({
   }, [active, rows.length, engaged]);
 
   return (
-    <div className={cx("chat-glide-menu", className)} role="listbox" aria-label={label}>
+    <div className={cx("chat-glide-menu", className)} style={style} role="listbox" aria-label={label} data-workos-chat-menu>
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-1 rounded-[6px] bg-hover"

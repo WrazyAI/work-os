@@ -663,31 +663,31 @@ export default function AvatarApp(): React.ReactElement {
     }])).finally(() => setFiling(false));
   }, [filing, loadDay, shareAvatarTools]);
 
-  const proposeAvatarSelectedCompletions = useCallback(async (taskIds: string[]) => {
-    if (!taskIds.length || filing) return;
-    const titles = new Map(facts.taskOptions.map((task) => [task.id, task.title]));
-    const operations = taskIds.map((taskId) => ({
+  const proposeAvatarSelectedCompletions = useCallback(async (tasks: Array<{ id: string; title: string }>) => {
+    if (!tasks.length || filing) return;
+    if (tasks.some((task) => !task.title.trim())) throw new Error("A selected task could not be resolved. Nothing was proposed.");
+    const operations = tasks.map((task) => ({
       op: "complete_task" as const,
-      statement: `Employee confirmed completion of ${titles.get(taskId) ?? "selected task"}.`,
-      task_id: taskId,
-      task_title: titles.get(taskId) ?? "selected task",
+      statement: `Employee confirmed completion of ${task.title}.`,
+      task_id: task.id,
+      task_title: task.title,
     }));
     setFiling(true);
     try {
       const { proposals } = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, operations }),
+        body: JSON.stringify({ input_text: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, operations }),
       });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
       if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
-      setProposedTaskIds((current) => new Set([...current, ...taskIds]));
+      setProposedTaskIds((current) => new Set([...current, ...tasks.map((task) => task.id)]));
       setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
-      void shareAvatarTools({ input: `Employee selected ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
+      void shareAvatarTools({ input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
     } finally {
       setFiling(false);
     }
-  }, [facts.taskOptions, filing]);
+  }, [filing]);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
   /** Persists only an agenda that the planning service successfully built. */
@@ -899,7 +899,7 @@ export default function AvatarApp(): React.ReactElement {
   }
 
   useEffect(() => {
-    chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+    chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [chat.length, thinking]);
 
   if (connected === false) {
@@ -1050,11 +1050,8 @@ export default function AvatarApp(): React.ReactElement {
                             {entry.operations.some(isMutatingToolOp) ? <ApprovalFlow
                               operations={entry.operations}
                               results={entry.toolResults}
-                              taskOptions={entry.taskOptions}
                               context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}
                               busy={filing}
-                              onEdit={(operationIndex, statement) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, statement } : op) } : candidate))}
-                              onRemap={(operationIndex, taskId) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, taskId, taskTitle: candidate.taskOptions?.find((task) => task.id === taskId)?.title ?? op.taskTitle } : op) } : candidate))}
                               onSubmit={(approved, rejected) => void approveOperations(entry.id, approved, rejected)}
                               onRetry={(result) => retryOperation(entry.id, result)}
                             /> : null}

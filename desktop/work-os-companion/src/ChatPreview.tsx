@@ -245,7 +245,6 @@ function AvatarSection() {
                       { op: "record_progress", statement: "Documented release evidence.", taskId: "t-open", taskTitle: "Document release evidence", proposalId: "preview-approval-2", enabled: true },
                     ]}
                     context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
-                    taskOptions={AVATAR_TASKS.map((task) => ({ id: task.id, title: task.title }))}
                     onSubmit={() => undefined}
                   />
                   <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />

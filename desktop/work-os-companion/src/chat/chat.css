@@ -12,6 +12,38 @@
 
 @source "../";
 
+/* Layer order is declared up front so the scoped preflight below sits between
+   theme and utilities: it strips UA chrome, and any utility still wins over it.
+   Legacy unlayered stylesheets beat all of these where they actually target a
+   property — those collisions are handled by the explicit bridge at the end. */
+@layer theme, base, utilities;
+
+@layer base {
+  /* Scoped preflight substitute. The companion never resets legacy stylesheets,
+     so chat-owned controls would otherwise show UA button chrome (1px border,
+     ButtonFace background) wherever their utilities don't set the same
+     property. Strip that chrome for every control inside a chat surface;
+     utilities override it where they set background/color. */
+  [data-workos-promptbar] button,
+  .chat-surface button,
+  .avatar-panel button,
+  .chat-glide-menu button,
+  .chat-task-card button,
+  .chat-tabs button,
+  .approval-flow button,
+  .approval-results button,
+  .chat-kind-options button {
+    border: 0;
+    background: transparent;
+  }
+  [data-workos-promptbar] textarea,
+  .chat-surface textarea,
+  .avatar-panel textarea {
+    border: 0;
+    background: transparent;
+  }
+}
+
 @theme {
   /* Surfaces */
   --color-canvas: #eef1eb;
@@ -337,6 +369,88 @@
 }
 
 .chat-surface:focus-within { border-color: var(--color-signal-strong); }
+
+/* In-app dock, closed state: the surface owns the card chrome (border, radius,
+   elevation) and the legacy shell stays transparent, mirroring the floating
+   panel's unified composer. */
+.chat-surface .progress-input-shell {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+}
+.chat-surface .progress-input-shell:focus-within {
+  border: 0;
+  box-shadow: none;
+  transform: none;
+}
+.chat-surface .progress-input-shell > span {
+  margin: 0;
+  font: inherit;
+}
+.chat-surface .progress-input-shell textarea {
+  min-height: 36px;
+  max-height: 100px;
+  padding: 7px 4px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* In-app dock, open state: the flyout is a DETACHED surface that overlays above
+   the composer instead of extending the page. The dock overlays a scrolling
+   workspace, so growing the dock box in flow would push the page's scroll range
+   past the content and leave scrollable blank space beneath it. The surface
+   hands its chrome to the shell, and the flyout (which already carries its own
+   legacy card styling) floats free with an internal scroll cap. */
+.chat-surface.is-open {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.chat-surface.is-open .progress-input-shell {
+  min-height: 56px;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.chat-surface.is-open .progress-input-shell:focus-within {
+  border-color: var(--color-signal-strong);
+  box-shadow: var(--shadow-card), 0 0 0 3px rgba(124, 201, 54, 0.24);
+  transform: translateY(-1px);
+}
+.chat-surface.is-open .progress-flyout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+  margin: 0;
+  max-height: calc(100dvh - 132px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  background: rgba(253, 253, 250, 0.98);
+  box-shadow: var(--shadow-raised);
+  animation: composer-rise 190ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* Short threads hug the composer instead of leaving a dead void beneath the
+   last message. The spacer collapses when the thread overflows, so scrolling
+   behavior is unaffected. */
+.chat-surface .progress-conversation::before,
+.avatar-chat::before {
+  content: "";
+  margin-top: auto;
+}
 
 .chat-surface .progress-conversation {
   display: flex;

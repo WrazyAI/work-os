@@ -34,7 +34,7 @@ export function taskSelectionSummaryText(input: {
 
 export type TaskSelectionCardProps = {
   tasks: readonly TaskSelectionCardTask[];
-  onMarkSelectedDone: (taskIds: string[]) => void | Promise<void>;
+  onMarkSelectedDone: (tasks: Array<{ id: string; title: string }>) => void | Promise<void>;
   title?: string;
   status?: TaskSelectionCardStatus;
   degraded?: boolean;
@@ -161,7 +161,7 @@ export function TaskSelectionCard({
     setSubmitState("sending");
     inflightRef.current = true;
     try {
-      await onMarkSelectedDone(selectedTasks.map((task) => task.id));
+      await onMarkSelectedDone(selectedTasks.map((task) => ({ id: task.id, title: task.title })));
       setSentCount(count);
       setSelectedIds(new Set());
       setSubmitState("sent");

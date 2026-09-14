@@ -58,21 +58,15 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
 export function ApprovalFlow({
   operations,
   results = [],
-  taskOptions = [],
   context,
   busy = false,
-  onEdit,
-  onRemap,
   onSubmit,
   onRetry,
 }: {
   operations: readonly ProposedOperation[];
   results?: readonly ToolCallResult[];
-  taskOptions?: readonly { id: string; title: string }[];
   context: ApprovedOpContext;
   busy?: boolean;
-  onEdit?: (index: number, statement: string) => void;
-  onRemap?: (index: number, taskId: string) => void;
   onSubmit: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
   onRetry?: (result: ToolCallResult) => void;
 }) {
@@ -128,7 +122,7 @@ export function ApprovalFlow({
   const decision = decisions[operationKey(current.op, current.index)] ?? "undecided";
   const destructive = current.op.op === "delete_task" || current.op.op === "delete_subtask";
   const call = operationToolCall(current.op, context);
-  const canRemap = ["complete_task", "reopen_task", "record_progress"].includes(current.op.op) && taskOptions.length > 0;
+  const unresolvedTask = (current.op.op === "complete_task" || current.op.op === "reopen_task") && !current.op.taskId;
 
   return (
     <section className={`approval-flow${destructive ? " is-destructive" : ""}`} aria-label={`Action ${step + 1} of ${pending.length}`}>
@@ -137,8 +131,8 @@ export function ApprovalFlow({
         <span>{step + 1} / {pending.length}</span>
       </header>
       <div className="approval-flow-body">
-        <label><span>Proposed wording</span><textarea value={current.op.statement} maxLength={1000} onChange={(event) => onEdit?.(current.index, event.target.value)} /></label>
-        {canRemap ? <label><span>Apply to task</span><select value={current.op.taskId ?? ""} onChange={(event) => onRemap?.(current.index, event.target.value)}><option value="">No task selected</option>{taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label> : null}
+        <p className="approval-statement">{current.op.statement}</p>
+        {unresolvedTask ? <p className="approval-unresolved" role="status"><CircleAlert size={13} aria-hidden="true" /> This action has no task attached. Skip it, or ask again to rebuild the list.</p> : null}
         <details><summary><ChevronDown size={13} />Technical details</summary><code>{call.command}</code></details>
       </div>
       <footer>

@@ -1341,16 +1341,23 @@ still need approval — checking a box never marks anything done by itself.
 
 Mutating assistant proposals use one `ApprovalFlow` in both chat surfaces. It
 shows exactly one action at a time, names the provider-facing outcome as a
-question, and keeps proposed wording and task mapping editable before review.
-Technical command details are collapsed by default. Approve and Skip only set
-local decisions and advance to the next action. No provider write happens until
-the final review has no undecided actions and the employee activates its single
-commit button. The final review lists every action and decision and allows any
-row to be reopened. After commit, `ApprovalResults` reports Recorded, Queued,
-Skipped, or Failed per action; a successful process exit is never substituted
-for provider confirmation. Destructive actions name the target and use the
-danger treatment. Keyboard focus and reduced-motion behavior follow the shared
-card rules.
+question, and is strictly **read-only feedback**: the proposed statement and the
+target task are shown as fixed content, never as editable fields — the card
+reports what the agent will do and collects an Approve or Skip decision, and
+nothing else. There is no wording editor and no task remapping control; ops are
+built with the real task ids and titles taken from the same list the employee
+checked (task-selection cards hand `{id, title}` pairs back, so a proposal can
+never be filed with a placeholder title). An op that somehow lost its task
+reference renders a flagged "no task attached" status instead of an editable
+picker. Technical command details are collapsed by default. Approve and Skip
+only set local decisions and advance to the next action. No provider write
+happens until the final review has no undecided actions and the employee
+activates its single commit button. The final review lists every action and
+decision and allows any row to be reopened. After commit, `ApprovalResults`
+reports Recorded, Queued, Skipped, or Failed per action; a successful process
+exit is never substituted for provider confirmation. Destructive actions name
+the target and use the danger treatment. Keyboard focus and reduced-motion
+behavior follow the shared card rules.
 
 ### 25.11 Assistant chat panel and prompt bar
 
@@ -1403,13 +1410,37 @@ Anatomy, top to bottom:
 
 Tokens and motion: the chat surfaces are built on Tailwind v4 scoped to
 `src/chat` (§20.1) with the `@theme` foundation mapping; shells keep their
-established borders, radius, and focus rings. The reply reveal runs ~32ms per
-token and caps out (rendering instantly) for very long replies; the sweep is
-~620ms + ~90ms outro and is one-shot. Both are fully removed under
-`prefers-reduced-motion`, which leaves the labels, receipt, and full reply text
-visible. The two-row composer layout is derived from the draft value (newline or
-labeled action), never from field measurement — placeholder wrap changes with
-width, so measurement feeds back into itself and oscillates.
+established borders, radius, and focus rings. Because preflight is deliberately
+excluded, `chat.css` declares its layer order up front (`theme, base,
+utilities`) and carries a scoped base-layer preflight substitute that strips UA
+button/textarea chrome (default 1px borders, ButtonFace backgrounds) for every
+control inside the chat surfaces; utilities still win over it, and legacy
+unlayered rules still win over both where they target the same properties —
+those collisions are resolved only by the explicit bridge at the end of the
+file. The reply reveal runs ~32ms per token and caps out (rendering instantly)
+for very long replies; the sweep is ~620ms + ~90ms outro and is one-shot. Both
+are fully removed under `prefers-reduced-motion`, which leaves the labels,
+receipt, and full reply text visible. The two-row composer layout is derived
+from the draft value (newline or labeled action), never from field measurement —
+placeholder wrap changes with width, so measurement feeds back into itself and
+oscillates.
+
+Delivery-surface layout differs where the page demands it. The floating panel
+is a fixed-height window, so its thread, task context, and composer stay one
+growing surface in flow, bottom-anchored with an auto-collapsing spacer so
+short threads hug the composer instead of leaving a dead void. The in-app dock
+overlays a scrolling workspace, so an in-flow flyout would extend the page's
+scroll range and leave scrollable blank space beneath the content; there the
+**open flyout is a detached card** that overlays above the composer shell
+(`position: absolute; bottom: calc(100% + 10px)`, capped at
+`calc(100dvh - 132px)` with an internal scroll), the surface hands its chrome to
+the shell, and the shell carries the card chrome while open. Detaching is the
+in-app dock's documented deviation from the one-surface look. The `@` and `/`
+menus are detached everywhere: they portal to `document.body` with fixed
+coordinates measured from the prompt bar, so no scroll container or overflow
+boundary in either surface can clip them. Thread scrollers never inflate page
+scroll ranges, and the auto-scroll fires on turn mount (including the fly-in of
+an assistant reply) but never overrides `prefers-reduced-motion`.
 
 Companion window state lives in one place. The tray item is truthful at all
 times: it reads `Hide companion` whenever the window is on screen — including

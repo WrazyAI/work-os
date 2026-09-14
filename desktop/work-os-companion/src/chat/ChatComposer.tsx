@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { ArrowUp, Plus } from "lucide-react";
 import { createChatSweep } from "./glimm";
 import { GlideMenu, type GlideRow } from "./GlideMenu";
@@ -67,6 +68,7 @@ export function ChatComposer({
   const [engaged, setEngaged] = useState(false);
   const [fitKey, setFitKey] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sweepRef = useRef<ReturnType<typeof createChatSweep> | null>(null);
@@ -142,11 +144,36 @@ export function ChatComposer({
     };
   }, []);
 
-  /* Clicking outside the composer closes the open menus. */
+  /* The menu is a detached surface portaled to the body: fixed positioning
+     measured from the composer keeps it clear of every scroll container and
+     overflow boundary in both delivery surfaces. */
+  useLayoutEffect(() => {
+    if (!menu) {
+      setAnchor(null);
+      return;
+    }
+    const update = () => {
+      const root = rootRef.current;
+      if (!root) return;
+      const rect = root.getBoundingClientRect();
+      setAnchor({ left: rect.left, top: rect.top, width: rect.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [menu]);
+
+  /* Clicking outside the composer closes the open menus. The menu itself is
+     portaled to the body, so it is exempt alongside the promptbar. */
   useEffect(() => {
     if (!menu) return;
     const close = (event: PointerEvent) => {
-      if (!(event.target as Element).closest("[data-workos-promptbar]")) {
+      const target = event.target as Element | null;
+      if (!target?.closest("[data-workos-promptbar], [data-workos-chat-menu]")) {
         setPlusOpen(false);
         setDismissed(true);
       }
@@ -224,13 +251,21 @@ export function ChatComposer({
 
   return (
     <div ref={rootRef} data-workos-promptbar className={`relative w-full min-w-0 ${className ?? ""}`}>
-      {menu && (
+      {menu && anchor && createPortal(
         <GlideMenu
           rows={rows}
           active={active}
           engaged={engaged}
           label={menuLabel}
-          className="absolute inset-x-0 bottom-full z-10 mb-2 max-h-[264px] overflow-y-auto rounded-[10px] border border-line bg-white p-1 shadow-raised"
+          className="overflow-y-auto rounded-[10px] border border-line bg-white p-1 shadow-raised"
+          style={{
+            position: "fixed",
+            left: anchor.left,
+            width: anchor.width,
+            bottom: window.innerHeight - anchor.top + 8,
+            maxHeight: Math.max(180, Math.min(264, anchor.top - 16)),
+            zIndex: 60,
+          }}
           emptyText={`No matches for “${query}”`}
           footText={menu === "at" ? "Type to filter Work OS context" : "Type to filter commands"}
           onHoverRow={(index) => {
@@ -238,7 +273,8 @@ export function ChatComposer({
             setEngaged(true);
           }}
           onPick={(row) => pick(row)}
-        />
+        />,
+        document.body,
       )}
 
       <div
