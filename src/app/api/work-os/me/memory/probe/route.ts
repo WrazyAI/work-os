@@ -26,12 +26,13 @@ export async function POST(req: Request) {
       ? body.date
       : new Date().toISOString().slice(0, 10);
     const scope = { organizationId: auth.access.organizationId, personId: auth.access.personId as string, localDate };
-    const todayBlock = await buildTodaySnapshot(scope);
     if (!memoryEnabled(auth.access.featureFlags)) {
-      return NextResponse.json({ memoryEnabled: false, todayBlock, memoryBlock: null, localDate });
+      return NextResponse.json({ memoryEnabled: false, todayBlock: null, memoryBlock: null, localDate });
     }
-    const query = typeof body.query === "string" && body.query.trim() ? body.query : "recent progress and blockers";
-    const memoryBlock = await buildMemoryPromptBlock(scope, query, { limit: 8 });
+    const [todayBlock, memoryBlock] = await Promise.all([
+      buildTodaySnapshot(scope),
+      buildMemoryPromptBlock(scope, typeof body.query === "string" && body.query.trim() ? body.query : "recent progress and blockers", { limit: 8 }),
+    ]);
     return NextResponse.json({ memoryEnabled: true, todayBlock, memoryBlock, localDate });
   } catch (error) {
     return jsonError(error);
