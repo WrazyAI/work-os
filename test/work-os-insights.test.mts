@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { activityEvidenceRollup, deterministicInsightBrief, effectiveBreakObservation, insightDateWindow } from "../src/lib/work-os-insights";
+import { buildInsightSynthesisPrompt } from "../src/lib/aiInsights";
 
 test("personal insight ranges are inclusive and deterministic", () => {
   assert.deepEqual(insightDateWindow("day", "2026-08-20"), { from: "2026-08-20", through: "2026-08-20", count: 1 });
@@ -38,4 +39,24 @@ test("deterministic brief reports tracked activity context without a productivit
   const brief = deterministicInsightBrief([{ tasksCompleted: 1, plannedCompleted: 1, planned: 1, trackedMinutes: 90 }], []);
   assert.match(brief.wins.join(" "), /90 tracked minutes of app\/site activity context/i);
   assert.match(brief.wins.join(" "), /not a productivity score/i);
+});
+
+test("insight synthesis prompt renders recalled context as informational only", () => {
+  const base = {
+    range: "7d" as const,
+    from: "2026-09-08",
+    through: "2026-09-14",
+    summary: "A steady week.",
+    wins: ["Shipped the memory integration."],
+    attention: [],
+    nextFocus: ["Close the loop with managers."],
+    totals: { observedSeconds: 5400, trackedMinutes: 60, planned: 5, plannedCompleted: 3, tasksCompleted: 2, outputEvidence: 1 },
+    days: [{ date: "2026-09-14", observedSeconds: 5400, planned: 5, plannedCompleted: 3, tasksCompleted: 2, trackedMinutes: 90 }],
+  };
+  const plain = buildInsightSynthesisPrompt(base);
+  assert.doesNotMatch(plain, /Additional context/);
+  const enriched = buildInsightSynthesisPrompt({ ...base, contextBlock: "Today so far (2026-09-14) — live facts:\n- Shift: on shift" });
+  assert.match(enriched, /Additional context \(live day state and recalled history — informational only/);
+  assert.match(enriched, /Shift: on shift/);
+  assert.match(enriched, /never a selectable fact and never completion evidence/);
 });
