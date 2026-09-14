@@ -126,7 +126,7 @@ export function TaskSelectionCard({
   const summary = taskSelectionSummaryText({ selected: selectedTasks.length, proposed: proposedCount, sentCount, approvalLocation });
 
   const toggle = (taskId: string) => {
-    if (proposedIds.has(taskId)) return;
+    if (proposedIds.has(taskId) || sending) return;
     setConfirming(false);
     setSubmitError(null);
     setSelectedIds((current) => {
@@ -301,7 +301,7 @@ export function TaskSelectionCard({
                     return (
                       <label key={task.id} className={cx("chat-task-table-row", selected && "is-selected", proposed && "is-proposed")} role="row">
                         <span role="cell" className="chat-task-check">
-                          <input type="checkbox" className="peer sr-only" checked={selected} disabled={proposed} onChange={() => toggle(task.id)} aria-label={proposed ? `${titleText} already has a pending proposal` : `Select ${titleText}`} />
+                          <input type="checkbox" className="peer sr-only" checked={selected} disabled={proposed || sending} onChange={() => toggle(task.id)} aria-label={proposed ? `${titleText} already has a pending proposal` : `Select ${titleText}`} />
                           <span aria-hidden="true"><Check size={12} strokeWidth={3} /></span>
                         </span>
                         <span role="cell" className="chat-task-table-title" title={task.description ? safeTaskText(task.description, "") : titleText}><strong>{titleText}</strong>{task.description ? <small>{safeTaskText(task.description, "")}</small> : null}</span>
@@ -336,12 +336,12 @@ export function TaskSelectionCard({
                       selected ? "bg-accent-tint/50" : proposed ? "opacity-70" : "hover:bg-hover",
                     )}
                   >
-                    <label className={cx("flex min-w-0 flex-1 items-start gap-2.5", proposed ? "cursor-default" : "cursor-pointer")}>
+                    <label className={cx("flex min-w-0 flex-1 items-start gap-2.5", proposed || sending ? "cursor-default" : "cursor-pointer")}>
                       <input
                         type="checkbox"
                         className="peer sr-only"
                         checked={selected}
-                        disabled={proposed}
+                        disabled={proposed || sending}
                         onChange={() => toggle(task.id)}
                         aria-label={proposed ? `${titleText} already has a pending proposal` : `Select ${titleText}`}
                       />
