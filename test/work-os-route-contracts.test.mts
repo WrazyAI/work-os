@@ -68,8 +68,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(day, /date must be a valid calendar date/);
   assert.match(day, /localDate/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /refineEodNarrative/);
-  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /sanitizeEodAnnotations/);
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /gatherEodScreenshotContext/);
   assert.match(await source("src/lib/aiEod.ts"), /export function sanitizeEodAnnotations/);
+  assert.match(await source("src/lib/aiEod.ts"), /export async function gatherEodScreenshotContext/);
+  assert.match(await source("src/lib/work-os-screenshots.ts"), /fetchScreenshotsForDay/);
+  assert.doesNotMatch(await source("src/lib/work-os-screenshots.ts"), /fetchAllLogs/);
   assert.match(await source("src/lib/aiEod.ts"), /order\("observed_at"/);
   const workspace = await source("src/lib/work-os-daily-workspace.ts");
   assert.match(workspace, /items:work_daily_plan_items\(task_id,completion_state,disposition\)/);

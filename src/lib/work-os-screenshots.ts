@@ -3,15 +3,20 @@ import { mkdir as fsMkdir } from "node:fs/promises";
 import path from "node:path";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStorageBackend } from "@/lib/db/storage";
-import { fetchAllLogs } from "@/lib/worktivityAudit";
 import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import type { WtActivityLog } from "@/lib/worktivity";
+import { fetchScreenshotsForDay, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
+
+/** The pipeline only needs these fields; both activity logs and screenshot
+ * records carry them, so summaries can be produced from either source. */
+type ScreenshotLog = Pick<WtActivityLog, "ID" | "Screenshot" | "CreateDate" | "Title" | "Url"> & { CaptureDate?: string | null };
+
+const captureAt = (log: ScreenshotLog) => log.CaptureDate || log.CreateDate;
 
 const BUCKET = "work-os-screenshots";
 const MODEL = process.env.WORK_OS_SCREENSHOT_MODEL || process.env.WORK_OS_INTERPRET_MODEL || "gpt-5.6-luna";
@@ -80,11 +85,19 @@ async function mirrorSummary(access: ScreenshotScope, personId: string, eventId:
   const { data: organization, error: organizationError } = await db().from("work_organizations").select("legacy_owner_id,created_by").eq("id", access.organizationId).single();
   if (organizationError) throw new Error(`load screenshot organization: ${organizationError.message}`);
   const ownerId = organization.legacy_owner_id || organization.created_by;
-  const { error } = await db().from("work_evidence").upsert({
+  const payload = {
     user_id: ownerId, organization_id: access.organizationId, person_id: personId, evidence_event_id: eventId,
     evidence_date: occurredAt.slice(0, 10), source: "worktivity", title: "Worktivity screenshot context", summary,
     metrics: { evidenceClass: "activity_observation", model, promptVersion: PROMPT_VERSION }, raw: { evidenceEventId: eventId }, updated_at: new Date().toISOString(),
-  }, { onConflict: "evidence_event_id" });
+  };
+  // work_evidence carries only a partial unique index on evidence_event_id, so
+  // ON CONFLICT cannot be used here — select then insert/update.
+  const existing = await db().from("work_evidence").select("id")
+    .eq("organization_id", access.organizationId).eq("evidence_event_id", eventId).maybeSingle();
+  if (existing.error) throw new Error(`load screenshot mirror: ${existing.error.message}`);
+  const { error } = existing.data
+    ? await db().from("work_evidence").update(payload).eq("id", existing.data.id as string)
+    : await db().from("work_evidence").insert(payload);
   if (error) throw new Error(`mirror screenshot evidence: ${error.message}`);
 }
 
@@ -134,7 +147,7 @@ async function screenshotConfig(organizationId: string, personId: string) {
   };
 }
 
-export function isExcludedScreenshot(log: WtActivityLog, config: { sensitiveApps: string[]; sensitiveDomains: string[] }) {
+export function isExcludedScreenshot(log: ScreenshotLog, config: { sensitiveApps: string[]; sensitiveDomains: string[] }) {
   const app = normalized(log.Title);
   const url = normalized(log.Url);
   return config.sensitiveApps.some((value) => value && app.includes(value)) ||
@@ -151,14 +164,14 @@ export function isRetainedScreenshotAvailable(summary: { storage_path?: string |
   return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
-function sampleLogs(logs: WtActivityLog[]) {
-  const screenshots = logs.filter((log) => log.Screenshot).sort((a, b) => a.CreateDate.localeCompare(b.CreateDate));
+function sampleScreenshots(shots: WtScreenshot[]) {
+  const screenshots = shots.filter((shot) => shot.Screenshot).sort((a, b) => captureAt(a).localeCompare(captureAt(b)));
   if (screenshots.length <= MAX_SCREENSHOTS_PER_DAY) return screenshots;
   const step = screenshots.length / MAX_SCREENSHOTS_PER_DAY;
   return Array.from({ length: MAX_SCREENSHOTS_PER_DAY }, (_, index) => screenshots[Math.floor(index * step)]);
 }
 
-async function neutralSummary(url: string, log: WtActivityLog) {
+async function neutralSummary(url: string, log: ScreenshotLog) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is required for screenshot summaries");
   const tool = {
@@ -200,7 +213,7 @@ async function neutralSummary(url: string, log: WtActivityLog) {
         {
           role: "user",
           content: [
-            { type: "text", text: `Metadata: app/title=${log.Title || "unknown"}; domain/app=${log.Url || "unknown"}; captured=${log.CreateDate}.` },
+            { type: "text", text: `Metadata: app/title=${log.Title || "unknown"}; domain/app=${log.Url || "unknown"}; captured=${captureAt(log)}.` },
             { type: "image_url", image_url: { url } },
           ],
         },
@@ -225,18 +238,18 @@ async function neutralSummary(url: string, log: WtActivityLog) {
   };
 }
 
-async function createEvidenceEvent(access: ScreenshotScope, personId: string, log: WtActivityLog) {
+async function createEvidenceEvent(access: ScreenshotScope, personId: string, log: ScreenshotLog) {
   const { data, error } = await db().from("work_evidence_events").upsert({
     organization_id: access.organizationId,
     provider: "worktivity",
     external_event_id: `screenshot:${log.ID}`,
     person_id: personId,
     evidence_class: "activity_observation",
-    title: `Worktivity screenshot context at ${log.CreateDate}`,
+    title: `Worktivity screenshot context at ${captureAt(log)}`,
     summary: "Pending neutral screenshot summary.",
     attribution_method: "merged_worktivity_person",
     attribution_confidence: 1,
-    occurred_at: log.CreateDate,
+    occurred_at: captureAt(log),
     metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url },
     raw: { worktivityLogId: log.ID },
     updated_at: new Date().toISOString(),
@@ -263,16 +276,16 @@ export async function summarizeWorktivityScreenshots(
     .single();
   if (personError) throw new Error(`load Worktivity person: ${personError.message}`);
   if (!person.worktivity_employee_id) throw new Error("person has no Worktivity mapping");
-  const [logs, config] = await Promise.all([
-    fetchAllLogs({ employeeId: person.worktivity_employee_id, start: date, end: date }),
+  const [shots, config] = await Promise.all([
+    fetchScreenshotsForDay(person.worktivity_employee_id, date),
     screenshotConfig(access.organizationId, personId),
   ]);
   await ensureBucket();
   const results = [];
   const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_DAY, Math.floor(options.maxScreenshots ?? MAX_SCREENSHOTS_PER_DAY)));
-  for (const log of sampleLogs(logs).slice(0, maxScreenshots)) {
+  for (const log of sampleScreenshots(shots).slice(0, maxScreenshots)) {
     const event = await createEvidenceEvent(access, personId, log);
-    const sourceReference = `worktivity:activity-log:${log.ID}`;
+    const sourceReference = `worktivity:screenshot:${log.ID}`;
     if (isExcludedScreenshot(log, config)) {
       const { data, error } = await db().from("work_screenshot_summaries").upsert({
         organization_id: access.organizationId,
@@ -288,18 +301,20 @@ export async function summarizeWorktivityScreenshots(
       results.push(data);
       continue;
     }
-    const imageResponse = await fetch(log.Screenshot as string);
-    if (!imageResponse.ok) throw new Error(`download Worktivity screenshot ${log.ID}: ${imageResponse.status}`);
-    const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
-    const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
-    const bytes = new Uint8Array(await imageResponse.arrayBuffer());
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    const storagePath = `${access.organizationId}/${personId}/${date}/${log.ID}-${digest.slice(0, 12)}.enc`;
-    const encrypted = encryptScreenshot(bytes);
-    const uploaded = await getStorageBackend().upload(BUCKET, storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
-    if (uploaded.error) throw new Error(`store Worktivity screenshot: ${uploaded.error.message}`);
-    let storageRetained = true;
+    let storagePath: string | null = null;
+    let storageRetained = false;
     try {
+      const imageResponse = await fetch(log.Screenshot as string);
+      if (!imageResponse.ok) throw new Error(`download Worktivity screenshot ${log.ID}: ${imageResponse.status}`);
+      const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+      const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+      const bytes = new Uint8Array(await imageResponse.arrayBuffer());
+      const digest = createHash("sha256").update(bytes).digest("hex");
+      storagePath = `${access.organizationId}/${personId}/${date}/${log.ID}-${digest.slice(0, 12)}.enc`;
+      const encrypted = encryptScreenshot(bytes);
+      const uploaded = await getStorageBackend().upload(BUCKET, storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
+      if (uploaded.error) throw new Error(`store Worktivity screenshot: ${uploaded.error.message}`);
+      storageRetained = true;
       const observation = await neutralSummary(log.Screenshot as string, log);
       if (observation.containsSensitiveContent) {
         const removed = await getStorageBackend().remove(BUCKET, [storagePath]);
@@ -372,13 +387,13 @@ export async function summarizeWorktivityScreenshots(
         updated_at: new Date().toISOString(),
       }, { onConflict: "evidence_event_id" }).select("*").single();
       if (failureRecordError || !data) {
-        if (storageRetained) await getStorageBackend().remove(BUCKET, [storagePath]);
+        if (storageRetained && storagePath) await getStorageBackend().remove(BUCKET, [storagePath]);
         throw new Error(`record screenshot processing failure: ${failureRecordError?.message ?? "no row returned"}`);
       }
       results.push(data);
     }
   }
-  return { date, logs: logs.length, sampled: results.length, summaries: results };
+  return { date, logs: shots.length, sampled: results.length, summaries: results };
 }
 
 /**

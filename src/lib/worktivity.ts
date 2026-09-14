@@ -118,3 +118,46 @@ export function employeeName(e: WtEmployee): string {
   const full = [inv?.FirstName, inv?.LastName].filter(Boolean).join(" ").trim();
   return full || inv?.Email || e.Title || e.UserId.slice(-6);
 }
+
+export interface WtScreenshot {
+  ID: string;
+  EmployeeId: string;
+  EmployeeActivityLogId: string | null;
+  Screenshot: string | null; // pre-signed object URL; LinkExpireDate is re-issued per request
+  CaptureDate: string;
+  CreateDate: string;
+  ActivityLevel: number | null;
+  Status: number;
+  Url: string | null;
+  Title: string | null;
+  OrganizationAppId: string | null;
+}
+
+/** Screenshots live on the dedicated /Screenshots/List endpoint — the
+ * /ActivityLogs/List Screenshot field stays null for this organization. The
+ * provider has ignored narrow filters at page boundaries before, so filter by
+ * employee client-side and dedupe by ID. */
+export async function fetchScreenshotsForDay(employeeId: string, date: string): Promise<WtScreenshot[]> {
+  const all: WtScreenshot[] = [];
+  let page = 1;
+  let pageCount = 1;
+  do {
+    const data = await wtPost<WtPaged<WtScreenshot>>("/Screenshots/List", {
+      StartDate: `${date}T00:00:00Z`,
+      EndDate: `${date}T23:59:59Z`,
+      EmployeeId: employeeId,
+      Page: page,
+      PageSize: 100,
+    });
+    all.push(...(data.Items ?? []));
+    pageCount = data.PageCount ?? 1;
+    page += 1;
+    if (page <= pageCount) await sleep(250); // stay under the shared 5 req/s limit
+  } while (page <= pageCount);
+  return [...new Map(
+    all
+      .filter((shot) => shot.EmployeeId === employeeId && !!shot.Screenshot)
+      .map((shot) => [shot.ID, shot] as const),
+  ).values()].sort((left, right) =>
+    String(left.CaptureDate || left.CreateDate).localeCompare(String(right.CaptureDate || right.CreateDate)));
+}

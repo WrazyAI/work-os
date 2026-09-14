@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { draftEodNarrative, gatherEodGrounding, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
+import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
@@ -55,7 +55,14 @@ export async function POST(req: Request) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;
       return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
     }
-    return NextResponse.json({ markdown: result.markdown, model: result.model });
+    let screenshots = { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+    let screenshotSyncUnavailable = false;
+    try {
+      screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
+    } catch {
+      screenshotSyncUnavailable = true;
+    }
+    return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable });
   } catch (error) {
     return jsonError(error);
   }
