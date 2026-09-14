@@ -274,7 +274,7 @@ export function evaluateCompanion(input: CompanionInput): CompanionDecision {
     if (ordinarySuppressed(record, cause, lastResponseAt, now)) {
       return { state: "progress_check", prompt: null, suppressReason: "already-reminded" };
     }
-    const intent = day.plan?.freeform_intent?.trim();
+    const intent = (day.plan?.focus_summary ?? day.plan?.freeform_intent)?.trim();
     return {
       state: "progress_check",
       prompt: {

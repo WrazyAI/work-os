@@ -218,11 +218,11 @@ export function composeEodMarkdown(markdown: string, bottleneck: string, require
 }
 
 /** Offline playground stand-in for the AI EOD draft — device-only, clearly labeled. */
-export function simulateAiEod(day: { tasks: Array<Record<string, unknown>>; plan?: { freeform_intent?: string | null } | null; shiftDate: string }): string {
+export function simulateAiEod(day: { tasks: Array<Record<string, unknown>>; plan?: { focus_summary?: string | null; freeform_intent?: string | null } | null; shiftDate: string }): string {
   const title = (task: Record<string, unknown>) => safeTaskText(task.title, "a task");
   const completed = day.tasks.filter((task) => task.completed === true).map((task) => `- ${title(task)}`);
   const open = day.tasks.filter((task) => task.completed !== true).map((task) => `- ${title(task)}`);
-  const intent = day.plan?.freeform_intent?.trim();
+  const intent = (day.plan?.focus_summary ?? day.plan?.freeform_intent)?.trim();
   return [
     `# EOD Report (offline playground) — ${day.shiftDate}`,
     "",

@@ -46,3 +46,16 @@ test("includes bounded GitHub evidence as context but not a linkable task source
   assert.match(prompt, /Pull request merged: release prep/);
   assert.match(prompt, /Only link a task using an id from the supplied context/);
 });
+
+test("planning prompt embeds live snapshot and recalled memory only when provided", () => {
+  const plain = buildPlanningPrompt("Prepare the release.", context, []);
+  assert.doesNotMatch(plain, /todayContext|memoryContext|dated recalled history/);
+  const enriched = buildPlanningPrompt("Prepare the release.", context, [], {
+    todayBlock: "Today so far (2026-09-14) — live facts:\n- Shift: on shift",
+    memoryBlock: "Recalled history (dated context, not current facts):\n- [2026-09-10 · task_event] Closed the migration task",
+  });
+  assert.match(enriched, /todayContext/);
+  assert.match(enriched, /memoryContext/);
+  assert.match(enriched, /Shift: on shift/);
+  assert.match(enriched, /never treat it as evidence of completion/);
+});

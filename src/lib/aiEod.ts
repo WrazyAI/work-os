@@ -288,3 +288,43 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
   }
 }
+
+/** Processed screenshot summaries for the report date, shaped for the EOD
+ * composer's screenshot-context panel. Neutral activity context only. */
+export async function gatherEodScreenshotContext(organizationId: string, personId: string, date: string) {
+  const supabase = createAdminClient();
+  const events = await supabase.from("work_evidence_events").select("id,occurred_at")
+    .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
+    .like("external_event_id", "screenshot:%")
+    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+  if (events.error) throw new Error(`load screenshot events: ${events.error.message}`);
+  const occurredBy = new Map((events.data ?? []).map((row: any) => {
+    const at = row.occurred_at instanceof Date ? row.occurred_at.toISOString() : String(row.occurred_at ?? "");
+    return [String(row.id), at];
+  }));
+  const ids = [...occurredBy.keys()];
+  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+  const rows = await supabase.from("work_screenshot_summaries").select("summary,visible_context,confidence,processing_status,evidence_event_id")
+    .in("evidence_event_id", ids);
+  if (rows.error) throw new Error(`load screenshot summaries: ${rows.error.message}`);
+  const summaries = (rows.data ?? []) as Array<Record<string, any>>;
+  const count = (status: string) => summaries.filter((row) => row.processing_status === status).length;
+  const observations = summaries
+    .filter((row) => row.processing_status === "processed")
+    .sort((left, right) => {
+      const leftAt = Date.parse(occurredBy.get(String(left.evidence_event_id)) ?? "");
+      const rightAt = Date.parse(occurredBy.get(String(right.evidence_event_id)) ?? "");
+      return (Number.isFinite(leftAt) ? leftAt : 0) - (Number.isFinite(rightAt) ? rightAt : 0);
+    })
+    .slice(0, 6)
+    .map((row) => {
+      const visible = row.visible_context as { visibleApp?: unknown } | null;
+      return {
+        capturedAt: occurredBy.get(String(row.evidence_event_id)) ?? "",
+        summary: String(row.summary ?? ""),
+        visibleApp: visible && visible.visibleApp != null ? String(visible.visibleApp) : null,
+        confidence: Number(row.confidence ?? 0),
+      };
+    });
+  return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), observations };
+}

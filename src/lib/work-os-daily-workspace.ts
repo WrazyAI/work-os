@@ -8,6 +8,19 @@ import { recordWorkMemory } from "@/lib/work-memory";
 
 type Json = Record<string, any>;
 
+/** The goal a surface should display: the AI-drafted summary when one exists,
+ * falling back to the employee's typed intent. The raw intent stays exposed so
+ * planners keep editing the original note and the AI-build fingerprint holds. */
+export function dailyGoalDisplay(plan: { focus_summary?: unknown; freeform_intent?: unknown; goal_provenance?: unknown } | null | undefined) {
+  const intent = typeof plan?.freeform_intent === "string" && plan.freeform_intent.trim() ? plan.freeform_intent : null;
+  const draft = typeof plan?.focus_summary === "string" && plan.focus_summary.trim() ? plan.focus_summary : null;
+  return {
+    text: draft ?? intent,
+    intent,
+    provenance: typeof plan?.goal_provenance === "string" ? plan.goal_provenance : intent ? "employee" : null,
+  };
+}
+
 export type TaskDayAttributionReason =
   | "due_date"
   | "surfaced"
@@ -37,7 +50,7 @@ export interface DailyWorkspaceRecord {
   date: string;
   currentDate: string;
   readOnly: boolean;
-  goal: { text: string | null; provenance: string | null; suggestionTaskIds: string[]; revision: number | null };
+  goal: { text: string | null; intent: string | null; provenance: string | null; suggestionTaskIds: string[]; revision: number | null };
   tasks: DailyWorkspaceTaskRow[];
   completed: number;
   total: number;
@@ -286,8 +299,7 @@ export async function resolveDailyWorkspace(
     currentDate: context.currentDate,
     readOnly: date !== context.currentDate,
     goal: {
-      text: plan?.freeform_intent ?? null,
-      provenance: plan?.goal_provenance ?? (plan?.freeform_intent ? "employee" : null),
+      ...dailyGoalDisplay(plan),
       suggestionTaskIds: Array.isArray(plan?.suggestion_task_ids) ? plan.suggestion_task_ids : [],
       revision: typeof plan?.revision === "number" ? plan.revision : null,
     },

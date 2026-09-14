@@ -805,6 +805,10 @@ Do not silently convert ambiguous progress text into a task. Ask the user to cla
 
 Use neutral observation terms. Never imply quality, intent, productivity, or completion from presence/activity telemetry alone.
 
+### 18.4 Recalled memory context
+
+When Work Memory feeds an agent prompt (updates, check-ins, EOD drafting and refinement, plan interpret and refine, insights synthesis), recalled history and profile facts are context only: they are dated, labeled as history, and never selectable facts, never completion evidence, and never a productivity judgment. The live day state is presented separately as current fact. The insights output remains exact-ID selection rendered from stored facts, so recalled context can influence which verified facts are chosen but never adds prose or figures. A dev-only prompt probe (inactive in production) exposes the assembled context for automated verification.
+
 ## 19. Page-specific guidance
 
 ### 19.1 Today

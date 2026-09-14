@@ -300,4 +300,20 @@ if (/unsigned-windows-release/.test(workflow)) {
   assert.match(workflow, /WINDOWS_CERTIFICATE_BASE64/);
 }
 
+// ── SOD saves the AI draft, not the raw chat input ──
+const avatar = read("src/AvatarApp.tsx");
+assert.match(avatar, /import \{ buildPlanItemsFromInterpretation \} from "\.\/planItems";/);
+assert.match(avatar, /goal_provenance: "ai_draft",/);
+assert.match(avatar, /focus_summary: interpretation\.summary,/);
+assert.match(avatar, /const items = buildPlanItemsFromInterpretation\(facts\.planItems, interpretation, answers\);/);
+assert.match(avatar, /planIntent: day\?\.plan\?\.focus_summary \?\? day\?\.plan\?\.freeform_intent \?\? null,/);
+assert.doesNotMatch(avatar, /goal_provenance: "employee",\s*\n\s*focus_summary: interpretation\.summary/);
+
+const planner = read("src/PlanningSession.tsx");
+assert.match(planner, /setInput\(plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
+
+const planItemsModule = read("src/planItems.ts");
+assert.match(planItemsModule, /export function buildPlanItemsFromInterpretation/);
+assert.match(planItemsModule, /item_kind: "outcome"/);
+
 console.log("Work OS desktop static checks passed.");

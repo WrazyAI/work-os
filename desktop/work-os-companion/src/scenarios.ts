@@ -246,7 +246,7 @@ export function insightsFixture(day: DayData, range: "day" | "7d" | "30d"): impo
       activityContext: day.attendance ? 1 : 0,
       tasksCompleted: plannedCompleted,
       tasksOpen: open,
-      goal: { text: day.plan?.freeform_intent ?? null, provenance: day.plan?.goal_provenance ?? null },
+      goal: { text: day.plan?.focus_summary ?? day.plan?.freeform_intent ?? null, provenance: day.plan?.goal_provenance ?? null },
       references: [],
     }],
     totals: {
