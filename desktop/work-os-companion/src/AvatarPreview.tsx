@@ -41,6 +41,7 @@ export default function AvatarPreview() {
       op: { op: "complete_task", statement: "Mark done: Work Memory P3", taskTitle: "Work Memory P3", enabled: false },
       status: "failed",
       message: "Not filed. The server still shows this proposal as pending, so it is safe to retry.",
+      retryable: true,
     },
   ];
 
@@ -97,7 +98,7 @@ export default function AvatarPreview() {
       )}
       {show("approvals") && (
         <section aria-label="Approval results preview">
-          <ApprovalResults results={filingResults} />
+          <ApprovalResults results={filingResults} onRetry={() => undefined} />
           <div style={{ height: 12 }} />
           <NavigateButton page="review" statement="Your EOD report is due." onNavigate={() => undefined} />
         </section>
