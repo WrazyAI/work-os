@@ -341,12 +341,10 @@ export default function AvatarApp(): React.ReactElement {
       }
       return current.map((entry) => {
         if (!entry.operations?.length) return entry;
-        const fresh = shared.results.filter((result) => {
-          const key = toolCallKey(result.op);
-          return entry.operations!.some((op) => toolCallKey(op) === key)
-            && !(entry.toolResults ?? []).some((existing) => toolCallKey(existing.op) === key);
-        });
-        return fresh.length ? { ...entry, toolResults: [...(entry.toolResults ?? []), ...fresh] } : entry;
+        const relevant = shared.results.filter((result) => entry.operations!.some((op) => toolCallKey(op) === toolCallKey(result.op)));
+        // mergeToolResults replaces a matching key, so a retry that changes a
+        // result's status or message updates the existing card.
+        return relevant.length ? { ...entry, toolResults: mergeToolResults(entry.toolResults ?? [], relevant) } : entry;
       });
     });
   }, [avatarConversationScope]); // eslint-disable-line react-hooks/exhaustive-deps -- toggleExpanded is stable for the window lifetime
@@ -615,9 +613,25 @@ export default function AvatarApp(): React.ReactElement {
     if (!op.proposalId || filing) return;
     setFiling(true);
     void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
-      setChat((current) => current.map((entry) => entry.id === entryId
-        ? { ...entry, toolResults: mergeToolResults(entry.toolResults ?? [], outcome.results) }
-        : entry));
+      const entry = chatRef.current.find((candidate) => candidate.id === entryId);
+      const mergedResults = mergeToolResults(entry?.toolResults ?? [], outcome.results);
+      setChat((current) => current.map((candidate) => candidate.id === entryId
+        ? { ...candidate, toolResults: mergedResults }
+        : candidate));
+      // Mirror the normal approval path: publish the complete merged review so
+      // the other window replaces the stale failure instead of keeping it.
+      if (entry) {
+        const entries = chatRef.current;
+        const at = entries.findIndex((candidate) => candidate.id === entryId);
+        const precedingUser = [...entries.slice(0, at < 0 ? entries.length : at)].reverse().find((candidate) => candidate.role === "user");
+        void shareAvatarTools({
+          input: precedingUser?.text ?? "",
+          reply: entry.text,
+          operations: (entry.operations ?? []).map((candidate) => ({ ...candidate, enabled: false })),
+          results: mergedResults,
+          taskOptions: [],
+        });
+      }
       if (outcome.recorded > 0) {
         setFacts((current) => clearRecordedUpdatePrompt(current));
         void loadDay(true);
@@ -627,7 +641,7 @@ export default function AvatarApp(): React.ReactElement {
       id: `retry-error-${Date.now()}`, role: "system",
       text: value instanceof Error ? value.message : "The retry could not be filed.",
     }])).finally(() => setFiling(false));
-  }, [filing, loadDay]);
+  }, [filing, loadDay, shareAvatarTools]);
 
   const proposeAvatarSelectedCompletions = useCallback((taskIds: string[]) => {
     if (!taskIds.length || filing) return;

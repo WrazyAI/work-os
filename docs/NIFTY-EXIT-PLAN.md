@@ -158,9 +158,12 @@ until Phase D removes it; the mixed-provider test covers both row kinds explicit
 
 **Deliverables**
 1. Flip `local_task_authority` for the owner org; observe 24–48 h.
-2. Remove sync triggers, Nifty routes/webhooks/credentials, and dead code.
-3. UI + `design.md` copy updates ("Nifty" → Work OS task language; static tests updated).
-4. Revoke Nifty tokens after the rollback window; archive the export tool.
+2. Keep the Nifty read/write paths, routes, and credentials live through the rollback
+   window: disabling the flag must still restore Nifty authority for historical rows.
+3. Only after the window closes and every local row is exported and verified: remove
+   sync triggers and Nifty routes/webhooks, revoke credentials, and archive the export
+   tool. Removing these earlier would make the documented rollback impossible.
+4. UI + `design.md` copy updates ("Nifty" → Work OS task language; static tests updated).
 
 **Acceptance:** no runtime Nifty calls (server logs clean), all surfaces show Work OS
 task state, desktop + web verified at wide/compact widths.

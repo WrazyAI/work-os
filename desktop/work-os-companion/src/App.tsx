@@ -1873,9 +1873,22 @@ export default function App() {
   function retryInterpretationOperation(result: ToolCallResult) {
     const op = { ...result.op, enabled: true };
     if (!op.proposalId || busy) return;
+    const review = interpretation;
     setBusy(true); setError("");
     void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+      const mergedResults = mergeToolResults(review?.results ?? [], outcome.results);
       setInterpretation((current) => current ? { ...current, results: mergeToolResults(current.results ?? [], outcome.results) } : current);
+      // Mirror the normal approval path so the avatar window replaces the
+      // stale failure with the retried result instead of keeping it.
+      if (review) {
+        void sharePendingTools({
+          input: pendingProgressUpdate || op.statement,
+          reply: review.reply,
+          operations: review.operations.map((candidate) => ({ ...candidate, enabled: false })),
+          results: mergedResults,
+          taskOptions: review.taskOptions,
+        });
+      }
       if (outcome.recorded > 0) {
         notifications.success("Recorded the retried update.", "Retry succeeded");
         void refresh();

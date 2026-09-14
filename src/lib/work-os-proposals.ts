@@ -438,8 +438,11 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       if (text(target.provider_task_id)) {
         try {
           await withTimeout(syncNiftyTask(ownerId, String(target.provider_task_id)), STALENESS_REFRESH_TIMEOUT_MS, "Task refresh");
-        } catch {
-          // Degraded refresh: continue with the mirrored task state.
+        } catch (refreshError) {
+          // Only a timeout degrades to the mirrored state; real provider or
+          // authorization failures must surface to the outer handler so a
+          // conflicted approval is never applied blindly.
+          if (!(refreshError instanceof Error) || !/timed out after/i.test(refreshError.message)) throw refreshError;
         }
       }
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
