@@ -52,6 +52,7 @@ assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);
 assert.match(app, /openDebuggerWindow/);
 assert.match(app, /onboardingState: "complete"/);
+assert.match(app, /notifications\.clearPersistent\("work-os-session-gate"\)/);
 assert.match(app, /Work OS needs another try/);
 assert.match(app, />Retry</);
 assert.match(app, /\/api\/work-os\/me\/workday/);
