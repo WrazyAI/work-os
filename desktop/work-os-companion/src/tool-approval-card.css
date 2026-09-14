@@ -48,6 +48,7 @@
 .tool-approval-card > footer { display: flex; gap: 5px; align-items: center; color: #626a61; font-size: 9px; line-height: 1.35; }
 .tool-approval-card.is-recorded { border-color: #a8cf82; background: #f4faee; }
 .tool-approval-card.is-queued { border-color: #d8bb79; background: #fffaf0; }
+.tool-approval-card.is-processing { border-color: #a9c6e6; background: #f5f9fe; }
 .tool-approval-card.is-failed { border-color: #e3aaa2; background: #fff6f4; }
 .tool-approval-card.is-denied { border-color: #d9ded5; background: #f7f8f5; }
 .tool-approval-card.is-pending { border-color: #9cc384; box-shadow: 0 1px 2px rgba(20, 30, 18, 0.05), 0 4px 14px rgba(20, 30, 18, 0.05); }
@@ -55,6 +56,7 @@
 .tool-approval-step { flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; background: #e8ede4; color: #52604e; font-size: 9px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tool-approval-card.is-failed .tool-approval-state { background: #f8ded8; color: #af4138; }
 .tool-approval-card.is-queued .tool-approval-state { background: #fff3d9; color: #8a6410; }
+.tool-approval-card.is-processing .tool-approval-state { background: #e3eefb; color: #2d5c8f; }
 .tool-approval-card.is-denied .tool-approval-state { background: #eceee8; color: #626a61; }
 .tool-approval-choice { min-height: 28px; }
 .tool-approval-actions button { min-height: 28px; padding: 0 4px; }
@@ -161,6 +163,8 @@
 .approval-results article em { border-radius: 999px; background: #edf0ea; padding: 3px 7px; color: #626a61; font-size: 9px; font-style: normal; font-weight: 750; }
 .approval-results article.is-recorded em { background: #e8f4da; color: #3f7d20; }
 .approval-results article.is-queued em { background: #fff3d1; color: #8a6410; }
+.approval-results article.is-processing em { background: #e3eefb; color: #2d5c8f; }
+.approval-results article.is-processing > span { background: #e3eefb; color: #2d5c8f; }
 .approval-results article.is-failed em { background: #f8ded8; color: #af4138; }
 
 @media (max-width: 560px) {

@@ -1820,7 +1820,8 @@ export default function App() {
       const [outcome, deniedResults] = await Promise.all([
         enabled.length ? fileApprovedOperations(enabled, {
           reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-        }) : Promise.resolve({ recorded: 0, queued: 0, failed: [], results: [] as ToolCallResult[] }),
+          readProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+        }) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
@@ -1834,6 +1835,7 @@ export default function App() {
       const parts: string[] = [];
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
+      if (outcome.processing) parts.push(`${outcome.processing} still processing`);
       if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
       const skipped = deniedResults.filter((result) => result.status === "denied").length;
       const skipFailures = deniedResults.length - skipped;

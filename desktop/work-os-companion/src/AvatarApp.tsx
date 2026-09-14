@@ -561,7 +561,8 @@ export default function AvatarApp(): React.ReactElement {
       const [outcome, rejectionResults] = await Promise.all([
         approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), {
           reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-        }) : Promise.resolve({ recorded: 0, queued: 0, failed: [], results: [] }),
+          readProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+        }) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
