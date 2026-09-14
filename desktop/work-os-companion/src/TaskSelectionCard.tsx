@@ -100,6 +100,8 @@ export function TaskSelectionCard({
   const inflightRef = useRef(false);
   const uid = useId();
 
+  const proposedKey = listedTasks.filter((task) => proposedIds.has(task.id)).map((task) => task.id).join("\u0000");
+
   useEffect(() => {
     setSelectedIds((current) => new Set([...current].filter((id) => knownIds.has(id))));
     setConfirming(false);
@@ -111,6 +113,16 @@ export function TaskSelectionCard({
     setSentCount(0);
     setCollapsed(false);
   }, [taskIdsKey]);
+
+  useEffect(() => {
+    if (!proposedIds.size) return;
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => !proposedIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+    // Only newly proposed ids matter; the set identity changes every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposedKey]);
 
   const selectedTasks = listedTasks.filter((task) => selectedIds.has(task.id) && !proposedIds.has(task.id));
   const loading = status === "loading";
