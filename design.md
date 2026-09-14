@@ -1265,6 +1265,18 @@ fetches or mutates. Below 560px those semantic rows reflow to a two-line compact
 layout with no horizontal page overflow. The floating companion always uses the
 stacked-row presentation because its 400px window is the compact surface.
 
+The card is collapsible at every state, including before anything is selected.
+The header is a disclosure toggle with `aria-expanded` and `aria-controls`;
+collapsed it shows a one-line summary (`3 pending · 2 selected · 1 proposed`) and
+hides the list and footer. Confirming proposals moves the card into a receipt
+state: the selection clears, the card auto-collapses to `<n> completion
+proposal(s) created — review and approve <location>`, and an optional review
+action reveals the approval flow (`Review in Chat` in the floating companion).
+Tasks that already have proposals awaiting approval are marked `Proposed` and
+their checkbox is disabled, so the same task cannot be proposed twice before the
+decision. Failures render inline in the card and preserve the selection. The
+card still never claims that a provider mutation succeeded.
+
 ### 25.8 Assistant thinking trace
 
 When the floating companion performs multi-step assistant work (interpreting an
