@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, CircleAlert, ListChecks, RefreshCw } from "lucide-react";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText } from "./taskWorkspace";
@@ -97,11 +97,15 @@ export function TaskSelectionCard({
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sentCount, setSentCount] = useState(0);
+  const inflightRef = useRef(false);
   const uid = useId();
 
   useEffect(() => {
     setSelectedIds((current) => new Set([...current].filter((id) => knownIds.has(id))));
     setConfirming(false);
+    // A list refresh must not unlock selection while a submission is in flight,
+    // or the resolving request would erase choices made after it started.
+    if (inflightRef.current) return;
     setSubmitState("idle");
     setSubmitError(null);
     setSentCount(0);
@@ -143,6 +147,7 @@ export function TaskSelectionCard({
     setConfirming(false);
     setSubmitError(null);
     setSubmitState("sending");
+    inflightRef.current = true;
     try {
       await onMarkSelectedDone(selectedTasks.map((task) => task.id));
       setSentCount(count);
@@ -152,6 +157,8 @@ export function TaskSelectionCard({
     } catch (value) {
       setSubmitState("idle");
       setSubmitError(value instanceof Error ? value.message : "Could not create the completion proposals.");
+    } finally {
+      inflightRef.current = false;
     }
   };
 
