@@ -95,6 +95,15 @@ const actionSuccessMessages: Record<string, string> = {
   "workspace.task_defer": "The task was deferred.",
 };
 
+/** One filing transport for approvals and retries: the accept request plus the
+ * owner-scoped readback used to reconcile an interrupted response. */
+function proposalFilingTransport() {
+  return {
+    reviewProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+    readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+  };
+}
+
 
 export default function App() {
   const notifications = useNotifications();
@@ -1821,9 +1830,7 @@ export default function App() {
     diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
     (async () => {
       const [outcome, deniedResults] = await Promise.all([
-        enabled.length ? fileApprovedOperations(enabled, {
-          reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-        }) : Promise.resolve({ recorded: 0, queued: 0, failed: [], results: [] as ToolCallResult[] }),
+        enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
@@ -1837,6 +1844,7 @@ export default function App() {
       const parts: string[] = [];
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
+      if (outcome.processing) parts.push(`${outcome.processing} still processing`);
       if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
       const skipped = deniedResults.filter((result) => result.status === "denied").length;
       const skipFailures = deniedResults.length - skipped;
@@ -1863,6 +1871,35 @@ export default function App() {
     })().catch((value) => {
       showError(value, "Your approved updates could not be filed.", "Filing failed");
     }).finally(() => setBusy(false));
+  }
+
+  function retryInterpretationOperation(result: ToolCallResult) {
+    const op = { ...result.op, enabled: true };
+    if (!op.proposalId || busy) return;
+    const review = interpretation;
+    setBusy(true); setError("");
+    void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+      const mergedResults = mergeToolResults(review?.results ?? [], outcome.results);
+      setInterpretation((current) => current ? { ...current, results: mergeToolResults(current.results ?? [], outcome.results) } : current);
+      // Mirror the normal approval path so the avatar window replaces the
+      // stale failure with the retried result instead of keeping it.
+      if (review) {
+        void sharePendingTools({
+          input: pendingProgressUpdate || op.statement,
+          reply: review.reply,
+          operations: review.operations.map((candidate) => ({ ...candidate, enabled: false })),
+          results: mergedResults,
+          taskOptions: review.taskOptions,
+        });
+      }
+      if (outcome.recorded > 0) {
+        notifications.success("Recorded the retried update.", "Retry succeeded");
+        void refresh();
+        return;
+      }
+      notifications.error(outcome.failed[0]?.message ?? outcome.results[0]?.message ?? "The retry did not record.", "Retry failed");
+    }).catch((value) => showError(value, "The retry could not be filed.", "Retry failed"))
+      .finally(() => setBusy(false));
   }
 
   async function proposeSelectedTaskCompletions(taskIds: string[]) {
@@ -2142,6 +2179,7 @@ export default function App() {
         onReviewOperations={approveInterpretation}
         onMarkSelectedDone={proposeSelectedTaskCompletions}
         onNavigateView={(page) => setView(page)}
+        onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
         onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })}
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
@@ -2297,7 +2335,7 @@ export function DashboardTaskCard({ task, currentDate, onOpen, onRetryPendingTas
   </article>;
 }
 
-function AssistantOperations({ interpretation, busy, toolContext, onEditOperation, onRemapOperation, onReviewOperations, onMarkSelectedDone, onNavigateView }: {
+function AssistantOperations({ interpretation, busy, toolContext, onEditOperation, onRemapOperation, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation }: {
   interpretation: { operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] };
   busy: boolean;
   toolContext: import("./interpretation").ApprovedOpContext;
@@ -2306,6 +2344,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
   onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
   onMarkSelectedDone?: (taskIds: string[]) => void;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void;
+  onRetryOperation?: (result: ToolCallResult) => void;
 }) {
   const mutating = interpretation.operations.filter(isMutatingToolOp);
   const mutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
@@ -2339,14 +2378,14 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
           })).filter((task) => !!task.id) : [];
           return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
-        {mutationResults.length ? <ApprovalResults results={mutationResults} /> : null}
-        {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} taskOptions={interpretation.taskOptions} context={toolContext} busy={busy} onEdit={onEditOperation} onRemap={onRemapOperation} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} /> : null}
+        {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
+        {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} taskOptions={interpretation.taskOptions} context={toolContext} busy={busy} onEdit={onEditOperation} onRemap={onRemapOperation} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
       </div>
     </ChatSectionBoundary>
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onEditOperation, onRemapOperation, onReviewOperations, onMarkSelectedDone, onNavigateView }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onEditOperation, onRemapOperation, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -2355,7 +2394,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (taskIds: string[]) => void;
+  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onEditOperation?: (index: number, statement: string) => void; onRemapOperation?: (index: number, taskId: string) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (taskIds: string[]) => void; onRetryOperation?: (result: ToolCallResult) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -2389,7 +2428,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" text={echoReply} stream onSettled={bumpSweep} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onEditOperation={onEditOperation} onRemapOperation={onRemapOperation} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onNavigateView={onNavigateView} /></ChatTurn>
+       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onEditOperation={onEditOperation} onRemapOperation={onRemapOperation} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
   : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}

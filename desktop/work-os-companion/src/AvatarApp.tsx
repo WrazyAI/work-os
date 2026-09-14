@@ -30,6 +30,15 @@ import "./avatar.css";
 type SessionInfo = { apiBase: string; token: string; organizationId: string; expiresAt: string };
 type DaySyncState = "loading" | "ready" | "stale" | "error";
 
+/** One filing transport for approvals and retries: the accept request plus the
+ * owner-scoped readback used to reconcile an interrupted response. */
+function proposalFilingTransport() {
+  return {
+    reviewProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+    readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+  };
+}
+
 interface DayFacts extends CompanionDayFacts {
   loaded: boolean;
   personId: string | null;
@@ -333,12 +342,10 @@ export default function AvatarApp(): React.ReactElement {
       }
       return current.map((entry) => {
         if (!entry.operations?.length) return entry;
-        const fresh = shared.results.filter((result) => {
-          const key = toolCallKey(result.op);
-          return entry.operations!.some((op) => toolCallKey(op) === key)
-            && !(entry.toolResults ?? []).some((existing) => toolCallKey(existing.op) === key);
-        });
-        return fresh.length ? { ...entry, toolResults: [...(entry.toolResults ?? []), ...fresh] } : entry;
+        const relevant = shared.results.filter((result) => entry.operations!.some((op) => toolCallKey(op) === toolCallKey(result.op)));
+        // mergeToolResults replaces a matching key, so a retry that changes a
+        // result's status or message updates the existing card.
+        return relevant.length ? { ...entry, toolResults: mergeToolResults(entry.toolResults ?? [], relevant) } : entry;
       });
     });
   }, [avatarConversationScope]); // eslint-disable-line react-hooks/exhaustive-deps -- toggleExpanded is stable for the window lifetime
@@ -560,9 +567,7 @@ export default function AvatarApp(): React.ReactElement {
     setFiling(true);
     try {
       const [outcome, rejectionResults] = await Promise.all([
-        approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), {
-          reviewProposal: (proposalId) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
-        }) : Promise.resolve({ recorded: 0, queued: 0, failed: [], results: [] }),
+        approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
@@ -613,6 +618,41 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setFiling(false);
     }
+  }, [filing, loadDay, shareAvatarTools]);
+
+  const retryOperation = useCallback((entryId: string, result: ToolCallResult) => {
+    const op = { ...result.op, enabled: true };
+    if (!op.proposalId || filing) return;
+    setFiling(true);
+    void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+      const entry = chatRef.current.find((candidate) => candidate.id === entryId);
+      const mergedResults = mergeToolResults(entry?.toolResults ?? [], outcome.results);
+      setChat((current) => current.map((candidate) => candidate.id === entryId
+        ? { ...candidate, toolResults: mergedResults }
+        : candidate));
+      // Mirror the normal approval path: publish the complete merged review so
+      // the other window replaces the stale failure instead of keeping it.
+      if (entry) {
+        const entries = chatRef.current;
+        const at = entries.findIndex((candidate) => candidate.id === entryId);
+        const precedingUser = [...entries.slice(0, at < 0 ? entries.length : at)].reverse().find((candidate) => candidate.role === "user");
+        void shareAvatarTools({
+          input: precedingUser?.text ?? "",
+          reply: entry.text,
+          operations: (entry.operations ?? []).map((candidate) => ({ ...candidate, enabled: false })),
+          results: mergedResults,
+          taskOptions: [],
+        });
+      }
+      if (outcome.recorded > 0) {
+        setFacts((current) => clearRecordedUpdatePrompt(current));
+        void loadDay(true);
+        void emit("work-os://avatar-day-changed");
+      }
+    }).catch((value) => setChat((current) => [...current, {
+      id: `retry-error-${Date.now()}`, role: "system",
+      text: value instanceof Error ? value.message : "The retry could not be filed.",
+    }])).finally(() => setFiling(false));
   }, [filing, loadDay, shareAvatarTools]);
 
   const proposeAvatarSelectedCompletions = useCallback(async (taskIds: string[]) => {
@@ -1006,6 +1046,7 @@ export default function AvatarApp(): React.ReactElement {
                               onEdit={(operationIndex, statement) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, statement } : op) } : candidate))}
                               onRemap={(operationIndex, taskId) => setChat((current) => current.map((candidate) => candidate.id === entry.id ? { ...candidate, operations: candidate.operations?.map((op, index) => index === operationIndex ? { ...op, taskId, taskTitle: candidate.taskOptions?.find((task) => task.id === taskId)?.title ?? op.taskTitle } : op) } : candidate))}
                               onSubmit={(approved, rejected) => void approveOperations(entry.id, approved, rejected)}
+                              onRetry={(result) => retryOperation(entry.id, result)}
                             /> : null}
                           </div>
                         ) : null}

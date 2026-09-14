@@ -25,9 +25,11 @@ export interface ProposedOperation {
 
 export interface ToolCallResult {
   op: ProposedOperation;
-  status: "recorded" | "queued" | "failed" | "denied";
+  status: "recorded" | "queued" | "processing" | "failed" | "denied";
   message: string;
   data?: unknown;
+  /** The stored proposal can be filed again with the same id (nothing claimed it). */
+  retryable?: boolean;
 }
 
 export interface CandidateReview {
@@ -246,13 +248,23 @@ export interface ApprovedOpContext {
 
 export interface ApprovalTransport {
   reviewProposal(proposalId: string): Promise<unknown>;
+  /** Owner-scoped readback for reconciling an interrupted approval. */
+  readProposal?(proposalId: string): Promise<unknown>;
 }
 
 export interface ApprovalOutcome {
   recorded: number;
   queued: number;
+  processing: number;
   failed: Array<{ op: ProposedOperation; message: string }>;
   results: ToolCallResult[];
+}
+
+function proposalRow(value: unknown): Record<string, unknown> | null {
+  const proposal = value && typeof value === "object" && "proposal" in (value as Record<string, unknown>)
+    ? (value as { proposal?: unknown }).proposal
+    : value;
+  return proposal && typeof proposal === "object" ? proposal as Record<string, unknown> : null;
 }
 
 /** Accepts stored proposals one at a time. An assistant result cannot mutate a
@@ -261,7 +273,7 @@ export async function fileApprovedOperations(
   operations: ProposedOperation[],
   transport: ApprovalTransport,
 ): Promise<ApprovalOutcome> {
-  const outcome: ApprovalOutcome = { recorded: 0, queued: 0, failed: [], results: [] };
+  const outcome: ApprovalOutcome = { recorded: 0, queued: 0, processing: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
       if (!op.proposalId) throw new Error("This update no longer has a server-side approval record. Interpret it again before filing.");
@@ -277,6 +289,44 @@ export async function fileApprovedOperations(
         outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state.", data });
       }
     } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "The change could not be filed.";
+      // A dropped response is not proof of failure. Read the proposal back and
+      // report what actually happened instead of guessing.
+      if (/timed out|timeout|abort/i.test(rawMessage) && op.proposalId && transport.readProposal) {
+        try {
+          const row = proposalRow(await transport.readProposal(op.proposalId));
+          const status = typeof row?.status === "string" ? row.status : null;
+          const failureReason = typeof row?.failure_reason === "string" && row.failure_reason.trim() ? row.failure_reason.trim() : null;
+          if (status === "applied") {
+            outcome.recorded += 1;
+            outcome.results.push({ op, status: "recorded", message: "Recorded after a slow response. The server confirmed the change applied.", data: row });
+            continue;
+          }
+          if (status === "failed" || status === "needs_review" || status === "stale") {
+            const message = failureReason ?? filingFailureMessage(error);
+            outcome.failed.push({ op, message });
+            outcome.results.push({ op, status: "failed", message });
+            continue;
+          }
+          // `applying` means the server claimed the proposal and is mid-write.
+          if (status === "applying") {
+            outcome.processing += 1;
+            outcome.results.push({ op, status: "processing", message: "The server is still processing this change. Do not retry — recheck Review in a moment." });
+            continue;
+          }
+          // `pending` means no write claimed the proposal yet: nothing was
+          // filed, and the server's claim is atomic, so a retry cannot
+          // double-apply. Keep it actionable instead of leaving a dead failure.
+          if (status === "pending") {
+            const message = "Not filed. The server still shows this proposal as pending, so it is safe to retry.";
+            outcome.failed.push({ op, message });
+            outcome.results.push({ op, status: "failed", message, retryable: true });
+            continue;
+          }
+        } catch {
+          // Fall through to the timeout guidance when the readback itself fails.
+        }
+      }
       const message = filingFailureMessage(error);
       outcome.failed.push({ op, message });
       outcome.results.push({ op, status: "failed", message });
@@ -285,9 +335,9 @@ export async function fileApprovedOperations(
   return outcome;
 }
 
-/** A filing request that outlives the client timeout may still have
- * landed server-side. Say so plainly instead of leaking timer jargon,
- * and point at Review before a retry files twice. */
+/** Only used when the server cannot confirm the proposal state either. A
+ * dropped response may still land server-side, so say so plainly and point at
+ * Review before a retry files twice. */
 export function filingFailureMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : "The change could not be filed.";
   if (/timed out|timeout|abort/i.test(raw)) {

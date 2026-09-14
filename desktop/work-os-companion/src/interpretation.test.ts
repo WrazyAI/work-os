@@ -156,6 +156,49 @@ describe("fileApprovedOperations", () => {
     expect(outcome.failed[0]?.message).toContain("Review");
     expect(outcome.failed[0]?.message).not.toContain("signal timed out");
   });
+
+  it("reconciles an interrupted approval that actually applied", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "complete_task", taskId: "t-1" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+      readProposal: async () => ({ proposal: { status: "applied", failure_reason: null } }),
+    });
+    expect(outcome.recorded).toBe(1);
+    expect(outcome.failed).toHaveLength(0);
+    expect(outcome.results[0]?.status).toBe("recorded");
+    expect(outcome.results[0]?.message).toContain("confirmed");
+  });
+
+  it("reports the server's real failure reason after a timeout", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "complete_task", taskId: "t-1" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+      readProposal: async () => ({ proposal: { status: "needs_review", failure_reason: "sufficient outcome or artifact evidence is required" } }),
+    });
+    expect(outcome.failed).toHaveLength(1);
+    expect(outcome.failed[0]?.message).toContain("sufficient outcome");
+    expect(outcome.results[0]?.status).toBe("failed");
+  });
+
+  it("reports a still-processing approval as processing, not failure", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "complete_task", taskId: "t-1" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+      readProposal: async () => ({ proposal: { status: "applying", failure_reason: null } }),
+    });
+    expect(outcome.processing).toBe(1);
+    expect(outcome.failed).toHaveLength(0);
+    expect(outcome.results[0]?.status).toBe("processing");
+    expect(outcome.results[0]?.message).toContain("Do not retry");
+  });
+
+  it("reports a still-pending proposal as unfiled and safe to retry", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "complete_task", taskId: "t-1" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+      readProposal: async () => ({ proposal: { status: "pending", failure_reason: null } }),
+    });
+    expect(outcome.processing).toBe(0);
+    expect(outcome.failed).toHaveLength(1);
+    expect(outcome.results[0]?.message).toContain("safe to retry");
+    expect(outcome.results[0]?.retryable).toBe(true);
+  });
 });
 
 describe("filingFailureMessage", () => {

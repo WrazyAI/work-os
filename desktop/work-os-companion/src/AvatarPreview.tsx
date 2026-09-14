@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { AvatarThinking } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
+import { ApprovalResults } from "./ApprovalFlow";
+import { NavigateButton } from "./NavigateButton";
 import { TaskSelectionCard } from "./TaskSelectionCard";
 import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
 import type { AgendaAnswers } from "./avatarAgenda";
+import type { ToolCallResult } from "./interpretation";
 
 /** DEV-only visual review surface for the floating avatar's new patterns:
  * thinking trace (working + settled), agenda follow-ups, and the
@@ -23,6 +26,24 @@ export default function AvatarPreview() {
     ],
     "2026-09-07",
   );
+  const filingResults: ToolCallResult[] = [
+    {
+      op: { op: "create_task", statement: "Integrate CodeRabbit into Work OS", taskTitle: "Integrate CodeRabbit into Work OS", enabled: false },
+      status: "recorded",
+      message: "Recorded after a slow response. The server confirmed the change applied.",
+    },
+    {
+      op: { op: "complete_task", statement: "Mark done: Fix desktop history persistence", taskTitle: "Fix desktop history persistence", enabled: false },
+      status: "processing",
+      message: "The server is still processing this change. Do not retry — recheck Review in a moment.",
+    },
+    {
+      op: { op: "complete_task", statement: "Mark done: Work Memory P3", taskTitle: "Work Memory P3", proposalId: "preview-proposal-unfiled", enabled: false },
+      status: "failed",
+      message: "Not filed. The server still shows this proposal as pending, so it is safe to retry.",
+      retryable: true,
+    },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 420, padding: 24 }}>
@@ -75,6 +96,13 @@ export default function AvatarPreview() {
             emptyTitle="No open tasks"
             emptyMessage="Tasks waiting to be completed will appear here."
           />
+        </section>
+      )}
+      {show("approvals") && (
+        <section aria-label="Approval results preview">
+          <ApprovalResults results={filingResults} onRetry={() => undefined} />
+          <div style={{ height: 12 }} />
+          <NavigateButton page="review" statement="Your EOD report is due." onNavigate={() => undefined} />
         </section>
       )}
     </div>

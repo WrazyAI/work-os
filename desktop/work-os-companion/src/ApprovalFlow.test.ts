@@ -26,8 +26,10 @@ describe("ApprovalFlow", () => {
   });
 
   it("renders truthful result states after recording", () => {
+    const blocker: ProposedOperation = { op: "record_blocker", statement: "Waiting on access", taskId: "task-3", taskTitle: "Access review", proposalId: "proposal-3", enabled: false };
     const results: ToolCallResult[] = [
       { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: blocker, status: "processing", message: "Still processing this change." },
       { op: operations[1]!, status: "failed", message: "Provider unavailable." },
     ];
     const markup = renderToStaticMarkup(createElement(ApprovalResults, { results }));
@@ -36,5 +38,20 @@ describe("ApprovalFlow", () => {
     expect(markup).toContain("Recorded in Nifty.");
     expect(markup).toContain("Provider unavailable.");
     expect(markup).toContain("Failed");
+    expect(markup).toContain("Processing");
+    expect(markup).toContain("Still processing");
+  });
+
+  it("offers a retry for an unfiled proposal and keeps it actionable", () => {
+    const results: ToolCallResult[] = [
+      { op: operations[0]!, status: "failed", message: "Not filed. Safe to retry.", retryable: true },
+      { op: operations[1]!, status: "failed", message: "Provider rejected the change." },
+    ];
+    const markup = renderToStaticMarkup(createElement(ApprovalResults, { results, onRetry: () => undefined }));
+
+    expect(markup).toContain("approval-retry");
+    expect(markup).toContain(">Retry</button>");
+    // Only the retryable failure gets the control.
+    expect(markup.match(/>Retry<\/button>/g)).toHaveLength(1);
   });
 });

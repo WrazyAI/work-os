@@ -23,7 +23,7 @@ export function ToolApprovalCard({ op, context, result, index, total, onToggle, 
         <div><small>{result ? "Tool call result" : "Assistant tool call"}</small><strong>{call.tool}</strong></div>
         {typeof total === "number" && total > 1 && typeof index === "number" ? <span className="tool-approval-step" aria-label={`Tool ${index + 1} of ${total}`}>{index + 1} of {total}</span> : null}
         {result
-          ? <span className="tool-approval-state">{result.status === "recorded" ? <Check size={13} /> : result.status === "failed" ? <CircleAlert size={13} /> : <Terminal size={13} />}{result.status === "recorded" ? "Recorded" : result.status === "queued" ? "Queued" : result.status === "denied" ? "Denied" : "Failed"}</span>
+          ? <span className="tool-approval-state">{result.status === "recorded" ? <Check size={13} /> : result.status === "failed" ? <CircleAlert size={13} /> : <Terminal size={13} />}{result.status === "recorded" ? "Recorded" : result.status === "queued" ? "Queued" : result.status === "denied" ? "Denied" : result.status === "processing" ? "Processing" : "Failed"}</span>
           : <span className="tool-approval-actions"><label className="tool-approval-choice"><input type="checkbox" checked={op.enabled} onChange={onToggle} />Approve</label><button type="button" onClick={onDeny}>Deny</button></span>}
       </header>
       <p className="tool-approval-action"><span>Action</span><strong>{operationLabel(op.op)} {op.taskTitle ?? "this update"}</strong></p>

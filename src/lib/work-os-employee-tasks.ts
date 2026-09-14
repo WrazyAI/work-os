@@ -55,7 +55,7 @@ async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
   return { ownerId, task, niftyMemberId: person.nifty_member_id as string | null };
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
     promise.then(

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, SkipForward } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Loader, SkipForward } from "lucide-react";
 import {
   isMutatingToolOp,
   operationLabel,
@@ -31,10 +31,11 @@ function statusLabel(result: ToolCallResult): string {
   if (result.status === "recorded") return "Recorded";
   if (result.status === "queued") return "Queued";
   if (result.status === "denied") return "Skipped";
+  if (result.status === "processing") return "Processing";
   return "Failed";
 }
 
-export function ApprovalResults({ results }: { results: readonly ToolCallResult[] }) {
+export function ApprovalResults({ results, onRetry }: { results: readonly ToolCallResult[]; onRetry?: (result: ToolCallResult) => void }) {
   if (!results.length) return null;
   return (
     <section className="approval-results" aria-label="Action results">
@@ -42,9 +43,10 @@ export function ApprovalResults({ results }: { results: readonly ToolCallResult[
       <div>
         {results.map((result, index) => (
           <article key={operationKey(result.op, index)} className={`is-${result.status}`}>
-            <span aria-hidden="true">{result.status === "failed" ? <CircleAlert size={14} /> : <Check size={14} />}</span>
+            <span aria-hidden="true">{result.status === "failed" ? <CircleAlert size={14} /> : result.status === "processing" ? <Loader size={14} /> : <Check size={14} />}</span>
             <div><strong>{operationLabel(result.op.op)} {result.op.taskTitle ?? "update"}</strong><p>{result.message}</p></div>
             <em>{statusLabel(result)}</em>
+            {result.retryable && result.op.proposalId && onRetry ? <button type="button" className="approval-retry" onClick={() => onRetry(result)}>Retry</button> : null}
           </article>
         ))}
       </div>
@@ -62,6 +64,7 @@ export function ApprovalFlow({
   onEdit,
   onRemap,
   onSubmit,
+  onRetry,
 }: {
   operations: readonly ProposedOperation[];
   results?: readonly ToolCallResult[];
@@ -71,6 +74,7 @@ export function ApprovalFlow({
   onEdit?: (index: number, statement: string) => void;
   onRemap?: (index: number, taskId: string) => void;
   onSubmit: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
+  onRetry?: (result: ToolCallResult) => void;
 }) {
   const pending = useMemo(() => operations.map((op, index) => ({ op, index })).filter(({ op }) =>
     isMutatingToolOp(op) && !results.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId))), [operations, results]);
@@ -85,7 +89,7 @@ export function ApprovalFlow({
     setDecisions({});
   }, [signature]);
 
-  if (!pending.length) return <ApprovalResults results={results.filter((result) => isMutatingToolOp(result.op))} />;
+  if (!pending.length) return <ApprovalResults results={results.filter((result) => isMutatingToolOp(result.op))} onRetry={onRetry} />;
 
   const decide = (decision: ApprovalDecision) => {
     const current = pending[step];

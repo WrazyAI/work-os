@@ -4,7 +4,7 @@ import {
   createTask,
   getTaskByLocalOrProviderId,
   listPersonTasks,
-  syncNifty,
+  syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
 import { activeSession } from "@/lib/work-os-workday";
@@ -22,8 +22,13 @@ import {
   deleteWorkOsEmployeeTask,
   listWorkOsEmployeeTaskSelection,
   setWorkOsEmployeeTaskCompletion,
+  withTimeout,
 } from "@/lib/work-os-employee-tasks";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+
+/** A provider refresh inside an approval must be bounded: token refresh and
+ * nested requests can otherwise outlive the companion's filing timeout. */
+const STALENESS_REFRESH_TIMEOUT_MS = 5_000;
 
 type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
@@ -64,6 +69,21 @@ export async function listWorkOsProposals(access: WorkOsAccess, personId: string
   return data ?? [];
 }
 
+/** Single proposal readback, owner-scoped. The companion uses it to reconcile
+ * an approval whose response was interrupted: it can distinguish "applied",
+ * a real failure reason, and "still processing" instead of guessing. */
+export async function getWorkOsProposal(access: WorkOsAccess, proposalId: string) {
+  const { data, error } = await db().from("work_task_proposals")
+    .select("id,operation,status,failure_reason,updated_at,decided_at,provider_result")
+    .eq("organization_id", access.organizationId)
+    .eq("person_id", access.personId as string)
+    .eq("id", proposalId)
+    .maybeSingle();
+  if (error) throw new Error(`load Work OS proposal: ${error.message}`);
+  if (!data) throw new Error("Proposal not found");
+  return data;
+}
+
 async function applyProposal(access: WorkOsAccess, proposal: Json) {
   const operation = proposal.operation as ProposalOperation;
   const change = proposal.proposed_change as Json;
@@ -91,7 +111,9 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
   if (operation === "create_task") {
     if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
     const marker = `Work OS proposal: ${proposal.id}`;
-    await syncNifty(ownerId);
+    // A full provider sync does not belong in a request path: the local
+    // mirror already holds anything a previous attempt created, so the
+    // marker lookup alone reconciles a retry after an interrupted filing.
     const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
       .eq("organization_id", access.organizationId).ilike("description", `%${marker}%`).maybeSingle();
     if (existingError) throw new Error(`reconcile Nifty task proposal: ${existingError.message}`);
@@ -398,16 +420,37 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   }
   if (!["pending", "failed", "needs_review"].includes(proposal.status)) return proposal;
   const proposedChange = proposal.proposed_change as Json;
-  if (proposal.task_id && proposal.operation !== "remove_from_plan") {
+  // Completion and reopen are idempotent state writes whose target is
+  // validated inside the employee task service, so unrelated provider drift
+  // (title, due date, description) must not block an employee's check-off.
+  const stalenessApplies = proposal.task_id
+    && proposal.operation !== "remove_from_plan"
+    && proposal.operation !== "complete_task"
+    && proposal.operation !== "reopen_task";
+  if (stalenessApplies) {
     try {
       const ownerId = await organizationOwnerId(access.organizationId);
-      await syncNifty(ownerId);
+      const target = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
+      // Refresh only this one provider task. A full org sync takes minutes and
+      // does not fit inside an approval request. The refresh is bounded too:
+      // on timeout we compare against the last mirrored state and let the
+      // idempotent write proceed instead of failing the employee's decision.
+      if (text(target.provider_task_id)) {
+        try {
+          await withTimeout(syncNiftyTask(ownerId, String(target.provider_task_id)), STALENESS_REFRESH_TIMEOUT_MS, "Task refresh");
+        } catch (refreshError) {
+          // Only a timeout degrades to the mirrored state; real provider or
+          // authorization failures must surface to the outer handler so a
+          // conflicted approval is never applied blindly.
+          if (!(refreshError instanceof Error) || !/timed out after/i.test(refreshError.message)) throw refreshError;
+        }
+      }
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       const before = (proposal.before_state ?? {}) as Json;
       const keys = ["title", "description", "status", "completed", "due_date", "start_date", "task_group_id", "parent_provider_task_id"];
       if (keys.some((key) => JSON.stringify(before[key] ?? null) !== JSON.stringify(current[key] ?? null))) {
         const { data: stale, error: staleError } = await db().from("work_task_proposals").update({
-          status: "stale", failure_reason: "Nifty task changed after this proposal was drafted. Create a new proposal from the current task state.",
+          status: "stale", failure_reason: "The task changed after this proposal was drafted. Create a new proposal from the current task state.",
           decision_idempotency_key: decisionKey, decided_by: access.ctx.user.id, decided_at: new Date().toISOString(), updated_at: new Date().toISOString(),
         }).eq("id", proposalId).select("*").single();
         if (staleError) throw new Error(`mark stale Work OS proposal: ${staleError.message}`);
@@ -415,10 +458,10 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
         return stale;
       }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : "Nifty task refresh failed";
+      const reason = error instanceof Error ? error.message : "Task refresh failed";
       await db().from("work_task_proposals").update({
         status: "failed",
-        failure_reason: `Could not refresh Nifty before applying this proposal: ${reason}`,
+        failure_reason: `Could not refresh the task before applying this proposal: ${reason}`,
         updated_at: new Date().toISOString(),
       }).eq("id", proposalId).in("status", ["pending", "failed", "needs_review"]);
       await audit(access, "proposal.refresh_failed", "task_proposal", proposalId, { reason });
