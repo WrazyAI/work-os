@@ -306,9 +306,19 @@ export async function fileApprovedOperations(
             outcome.results.push({ op, status: "failed", message });
             continue;
           }
-          if (status === "pending" || status === "applying") {
+          // `applying` means the server claimed the proposal and is mid-write.
+          if (status === "applying") {
             outcome.processing += 1;
             outcome.results.push({ op, status: "processing", message: "The server is still processing this change. Do not retry — recheck Review in a moment." });
+            continue;
+          }
+          // `pending` means no write claimed the proposal yet: nothing was
+          // filed, and the server's claim is atomic, so a retry cannot
+          // double-apply. Say that instead of leaving a false failure.
+          if (status === "pending") {
+            const message = "Not filed. The server still shows this proposal as pending, so it is safe to retry.";
+            outcome.failed.push({ op, message });
+            outcome.results.push({ op, status: "failed", message });
             continue;
           }
         } catch {

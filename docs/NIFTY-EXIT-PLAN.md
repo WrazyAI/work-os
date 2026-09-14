@@ -198,7 +198,11 @@ task state, desktop + web verified at wide/compact widths.
 ## 8. Rollback
 
 - Phase A/B: revert commit; Nifty remains authoritative throughout.
-- Phase C: flag off restores today's behavior exactly; no data written locally.
+- Phase C (dark launch): the flag is off in production, so no production data is
+  written locally. In a test org, locally created rows stay visible if the flag is
+  disabled (reads are provider-agnostic); they are exported through the same one-way
+  export tool defined for Phase D, or discarded with the test org. Rollback never
+  hides a task that was created during the launch.
 - Phase D: flag off restores Nifty authority for historical tasks; tasks created while
   local (if any) are exported to Nifty via the import tool before the window closes,
   or the cutover is declared forward-only.
