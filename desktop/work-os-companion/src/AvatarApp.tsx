@@ -589,7 +589,10 @@ export default function AvatarApp(): React.ReactElement {
         taskOptions: [],
       });
       if (outcome.recorded > 0) setFacts((current) => clearRecordedUpdatePrompt(current));
-      const resolvedTaskIds = [...approved, ...rejected].map((operation) => operation.taskId).filter((id): id is string => !!id);
+      const resolvedTaskIds = results
+        .filter((result) => result.status === "recorded" || result.status === "denied")
+        .map((result) => result.op.taskId)
+        .filter((id): id is string => !!id);
       if (resolvedTaskIds.length) {
         setProposedTaskIds((current) => {
           const next = new Set(current);

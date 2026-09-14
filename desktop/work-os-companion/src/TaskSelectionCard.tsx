@@ -18,7 +18,6 @@ export type TaskSelectionCardStatus = "ready" | "loading" | "error";
 
 /** Collapsed summary line and post-submit receipt text. Pure for testability. */
 export function taskSelectionSummaryText(input: {
-  pending: number;
   selected: number;
   proposed: number;
   sentCount: number;
@@ -28,7 +27,6 @@ export function taskSelectionSummaryText(input: {
     return `${input.sentCount} completion proposal${input.sentCount === 1 ? "" : "s"} created — review and approve ${input.approvalLocation}.`;
   }
   return [
-    `${input.pending} pending`,
     input.selected ? `${input.selected} selected` : null,
     input.proposed ? `${input.proposed} proposed` : null,
   ].filter(Boolean).join(" · ");
@@ -125,7 +123,7 @@ export function TaskSelectionCard({
     { key: "overdue" as const, label: "Overdue", count: listedTasks.filter((task) => task.state === "overdue").length },
   ];
 
-  const summary = taskSelectionSummaryText({ pending: listedTasks.length, selected: selectedTasks.length, proposed: proposedCount, sentCount, approvalLocation });
+  const summary = taskSelectionSummaryText({ selected: selectedTasks.length, proposed: proposedCount, sentCount, approvalLocation });
 
   const toggle = (taskId: string) => {
     if (proposedIds.has(taskId)) return;
@@ -186,8 +184,8 @@ export function TaskSelectionCard({
             <span className="min-w-0 flex-1">
               <span className="block text-[9px] font-bold uppercase tracking-[0.08em] text-ink-3">Task selection</span>
               <span className="block truncate text-[13px] font-semibold text-ink">{title}</span>
-              {(collapsed || submitState === "sent") && (
-                <span className={cx("mt-0.5 block text-[10.5px] leading-snug", submitState === "sent" ? "text-accent-ink" : "text-ink-3")}>{summary}</span>
+              {collapsed && submitState !== "sent" && summary && (
+                <span className="mt-0.5 block text-[10.5px] leading-snug text-ink-3">{summary}</span>
               )}
             </span>
             <ChevronDown
@@ -206,6 +204,29 @@ export function TaskSelectionCard({
         </output>
       </header>
 
+      {submitError && (
+        <p className="m-0 flex shrink-0 items-center gap-1.5 border-b border-line bg-danger-tint/40 px-3 py-1.5 text-[11px] leading-snug text-danger" role="alert">
+          <CircleAlert size={13} aria-hidden="true" />
+          {submitError}
+        </p>
+      )}
+
+      {submitState === "sent" && (
+        <p className="m-0 flex shrink-0 items-center gap-1.5 border-b border-line bg-accent-tint/40 px-3 py-1.5 text-[11px] leading-snug text-ink-2" role="status">
+          <Check size={13} aria-hidden="true" />
+          <span className="min-w-0 flex-1">{summary}</span>
+          {onReview && (
+            <button
+              type="button"
+              className="chat-task-review shrink-0 rounded-[7px] border border-line bg-white px-2 py-0.5 text-[10.5px] font-semibold text-ink-2 transition-colors hover:border-signal-strong hover:text-ink"
+              onClick={onReview}
+            >
+              {reviewLabel}
+            </button>
+          )}
+        </p>
+      )}
+
       <div id={contentId} className={cx(collapsed ? "hidden" : "flex min-h-0 flex-col")} hidden={collapsed}>
         {degraded && !loading && !failed && (
           <p
@@ -214,29 +235,6 @@ export function TaskSelectionCard({
           >
             <AlertTriangle size={13} aria-hidden="true" />
             Showing the last available task details.
-          </p>
-        )}
-
-        {submitError && (
-          <p className="m-0 flex shrink-0 items-center gap-1.5 border-b border-line bg-danger-tint/40 px-3 py-1.5 text-[11px] leading-snug text-danger" role="alert">
-            <CircleAlert size={13} aria-hidden="true" />
-            {submitError}
-          </p>
-        )}
-
-        {submitState === "sent" && (
-          <p className="m-0 flex shrink-0 items-center gap-1.5 border-b border-line bg-accent-tint/40 px-3 py-1.5 text-[11px] leading-snug text-ink-2" role="status">
-            <Check size={13} aria-hidden="true" />
-            <span className="min-w-0 flex-1">{summary}</span>
-            {onReview && (
-              <button
-                type="button"
-                className="chat-task-review shrink-0 rounded-[7px] border border-line bg-white px-2 py-0.5 text-[10.5px] font-semibold text-ink-2 transition-colors hover:border-signal-strong hover:text-ink"
-                onClick={onReview}
-              >
-                {reviewLabel}
-              </button>
-            )}
           </p>
         )}
 

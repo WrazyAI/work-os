@@ -77,13 +77,13 @@ describe("TaskSelectionCard", () => {
 });
 
 describe("taskSelectionSummaryText", () => {
-  it("summarizes pending, selected, and proposed counts", () => {
-    expect(taskSelectionSummaryText({ pending: 3, selected: 0, proposed: 0, sentCount: 0, approvalLocation: "in Chat" })).toBe("3 pending");
-    expect(taskSelectionSummaryText({ pending: 3, selected: 2, proposed: 1, sentCount: 0, approvalLocation: "in Chat" })).toBe("3 pending · 2 selected · 1 proposed");
+  it("summarizes selected and proposed counts, and stays empty when there is nothing to add", () => {
+    expect(taskSelectionSummaryText({ selected: 0, proposed: 0, sentCount: 0, approvalLocation: "in Chat" })).toBe("");
+    expect(taskSelectionSummaryText({ selected: 2, proposed: 1, sentCount: 0, approvalLocation: "in Chat" })).toBe("2 selected · 1 proposed");
   });
 
   it("writes a singular and plural receipt for the approval location", () => {
-    expect(taskSelectionSummaryText({ pending: 1, selected: 1, proposed: 0, sentCount: 1, approvalLocation: "in Chat" })).toBe("1 completion proposal created — review and approve in Chat.");
-    expect(taskSelectionSummaryText({ pending: 2, selected: 2, proposed: 0, sentCount: 2, approvalLocation: "below" })).toBe("2 completion proposals created — review and approve below.");
+    expect(taskSelectionSummaryText({ selected: 1, proposed: 0, sentCount: 1, approvalLocation: "in Chat" })).toBe("1 completion proposal created — review and approve in Chat.");
+    expect(taskSelectionSummaryText({ selected: 2, proposed: 0, sentCount: 2, approvalLocation: "below" })).toBe("2 completion proposals created — review and approve below.");
   });
 });

@@ -2311,6 +2311,10 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
   const mutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
   const hasResults = mutationResults.length > 0;
   const hasPendingMutations = mutating.some((op) => !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
+  const proposedTaskIds = interpretation.operations
+    .filter((op) => op.op === "complete_task" && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
+    .map((op) => op.taskId)
+    .filter((id): id is string => !!id);
   return <>
     <strong>{mutating.length ? (hasResults ? "Action results" : "Review proposed actions") : "Assistant shortcuts"}</strong>
     {interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}
@@ -2333,7 +2337,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onEditOperatio
             priority: typeof task.priority === "string" ? task.priority : null,
             state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
           })).filter((task) => !!task.id) : [];
-          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} /> : null}
         {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} taskOptions={interpretation.taskOptions} context={toolContext} busy={busy} onEdit={onEditOperation} onRemap={onRemapOperation} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} /> : null}
