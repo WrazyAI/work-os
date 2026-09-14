@@ -38,7 +38,7 @@ export default function AvatarPreview() {
       message: "The server is still processing this change. Do not retry — recheck Review in a moment.",
     },
     {
-      op: { op: "complete_task", statement: "Mark done: Work Memory P3", taskTitle: "Work Memory P3", enabled: false },
+      op: { op: "complete_task", statement: "Mark done: Work Memory P3", taskTitle: "Work Memory P3", proposalId: "preview-proposal-unfiled", enabled: false },
       status: "failed",
       message: "Not filed. The server still shows this proposal as pending, so it is safe to retry.",
       retryable: true,
