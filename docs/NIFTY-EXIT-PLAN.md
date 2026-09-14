@@ -1,6 +1,6 @@
 # Nifty Exit Plan — Work OS Local Task Authority
 
-**Status:** Draft for operator approval
+**Status:** Approved for implementation — operator directed Phase A work on 2026-09-14
 **Date:** 2026-09-14
 **Repos:** `WrazyAI/work-os` (canonical product surface) · `WrazyAI/agent-os` (deployed app + runner)
 **Ledger:** Nifty `sFgUhkIiFF` — "Migrate Work OS task authority from Nifty to Neon"
@@ -160,7 +160,7 @@ until Phase D removes it; the mixed-provider test covers both row kinds explicit
 1. Flip `local_task_authority` for the owner org; observe 24–48 h.
 2. Remove sync triggers, Nifty routes/webhooks/credentials, and dead code.
 3. UI + `design.md` copy updates ("Nifty" → Work OS task language; static tests updated).
-4. Revoke Nifty tokens after the rollback window; archive the import tool.
+4. Revoke Nifty tokens after the rollback window; archive the export tool.
 
 **Acceptance:** no runtime Nifty calls (server logs clean), all surfaces show Work OS
 task state, desktop + web verified at wide/compact widths.
@@ -183,7 +183,7 @@ task state, desktop + web verified at wide/compact widths.
 6. **Cutover style.** Dark-launch then flip (recommended) vs flip live immediately after
    Phase C verification.
 7. **Daily Log.** Leave reading Nifty for now (recommended) or include here?
-8. **Rollback window.** How long to keep Nifty credentials + import tool after cutover
+8. **Rollback window.** How long to keep Nifty credentials + export tool after cutover
    (recommend 7–14 days)?
 
 ---
