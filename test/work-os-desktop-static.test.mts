@@ -173,7 +173,7 @@ assert.match(app, /role="dialog"/);
 assert.match(app, /assignee_person_ids/);
 assert.match(app, /openTaskDetails/);
 assert.match(taskSurfaces, /Add a subtask/);
-assert.match(taskSurfaces, /Update the Nifty record/);
+assert.match(taskSurfaces, /Update the \{localTask \? "Work OS" : "Nifty"\} record/);
 assert.match(taskSurfaces, /Archive.*reversible/);
 assert.match(app, /method: "DELETE"/);
 assert.match(app, /Delete permanently/);
@@ -342,5 +342,58 @@ assert.match(planner, /Late-start reason recorded/);
 const lateHelper = read("src/lateStart.ts");
 assert.match(lateHelper, /export function lateReasonRequired/);
 assert.match(lateHelper, /PROLONGED_ABSENCE_MINUTES = 30/);
+
+// ── SOD goals materialize as local Work OS tasks and subtasks ──
+assert.match(planner, /planning-materialize-hint/);
+assert.match(planner, /Confirming creates \$\{taskCopy\} with \$\{subtaskCopy\}\./);
+const localTaskSurfaces = read("src/taskSurfaces.tsx");
+assert.match(localTaskSurfaces, /export function taskSourceLabel/);
+assert.match(taskSurfaces, /=== "local" \? "Work OS" : "Nifty"/);
+assert.match(localTaskSurfaces, /\{taskSourceLabel\(task\)\} is the task record/);
+assert.match(localTaskSurfaces, /localTask\?: boolean/);
+const companionTypes = read("src/types.ts");
+assert.match(companionTypes, /item_kind: "nifty_task" \| "outcome" \| "local_task"/);
+assert.match(avatar, /Created \$\{createdTasks\} Work OS task/);
+assert.match(app, /Created \$\{createdTasks\} Work OS task/);
+
+const localTasks = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-local-tasks.ts"), "utf8");
+assert.match(localTasks, /export const LOCAL_TASK_PROVIDER = "local"/);
+assert.match(localTasks, /export async function materializePlanLocalTasks/);
+assert.match(localTasks, /export function planTaskMarker/);
+const workdaySource = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-workday.ts"), "utf8");
+assert.match(workdaySource, /materializePlanLocalTasks\(access, String\(plan\.id\), shiftDate, entries\)/);
+assert.match(workdaySource, /if \(confirm && submitted\)/);
+const taskStore = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-tasks.ts"), "utf8");
+assert.match(taskStore, /task\.provider === "local"/);
+const migration = readFileSync(resolve(import.meta.dirname, "../supabase/migrations/0041_work_os_local_plan_tasks.sql"), "utf8");
+assert.match(migration, /'nifty_task', 'outcome', 'local_task'/);
+const web = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/EmployeeWorkOsHome.tsx"), "utf8");
+assert.match(web, /=== "local" \? "Work OS task" :/);
+assert.match(web, /Permanently delete this task from Work OS\?/);
+
+// ── Approval flow and shared review persistence ──
+const approvalFlow = read("src/ApprovalFlow.tsx");
+assert.match(approvalFlow, /export function settleDecisions/);
+assert.match(approvalFlow, /const settled = settleDecisions\(pending, next\);/);
+assert.match(approvalFlow, /if \(settled\) \{\s*\n\s*setSubmitted\(true\);/);
+assert.doesNotMatch(approvalFlow, /Final review/);
+assert.doesNotMatch(approvalFlow, /Approve & record/);
+assert.doesNotMatch(approvalFlow, /approval-summary/);
+const approvalStyles = read("src/tool-approval-card.css");
+assert.doesNotMatch(approvalStyles, /approval-summary/);
+assert.doesNotMatch(approvalStyles, /approval-decision-dot/);
+
+const vaultSource = read("src/vault.ts");
+assert.match(vaultSource, /import \{ mergeConversationTurns \} from "\.\/avatarLogic";/);
+assert.match(vaultSource, /mergeConversationTurns\(stored, turns\)/);
+const avatarLogic = read("src/avatarLogic.ts");
+assert.match(avatarLogic, /export function mergeConversationTurns<T extends \{ id: string; createdAt\?: string \}>/);
+const interpretationTypes = read("src/interpretation.ts");
+assert.match(interpretationTypes, /reviewId: string;/);
+assert.match(avatar, /const hasThisReview = current\.some\(\(entry\) => entry\.id === shared\.reviewId\);/);
+assert.match(avatar, /id: shared\.reviewId, role: "assistant" as const,/);
+assert.match(app, /reviewId: shared\.reviewId \}/);
+assert.match(app, /const reviewId = crypto\.randomUUID\(\);/);
+assert.doesNotMatch(app, /meta: "shared review"/);
 
 console.log("Work OS desktop static checks passed.");

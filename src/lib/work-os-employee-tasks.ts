@@ -75,8 +75,9 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
   let currentTask = task;
   // The mirror is authoritative enough within the freshness window. Outside
   // it, refresh from Nifty quickly and fall back to the mirror on timeout —
-  // opening a task must never hang on a provider round-trip.
-  if (!syncedAtMs || Date.now() - syncedAtMs > TASK_DETAIL_MIRROR_FRESH_MS) {
+  // opening a task must never hang on a provider round-trip. Work OS-native
+  // tasks have no provider record, so they are never refreshed.
+  if (task.provider !== "local" && (!syncedAtMs || Date.now() - syncedAtMs > TASK_DETAIL_MIRROR_FRESH_MS)) {
     try {
       await withTimeout(syncNiftyTask(ownerId, providerTaskId), TASK_DETAIL_PROVIDER_REFRESH_MS, "Nifty task refresh");
       currentTask = await getTaskByLocalOrProviderId(ownerId, taskId);

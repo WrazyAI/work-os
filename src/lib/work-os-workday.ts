@@ -9,6 +9,7 @@ import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
+import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -771,6 +772,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   }
   const result = Array.isArray(mutation) ? mutation[0] : mutation;
   if (!result) throw new Error("save daily plan draft atomically: no mutation result");
+  let taskCreation: PlanTaskMaterialization | null = null;
   if (result.replayed !== true) {
     await auditPlan(access, confirm ? "plan.confirmed" : "plan.draft_saved", String(plan.id), {
       shiftDate, revision: expectedRevision + 1, idempotencyKey,
@@ -806,8 +808,38 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
         },
       );
     }
+    if (confirm && submitted) {
+      // New items get database ids only after the RPC, and prepared items are
+      // ordered by rank, so resolve the committed rows by rank before linking.
+      const committedResult = await db().from("work_daily_plan_items")
+        .select("id,rank,task_id").eq("plan_id", plan.id).order("rank", { ascending: true });
+      if (committedResult.error) throw new Error(`load committed plan items: ${committedResult.error.message}`);
+      const byRank = new Map((committedResult.data ?? []).map((row: Json) => [Number(row.rank), row]));
+      const entries = preparedItems
+        .map((item, index) => {
+          const row = byRank.get(index) as Json | undefined;
+          return {
+            itemId: row ? String(row.id) : null,
+            title: value(item.title_snapshot) ?? "",
+            objective: value(item.objective),
+            successCriteria: item.success_criteria,
+            linkedTaskId: value(row?.task_id),
+          };
+        })
+        .filter((entry) => entry.title);
+      if (entries.length) {
+        try {
+          taskCreation = await materializePlanLocalTasks(access, String(plan.id), shiftDate, entries);
+        } catch {
+          // Materialization is best-effort: a creation failure must never undo
+          // a confirmed plan. Unlinked items retry on the next confirm.
+          taskCreation = { tasks: 0, subtasks: 0, failed: entries.length, created: [] };
+        }
+      }
+    }
   }
-  return loadPlanByDate(access, shiftDate);
+  const savedPlan = await loadPlanByDate(access, shiftDate);
+  return taskCreation ? { ...savedPlan, taskCreation } : savedPlan;
 }
 
 export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, idempotencyKey: string) {

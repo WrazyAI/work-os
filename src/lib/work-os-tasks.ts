@@ -241,6 +241,21 @@ export async function createTask(userId: string, body: Json) {
 
 export async function updateTask(userId: string, taskId: string, patch: Json) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
+  if (task.provider === "local") {
+    const row: Json = {};
+    if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
+    if ("description" in patch) row.description = nonEmptyString(patch.description);
+    if ("due_date" in patch) row.due_date = nonEmptyString(patch.due_date);
+    if ("completed" in patch) {
+      row.completed = patch.completed === true;
+      row.status = row.completed ? "completed" : "open";
+      row.completed_at = row.completed ? new Date().toISOString() : null;
+    }
+    return selectFirst(
+      db().from("work_tasks").update({ ...row, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("id", task.id).select("*"),
+      "update Work OS task",
+    );
+  }
   const providerTaskId = task.provider_task_id as string;
   const allowed: Json = {};
   for (const key of ["name", "description", "milestone_id", "due_date", "start_date", "task_group_id", "assignees", "labels", "story_points", "priority", "dependencies"]) {
@@ -270,6 +285,17 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
 
 export async function completeTask(userId: string, taskId: string, completed = true) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
+  if (task.provider === "local") {
+    return selectFirst(
+      db().from("work_tasks").update({
+        completed,
+        status: completed ? "completed" : "open",
+        completed_at: completed ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", userId).eq("id", task.id).select("*"),
+      "complete Work OS task",
+    );
+  }
   const providerTaskId = task.provider_task_id as string;
   const result = await niftyForOwner(userId, () => completeNiftyTask(providerTaskId, completed));
   const normalized = normalizeNiftyTaskPayload(result) ?? normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
@@ -297,6 +323,20 @@ export async function completeTask(userId: string, taskId: string, completed = t
 
 export async function archiveTask(userId: string, taskId: string) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
+  if (task.provider === "local") {
+    const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
+    const archived = await selectFirst(
+      db().from("work_tasks").update({
+        status: "archived",
+        raw: { ...raw, archived: true },
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", userId).eq("id", task.id).select("*"),
+      "archive Work OS task",
+    );
+    await removePlanItemsForTombstonedTask(String(archived.id));
+    return archived;
+  }
   const providerTaskId = task.provider_task_id as string;
   await niftyForOwner(userId, () => archiveNiftyTask(providerTaskId, true));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
@@ -317,6 +357,20 @@ export async function archiveTask(userId: string, taskId: string) {
 
 export async function deleteTask(userId: string, taskId: string) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
+  if (task.provider === "local") {
+    const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
+    const deleted = await selectFirst(
+      db().from("work_tasks").update({
+        status: "deleted",
+        raw: { ...raw, deleted: true, deleted_at: new Date().toISOString() },
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", userId).eq("id", task.id).select("*"),
+      "tombstone Work OS task",
+    );
+    await removePlanItemsForTombstonedTask(String(deleted.id));
+    return deleted;
+  }
   const providerTaskId = task.provider_task_id as string;
   await niftyForOwner(userId, () => deleteNiftyTask(providerTaskId));
   const raw = task.raw && typeof task.raw === "object" ? task.raw as Json : {};
@@ -341,7 +395,25 @@ export async function moveTaskToParent(userId: string, taskId: string, parentTas
   if (task.id === parent.id) throw new Error("A task cannot be its own parent");
   if (!task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
   if (parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
-  if (task.organization_id !== parent.organization_id || task.provider_project_id !== parent.provider_project_id) {
+  if (task.organization_id !== parent.organization_id) throw new Error("Subtasks can only be moved between tasks in the same project");
+  const localMove = task.provider === "local" || parent.provider === "local";
+  if (localMove) {
+    if (task.provider !== "local") throw new Error("Nifty subtasks cannot be moved beneath a Work OS task");
+    if (task.provider === "local" && parent.provider === "nifty" && task.provider_project_id && parent.provider_project_id && task.provider_project_id !== parent.provider_project_id) {
+      throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+    }
+    if (task.parent_provider_task_id === parent.provider_task_id) return task;
+    return selectFirst(
+      db().from("work_tasks").update({
+        parent_task_id: parent.id,
+        parent_provider_task_id: parent.provider_task_id,
+        synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", userId).eq("id", task.id).select("*"),
+      "move Work OS task beneath parent",
+    );
+  }
+  if (task.provider_project_id !== parent.provider_project_id) {
     throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
   }
   const providerTaskId = task.provider_task_id as string;

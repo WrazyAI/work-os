@@ -125,6 +125,12 @@ export function moveMenuFocus(event: KeyboardEvent) {
 
 type AnyTask = Record<string, any>;
 
+/** Truthful source label: planner-created tasks live in Work OS itself; all
+ * other rows are Nifty mirrors until the local-first migration completes. */
+export function taskSourceLabel(task: AnyTask): string {
+  return String(task?.provider ?? "") === "local" ? "Work OS" : "Nifty";
+}
+
 export function TaskComposerModal({ busy, title, description, assignees, options, optionsLoading, onTitle, onDescription, onToggleAssignee, onClose, onSubmit }: {
   busy: boolean; title: string; description: string; assignees: string[];
   options: Array<{ id: string; displayName: string; email: string | null }>; optionsLoading: boolean;
@@ -196,13 +202,13 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
   const sync = details.subtaskSync;
   return <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
     <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
-      <header><div><span>{task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{safeTaskText(task.title, "Untitled Nifty task")}</h2></div><button aria-label="Close task details" disabled={busy} onClick={onClose}><X size={18} /></button></header>
+      <header><div><span>{task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</h2></div><button aria-label="Close task details" disabled={busy} onClick={onClose}><X size={18} /></button></header>
       <div className="task-modal-body">
         {loading ? <TaskDetailSkeleton /> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
-          <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, "Nifty")}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
+          <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, taskSourceLabel(task))}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
           <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <CompletionRingInline completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} />}</header>
-            {sync?.error && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
+            {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
@@ -223,29 +229,30 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
           </section>
         </>}
       </div>
-      <footer className="task-detail-footer"><small>{safeTaskText(task.project?.name, "Nifty")} · Nifty is the task record</small><button onClick={onClose}>Done</button></footer>
+      <footer className="task-detail-footer"><small>{safeTaskText(task.project?.name, taskSourceLabel(task))} · {taskSourceLabel(task)} is the task record</small><button onClick={onClose}>Done</button></footer>
     </section>
   </div>;
 }
 
-export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy, onCancel, onConfirm }: {
-  mode: "archive" | "delete"; scope: "task" | "subtask"; title: string; subtaskCount: number; busy: boolean; onCancel: () => void; onConfirm: () => void;
+export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy, localTask = false, onCancel, onConfirm }: {
+  mode: "archive" | "delete"; scope: "task" | "subtask"; title: string; subtaskCount: number; busy: boolean; localTask?: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   const permanent = mode === "delete";
+  const source = localTask ? "Work OS" : "Nifty";
   return <div className="task-modal-backdrop confirmation-backdrop"><section className={`delete-confirmation ${permanent ? "" : "reversible"}`} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
     <span className={permanent ? "danger-icon" : "reversible-icon"}>{permanent ? <Trash2 size={18} /> : <Archive size={18} />}</span>
     <h2 id="delete-confirmation-title">{permanent ? "Permanently delete" : "Archive"} this {scope}?</h2>
-    <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from Nifty and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in Nifty. It can be restored from Nifty’s archived tasks.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
+    <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from {source} and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in {localTask ? "Work OS history" : `Nifty. It can be restored from Nifty’s archived tasks`}.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
     <div><button disabled={busy} onClick={onCancel}>Cancel</button><button className={permanent ? "confirm-delete" : "confirm-archive"} disabled={busy} onClick={onConfirm}>{busy ? (permanent ? "Deleting…" : "Archiving…") : permanent ? "Delete permanently" : "Archive task"}</button></div>
   </section></div>;
 }
 
-export function TaskEditModal({ kind, title, description, busy, onTitle, onDescription, onClose, onSubmit }: {
-  kind: "task" | "subtask"; title: string; description: string; busy: boolean;
+export function TaskEditModal({ kind, title, description, busy, localTask = false, onTitle, onDescription, onClose, onSubmit }: {
+  kind: "task" | "subtask"; title: string; description: string; busy: boolean; localTask?: boolean;
   onTitle: (value: string) => void; onDescription: (value: string) => void; onClose: () => void; onSubmit: () => void;
 }) {
   return <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title">
-    <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the Nifty record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
+    <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the {localTask ? "Work OS" : "Nifty"} record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
     <div className="task-modal-body">
       <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
@@ -265,7 +272,7 @@ export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTa
     <aside className="carry-flyout" aria-label="Unfinished work" role="dialog" aria-modal="true">
       <header><div><span>From previous days</span><h2>Review unfinished work.</h2><small>{total} unfinished task{total === 1 ? "" : "s"} across {groups.length} workday{groups.length === 1 ? "" : "s"}. Decide what moves forward.</small></div><button aria-label="Close unfinished work" onClick={onClose}><X size={18} /></button></header>
       <div>{groups.length ? groups.map((group) => <section key={group.date}><h3>{group.label}</h3>{group.items.map(({ task, attribution }) => <article key={task.id}>
-        <div className="carry-row-copy"><strong>{safeTaskText(task.title, "Untitled Nifty task")}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div>
+        <div className="carry-row-copy"><strong>{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div>
         <div className="carry-row-actions"><button disabled={busy} onClick={() => onSurfaceTask(task)}><Plus size={13} /> Add to today</button><button disabled={busy} onClick={() => onTaskCompletion(task, true)}><Check size={13} /> Complete</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button onClick={() => onOpenDay(attribution.date!)}>Open day</button></div>
       </article>)}</section>) : <div className="carry-empty"><Check size={20} /><strong>Nothing left behind</strong><span>Earlier work is complete or carried forward.</span></div>}</div>
       <footer><small>Nothing changes in Nifty until you act.</small><button onClick={onClose}>Close</button></footer>
@@ -284,6 +291,7 @@ export function AssigneeTags({ task }: { task: AnyTask }) {
 }
 
 export function SyncChip({ task }: { task: AnyTask }) {
+  if (String(task.provider ?? "") === "local") return <span className="sync-chip synced">Work OS task</span>;
   if (task.sync_error) return <span className="sync-chip degraded">Nifty details unavailable</span>;
   if (task.synced_at) return <span className="sync-chip synced">Nifty synced</span>;
   return <span className="sync-chip awaiting">Awaiting Nifty sync</span>;

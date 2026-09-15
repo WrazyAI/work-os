@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
+import { ApprovalFlow, ApprovalResults, settleDecisions } from "./ApprovalFlow";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 
 const operations: ProposedOperation[] = [
@@ -70,5 +70,36 @@ describe("ApprovalFlow", () => {
     expect(markup).toContain(">Retry</button>");
     // Only the retryable failure gets the control.
     expect(markup.match(/>Retry<\/button>/g)).toHaveLength(1);
+  });
+
+  it("files nothing until every action is decided", () => {
+    const pending = operations.map((op, index) => ({ op, index }));
+    expect(settleDecisions(pending, {})).toBeNull();
+    expect(settleDecisions(pending, { "proposal-1": "approve" })).toBeNull();
+  });
+
+  it("settles the batch once the last action is decided — no second confirmation", () => {
+    const pending = operations.map((op, index) => ({ op, index }));
+    const settled = settleDecisions(pending, { "proposal-1": "approve", "proposal-2": "skip" });
+    expect(settled).not.toBeNull();
+    expect(settled!.approved.map((op) => op.proposalId)).toEqual(["proposal-1"]);
+    expect(settled!.rejected.map((op) => op.proposalId)).toEqual(["proposal-2"]);
+  });
+
+  it("settles an all-approved batch in one pass", () => {
+    const pending = operations.map((op, index) => ({ op, index }));
+    const settled = settleDecisions(pending, { "proposal-1": "approve", "proposal-2": "approve" });
+    expect(settled!.approved).toHaveLength(2);
+    expect(settled!.rejected).toHaveLength(0);
+  });
+
+  it("no longer renders a final review step", () => {
+    const markup = renderToStaticMarkup(createElement(ApprovalFlow, {
+      operations,
+      context: { shiftDate: "2026-09-11", personId: "person-1", promptKind: "optional" },
+      onSubmit: () => undefined,
+    }));
+    expect(markup).not.toContain("Final review");
+    expect(markup).not.toContain("Approve & record");
   });
 });

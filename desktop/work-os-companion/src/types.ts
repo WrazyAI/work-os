@@ -30,7 +30,7 @@ export interface DailyPlanItem {
   rank: number;
   title_snapshot: string;
   blocker: string | null;
-  item_kind: "nifty_task" | "outcome";
+  item_kind: "nifty_task" | "outcome" | "local_task";
   completion_state: "open" | "completed";
   completed_at?: string | null;
   objective?: string | null;

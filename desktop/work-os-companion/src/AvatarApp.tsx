@@ -335,29 +335,36 @@ export default function AvatarApp(): React.ReactElement {
     await secureState.savePendingTools(avatarConversationScope, record).catch(() => undefined);
     emit("work-os://pending-tools-changed", { scope: avatarConversationScope }).catch(() => undefined);
   }, [avatarConversationScope]);
-  // Tool calls raised in the main window appear here too. Adopt a fresh
-  // review only when this chat has none active; otherwise merge filed
-  // results into the matching local cards by stable key.
+  // One review identity, both windows: the pending-tools record is the source
+  // of truth for an open review, so this window re-adopts a review it raised
+  // itself (reloads, restarts) and never loses one to a cross-window save.
+  // Filed results always merge into the matching cards by stable key.
   const adoptSharedTools = useCallback(async () => {
     if (!avatarConversationScope) return;
     const shared = await secureState.pendingTools(avatarConversationScope).catch(() => null);
-    if (!shared || shared.origin === "avatar") return;
+    if (!shared) return;
     const signature = JSON.stringify(shared);
     if (avatarToolsSig.current === signature) return;
     avatarToolsSig.current = signature;
     setChat((current) => {
-      const hasActive = current.some((entry) => entry.operations?.some((op) => isMutatingToolOp(op)
-        && !(entry.toolResults ?? []).some((result) => toolCallKey(result.op) === toolCallKey(op))));
-      if (!hasActive && shared.operations.length) {
+      const hasThisReview = current.some((entry) => entry.id === shared.reviewId);
+      if (!hasThisReview && (shared.operations.length || shared.results.length)) {
         void toggleExpanded(true);
         return [...current, {
-          id: `shared-${shared.updatedAt}`, role: "assistant" as const,
+          id: shared.reviewId, role: "assistant" as const,
           text: shared.reply ?? "Tool calls shared from the main window.",
           operations: shared.operations, taskOptions: shared.taskOptions ?? [],
           toolResults: shared.results.length ? shared.results : undefined,
         }];
       }
       return current.map((entry) => {
+        if (entry.id === shared.reviewId) {
+          const relevant = shared.results.filter((result) => shared.operations.some((op) => toolCallKey(op) === toolCallKey(result.op)));
+          const patch: Partial<ChatEntry> = {};
+          if (!entry.operations?.length && shared.operations.length) patch.operations = shared.operations;
+          if (relevant.length) patch.toolResults = mergeToolResults(entry.toolResults ?? [], relevant);
+          return Object.keys(patch).length ? { ...entry, ...patch } : entry;
+        }
         if (!entry.operations?.length) return entry;
         const relevant = shared.results.filter((result) => entry.operations!.some((op) => toolCallKey(op) === toolCallKey(result.op)));
         // mergeToolResults replaces a matching key, so a retry that changes a
@@ -568,9 +575,10 @@ export default function AvatarApp(): React.ReactElement {
         }
       }
       const trace = settle(stages.map((stage) => stage.label), mutating.length ? `${mutating.length} proposal${mutating.length === 1 ? "" : "s"} to review` : "Shown inline");
-      const assistantEntry: ChatEntry = { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined };
+      const reviewId = crypto.randomUUID();
+      const assistantEntry: ChatEntry = { id: reviewId, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined };
       setChat((current) => [...current, assistantEntry]);
-      void shareAvatarTools({ input: text, reply: review.reply, operations, results: displayResults, taskOptions: [] });
+      void shareAvatarTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions: [] });
     } catch (value) {
       setChat((current) => [...current, {
         id: `e-${Date.now()}`, role: "system",
@@ -606,6 +614,7 @@ export default function AvatarApp(): React.ReactElement {
       const at = entries.findIndex((entry) => entry.id === entryId);
       const precedingUser = [...entries.slice(0, at < 0 ? entries.length : at)].reverse().find((entry) => entry.role === "user");
       void shareAvatarTools({
+        reviewId: entryId,
         input: precedingUser?.text ?? "",
         reply: filed?.text,
         operations: (filed?.operations ?? [...approved, ...rejected]).map((op) => ({ ...op, enabled: false })),
@@ -656,6 +665,7 @@ export default function AvatarApp(): React.ReactElement {
         const at = entries.findIndex((candidate) => candidate.id === entryId);
         const precedingUser = [...entries.slice(0, at < 0 ? entries.length : at)].reverse().find((candidate) => candidate.role === "user");
         void shareAvatarTools({
+          reviewId: entryId,
           input: precedingUser?.text ?? "",
           reply: entry.text,
           operations: (entry.operations ?? []).map((candidate) => ({ ...candidate, enabled: false })),
@@ -693,8 +703,9 @@ export default function AvatarApp(): React.ReactElement {
       const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
       if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
       setProposedTaskIds((current) => new Set([...current, ...tasks.map((task) => task.id)]));
-      setChat((current) => [...current, { id: `a-complete-${Date.now()}`, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
-      void shareAvatarTools({ input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
+      const reviewId = crypto.randomUUID();
+      setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+      void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
     } finally {
       setFiling(false);
     }
@@ -709,11 +720,12 @@ export default function AvatarApp(): React.ReactElement {
     review: { rounds: number; answered: number; asked: number; reviewed: boolean },
   ) => {
     setFiling(true);
+    let receiptText = "";
     try {
       if (interpretation) {
         if (!interpretation.buildId) throw new Error("Build the plan again before confirming it.");
         const items = buildPlanItemsFromInterpretation(facts.planItems, interpretation, answers);
-        await apiRequest("/api/work-os/me/plan", {
+        const confirmation = await apiRequest<{ taskCreation?: { tasks?: number; subtasks?: number; failed?: number } }>("/api/work-os/me/plan", {
           method: "PUT",
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({
@@ -733,12 +745,21 @@ export default function AvatarApp(): React.ReactElement {
             items,
           }),
         });
+        const materialized = confirmation?.taskCreation;
+        const createdTasks = materialized?.tasks ?? 0;
+        const createdSubtasks = materialized?.subtasks ?? 0;
+        const materializeCopy = materialized && (createdTasks || createdSubtasks)
+          ? ` Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}.`
+          : materialized?.failed
+            ? ` ${materialized.failed} plan task${materialized.failed === 1 ? "" : "s"} could not be created — they will retry on your next confirm.`
+            : "";
+        receiptText = `${agendaReceipt(review)}${materializeCopy}`;
       } else throw new Error("Planning assistance must build a plan before it can be confirmed.");
       setInput("");
       setAgendaReview(null);
       setChat((current) => [...current, {
         id: `agenda-${Date.now()}`, role: "assistant",
-          text: agendaReceipt(review),
+          text: receiptText,
         receipt: "Agenda confirmed",
       }]);
       await loadDay(true);

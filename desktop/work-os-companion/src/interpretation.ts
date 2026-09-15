@@ -357,6 +357,9 @@ export function toolCallKey(op: Pick<ProposedOperation, "proposalId" | "op" | "t
  * so filing or denying in one window is reflected in the other. Local
  * approve toggles stay per-window; the server dedupes concurrent filings. */
 export interface PendingToolReview {
+  /** Stable identity for this review across windows and reloads: both chat
+   * surfaces key the review turn by it, so a shared review is one turn. */
+  reviewId: string;
   input: string;
   reply?: string;
   operations: ProposedOperation[];

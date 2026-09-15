@@ -15,6 +15,23 @@ function operationKey(op: ProposedOperation, index: number): string {
   return op.proposalId ?? `${op.op}:${op.taskId ?? ""}:${index}`;
 }
 
+/** The settled batch once every pending action has a decision. Null while any
+ * action is still undecided — nothing is filed before the last decision. */
+export function settleDecisions(
+  pending: readonly { op: ProposedOperation; index: number }[],
+  decisions: Record<string, ApprovalDecision>,
+): { approved: ProposedOperation[]; rejected: ProposedOperation[] } | null {
+  const approved: ProposedOperation[] = [];
+  const rejected: ProposedOperation[] = [];
+  for (const { op, index } of pending) {
+    const decision = decisions[operationKey(op, index)] ?? "undecided";
+    if (decision === "undecided") return null;
+    if (decision === "approve") approved.push(op);
+    else rejected.push(op);
+  }
+  return { approved, rejected };
+}
+
 function questionFor(op: ProposedOperation): string {
   const target = op.taskTitle || op.statement;
   if (op.op === "complete_task") return `Mark “${target}” done?`;
@@ -54,7 +71,9 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
   );
 }
 
-/** One decision at a time. No provider write happens until the final review. */
+/** One decision at a time. Nothing is filed until every action is decided;
+ * the last decision files the whole batch in a single review — there is no
+ * second confirmation step. */
 export function ApprovalFlow({
   operations,
   results = [],
@@ -74,49 +93,31 @@ export function ApprovalFlow({
     isMutatingToolOp(op) && !results.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId))), [operations, results]);
   const signature = pending.map(({ op, index }) => operationKey(op, index)).join("|");
   const [step, setStep] = useState(0);
-  const [summary, setSummary] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, ApprovalDecision>>({});
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     setStep(0);
-    setSummary(false);
     setDecisions({});
+    setSubmitted(false);
   }, [signature]);
 
   if (!pending.length) return <ApprovalResults results={results.filter((result) => isMutatingToolOp(result.op))} onRetry={onRetry} />;
 
   const decide = (decision: ApprovalDecision) => {
+    if (submitted) return;
     const current = pending[step];
     if (!current) return;
-    setDecisions((value) => ({ ...value, [operationKey(current.op, current.index)]: decision }));
-    if (step >= pending.length - 1) setSummary(true);
-    else setStep((value) => value + 1);
+    const next = { ...decisions, [operationKey(current.op, current.index)]: decision };
+    setDecisions(next);
+    const settled = settleDecisions(pending, next);
+    if (settled) {
+      setSubmitted(true);
+      onSubmit(settled.approved.map((op) => ({ ...op, enabled: true })), settled.rejected.map((op) => ({ ...op, enabled: false })));
+      return;
+    }
+    if (step < pending.length - 1) setStep((value) => value + 1);
   };
-
-  const approved = pending.filter(({ op, index }) => decisions[operationKey(op, index)] === "approve").map(({ op }) => op);
-  const rejected = pending.filter(({ op, index }) => decisions[operationKey(op, index)] === "skip").map(({ op }) => op);
-  const undecided = pending.length - approved.length - rejected.length;
-
-  if (summary) {
-    return (
-      <section className="approval-flow approval-summary" aria-label="Review action decisions">
-        <header><div><small>Final review</small><strong>Confirm what Work OS should record</strong></div><span>{approved.length} approved</span></header>
-        <div className="approval-summary-list">
-          {pending.map(({ op, index }) => {
-            const decision = decisions[operationKey(op, index)] ?? "undecided";
-            return <button key={operationKey(op, index)} type="button" onClick={() => { setStep(index); setSummary(false); }}><span className={`approval-decision-dot is-${decision}`} /> <strong>{operationLabel(op.op)} {op.taskTitle ?? op.statement}</strong><em>{decision === "approve" ? "Approve" : decision === "skip" ? "Skip" : "Review"}</em></button>;
-          })}
-        </div>
-        <footer>
-          <button type="button" className="approval-back" onClick={() => { setStep(Math.max(0, pending.length - 1)); setSummary(false); }}><ChevronLeft size={14} />Back</button>
-          <button type="button" className="approval-submit" disabled={busy || undecided > 0} onClick={() => onSubmit(approved.map((op) => ({ ...op, enabled: true })), rejected.map((op) => ({ ...op, enabled: false })))}>
-            {approved.length ? `Approve & record ${approved.length} action${approved.length === 1 ? "" : "s"}` : "Dismiss proposals"}
-          </button>
-        </footer>
-        {undecided > 0 ? <p className="approval-hint">Review {undecided} remaining action{undecided === 1 ? "" : "s"} before continuing.</p> : null}
-      </section>
-    );
-  }
 
   const current = pending[step]!;
   const decision = decisions[operationKey(current.op, current.index)] ?? "undecided";
