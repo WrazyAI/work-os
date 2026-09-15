@@ -809,16 +809,21 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
       );
     }
     if (confirm && submitted) {
-      const existingById = new Map((Array.isArray(plan.items) ? plan.items as Json[] : []).map((item) => [String(item.id), item]));
+      // New items get database ids only after the RPC, and prepared items are
+      // ordered by rank, so resolve the committed rows by rank before linking.
+      const committedResult = await db().from("work_daily_plan_items")
+        .select("id,rank,task_id").eq("plan_id", plan.id).order("rank", { ascending: true });
+      if (committedResult.error) throw new Error(`load committed plan items: ${committedResult.error.message}`);
+      const byRank = new Map((committedResult.data ?? []).map((row: Json) => [Number(row.rank), row]));
       const entries = preparedItems
-        .map((item) => {
-          const existing = item.id ? existingById.get(String(item.id)) : undefined;
+        .map((item, index) => {
+          const row = byRank.get(index) as Json | undefined;
           return {
-            itemId: value(item.id),
+            itemId: row ? String(row.id) : null,
             title: value(item.title_snapshot) ?? "",
             objective: value(item.objective),
             successCriteria: item.success_criteria,
-            linkedTaskId: value(existing?.task_id),
+            linkedTaskId: value(row?.task_id),
           };
         })
         .filter((entry) => entry.title);
