@@ -126,7 +126,7 @@ export default function App() {
   const [loadedComposerConversation, setLoadedComposerConversation] = useState<string | null>(null);
   const composerConversationSignature = useRef("");
   const launchUpdateCheckRef = useRef(false);
-  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null>(null);
+  const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[]; reviewId?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [composerThinking, setComposerThinking] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
@@ -1055,7 +1055,7 @@ export default function App() {
       setPendingProgressUpdate(text);
       setProgressPanel("update");
       setProgressComposerOpen(true);
-      setInterpretation({ status: "ready", operations: review.operations, taskOptions: interpretationTaskOptions() });
+      setInterpretation({ status: "ready", operations: review.operations, taskOptions: interpretationTaskOptions(), reviewId: crypto.randomUUID() });
       notifications.info("Your queued update is ready for review. Nothing has been recorded yet.", "Review queued update");
     }).catch((value) => diagnostics.warn("offline_queue.restore_interpretation", errorMessage(value, "Could not restore queued interpretation")));
   }, [notifications, queuedInterpretationId, taskHistory, visibleDay]);
@@ -1107,10 +1107,21 @@ export default function App() {
       if (!current) {
         if (!shared.operations.length) return current;
         setPendingProgressUpdate(shared.input);
-        setComposerHistory((history) => [...history, { id: crypto.randomUUID(), role: "assistant", text: shared.reply || "Tool calls shared from the companion.", meta: "shared review", createdAt: new Date().toISOString() }]);
+        setComposerHistory((history) => {
+          const turn: WorkOsConversationTurn = {
+            id: shared.reviewId, role: "assistant", text: shared.reply || "Tool calls shared from the companion.",
+            createdAt: new Date().toISOString(), operations: shared.operations,
+            toolResults: shared.results.length ? shared.results : undefined,
+          };
+          const index = history.findIndex((entry) => entry.id === shared.reviewId);
+          if (index < 0) return [...history, turn];
+          const next = [...history];
+          next[index] = { ...history[index], ...turn };
+          return next;
+        });
         if (typeof document !== "undefined" && document.hasFocus()) setProgressComposerOpen(true);
         else notifications.info("Tool calls shared from the companion.", "Review shared tools");
-        return { status: "ready", operations: shared.operations, taskOptions: shared.taskOptions, reply: shared.reply, results: shared.results.length ? shared.results : undefined };
+        return { status: "ready", operations: shared.operations, taskOptions: shared.taskOptions, reply: shared.reply, results: shared.results.length ? shared.results : undefined, reviewId: shared.reviewId };
       }
       const localKeys = new Set(current.operations.map(toolCallKey));
       const fresh = shared.results.filter((result) => localKeys.has(toolCallKey(result.op)));
@@ -1748,10 +1759,11 @@ export default function App() {
           displayResults.push({ op, status: "failed", message: value instanceof Error ? value.message : "The task list could not be loaded." });
         }
       }
-      setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined });
+      const reviewId = crypto.randomUUID();
+      setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined, reviewId });
       setComposerThinking(null);
-      setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: review.reply || "Here's what I understood.", meta: mutating.length ? `${mutating.length} proposed update${mutating.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString() }]);
-      void sharePendingTools({ input: text, reply: review.reply, operations, results: displayResults, taskOptions });
+      setComposerHistory((current) => [...current, { id: reviewId, role: "assistant", text: review.reply || "Here's what I understood.", meta: mutating.length ? `${mutating.length} proposed update${mutating.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString(), operations, toolResults: displayResults.length ? displayResults : undefined }]);
+      void sharePendingTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions });
     }).catch((value) => {
       setInterpretation(null);
       setComposerThinking(null);
@@ -1826,6 +1838,7 @@ export default function App() {
       const reviewedResults = [...outcome.results, ...deniedResults];
       close(reviewedResults, parts.join(" · ") || "No actions were recorded");
       void sharePendingTools({
+        reviewId: interpretation?.reviewId ?? crypto.randomUUID(),
         input: text,
         reply: interpretation?.reply,
         operations: (interpretation?.operations ?? [...enabled, ...rejected]).map((op) => ({ ...op, enabled: false })),
@@ -1858,6 +1871,7 @@ export default function App() {
       // stale failure with the retried result instead of keeping it.
       if (review) {
         void sharePendingTools({
+          reviewId: interpretation?.reviewId ?? crypto.randomUUID(),
           input: pendingProgressUpdate || op.statement,
           reply: review.reply,
           operations: review.operations.map((candidate) => ({ ...candidate, enabled: false })),
@@ -1895,10 +1909,11 @@ export default function App() {
       }));
       if (operations.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
       setPendingProgressUpdate(inputText);
-      setInterpretation((current) => current ? { ...current, operations: [...current.operations, ...operations] } : {
-        status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.",
+      const reviewId = interpretation?.reviewId ?? crypto.randomUUID();
+      setInterpretation((current) => current ? { ...current, operations: [...current.operations, ...operations], reviewId: current.reviewId ?? reviewId } : {
+        status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.", reviewId,
       });
-      void sharePendingTools({ input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
+      void sharePendingTools({ reviewId, input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
     } finally {
       setBusy(false);
     }

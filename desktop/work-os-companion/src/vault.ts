@@ -4,6 +4,7 @@ import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
+import { mergeConversationTurns } from "./avatarLogic";
 
 export interface WorkOsSettings {
   apiBase: string;
@@ -147,9 +148,15 @@ export const secureState = {
   },
   clearQueryCache: () => isTauri() ? remove("query-cache") : Promise.resolve(),
   conversation: async (scope: string) => isTauri() ? (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [] : [],
-  saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => isTauri()
-    ? set(`conversation:${scope}`, turns.slice(-60))
-    : Promise.resolve(),
+  /** Additive save: merge with what another window already wrote instead of
+   * overwriting it, so a shared review turn can never be clobbered. */
+  saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => {
+    if (!isTauri()) return Promise.resolve();
+    return (async () => {
+      const stored = (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [];
+      await set(`conversation:${scope}`, mergeConversationTurns(stored, turns));
+    })();
+  },
   clearConversation: (scope: string) => isTauri() ? remove(`conversation:${scope}`) : Promise.resolve(),
   /** Latest pending tool review for the scope, shared by the main window and
    * the avatar so cards raised in either surface appear in both. */
