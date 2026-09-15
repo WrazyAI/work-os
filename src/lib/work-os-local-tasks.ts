@@ -82,13 +82,24 @@ async function createLocalTaskRow(access: WorkOsAccess, input: {
   }).select("*").single();
   if (result.error) throw new Error(`create Work OS plan task: ${result.error.message}`);
   const row = result.data as Json;
-  await recordTaskDayEvent(access, row, "creation_observed", {
-    idempotencyKey: `local:created:${String(row.provider_task_id)}`,
-    exactAt: String(row.created_at ?? now),
-    provenance: "employee_explicit",
-    localDate: input.dueDate,
-  });
+  await recordLocalTaskCreationEvent(access, row, input.dueDate, now);
   return row;
+}
+
+/** Day-event attribution is best-effort (idempotent upsert): a missing event
+ * only affects day surfacing, never the task itself, and re-running the flow
+ * heals it. */
+async function recordLocalTaskCreationEvent(access: WorkOsAccess, task: Json, dueDate: string, exactAt: string) {
+  try {
+    await recordTaskDayEvent(access, task, "creation_observed", {
+      idempotencyKey: `local:created:${String(task.provider_task_id)}`,
+      exactAt,
+      provenance: "employee_explicit",
+      localDate: dueDate,
+    });
+  } catch (error) {
+    console.error("[plan-materialize] day event failed:", error instanceof Error ? error.message : error);
+  }
 }
 
 async function loadTaskById(access: WorkOsAccess, taskId: string) {
@@ -130,6 +141,9 @@ export async function materializePlanLocalTasks(
             marker,
           });
           summary.tasks += 1;
+        } else {
+          // Heal attribution for a task created before an earlier day-event write failed.
+          await recordLocalTaskCreationEvent(access, parent, planDate, new Date().toISOString());
         }
         if (entry.itemId) {
           const link = await db().from("work_daily_plan_items")
