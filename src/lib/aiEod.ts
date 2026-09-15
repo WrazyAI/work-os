@@ -319,8 +319,8 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
     return [String(row.id), at];
   }));
   const ids = [...occurredBy.keys()];
-  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
-  const rows = await supabase.from("work_screenshot_summaries").select("summary,visible_context,confidence,processing_status,evidence_event_id")
+  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+  const rows = await supabase.from("work_screenshot_summaries").select("id,summary,visible_context,confidence,processing_status,evidence_event_id")
     .in("evidence_event_id", ids);
   if (rows.error) throw new Error(`load screenshot summaries: ${rows.error.message}`);
   const summaries = (rows.data ?? []) as Array<Record<string, any>>;
@@ -336,6 +336,7 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
     .map((row) => {
       const visible = row.visible_context as { visibleApp?: unknown } | null;
       return {
+        summaryId: String(row.id),
         capturedAt: occurredBy.get(String(row.evidence_event_id)) ?? "",
         summary: String(row.summary ?? ""),
         visibleApp: visible && visible.visibleApp != null ? String(visible.visibleApp) : null,
