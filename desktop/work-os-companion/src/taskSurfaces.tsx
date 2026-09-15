@@ -10,6 +10,8 @@ import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
 import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
+import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
+import type { EodScreenshotGallery } from "./types";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 
@@ -303,11 +305,12 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
-export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "today", suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotSyncUnavailable = false, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
+export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "today", suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
   reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; suggestedBottleneck: string | null;
-  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
+  const hasGalleryFrames = (screenshotGallery?.viewable.length ?? 0) > 0 || (screenshotGallery?.processed ?? 0) > 0;
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
   const [feedback, setFeedback] = useState("");
@@ -399,7 +402,7 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
       <small>{source === "ai" ? `Drafted by the assistant from ${dayReference} record — review every line before submitting.` : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : `Standard draft from ${dayReference} record.`} Report id {reportId.slice(0, 8)}…</small></div></div>
       <div className="eod-composer-actions">{onRefresh && <button disabled={busy || redrafting} onClick={onRefresh}>Refresh from record</button>}<button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button></div>
     </header>
-    {source === "ai" && screenshotContext && <details className="eod-screenshot-context"><summary>{screenshotContext.processed} screenshot sample{ screenshotContext.processed === 1 ? "" : "s" } analyzed for this day</summary><div className="eod-screenshot-body"><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p>{screenshotContext.observations.length > 0 && <ul>{screenshotContext.observations.map((item, index) => <li key={`${item.capturedAt}:${index}`}><time>{item.capturedAt.slice(11, 16) || "—"}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></li>)}</ul>}{(screenshotContext.excluded > 0 || screenshotContext.failed > 0) && <small>{screenshotContext.excluded} excluded by privacy policy · {screenshotContext.failed} unavailable</small>}</div></details>}
+    {(hasGalleryFrames || (source === "ai" && screenshotContext)) && <details className="eod-screenshot-context" open={false}><summary>{(screenshotGallery?.processed ?? screenshotContext?.processed ?? 0)} screenshot sample{(screenshotGallery?.processed ?? screenshotContext?.processed ?? 0) === 1 ? "" : "s"} analyzed for this day</summary><div className="eod-screenshot-body"><p>Sampled activity context only. It does not prove task completion, effort, or output quality.</p><EodScreenshotPanel context={source === "ai" ? screenshotContext : null} gallery={screenshotGallery} resolveSrc={screenshotResolveSrc} /></div></details>}
     {source === "ai" && screenshotSyncUnavailable && <p className="eod-screenshot-unavailable" role="status">Screenshot context was unavailable for this draft. It uses {dayReference} recorded work only.</p>}
     <section className="eod-report" aria-label="Report draft">
       <div className="eod-report-head">

@@ -11,7 +11,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { DailyPlan, DayData, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { DailyPlan, DayData, EodScreenshotGallery, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -150,5 +150,15 @@ export function useOutstandingEodsQuery(options: { enabled: boolean }) {
     enabled: options.enabled,
     staleTime: DAY_DETAILS_STALE_MS,
     queryFn: () => apiRequest<OutstandingEodsData>("/api/work-os/me/eod/outstanding?days=14"),
+  });
+}
+
+/** Viewable screenshot frames for one day, used by the EOD composer gallery. */
+export function useEodScreenshotsQuery(options: { enabled: boolean; date: string | null }) {
+  return useQuery({
+    queryKey: workOsKeys.eodScreenshots(options.date ?? "none"),
+    enabled: options.enabled && !!options.date,
+    staleTime: DAY_DETAILS_STALE_MS,
+    queryFn: () => apiRequest<EodScreenshotGallery>(`/api/work-os/me/eod/screenshots?date=${encodeURIComponent(options.date!)}`),
   });
 }
