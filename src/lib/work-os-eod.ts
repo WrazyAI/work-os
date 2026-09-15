@@ -77,6 +77,17 @@ function limitedSection(items: Array<Record<string, any>>): Json[] {
     : items;
 }
 
+/** One report line per item: evidence keeps its neutral summary so screenshot
+ * observations are readable in the deterministic draft, not just their title. */
+export function eodLineItems(items: Json[], empty: string): string[] {
+  if (!items.length) return [`- ${empty}`];
+  return items.map((item) => {
+    const title = text(item.title) ?? text((item.task_snapshot as Json | undefined)?.title) ?? text(item.input_text) ?? "Recorded item";
+    const summary = text(item.summary);
+    return summary && summary !== title ? `- ${title} — ${summary.slice(0, 240)}` : `- ${title}`;
+  });
+}
+
 async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
   const [workspace, personResult, evidenceRows, checkInsResult, eventsResult] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
@@ -105,7 +116,6 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
   const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
   const title = `EOD Report: ${personResult.data.display_name} - ${reportDate}`;
-  const lineItems = (items: Json[], empty: string) => items.length ? items.map((item) => `- ${item.title ?? (item.task_snapshot as Json | undefined)?.title ?? item.input_text}`) : [`- ${empty}`];
   const markdown = [
     `# ${title}`,
     "",
@@ -115,25 +125,25 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     workspace.sessionQuality.status === "needs_correction" ? `Session quality: ${workspace.sessionQuality.message}` : "Session quality: valid or not applicable",
     "",
     "## Completed Work",
-    ...lineItems(limitedSection(completed), "No tasks were completed on this date."),
+    ...eodLineItems(limitedSection(completed), "No tasks were completed on this date."),
     "",
     "## Progressed Work",
-    ...lineItems(progressed, "No substantive progress updates were recorded."),
+    ...eodLineItems(progressed, "No substantive progress updates were recorded."),
     "",
     "## Deferred Work",
-    ...lineItems(limitedSection(deferred), "No work was explicitly deferred."),
+    ...eodLineItems(limitedSection(deferred), "No work was explicitly deferred."),
     "",
     "## Carried Work",
-    ...lineItems(limitedSection(carried), "Nothing carries over from this day."),
+    ...eodLineItems(limitedSection(carried), "Nothing carries over from this day."),
     "",
     "## Unplanned Work",
-    ...lineItems(limitedSection(unplanned), "No unplanned task creation was observed."),
+    ...eodLineItems(limitedSection(unplanned), "No unplanned task creation was observed."),
     "",
     "## Output Evidence",
-    ...lineItems(outputEvidence, "No output evidence was recorded."),
+    ...eodLineItems(outputEvidence, "No output evidence was recorded."),
     "",
     "## Activity Context",
-    ...lineItems(activityEvidence, "No Worktivity activity context was recorded."),
+    ...eodLineItems(activityEvidence, "No Worktivity activity context was recorded."),
     "",
     "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
   ].join("\n");

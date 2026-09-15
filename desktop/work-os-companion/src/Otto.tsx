@@ -1,12 +1,15 @@
 import type { CSSProperties } from "react";
 
 export type OttoPose = "idle" | "sleep" | "focus" | "alert" | "rest" | "think" | "celebrate" | "recover";
+export type OttoTone = "signal" | "late";
 
 /** Otto — the Work OS focus robot. One rounded body, one signal-green visor,
  * a lamp antenna, hover hands, and a pose per real workday state.
- * The SVG is intentionally small so the silhouette survives favicon sizes. */
-export function Otto({ pose = "idle", className = "", style }: { pose?: OttoPose; className?: string; style?: CSSProperties }) {
-  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} style={style} viewBox="0 0 96 96" role="img" aria-label={`Otto, the Work OS companion, ${pose}`}>
+ * The SVG is intentionally small so the silhouette survives favicon sizes.
+ * `tone="late"` is the one documented palette exception: the signal accents
+ * render danger red until a late-start reason is recorded (design.md §8). */
+export function Otto({ pose = "idle", tone = "signal", className = "", style }: { pose?: OttoPose; tone?: OttoTone; className?: string; style?: CSSProperties }) {
+  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} data-tone={tone} style={style} viewBox="0 0 96 96" role="img" aria-label={`Otto, the Work OS companion, ${tone === "late" ? "late start needs a reason" : pose}`}>
     <ellipse className="otto-shadow" cx="48" cy="87" rx="23" ry="4.5" />
     <g className="otto-figure">
       <path className="otto-antenna" d="M48 31V20" />
@@ -34,5 +37,9 @@ export function Otto({ pose = "idle", className = "", style }: { pose?: OttoPose
       <path d="m78 26 1.3 3.5L83 31l-3.7 1.3L78 36l-1.3-3.7L73 31l3.7-1.3Z" />
     </g>}
     {pose === "recover" && <path className="otto-concern" d="M74 28h6M77 23v10" />}
+    {tone === "late" && <g className="otto-late-mark">
+      <circle cx="77" cy="27" r="6" />
+      <path d="M77 23.5V27l2.4 1.6" />
+    </g>}
   </svg>;
 }

@@ -316,4 +316,31 @@ const planItemsModule = read("src/planItems.ts");
 assert.match(planItemsModule, /export function buildPlanItemsFromInterpretation/);
 assert.match(planItemsModule, /item_kind: "outcome"/);
 
+// ── Late-start reason: red Otto until the reason is recorded ──
+const otto = read("src/Otto.tsx");
+assert.match(otto, /export type OttoTone = "signal" \| "late";/);
+assert.match(otto, /data-tone=\{tone\}/);
+assert.match(otto, /late start needs a reason/);
+assert.match(otto, /className="otto-late-mark"/);
+const ottoStyles = read("src/otto.css");
+assert.match(ottoStyles, /\.otto\[data-tone="late"\]/);
+assert.match(ottoStyles, /\.otto-late-mark/);
+
+assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/);
+assert.match(avatar, /const petTone = facts\.lateReasonRequired \? "late" : "signal";/);
+assert.match(avatar, /<Otto pose=\{petPose\} tone=\{petTone\} className="avatar-pet" \/>/);
+assert.match(avatar, /Late start — add a reason/);
+
+assert.match(app, /const lateReasonMissing = lateReasonRequired\(visibleDay\?\.session\);/);
+assert.match(app, /className="late-attention-pill"/);
+assert.match(app, /async function saveLateReason\(reason: string\)/);
+assert.match(app, /sendOrQueue\("\/api\/work-os\/me\/workday", "PATCH", \{ action: "late_reason", reason \}\)/);
+assert.match(app, /late_reason: confirmation\.reason\.trim\(\) \|\| undefined/);
+assert.match(app, /lateReasonRequired=\{lateReasonMissing\} onSaveLateReason=\{saveLateReason\}/);
+assert.match(planner, /planning-late-reason/);
+assert.match(planner, /Late-start reason recorded/);
+const lateHelper = read("src/lateStart.ts");
+assert.match(lateHelper, /export function lateReasonRequired/);
+assert.match(lateHelper, /PROLONGED_ABSENCE_MINUTES = 30/);
+
 console.log("Work OS desktop static checks passed.");

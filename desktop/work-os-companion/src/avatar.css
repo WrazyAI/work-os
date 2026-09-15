@@ -106,6 +106,7 @@ body.avatar-window {
 .avatar-orb.off .ring-fill { stroke: #5a5d55; }
 .avatar-orb.paused .ring-fill { stroke: #d9a441; }
 .avatar-orb.due .ring-fill { stroke: #ff9d5c; }
+.avatar-orb.late .ring-fill { stroke: #e2604f; }
 
 .avatar-pet { position: relative; z-index: 1; width: 86px; height: 86px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
 .avatar-pet .pet-body, .avatar-pet .pet-ear { fill: #344b36; stroke: #d6f4b8; stroke-width: 2.2; stroke-linejoin: round; }
@@ -644,6 +645,7 @@ body.avatar-window {
 .avatar-live-dot.is-live { background: #67aa31; box-shadow: 0 0 0 3px rgba(103, 170, 49, .13); }
 .avatar-live-dot.is-paused { background: #d99216; box-shadow: 0 0 0 3px rgba(217, 146, 22, .13); }
 .avatar-live-dot.is-due { background: #d65a4c; box-shadow: 0 0 0 3px rgba(214, 90, 76, .12); }
+.avatar-live-dot.is-late { background: #d4493f; box-shadow: 0 0 0 3px rgba(212, 73, 63, .16); }
 .avatar-head-actions { gap: 1px; }
 .avatar-close,
 .avatar-clear,

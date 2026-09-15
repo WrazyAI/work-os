@@ -29,4 +29,14 @@ describe("Otto, the Work OS companion", () => {
     expect(sleeping).toContain("otto-line");
     expect(sleeping).not.toContain("otto-eye");
   });
+
+  it("carries the late tone with a clock mark and an accessible label", () => {
+    const late = renderToStaticMarkup(createElement(Otto, { pose: "focus", tone: "late" }));
+    expect(late).toContain('data-tone="late"');
+    expect(late).toContain("otto-late-mark");
+    expect(late).toContain("late start needs a reason");
+    const signal = renderToStaticMarkup(createElement(Otto, { pose: "focus" }));
+    expect(signal).toContain('data-tone="signal"');
+    expect(signal).not.toContain("otto-late-mark");
+  });
 });

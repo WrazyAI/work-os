@@ -91,6 +91,30 @@
   stroke-linecap: round;
 }
 
+/* Late-start tone (design.md §8): the documented palette exception. The
+ * signal accents carry the danger red until the reason is recorded; the ink,
+ * paper, and visor keep the silhouette readable. */
+.otto[data-tone="late"] {
+  --otto-signal: #d4493f;
+}
+
+/* The floating orb sits on a dark face — brighten the red there. */
+.avatar-pet.otto[data-tone="late"] {
+  --otto-signal: #e2604f;
+}
+
+.otto-late-mark {
+  fill: none;
+  stroke: #d4493f;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.avatar-pet.otto[data-tone="late"] .otto-late-mark {
+  stroke: #e2604f;
+}
+
 .otto-figure {
   transform-origin: 48px 80px;
 }

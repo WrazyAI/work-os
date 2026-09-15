@@ -8,6 +8,9 @@ export interface WorkSession {
   clocked_in_at: string | null;
   clocked_out_at: string | null;
   paused_seconds: number;
+  late_acknowledged_at?: string | null;
+  late_reason?: string | null;
+  late_reason_provided_at?: string | null;
   provider_break_seconds?: number;
   provider_break_observed_at?: string | null;
   provider_break_provenance?: Record<string, unknown> | null;

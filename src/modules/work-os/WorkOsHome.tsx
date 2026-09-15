@@ -7,6 +7,7 @@ import { todayIso } from "@/lib/work-os-dates";
 import {
   AlertCircle,
   BriefcaseBusiness,
+  Camera,
   CheckCircle2,
   ClipboardList,
   FileSearch,
@@ -138,6 +139,12 @@ export default function WorkOsHome() {
   const [scheduleBreakStart, setScheduleBreakStart] = useState("");
   const [scheduleBreakEnd, setScheduleBreakEnd] = useState("");
   const [scheduleDays, setScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [screenshotEnabled, setScreenshotEnabled] = useState(true);
+  const [screenshotInterval, setScreenshotInterval] = useState("60");
+  const [screenshotWindowStart, setScreenshotWindowStart] = useState("");
+  const [screenshotWindowEnd, setScreenshotWindowEnd] = useState("");
+  const [screenshotEodLead, setScreenshotEodLead] = useState("30");
+  const scheduleHydratedFor = useRef<string | null>(null);
   const [exceptionDate, setExceptionDate] = useState(todayIso());
   const [exceptionKind, setExceptionKind] = useState("leave");
   const [exceptionStart, setExceptionStart] = useState("09:00");
@@ -196,6 +203,24 @@ export default function WorkOsHome() {
     queryFn: () => fetchJson(`/api/work-os/schedules${personId ? `?personId=${personId}` : ""}`),
     enabled: schemaReady && tab === "schedules",
   });
+  useEffect(() => {
+    if (!personId || !schedules.data || scheduleHydratedFor.current === personId) return;
+    const latest = (schedules.data.schedules ?? []).find((row: AnyRow) => String(row.person_id) === personId);
+    if (!latest) return;
+    scheduleHydratedFor.current = personId;
+    setScheduleTimezone(String(latest.timezone ?? "UTC"));
+    setScheduleStart(String(latest.shift_start ?? "09:00").slice(0, 5));
+    setScheduleEnd(String(latest.shift_end ?? "17:00").slice(0, 5));
+    setScheduleDays(Array.isArray(latest.days_of_week) ? latest.days_of_week.map(Number) : [1, 2, 3, 4, 5]);
+    const firstBreak = Array.isArray(latest.break_windows) ? latest.break_windows[0] : null;
+    setScheduleBreakStart(firstBreak?.start ? String(firstBreak.start).slice(0, 5) : "");
+    setScheduleBreakEnd(firstBreak?.end ? String(firstBreak.end).slice(0, 5) : "");
+    setScreenshotEnabled(latest.screenshot_analysis_enabled !== false);
+    setScreenshotInterval(String(latest.screenshot_analysis_interval_minutes ?? 60));
+    setScreenshotWindowStart(latest.screenshot_analysis_start ? String(latest.screenshot_analysis_start).slice(0, 5) : "");
+    setScreenshotWindowEnd(latest.screenshot_analysis_end ? String(latest.screenshot_analysis_end).slice(0, 5) : "");
+    setScreenshotEodLead(String(latest.screenshot_analysis_eod_lead_minutes ?? 30));
+  }, [personId, schedules.data]);
   const organization = useQuery<{ organization: AnyRow; memberships: AnyRow[]; teams: AnyRow[]; teamMembers: AnyRow[] }>({
     queryKey: ["work-os", "organization"],
     queryFn: () => fetchJson("/api/work-os/organization"),
@@ -259,7 +284,7 @@ export default function WorkOsHome() {
   const saveSchedule = useMutation({
     mutationFn: () => fetchJson("/api/work-os/schedules", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: authoritativeBreaks ? [] : scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [] }),
+      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: authoritativeBreaks ? [] : scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [], screenshot_analysis_enabled: screenshotEnabled, screenshot_analysis_interval_minutes: Number(screenshotInterval) || 60, screenshot_analysis_start: screenshotWindowStart || null, screenshot_analysis_end: screenshotWindowEnd || null, screenshot_analysis_eod_lead_minutes: Number(screenshotEodLead) || 0 }),
     }),
     onSuccess: refresh,
   });
@@ -623,6 +648,18 @@ export default function WorkOsHome() {
                 {saveSchedule.error ? <div className="mt-3"><Notice tone="err">{(saveSchedule.error as Error).message}</Notice></div> : null}
               </Card>
               <Card>
+                <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Camera size={15} style={{ color: "var(--accent)" }} /> Screenshot analysis</h2>
+                <p className="mb-4 text-[12px] leading-5 text-[var(--text-secondary)]">Runs the Worktivity screenshot analysis on this schedule — hourly during the shift, then a final pass before the day ends (or right after an early clock-out). Observations are neutral activity context only; they never prove productivity or task completion.</p>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]" style={{ borderColor: "var(--border)" }}><input type="checkbox" checked={screenshotEnabled} onChange={(event) => setScreenshotEnabled(event.target.checked)} /> Enabled</label>
+                  <Field label="Every (minutes)"><input type="number" min={15} max={240} value={screenshotInterval} onChange={(event) => setScreenshotInterval(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="Window start (optional)"><input type="time" value={screenshotWindowStart} onChange={(event) => setScreenshotWindowStart(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="Window end (optional)"><input type="time" value={screenshotWindowEnd} onChange={(event) => setScreenshotWindowEnd(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="End-of-day lead (minutes)"><input type="number" min={0} max={180} value={screenshotEodLead} onChange={(event) => setScreenshotEodLead(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                </div>
+                <p className="mt-3 text-[11px] text-[var(--text-tertiary)]">Saved with the recurring schedule above. Leave the window empty to use the shift itself.</p>
+              </Card>
+              <Card>
                 <h2 className="mb-4 text-sm font-semibold">Schedule exception</h2>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   <Field label="Date"><input type="date" value={exceptionDate} onChange={(event) => setExceptionDate(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
@@ -642,6 +679,7 @@ export default function WorkOsHome() {
                       <div><p className="font-semibold text-[var(--text-primary)]">{schedule.person?.display_name}</p><p className="text-[var(--text-tertiary)]">{schedule.timezone}</p></div>
                       <p className="text-[var(--text-secondary)]">{String(schedule.shift_start).slice(0, 5)} - {String(schedule.shift_end).slice(0, 5)}</p>
                       <p className="text-[var(--text-tertiary)]">{(schedule.days_of_week ?? []).map((day: number) => ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][day]).join(" ")}</p>
+                      <p className="text-[var(--text-tertiary)]">{schedule.screenshot_analysis_enabled === false ? "Screenshot analysis off" : `Screenshots every ${schedule.screenshot_analysis_interval_minutes ?? 60}m · EOD lead ${schedule.screenshot_analysis_eod_lead_minutes ?? 30}m`}</p>
                     </div>
                   ))}
                   {!schedules.data?.schedules?.length ? <p className="py-3 text-[12px] text-[var(--text-tertiary)]">No schedules configured for this selection.</p> : null}
