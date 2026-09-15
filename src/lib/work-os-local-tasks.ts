@@ -151,7 +151,8 @@ export async function materializePlanLocalTasks(
       const existing = parents.get(String(parent.id));
       if (existing) existing.criteria.push(...criteria);
       else parents.set(String(parent.id), { row: parent, criteria });
-    } catch {
+    } catch (error) {
+      console.error("[plan-materialize] goal failed:", error instanceof Error ? error.message : error);
       summary.failed += 1;
     }
   }
@@ -171,7 +172,8 @@ export async function materializePlanLocalTasks(
           });
           summary.subtasks += 1;
         }
-      } catch {
+      } catch (error) {
+        console.error("[plan-materialize] subtask failed:", error instanceof Error ? error.message : error);
         summary.failed += 1;
       }
     }
