@@ -29,7 +29,10 @@ const defaultApiBase = import.meta.env.VITE_WORK_OS_API_URL || "https://app.wraz
 
 function httpsOrigin(value: string) {
   const url = new URL(value);
-  if (url.protocol !== "https:") throw new Error("Use the HTTPS WrazyOS URL.");
+  // Dev-fixture loopback (see browserSession): the dev proxy makes API calls
+  // same-origin, so the packaged HTTPS rule does not apply to the dev server.
+  const devLoopback = import.meta.env.DEV && (url.hostname === "127.0.0.1" || url.hostname === "localhost");
+  if (url.protocol !== "https:" && !devLoopback) throw new Error("Use the HTTPS WrazyOS URL.");
   return url.origin;
 }
 
@@ -71,9 +74,30 @@ async function remove(key: string) {
   await stronghold.save();
 }
 
+/** Dev-fixture only (mirrors the ?preview-* bootstrap): a dev server URL with
+ * ?token=<desktop session token> boots the browser build signed in, so E2E
+ * suites can exercise the real planner against the real API. Never active in
+ * the packaged app, and the token is never persisted. The organization id is
+ * resolved from the API because every request carries it. */
+let browserSessionCache: DesktopSession | null = null;
+async function browserSession(): Promise<DesktopSession | null> {
+  if (!import.meta.env.DEV) return null;
+  if (browserSessionCache) return browserSessionCache;
+  const token = new URLSearchParams(window.location.search).get("token");
+  if (!token) return null;
+  const apiBase = defaultApiBase;
+  const response = await fetch(`${apiBase.replace(/\/$/, "")}/api/work-os/me/day?compact=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => null);
+  if (!response || !response.ok) return null;
+  const access = (await response.json().catch(() => null)) as { access?: { organizationId?: string } } | null;
+  browserSessionCache = { token, expiresAt: new Date(Date.now() + 24 * 3_600_000).toISOString(), organizationId: access?.access?.organizationId ?? "browser-test", apiBase };
+  return browserSessionCache;
+}
+
 export const secureState = {
   session: async () => {
-    if (!isTauri()) return null;
+    if (!isTauri()) return browserSession();
     const session = await get<DesktopSession>("session");
     if (!session) return null;
     try { return { ...session, apiBase: httpsOrigin(session.apiBase) }; }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
-import { emit, listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "./tauriEvents";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Minus, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
@@ -125,7 +125,12 @@ function fireNotification(nudge: CompanionNudge, permission: boolean): void {
 }
 
 export default function AvatarApp(): React.ReactElement {
-  const win = useMemo(() => getCurrentWindow(), []);
+  // Browser dev fixture (?window=avatar&token=…): there is no native window to
+  // position, so window-management calls stay no-ops instead of crashing.
+  const win = useMemo(() => {
+    try { return isTauri() ? getCurrentWindow() : null; }
+    catch { return null; }
+  }, []);
   const [expanded, setExpanded] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [facts, setFacts] = useState<DayFacts>({
@@ -187,8 +192,8 @@ export default function AvatarApp(): React.ReactElement {
       notificationPermission.current = await requestNotificationPermissionOnce();
       try {
         const saved = readJson<{ x?: number; y?: number }>(POSITION_KEY, {});
-        const monitor = await currentMonitor();
-        if (monitor && typeof saved.x === "number" && typeof saved.y === "number") {
+        const monitor = win ? await currentMonitor() : null;
+        if (win && monitor && typeof saved.x === "number" && typeof saved.y === "number") {
           const x = Math.max(0, Math.min(monitor.size.width - AVATAR_COLLAPSED.width, saved.x));
           const y = Math.max(0, Math.min(monitor.size.height - AVATAR_COLLAPSED.height, saved.y));
           await win.setPosition(new LogicalPosition(x, y));
@@ -411,7 +416,7 @@ export default function AvatarApp(): React.ReactElement {
             if (!current) void toggleExpanded(true);
             return true;
           });
-          win.setFocus().catch(() => { /* best effort */ });
+          if (win) win.setFocus().catch(() => { /* best effort */ });
           void loadDay();
         }).catch(() => undefined).finally(() => deliveryKeys.current.delete(nudge.key));
         continue;
@@ -449,6 +454,7 @@ export default function AvatarApp(): React.ReactElement {
     const size = open ? AVATAR_EXPANDED : AVATAR_COLLAPSED;
     // Resize first, on its own: a monitor/position failure must never leave the
     // window stuck at the wrong size (which kept the companion from collapsing).
+    if (!win) return;
     try {
       await win.setSize(new LogicalSize(size.width, size.height));
     } catch { /* sizing is cosmetic */ }
@@ -479,6 +485,7 @@ export default function AvatarApp(): React.ReactElement {
 
   // ── Persist position after drags settle ──
   useEffect(() => {
+    if (!win) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unlisten = win.onMoved(() => {
       if (expanded) return;

@@ -13,7 +13,17 @@ export default defineConfig({
   // from @tailwindcss/vite, not PostCSS.
   css: { postcss: { plugins: [] } },
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
+  server: {
+    port: 1420,
+    strictPort: true,
+    // Dev-fixture only (mirrors the ?preview-* bootstrap): when the browser
+    // build runs against the deployed Work OS API through ?token=, the API
+    // base is this dev server itself, and /api is proxied so browser E2E
+    // suites stay same-origin (the API sends no CORS headers by design).
+    proxy: process.env.VITE_WORK_OS_API_PROXY
+      ? { "/api": { target: process.env.VITE_WORK_OS_API_PROXY, changeOrigin: true, secure: true } }
+      : undefined,
+  },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
     target: "chrome105",
