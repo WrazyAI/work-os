@@ -29,6 +29,23 @@ function ident(name: string): string {
   return `"${name}"`;
 }
 
+const JSON_PATH = /^[A-Za-z_][A-Za-z0-9_]*(?:->>?[A-Za-z_][A-Za-z0-9_]*)+$/;
+
+// PostgREST-style JSON path filters (for example `launch->>campaign_id`) are
+// used by the SEO OS call sites. Compile each validated segment into quoted SQL
+// so the expression stays injection-safe (keys are validated identifiers).
+function columnRef(name: string): string {
+  if (IDENT.test(name)) return `"${name}"`;
+  if (!JSON_PATH.test(name)) throw new Error(`invalid identifier: ${name}`);
+  const operators = name.match(/->>|->/g) ?? [];
+  const segments = name.split(/->>|->/);
+  let sql = `"${segments[0]}"`;
+  operators.forEach((operator, index) => {
+    sql += `${operator}'${segments[index + 1]}'`;
+  });
+  return sql;
+}
+
 type Filter = { kind: "op"; col: string; op: string; val: unknown; negate?: boolean } | { kind: "or"; raw: string };
 
 type EmbedSpec = {
@@ -216,7 +233,7 @@ export class PostgrestQuery {
         clauses.push(`(${parseOrSpec(f.raw, params)})`);
         continue;
       }
-      const colSql = ident(f.col);
+      const colSql = columnRef(f.col);
       const op = f.op;
       const negate = f.negate === true;
       let clause: string;
