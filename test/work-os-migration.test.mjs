@@ -36,6 +36,7 @@ const migrations = [
     "neon/migrations/0035_ai_plan_build_confirmation_gate.sql",
     "neon/migrations/0036_work_os_query_indexes.sql",
     "neon/migrations/0038_work_reports_daily_eod_unique.sql",
+    "neon/migrations/0039_work_screenshot_schedule.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -74,6 +75,12 @@ test("Work OS companion migration is complete and idempotent", async () => {
   assert.equal(exactCompletionIndex.rows.length, 1);
   const dailyEodIndex = await db.query(`select indexname from pg_indexes where schemaname='public' and indexname='work_reports_daily_eod_uidx'`);
   assert.equal(dailyEodIndex.rows.length, 1);
+  const screenshotScheduleColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_schedules'
+      and column_name = any($1)
+  `, [["screenshot_analysis_enabled", "screenshot_analysis_interval_minutes", "screenshot_analysis_start", "screenshot_analysis_end", "screenshot_analysis_eod_lead_minutes"]]);
+  assert.equal(screenshotScheduleColumns.rows.length, 5);
 
   const policies = await db.query(`
     select count(*)::int as count from pg_policies where schemaname='public'

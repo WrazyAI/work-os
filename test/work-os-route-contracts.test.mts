@@ -34,6 +34,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(eodService, /selectDayEodWork/);
   assert.doesNotMatch(eodService, /workspace\.carryOverGroups/);
   assert.match(eodService, /No tasks were completed on this date/);
+  const scheduledShots = await source("src/app/api/work-os/evidence/screenshots/run-scheduled/route.ts");
+  assert.match(scheduledShots, /runScheduledScreenshotAnalysis/);
+  assert.match(scheduledShots, /CRON_SECRET/);
+  assert.match(await source("src/lib/work-os-screenshots.ts"), /export function screenshotRunMode/);
+  assert.match(await source("src/lib/work-os-screenshots.ts"), /terminallyAnalyzedFrames/);
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
   const nifty = await source("src/lib/integrations/nifty.ts");
   const workOs = await source("src/lib/work-os-tasks.ts");

@@ -7,6 +7,7 @@ import { todayIso } from "@/lib/work-os-dates";
 import {
   AlertCircle,
   BriefcaseBusiness,
+  Camera,
   CheckCircle2,
   ClipboardList,
   FileSearch,
@@ -647,6 +648,18 @@ export default function WorkOsHome() {
                 {saveSchedule.error ? <div className="mt-3"><Notice tone="err">{(saveSchedule.error as Error).message}</Notice></div> : null}
               </Card>
               <Card>
+                <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Camera size={15} style={{ color: "var(--accent)" }} /> Screenshot analysis</h2>
+                <p className="mb-4 text-[12px] leading-5 text-[var(--text-secondary)]">Runs the Worktivity screenshot analysis on this schedule — hourly during the shift, then a final pass before the day ends (or right after an early clock-out). Observations are neutral activity context only; they never prove productivity or task completion.</p>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <label className="flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-secondary)]" style={{ borderColor: "var(--border)" }}><input type="checkbox" checked={screenshotEnabled} onChange={(event) => setScreenshotEnabled(event.target.checked)} /> Enabled</label>
+                  <Field label="Every (minutes)"><input type="number" min={15} max={240} value={screenshotInterval} onChange={(event) => setScreenshotInterval(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="Window start (optional)"><input type="time" value={screenshotWindowStart} onChange={(event) => setScreenshotWindowStart(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="Window end (optional)"><input type="time" value={screenshotWindowEnd} onChange={(event) => setScreenshotWindowEnd(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                  <Field label="End-of-day lead (minutes)"><input type="number" min={0} max={180} value={screenshotEodLead} onChange={(event) => setScreenshotEodLead(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
+                </div>
+                <p className="mt-3 text-[11px] text-[var(--text-tertiary)]">Saved with the recurring schedule above. Leave the window empty to use the shift itself.</p>
+              </Card>
+              <Card>
                 <h2 className="mb-4 text-sm font-semibold">Schedule exception</h2>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   <Field label="Date"><input type="date" value={exceptionDate} onChange={(event) => setExceptionDate(event.target.value)} className={inputClass} style={{ borderColor: "var(--border)" }} /></Field>
@@ -666,6 +679,7 @@ export default function WorkOsHome() {
                       <div><p className="font-semibold text-[var(--text-primary)]">{schedule.person?.display_name}</p><p className="text-[var(--text-tertiary)]">{schedule.timezone}</p></div>
                       <p className="text-[var(--text-secondary)]">{String(schedule.shift_start).slice(0, 5)} - {String(schedule.shift_end).slice(0, 5)}</p>
                       <p className="text-[var(--text-tertiary)]">{(schedule.days_of_week ?? []).map((day: number) => ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][day]).join(" ")}</p>
+                      <p className="text-[var(--text-tertiary)]">{schedule.screenshot_analysis_enabled === false ? "Screenshot analysis off" : `Screenshots every ${schedule.screenshot_analysis_interval_minutes ?? 60}m · EOD lead ${schedule.screenshot_analysis_eod_lead_minutes ?? 30}m`}</p>
                     </div>
                   ))}
                   {!schedules.data?.schedules?.length ? <p className="py-3 text-[12px] text-[var(--text-tertiary)]">No schedules configured for this selection.</p> : null}
