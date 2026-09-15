@@ -618,13 +618,14 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
       .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", localDate)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     const target = SCHEDULE_AUDIT_TARGET(person.organization_id, person.id, localDate);
-    const audits = await db().from("work_audit_log").select("action,occurred_at")
+    const audits = await db().from("work_audit_log").select("action,created_at")
       .eq("organization_id", person.organization_id).eq("target_type", "workday").eq("target_id", target)
       .in("action", ["screenshot.hourly_completed", "screenshot.eod_completed"])
-      .order("occurred_at", { ascending: false }).limit(50);
-    const auditRows = (audits.data ?? []) as Array<{ action: string; occurred_at: unknown }>;
+      .order("created_at", { ascending: false }).limit(50);
+    if (audits.error) continue; // never re-run a day whose ledger cannot be read
+    const auditRows = (audits.data ?? []) as Array<{ action: string; created_at: unknown }>;
     const eodCompleted = auditRows.some((row) => row.action === "screenshot.eod_completed");
-    const lastHourly = auditRows.find((row) => row.action === "screenshot.hourly_completed")?.occurred_at;
+    const lastHourly = auditRows.find((row) => row.action === "screenshot.hourly_completed")?.created_at;
     const mode = screenshotRunMode({
       now, timezone, shiftStart, shiftEnd,
       intervalMinutes: schedule.screenshot_analysis_interval_minutes,
