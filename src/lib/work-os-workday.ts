@@ -822,7 +822,15 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
           };
         })
         .filter((entry) => entry.title);
-      if (entries.length) taskCreation = await materializePlanLocalTasks(access, String(plan.id), shiftDate, entries);
+      if (entries.length) {
+        try {
+          taskCreation = await materializePlanLocalTasks(access, String(plan.id), shiftDate, entries);
+        } catch {
+          // Materialization is best-effort: a creation failure must never undo
+          // a confirmed plan. Unlinked items retry on the next confirm.
+          taskCreation = { tasks: 0, subtasks: 0, failed: entries.length, created: [] };
+        }
+      }
     }
   }
   const savedPlan = await loadPlanByDate(access, shiftDate);
