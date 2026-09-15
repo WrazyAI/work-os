@@ -332,6 +332,12 @@
   background: var(--surface);
 }
 
+.planning-materialize-hint {
+  margin-top: 10px;
+  background: var(--surface);
+  color: var(--text-secondary, var(--muted));
+}
+
 
 .planning-annotation-mark {
   border-radius: 3px;

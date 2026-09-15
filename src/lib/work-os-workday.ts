@@ -9,6 +9,7 @@ import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
+import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -771,6 +772,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
   }
   const result = Array.isArray(mutation) ? mutation[0] : mutation;
   if (!result) throw new Error("save daily plan draft atomically: no mutation result");
+  let taskCreation: PlanTaskMaterialization | null = null;
   if (result.replayed !== true) {
     await auditPlan(access, confirm ? "plan.confirmed" : "plan.draft_saved", String(plan.id), {
       shiftDate, revision: expectedRevision + 1, idempotencyKey,
@@ -806,8 +808,25 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
         },
       );
     }
+    if (confirm && submitted) {
+      const existingById = new Map((Array.isArray(plan.items) ? plan.items as Json[] : []).map((item) => [String(item.id), item]));
+      const entries = preparedItems
+        .map((item) => {
+          const existing = item.id ? existingById.get(String(item.id)) : undefined;
+          return {
+            itemId: value(item.id),
+            title: value(item.title_snapshot) ?? "",
+            objective: value(item.objective),
+            successCriteria: item.success_criteria,
+            linkedTaskId: value(existing?.task_id),
+          };
+        })
+        .filter((entry) => entry.title);
+      if (entries.length) taskCreation = await materializePlanLocalTasks(access, String(plan.id), shiftDate, entries);
+    }
   }
-  return loadPlanByDate(access, shiftDate);
+  const savedPlan = await loadPlanByDate(access, shiftDate);
+  return taskCreation ? { ...savedPlan, taskCreation } : savedPlan;
 }
 
 export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, idempotencyKey: string) {

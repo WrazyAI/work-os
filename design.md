@@ -1871,6 +1871,34 @@ none remain; a local retry notice that keeps cached rows visible when a refresh
 fails; `Back to today` returns to the live day. Observed minutes remain neutral
 activity context, never productivity, and copy avoids guilt framing.
 
+### 29.1d Confirmed SOD commitments become Work OS tasks
+
+Confirming an AI-built day plan materializes it: every commitment that is not
+already linked to a task becomes a Work OS-native task (never a provider call),
+and every success criterion becomes a subtask under its commitment's task —
+including commitments the draft linked to existing tasks. Task fields map
+truthfully: commitment title → task title, objective → task description, and
+each criterion → subtask title (trimmed to the 240-character title limit).
+
+- **Timing.** Materialization happens only on confirm, not on draft saves or
+  build. The plan item is then linked to its task (`item_kind='local_task'`), so
+  re-confirms and refreshes never duplicate work: a linked item is retained, and
+  creation is additionally guarded by plan-scoped content markers.
+- **Failure.** A failed creation is best-effort and audited; the item stays
+  unlinked and retries on the next confirm. When any goal fails, the confirm
+  receipt says how many could not be created instead of claiming success.
+- **Preview.** The plan review shows a truthful one-line preview before confirm:
+  `Confirming creates N Work OS tasks with M subtasks.` When every commitment is
+  linked, it reads `Confirming adds M subtasks to your existing tasks.`
+- **Provenance.** Work OS-native tasks carry a `Work OS` source label in every
+  task surface (details footer, sync chip, delete/edit copy) and never claim a
+  Nifty record; Nifty-mirrored tasks keep their existing Nifty labels and sync
+  chip while the two sources coexist.
+- **Lifecycle.** Complete, edit, archive, delete, and subtask move all write
+  locally for these tasks with no provider call, and completing them never
+  claims a provider confirmation. Planner tasks are due the plan's day and are
+  assigned to the confirming employee.
+
 ### 29.2 Insights
 
 Insights follows summary → comparison → exact record:

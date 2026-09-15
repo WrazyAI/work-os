@@ -709,11 +709,12 @@ export default function AvatarApp(): React.ReactElement {
     review: { rounds: number; answered: number; asked: number; reviewed: boolean },
   ) => {
     setFiling(true);
+    let receiptText = "";
     try {
       if (interpretation) {
         if (!interpretation.buildId) throw new Error("Build the plan again before confirming it.");
         const items = buildPlanItemsFromInterpretation(facts.planItems, interpretation, answers);
-        await apiRequest("/api/work-os/me/plan", {
+        const confirmation = await apiRequest<{ taskCreation?: { tasks?: number; subtasks?: number; failed?: number } }>("/api/work-os/me/plan", {
           method: "PUT",
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({
@@ -733,12 +734,21 @@ export default function AvatarApp(): React.ReactElement {
             items,
           }),
         });
+        const materialized = confirmation?.taskCreation;
+        const createdTasks = materialized?.tasks ?? 0;
+        const createdSubtasks = materialized?.subtasks ?? 0;
+        const materializeCopy = materialized && (createdTasks || createdSubtasks)
+          ? ` Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}.`
+          : materialized?.failed
+            ? ` ${materialized.failed} plan task${materialized.failed === 1 ? "" : "s"} could not be created — they will retry on your next confirm.`
+            : "";
+        receiptText = `${agendaReceipt(review)}${materializeCopy}`;
       } else throw new Error("Planning assistance must build a plan before it can be confirmed.");
       setInput("");
       setAgendaReview(null);
       setChat((current) => [...current, {
         id: `agenda-${Date.now()}`, role: "assistant",
-          text: agendaReceipt(review),
+          text: receiptText,
         receipt: "Agenda confirmed",
       }]);
       await loadDay(true);

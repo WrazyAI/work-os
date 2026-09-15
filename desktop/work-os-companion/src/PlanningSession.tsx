@@ -401,6 +401,16 @@ export function PlanningSession({
             </div>
           </div>
           {deleteArmed && <p className="planning-notice planning-delete-notice" role="status"><Trash2 size={15} /><span>Delete this draft and start over? Click the trash button again to confirm.</span></p>}
+          <p className="planning-status planning-materialize-hint" role="status"><CheckCircle2 size={15} /><span>{(() => {
+            const newGoals = interpretation.commitments.filter((commitment) => !commitment.linkedTaskId).length;
+            const subtasks = interpretation.commitments.reduce((total, commitment) => total + commitment.successCriteria.length, 0);
+            const taskCopy = `${newGoals} Work OS task${newGoals === 1 ? "" : "s"}`;
+            const subtaskCopy = `${subtasks} subtask${subtasks === 1 ? "" : "s"}`;
+            if (newGoals && subtasks) return `Confirming creates ${taskCopy} with ${subtaskCopy}.`;
+            if (newGoals) return `Confirming creates ${taskCopy}.`;
+            if (subtasks) return `Confirming adds ${subtaskCopy} to your existing tasks.`;
+            return "";
+          })()}</span></p>
           {hasDraft && <p className="planning-status planning-feedback-hint" role="status"><Pencil size={15} /><span>{feedbackMode ? "Editing the draft — select text to attach feedback, or keep typing." : "Select text to attach feedback, or switch to Edit to change the wording."}</span></p>}
           {pendingSelection && <SelectionAnnotator quote={pendingSelection.quote} anchor={pendingSelection.rect} value={pendingComment} canSave={pendingValid} disabled={working} autoFocus={!feedbackMode} onChange={(value) => { setPendingComment(value); setFeedbackDirty(true); }} onSave={() => { flushPendingAnnotation(annotations); }} onCancel={() => { setPendingSelection(null); setPendingComment(""); }} />}
           {openAnnotation && (() => {
