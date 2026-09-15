@@ -356,6 +356,33 @@ Convergence procedure:
 5. Never rewrite either repo's history to force a match. Converge content with
    normal commits on each side and record both commit SHAs in the handoff.
 
+### Non-destructive convergence rule (mandatory)
+
+Shared surfaces are maintained **independently in each repository** and
+reconciled by explicit, per-file review. Bulk operations that can delete or
+overwrite the other side's files are prohibited — a work-os-to-agent-os tree
+copy on 2026-09-11 deleted 615 agent-os files from the worktree and replaced
+the root layout, taking the live app's sidebar, tabs, favicon, and metadata
+down with it.
+
+- Never run `rsync --delete`, whole-tree `cp -a`, `git read-tree`, `git clean`,
+  or any bulk sync against either checkout.
+- Never treat "the other repo does not have this file" as a reason to delete
+  it. Files that exist on one side only are repo-unique and must be left alone.
+- Apply convergent changes one file at a time, keep the newest functional
+  version of each (`git diff agentos/main origin/main -- <path>`), and review
+  the resulting diff before committing.
+- **agent-os-authoritative files** must never be replaced by work-os variants:
+  `src/app/layout.tsx` (WrazyOS metadata, self-hosted fonts,
+  ThemeProvider/QueryProvider/ActivityCenterProvider/Shell), `next.config.ts`
+  (turbopack root pin, `proxyClientMaxBodySize`, build `cpus`), `src/proxy.ts`,
+  `scripts/redeploy.sh`, `src/components/**`, and the agent platform routes.
+- **work-os-authoritative files** stay in work-os: its thin standalone
+  `src/app/layout.tsx` and `next.config.mjs` are correct only for the work-os
+  repo and must never shadow or replace the agent-os versions.
+- Guard tests enforce this: `test/agent-os-surface.test.mts` (agent-os) and
+  `test/work-os-surface.test.mts` (work-os). Never delete or weaken them.
+
 Recent shared-feature reconciliations (the pattern to follow):
 
 - **Nifty access recovery** — `src/lib/integrations/nifty.ts` gained the static
