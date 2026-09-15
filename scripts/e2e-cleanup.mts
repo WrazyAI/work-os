@@ -10,7 +10,7 @@ for (const path of [".env.local", ".env"]) {
       if (!process.env[key]) process.env[key] = value;
     }
   } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 }
 const uid = process.argv[2];
