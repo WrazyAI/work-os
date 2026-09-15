@@ -329,3 +329,15 @@ export function mergeAvatarChatEntries(current: AvatarChatEntryState[], incoming
     };
   });
 }
+
+/** Additive conversation merge for the shared window store: incoming turns win
+ * per id, unseen turns are kept, order is by creation time, and the newest 60
+ * survive. Two windows writing their own histories can no longer clobber each
+ * other's turns. */
+export function mergeConversationTurns<T extends { id: string; createdAt?: string }>(stored: readonly T[], incoming: readonly T[]): T[] {
+  const byId = new Map(stored.map((turn) => [turn.id, turn]));
+  for (const turn of incoming) byId.set(turn.id, turn);
+  return [...byId.values()]
+    .sort((left, right) => (Date.parse(left.createdAt ?? "") || 0) - (Date.parse(right.createdAt ?? "") || 0) || left.id.localeCompare(right.id))
+    .slice(-60);
+}

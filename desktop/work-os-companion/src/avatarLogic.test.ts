@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift, mergeAvatarChatEntries, serializeAvatarChatEntry,
+  clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -228,5 +228,38 @@ describe("agenda auto-expand", () => {
 
   it("clears the key once the agenda is no longer due", () => {
     expect(nextAgendaAutoExpand("2026-08-31:draft", false, key)).toEqual({ expand: false, key: null });
+  });
+});
+
+describe("mergeConversationTurns", () => {
+  const turn = (id: string, createdAt: string, text = id) => ({ id, createdAt, text });
+
+  it("keeps a review turn another window wrote instead of overwriting it", () => {
+    const stored = [turn("u-1", "2026-09-15T10:00:00Z"), turn("review-1", "2026-09-15T10:01:00Z", "Review")];
+    const incoming = [turn("u-1", "2026-09-15T10:00:00Z"), turn("shared-note", "2026-09-15T10:02:00Z")];
+    const merged = mergeConversationTurns(stored, incoming);
+    expect(merged.map((entry) => entry.id)).toEqual(["u-1", "review-1", "shared-note"]);
+  });
+
+  it("lets the writer's version win for the same turn id", () => {
+    const merged = mergeConversationTurns(
+      [turn("review-1", "2026-09-15T10:00:00Z", "Old text")],
+      [turn("review-1", "2026-09-15T10:00:00Z", "New text")],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.text).toBe("New text");
+  });
+
+  it("never wipes the shared store when a window saves an empty history (clears use the explicit clear path)", () => {
+    expect(mergeConversationTurns([turn("u-1", "2026-09-15T10:00:00Z")], [])).toEqual([turn("u-1", "2026-09-15T10:00:00Z")]);
+  });
+
+  it("caps the merged history at the newest 60 turns in order", () => {
+    const stored = Array.from({ length: 60 }, (_, index) => turn(`t-${index}`, `2026-09-15T10:${String(index).padStart(2, "0")}:00Z`));
+    const incoming = [turn("t-new", "2026-09-15T11:00:00Z")];
+    const merged = mergeConversationTurns(stored, incoming);
+    expect(merged).toHaveLength(60);
+    expect(merged[merged.length - 1]?.id).toBe("t-new");
+    expect(merged.some((entry) => entry.id === "t-0")).toBe(false);
   });
 });

@@ -380,4 +380,29 @@ const web = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/Em
 assert.match(web, /=== "local" \? "Work OS task" :/);
 assert.match(web, /Permanently delete this task from Work OS\?/);
 
+// ── Approval flow and shared review persistence ──
+const approvalFlow = read("src/ApprovalFlow.tsx");
+assert.match(approvalFlow, /export function settleDecisions/);
+assert.match(approvalFlow, /const settled = settleDecisions\(pending, next\);/);
+assert.match(approvalFlow, /if \(settled\) \{\s*\n\s*setSubmitted\(true\);/);
+assert.doesNotMatch(approvalFlow, /Final review/);
+assert.doesNotMatch(approvalFlow, /Approve & record/);
+assert.doesNotMatch(approvalFlow, /approval-summary/);
+const approvalStyles = read("src/tool-approval-card.css");
+assert.doesNotMatch(approvalStyles, /approval-summary/);
+assert.doesNotMatch(approvalStyles, /approval-decision-dot/);
+
+const vaultSource = read("src/vault.ts");
+assert.match(vaultSource, /import \{ mergeConversationTurns \} from "\.\/avatarLogic";/);
+assert.match(vaultSource, /mergeConversationTurns\(stored, turns\)/);
+const avatarLogic = read("src/avatarLogic.ts");
+assert.match(avatarLogic, /export function mergeConversationTurns<T extends \{ id: string; createdAt\?: string \}>/);
+const interpretationTypes = read("src/interpretation.ts");
+assert.match(interpretationTypes, /reviewId: string;/);
+assert.match(avatar, /const hasThisReview = current\.some\(\(entry\) => entry\.id === shared\.reviewId\);/);
+assert.match(avatar, /id: shared\.reviewId, role: "assistant" as const,/);
+assert.match(app, /reviewId: shared\.reviewId \}/);
+assert.match(app, /const reviewId = crypto\.randomUUID\(\);/);
+assert.doesNotMatch(app, /meta: "shared review"/);
+
 console.log("Work OS desktop static checks passed.");

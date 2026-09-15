@@ -1364,13 +1364,22 @@ never be filed with a placeholder title). An op that somehow lost its task
 reference renders a flagged "no task attached" status instead of an editable
 picker. Technical command details are collapsed by default. Approve and Skip
 only set local decisions and advance to the next action. No provider write
-happens until the final review has no undecided actions and the employee
-activates its single commit button. The final review lists every action and
-decision and allows any row to be reopened. After commit, `ApprovalResults`
-reports Recorded, Queued, Skipped, or Failed per action; a successful process
-exit is never substituted for provider confirmation. Destructive actions name
-the target and use the danger treatment. Keyboard focus and reduced-motion
-behavior follow the shared card rules.
+happens before every action is decided; the moment the last action is decided
+the whole batch is filed in one review — there is no second confirmation step,
+and the per-action Back/Next navigation is the way to revisit a decision before
+the last one. After filing, `ApprovalResults` reports Recorded, Queued,
+Skipped, or Failed per action; a successful process exit is never substituted
+for provider confirmation. Destructive actions name the target and use the
+danger treatment. Keyboard focus and reduced-motion behavior follow the shared
+card rules.
+
+**Shared review identity.** A review raised in either chat window is one turn
+in the shared conversation, keyed by its review id, with the operations and
+results attached. Both windows save conversation turns additively (merged by
+turn id), so one window's save can never drop the other window's review, and
+the floating companion re-adopts an open review from the shared pending-tools
+record on load — a review survives reloads, restarts, and cross-window traffic
+identically in both surfaces.
 
 ### 25.11 Assistant chat panel and prompt bar
 
