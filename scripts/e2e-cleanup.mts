@@ -13,7 +13,11 @@ for (const path of [".env.local", ".env"]) {
     if (error.code !== "ENOENT") throw error;
   }
 }
-const uid = "7b371568-0801-4286-a43d-7ffb76235f48";
+const uid = process.argv[2];
+if (!uid) {
+  console.error("usage: tsx scripts/e2e-cleanup.mts <user-id>");
+  process.exit(1);
+}
 const pg = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await pg.connect();
 await pg.query("delete from work_org_members where user_id=$1", [uid]);
