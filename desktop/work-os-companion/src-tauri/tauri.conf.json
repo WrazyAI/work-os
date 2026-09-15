@@ -69,7 +69,10 @@
     ],
     "windows": {
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
+      }
     }
   },
   "plugins": {
