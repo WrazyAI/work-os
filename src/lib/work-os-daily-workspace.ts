@@ -178,7 +178,7 @@ export async function resolveDailyWorkspace(
     db().from("work_task_day_events").select("*")
       .eq("organization_id", access.organizationId).eq("local_date", date)
       .order("observed_at", { ascending: true }).order("id", { ascending: true }),
-    db().from("work_daily_plans").select("id,freeform_intent,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
+    db().from("work_daily_plans").select("id,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
       .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
       .eq("shift_date", date).maybeSingle(),
     db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,correction_status,correction_reason")
