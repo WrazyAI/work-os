@@ -22,7 +22,10 @@ const BUCKET = "work-os-screenshots";
 const MODEL = process.env.WORK_OS_SCREENSHOT_MODEL || process.env.WORK_OS_INTERPRET_MODEL || "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const PROMPT_VERSION = "work-os-neutral-screenshot-v2";
-const MAX_SCREENSHOTS_PER_DAY = 12;
+const DEFAULT_SCREENSHOTS_PER_RUN = 12;
+const MAX_SCREENSHOTS_PER_RUN = 48;
+const SCHEDULED_HOURLY_CAP = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Number(process.env.WORK_OS_SCREENSHOT_HOURLY_CAP ?? 24) || 24));
+const SCHEDULED_EOD_CAP = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Number(process.env.WORK_OS_SCREENSHOT_EOD_CAP ?? 24) || 24));
 
 function db() {
   return createAdminClient();
@@ -164,11 +167,32 @@ export function isRetainedScreenshotAvailable(summary: { storage_path?: string |
   return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
-function sampleScreenshots(shots: WtScreenshot[]) {
+function sampleScreenshots(shots: WtScreenshot[], cap = DEFAULT_SCREENSHOTS_PER_RUN) {
   const screenshots = shots.filter((shot) => shot.Screenshot).sort((a, b) => captureAt(a).localeCompare(captureAt(b)));
-  if (screenshots.length <= MAX_SCREENSHOTS_PER_DAY) return screenshots;
-  const step = screenshots.length / MAX_SCREENSHOTS_PER_DAY;
-  return Array.from({ length: MAX_SCREENSHOTS_PER_DAY }, (_, index) => screenshots[Math.floor(index * step)]);
+  if (screenshots.length <= cap) return screenshots;
+  const step = screenshots.length / cap;
+  return Array.from({ length: cap }, (_, index) => screenshots[Math.floor(index * step)]);
+}
+
+/** Frames that already have a terminal summary are never re-analyzed; failed
+ * frames stay pending so the next scheduled run retries them. */
+async function terminallyAnalyzedFrames(organizationId: string, personId: string, date: string) {
+  const events = await db().from("work_evidence_events").select("id,external_event_id")
+    .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
+    .like("external_event_id", "screenshot:%")
+    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+  if (events.error) throw new Error(`load analyzed screenshot frames: ${events.error.message}`);
+  const byExternal = new Map((events.data ?? []).map((row: any) => [String(row.external_event_id), String(row.id)]));
+  if (!byExternal.size) return new Set<string>();
+  const summaries = await db().from("work_screenshot_summaries").select("evidence_event_id,processing_status")
+    .in("evidence_event_id", [...byExternal.values()]);
+  if (summaries.error) throw new Error(`load screenshot summary statuses: ${summaries.error.message}`);
+  const terminal = new Set((summaries.data ?? [])
+    .filter((row: any) => ["processed", "excluded"].includes(String(row.processing_status)))
+    .map((row: any) => String(row.evidence_event_id)));
+  const done = new Set<string>();
+  for (const [external, eventId] of byExternal) if (terminal.has(eventId)) done.add(external);
+  return done;
 }
 
 async function neutralSummary(url: string, log: ScreenshotLog) {
@@ -276,14 +300,16 @@ export async function summarizeWorktivityScreenshots(
     .single();
   if (personError) throw new Error(`load Worktivity person: ${personError.message}`);
   if (!person.worktivity_employee_id) throw new Error("person has no Worktivity mapping");
-  const [shots, config] = await Promise.all([
+  const [shots, config, analyzed] = await Promise.all([
     fetchScreenshotsForDay(person.worktivity_employee_id, date),
     screenshotConfig(access.organizationId, personId),
+    terminallyAnalyzedFrames(access.organizationId, personId, date),
   ]);
+  const pending = shots.filter((shot) => !analyzed.has(`screenshot:${shot.ID}`));
   await ensureBucket();
   const results = [];
-  const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_DAY, Math.floor(options.maxScreenshots ?? MAX_SCREENSHOTS_PER_DAY)));
-  for (const log of sampleScreenshots(shots).slice(0, maxScreenshots)) {
+  const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? DEFAULT_SCREENSHOTS_PER_RUN)));
+  for (const log of sampleScreenshots(pending, maxScreenshots)) {
     const event = await createEvidenceEvent(access, personId, log);
     const sourceReference = `worktivity:screenshot:${log.ID}`;
     if (isExcludedScreenshot(log, config)) {
@@ -508,6 +534,139 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
       results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: "processed" });
     } catch (cause) {
       results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: cause instanceof Error ? cause.message : "failed" });
+    }
+  }
+  return { attempted: results.length, results };
+}
+
+export type ScreenshotRunMode = "hourly" | "eod";
+
+/** Decides whether a scheduled analysis run is due for one employee, on the
+ * employee's local clock. Pure so the due math is unit-testable.
+ * Rules: an end-of-day pass at shift end minus the lead (or right after an
+ * early clock-out); otherwise hourly top-ups between window start and the
+ * end-of-day boundary. A completed end-of-day pass settles the day. */
+export function screenshotRunMode(input: {
+  now: Date;
+  timezone: string;
+  shiftStart: string;
+  shiftEnd: string;
+  intervalMinutes?: number | null;
+  eodLeadMinutes?: number | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  clockedOutAt?: string | null;
+  lastHourlyAt?: string | null;
+  eodCompleted?: boolean;
+}): ScreenshotRunMode | null {
+  if (input.eodCompleted) return null;
+  const localDate = localDateForTimezone(input.now, input.timezone);
+  const at = (time: string) => Date.parse(zonedDateTimeToUtc(localDate, time, input.timezone).toISOString());
+  const shiftStartAt = at(input.shiftStart);
+  const shiftEndAt = at(input.shiftEnd);
+  if (!Number.isFinite(shiftStartAt) || !Number.isFinite(shiftEndAt)) return null;
+  const now = input.now.getTime();
+  const lead = Math.max(0, Number(input.eodLeadMinutes ?? 30) || 0) * 60_000;
+  const eodAt = shiftEndAt - lead;
+  const clockedOutAt = input.clockedOutAt ? Date.parse(input.clockedOutAt) : Number.NaN;
+  if (Number.isFinite(clockedOutAt) && now >= clockedOutAt + 2 * 60_000) return "eod";
+  if (now >= eodAt) return "eod";
+  const windowStartAt = input.windowStart ? at(input.windowStart) : shiftStartAt;
+  const windowEndAt = input.windowEnd ? at(input.windowEnd) : shiftEndAt;
+  const hourlyUntil = Math.min(Number.isFinite(windowEndAt) ? windowEndAt : shiftEndAt, eodAt);
+  if (now < windowStartAt || now >= hourlyUntil) return null;
+  const interval = Math.max(15, Number(input.intervalMinutes ?? 60) || 60) * 60_000;
+  const lastHourlyAt = input.lastHourlyAt ? Date.parse(input.lastHourlyAt) : Number.NaN;
+  return !Number.isFinite(lastHourlyAt) || now >= lastHourlyAt + interval ? "hourly" : null;
+}
+
+const SCHEDULE_AUDIT_TARGET = (organizationId: string, personId: string, date: string) => `${organizationId}:${personId}:${date}`;
+
+/** Bounded cron work for the per-employee schedule: hourly analysis during the
+ * shift plus the end-of-day pass. Consent and the organization flag remain
+ * fail-closed gates, and terminally analyzed frames are never re-processed. */
+export async function runScheduledScreenshotAnalysis(limit = 8) {
+  if (!process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY || !process.env.CRON_SECRET) {
+    throw new Error("screenshot scheduled analysis is not ready: encryption key and cron secret are required");
+  }
+  const people = await db().from("work_people")
+    .select("id,organization_id").eq("active", true).not("worktivity_employee_id", "is", null)
+    .limit(Math.max(limit * 6, limit));
+  if (people.error) throw new Error(`load scheduled screenshot candidates: ${people.error.message}`);
+  const now = new Date();
+  const results: Array<{ organizationId: string; personId: string; date: string; mode: ScreenshotRunMode; status: string; sampled?: number }> = [];
+  for (const person of (people.data ?? []) as Array<{ id: string; organization_id: string }>) {
+    if (results.length >= limit) break;
+    const schedules = await db().from("work_schedules").select("*")
+      .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("active", true)
+      .order("effective_from", { ascending: false }).limit(4);
+    if (schedules.error) continue;
+    const timezone = String((schedules.data ?? [])[0]?.timezone ?? "UTC");
+    const localDate = localDateForTimezone(now, timezone);
+    const schedule = (schedules.data ?? []).find((row: any) => {
+      const from = dateOnly(row.effective_from);
+      const to = dateOnly(row.effective_to);
+      return (!from || from <= localDate) && (!to || to >= localDate);
+    });
+    if (!schedule || schedule.screenshot_analysis_enabled === false) continue;
+    const exception = await db().from("work_schedule_exceptions").select("kind,shift_start,shift_end")
+      .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("exception_date", localDate).maybeSingle();
+    if (exception.error || exception.data?.kind === "leave") continue;
+    const shiftStart = String(exception.data?.shift_start ?? schedule.shift_start).slice(0, 5);
+    const shiftEnd = String(exception.data?.shift_end ?? schedule.shift_end).slice(0, 5);
+    const session = await db().from("work_sessions").select("clocked_out_at")
+      .eq("organization_id", person.organization_id).eq("person_id", person.id).eq("shift_date", localDate)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const target = SCHEDULE_AUDIT_TARGET(person.organization_id, person.id, localDate);
+    const audits = await db().from("work_audit_log").select("action,occurred_at")
+      .eq("organization_id", person.organization_id).eq("target_type", "workday").eq("target_id", target)
+      .in("action", ["screenshot.hourly_completed", "screenshot.eod_completed"])
+      .order("occurred_at", { ascending: false }).limit(50);
+    const auditRows = (audits.data ?? []) as Array<{ action: string; occurred_at: unknown }>;
+    const eodCompleted = auditRows.some((row) => row.action === "screenshot.eod_completed");
+    const lastHourly = auditRows.find((row) => row.action === "screenshot.hourly_completed")?.occurred_at;
+    const mode = screenshotRunMode({
+      now, timezone, shiftStart, shiftEnd,
+      intervalMinutes: schedule.screenshot_analysis_interval_minutes,
+      eodLeadMinutes: schedule.screenshot_analysis_eod_lead_minutes,
+      windowStart: schedule.screenshot_analysis_start ? String(schedule.screenshot_analysis_start).slice(0, 5) : null,
+      windowEnd: schedule.screenshot_analysis_end ? String(schedule.screenshot_analysis_end).slice(0, 5) : null,
+      clockedOutAt: (session.data?.clocked_out_at as string | null) ?? null,
+      lastHourlyAt: lastHourly instanceof Date ? lastHourly.toISOString() : (lastHourly as string | null) ?? null,
+      eodCompleted,
+    });
+    if (!mode) continue;
+    const organization = await db().from("work_organizations").select("feature_flags,legacy_owner_id,created_by")
+      .eq("id", person.organization_id).maybeSingle();
+    if (organization.error || (organization.data?.feature_flags as Json | null)?.screenshot_summaries !== true) continue;
+    const consent = await employeeTrackingConsent(person.organization_id, person.id);
+    if (!consent.tracking || !consent.screenshotAnalysis) continue;
+    const actorId = (organization.data?.legacy_owner_id || organization.data?.created_by) as string | null;
+    if (!actorId) continue;
+    const access = {
+      ctx: { user: { id: actorId }, profile: { id: actorId } },
+      organizationId: person.organization_id,
+      organizationOwnerId: actorId,
+      role: "admin",
+      personId: person.id,
+      membershipId: `system-screenshot-schedule:${person.id}`,
+      featureFlags: {},
+    } as unknown as WorkOsAccess;
+    try {
+      const cap = mode === "eod" ? SCHEDULED_EOD_CAP : SCHEDULED_HOURLY_CAP;
+      const run = await summarizeWorktivityScreenshots(access, person.id, localDate, { maxScreenshots: cap });
+      const { error: auditError } = await db().from("work_audit_log").insert({
+        organization_id: person.organization_id,
+        actor_user_id: null,
+        action: mode === "eod" ? "screenshot.eod_completed" : "screenshot.hourly_completed",
+        target_type: "workday",
+        target_id: target,
+        metadata: { source: "scheduled_screenshot_sync", mode, shiftDate: localDate, personId: person.id, frames: run.logs, sampled: run.sampled, cap },
+      });
+      if (auditError) throw new Error(`audit scheduled screenshot sync: ${auditError.message}`);
+      results.push({ organizationId: person.organization_id, personId: person.id, date: localDate, mode, status: "processed", sampled: run.sampled });
+    } catch (cause) {
+      results.push({ organizationId: person.organization_id, personId: person.id, date: localDate, mode, status: cause instanceof Error ? cause.message : "failed" });
     }
   }
   return { attempted: results.length, results };

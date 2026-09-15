@@ -48,19 +48,23 @@ export async function POST(req: Request) {
       ]);
       grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
     }
-    const result = hasRefinement
-      ? await refineEodNarrative(grounding, body.draft as string, feedback, annotations)
-      : await draftEodNarrative(grounding);
-    if (!result.ok) {
-      const status = result.reason === "ai_unconfigured" ? 501 : 503;
-      return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
-    }
     let screenshots = { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
     let screenshotSyncUnavailable = false;
     try {
       screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
     } catch {
       screenshotSyncUnavailable = true;
+    }
+    const groundingWithObserved = {
+      ...grounding,
+      observed: screenshots.observations.map((observation) => ({ at: observation.capturedAt, text: observation.summary, app: observation.visibleApp })),
+    };
+    const result = hasRefinement
+      ? await refineEodNarrative(groundingWithObserved, body.draft as string, feedback, annotations)
+      : await draftEodNarrative(groundingWithObserved);
+    if (!result.ok) {
+      const status = result.reason === "ai_unconfigured" ? 501 : 503;
+      return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
     }
     return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable });
   } catch (error) {

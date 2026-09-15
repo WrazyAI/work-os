@@ -16,6 +16,8 @@ export interface EodGrounding {
   carried: string[];
   blockers: string[];
   commitments?: Array<{ title: string; status: "selected" | "deferred" | "completed" }>;
+  /** Neutral, sampled activity observations (Worktivity screenshot summaries). */
+  observed?: Array<{ at: string; text: string; app: string | null }>;
   contextBlock?: string;
 }
 
@@ -26,6 +28,7 @@ export interface EodSelection {
   completedFactIds: string[];
   carriedFactIds: string[];
   blockerFactIds: string[];
+  observedFactIds: string[];
 }
 
 const EOD_SELECTION_SCHEMA = {
@@ -34,12 +37,13 @@ const EOD_SELECTION_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["summaryFactIds", "completedFactIds", "carriedFactIds", "blockerFactIds"],
+    required: ["summaryFactIds", "completedFactIds", "carriedFactIds", "blockerFactIds", "observedFactIds"],
     properties: {
       summaryFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
       completedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
       carriedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
       blockerFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
+      observedFactIds: { type: "array", items: { type: "string" }, maxItems: 24 },
     },
   },
 } as const;
@@ -50,6 +54,10 @@ function eodFacts(grounding: EodGrounding) {
     completed: grounding.completed.map((text, index) => ({ id: `completed:${index}`, text })),
     carried: grounding.carried.map((text, index) => ({ id: `carried:${index}`, text })),
     blocker: grounding.blockers.map((text, index) => ({ id: `blocker:${index}`, text })),
+    observed: (grounding.observed ?? []).map((observation, index) => ({
+      id: `observed:${index}`,
+      text: `${observation.text}${observation.app ? ` (observed in ${observation.app})` : ""} at ${observation.at}`,
+    })),
   };
 }
 
@@ -76,8 +84,9 @@ export function parseEodSelection(raw: unknown, grounding: EodGrounding): EodSel
   const completedFactIds = selectedFactIds(value.completedFactIds, "completed:", new Set(facts.completed.map((fact) => fact.id)));
   const carriedFactIds = selectedFactIds(value.carriedFactIds, "carried:", new Set(facts.carried.map((fact) => fact.id)));
   const blockerFactIds = selectedFactIds(value.blockerFactIds, "blocker:", new Set(facts.blocker.map((fact) => fact.id)));
-  return summaryFactIds && completedFactIds && carriedFactIds && blockerFactIds
-    ? { summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds }
+  const observedFactIds = selectedFactIds(value.observedFactIds, "observed:", new Set(facts.observed.map((fact) => fact.id)));
+  return summaryFactIds && completedFactIds && carriedFactIds && blockerFactIds && observedFactIds
+    ? { summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds }
     : null;
 }
 
@@ -91,10 +100,14 @@ export function renderEodSelection(selection: EodSelection, grounding: EodGround
   const completed = selected(selection.completedFactIds, facts.completed);
   const carried = selected(selection.carriedFactIds, facts.carried);
   const blockers = selected(selection.blockerFactIds, facts.blocker);
+  const observed = selected(selection.observedFactIds, facts.observed);
   return [
     "## Summary", ...(summary.length ? summary.map((text) => `- ${text}`) : ["- No recorded progress update."]),
     "", "## Completed", ...(completed.length ? completed.map((text) => `- ${text}`) : ["- Nothing completed yet"]),
     "", "## Carried forward", ...(carried.length ? carried.map((text) => `- ${text}`) : ["- Nothing pending"]),
+    ...(observed.length
+      ? ["", "## Observed activity context", ...observed.map((text) => `- ${text}`), "Activity context is descriptive and does not prove attendance, productivity, or task completion."]
+      : []),
     "", "## Daily commitment reconciliation", ...renderCommitmentReconciliation(grounding.commitments),
     "", "## Bottleneck", ...(blockers.length ? blockers.map((text) => `- ${text}`) : [BOTTLENECK_PLACEHOLDER]),
   ].join("\n");
@@ -122,8 +135,11 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Bottleneck facts (recorded blockers):",
     fmt(facts.blocker, "none"),
     "",
+    "Observed activity context (neutral screenshot summaries; never proof of productivity, effort, or task completion):",
+    fmt(facts.observed, "none"),
+    "",
     grounding.contextBlock ? `Additional context (live day state and recalled history — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",
-    "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, and blockerFactIds.",
+    "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, and observedFactIds.",
     "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");
 }

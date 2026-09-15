@@ -105,7 +105,11 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
   const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
   const title = `EOD Report: ${personResult.data.display_name} - ${reportDate}`;
-  const lineItems = (items: Json[], empty: string) => items.length ? items.map((item) => `- ${item.title ?? (item.task_snapshot as Json | undefined)?.title ?? item.input_text}`) : [`- ${empty}`];
+  const lineItems = (items: Json[], empty: string) => items.length ? items.map((item) => {
+    const title = text(item.title) ?? text((item.task_snapshot as Json | undefined)?.title) ?? text(item.input_text) ?? "Recorded item";
+    const summary = text(item.summary);
+    return summary && summary !== title ? `- ${title} — ${summary.slice(0, 240)}` : `- ${title}`;
+  }) : [`- ${empty}`];
   const markdown = [
     `# ${title}`,
     "",

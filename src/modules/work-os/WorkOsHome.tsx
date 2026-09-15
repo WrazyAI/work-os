@@ -138,6 +138,12 @@ export default function WorkOsHome() {
   const [scheduleBreakStart, setScheduleBreakStart] = useState("");
   const [scheduleBreakEnd, setScheduleBreakEnd] = useState("");
   const [scheduleDays, setScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [screenshotEnabled, setScreenshotEnabled] = useState(true);
+  const [screenshotInterval, setScreenshotInterval] = useState("60");
+  const [screenshotWindowStart, setScreenshotWindowStart] = useState("");
+  const [screenshotWindowEnd, setScreenshotWindowEnd] = useState("");
+  const [screenshotEodLead, setScreenshotEodLead] = useState("30");
+  const scheduleHydratedFor = useRef<string | null>(null);
   const [exceptionDate, setExceptionDate] = useState(todayIso());
   const [exceptionKind, setExceptionKind] = useState("leave");
   const [exceptionStart, setExceptionStart] = useState("09:00");
@@ -196,6 +202,24 @@ export default function WorkOsHome() {
     queryFn: () => fetchJson(`/api/work-os/schedules${personId ? `?personId=${personId}` : ""}`),
     enabled: schemaReady && tab === "schedules",
   });
+  useEffect(() => {
+    if (!personId || !schedules.data || scheduleHydratedFor.current === personId) return;
+    const latest = (schedules.data.schedules ?? []).find((row: AnyRow) => String(row.person_id) === personId);
+    if (!latest) return;
+    scheduleHydratedFor.current = personId;
+    setScheduleTimezone(String(latest.timezone ?? "UTC"));
+    setScheduleStart(String(latest.shift_start ?? "09:00").slice(0, 5));
+    setScheduleEnd(String(latest.shift_end ?? "17:00").slice(0, 5));
+    setScheduleDays(Array.isArray(latest.days_of_week) ? latest.days_of_week.map(Number) : [1, 2, 3, 4, 5]);
+    const firstBreak = Array.isArray(latest.break_windows) ? latest.break_windows[0] : null;
+    setScheduleBreakStart(firstBreak?.start ? String(firstBreak.start).slice(0, 5) : "");
+    setScheduleBreakEnd(firstBreak?.end ? String(firstBreak.end).slice(0, 5) : "");
+    setScreenshotEnabled(latest.screenshot_analysis_enabled !== false);
+    setScreenshotInterval(String(latest.screenshot_analysis_interval_minutes ?? 60));
+    setScreenshotWindowStart(latest.screenshot_analysis_start ? String(latest.screenshot_analysis_start).slice(0, 5) : "");
+    setScreenshotWindowEnd(latest.screenshot_analysis_end ? String(latest.screenshot_analysis_end).slice(0, 5) : "");
+    setScreenshotEodLead(String(latest.screenshot_analysis_eod_lead_minutes ?? 30));
+  }, [personId, schedules.data]);
   const organization = useQuery<{ organization: AnyRow; memberships: AnyRow[]; teams: AnyRow[]; teamMembers: AnyRow[] }>({
     queryKey: ["work-os", "organization"],
     queryFn: () => fetchJson("/api/work-os/organization"),
@@ -259,7 +283,7 @@ export default function WorkOsHome() {
   const saveSchedule = useMutation({
     mutationFn: () => fetchJson("/api/work-os/schedules", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: authoritativeBreaks ? [] : scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [] }),
+      body: JSON.stringify({ person_id: personId, timezone: scheduleTimezone, shift_start: scheduleStart, shift_end: scheduleEnd, days_of_week: scheduleDays, effective_from: todayIso(), break_windows: authoritativeBreaks ? [] : scheduleBreakStart && scheduleBreakEnd ? [{ start: scheduleBreakStart, end: scheduleBreakEnd }] : [], screenshot_analysis_enabled: screenshotEnabled, screenshot_analysis_interval_minutes: Number(screenshotInterval) || 60, screenshot_analysis_start: screenshotWindowStart || null, screenshot_analysis_end: screenshotWindowEnd || null, screenshot_analysis_eod_lead_minutes: Number(screenshotEodLead) || 0 }),
     }),
     onSuccess: refresh,
   });

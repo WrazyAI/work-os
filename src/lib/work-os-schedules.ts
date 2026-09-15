@@ -54,6 +54,19 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
   if (authoritativeBreaks && Array.isArray(body.break_windows) && body.break_windows.length) {
     throw new Error("Scheduled break windows are disabled because Worktivity is the break source for this organization.");
   }
+  const screenshotEnabled = body.screenshot_analysis_enabled !== false;
+  const screenshotInterval = Number(body.screenshot_analysis_interval_minutes ?? 60);
+  if (!Number.isInteger(screenshotInterval) || screenshotInterval < 15 || screenshotInterval > 240) {
+    throw new Error("screenshot_analysis_interval_minutes must be an integer between 15 and 240");
+  }
+  const screenshotEodLead = Number(body.screenshot_analysis_eod_lead_minutes ?? 30);
+  if (!Number.isInteger(screenshotEodLead) || screenshotEodLead < 0 || screenshotEodLead > 180) {
+    throw new Error("screenshot_analysis_eod_lead_minutes must be an integer between 0 and 180");
+  }
+  const screenshotStart = body.screenshot_analysis_start ? validateWorkOsTime(body.screenshot_analysis_start, "screenshot_analysis_start") : null;
+  const screenshotEnd = body.screenshot_analysis_end ? validateWorkOsTime(body.screenshot_analysis_end, "screenshot_analysis_end") : null;
+  if (!!screenshotStart !== !!screenshotEnd) throw new Error("screenshot_analysis_start and screenshot_analysis_end must be provided together");
+  if (screenshotStart && screenshotStart === screenshotEnd) throw new Error("screenshot_analysis_start and screenshot_analysis_end must be different");
   const payload = {
     organization_id: access.organizationId,
     person_id: personId,
@@ -65,6 +78,11 @@ export async function saveWorkOsSchedule(access: WorkOsAccess, body: Json) {
     effective_from: effectiveFrom,
     effective_to: effectiveTo,
     active: body.active !== false,
+    screenshot_analysis_enabled: screenshotEnabled,
+    screenshot_analysis_interval_minutes: screenshotInterval,
+    screenshot_analysis_start: screenshotStart,
+    screenshot_analysis_end: screenshotEnd,
+    screenshot_analysis_eod_lead_minutes: screenshotEodLead,
     created_by: access.ctx.user.id,
     updated_at: new Date().toISOString(),
   };
