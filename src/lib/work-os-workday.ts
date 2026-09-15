@@ -447,7 +447,7 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
     if (!reason) throw new Error("A late-start reason is required.");
     if (reason.length > 1000) throw new Error("Late-start reasons must be 1000 characters or fewer.");
     if (!lateReasonRequired({ ...session, late_reason: null })) {
-      throw new Error("This session did not start late enough to require a late-start reason.");
+      throw new Error("A late-start reason must be recorded only for sessions that started 30 or more minutes late.");
     }
     const recordedAt = new Date().toISOString();
     const { data: recorded, error: recordError } = await db().from("work_sessions").update({
