@@ -13,7 +13,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
@@ -161,6 +161,7 @@ export default function AvatarApp(): React.ReactElement {
   const deliveryKeys = useRef<Set<string>>(new Set());
   const notificationPermission = useRef(false);
   const chatScroll = useRef<HTMLDivElement | null>(null);
+  const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
   const [sweepSignal, setSweepSignal] = useState(0);
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const dayRef = useRef<DayFacts>(facts);
@@ -906,7 +907,22 @@ export default function AvatarApp(): React.ReactElement {
   }
 
   useEffect(() => {
-    chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    const el = chatScroll.current;
+    if (!el) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+    const newest = el.lastElementChild as HTMLElement | null;
+    const previousHeight = threadMetricsRef.current?.scrollHeight ?? el.scrollHeight;
+    const wasAtBottom = previousHeight - el.scrollTop - el.clientHeight < 48;
+    const target = threadScrollTarget({
+      clientHeight: el.clientHeight,
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      newestHeight: newest ? newest.offsetHeight : 0,
+      newestTop: newest ? newest.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
+      wasAtBottom,
+    });
+    if (target !== null) el.scrollTo({ top: target, behavior });
+    threadMetricsRef.current = { scrollHeight: el.scrollHeight };
   }, [chat.length, thinking]);
 
   if (connected === false) {

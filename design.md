@@ -1411,19 +1411,25 @@ Anatomy, top to bottom:
 Tokens and motion: the chat surfaces are built on Tailwind v4 scoped to
 `src/chat` (§20.1) with the `@theme` foundation mapping; shells keep their
 established borders, radius, and focus rings. Because preflight is deliberately
-excluded, `chat.css` declares its layer order up front (`theme, base,
-utilities`) and carries a scoped base-layer preflight substitute that strips UA
-button/textarea chrome (default 1px borders, ButtonFace backgrounds) for every
-control inside the chat surfaces; utilities still win over it, and legacy
-unlayered rules still win over both where they target the same properties —
-those collisions are resolved only by the explicit bridge at the end of the
-file. The reply reveal runs ~32ms per token and caps out (rendering instantly)
-for very long replies; the sweep is ~620ms + ~90ms outro and is one-shot. Both
-are fully removed under `prefers-reduced-motion`, which leaves the labels,
-receipt, and full reply text visible. The two-row composer layout is derived
-from the draft value (newline or labeled action), never from field measurement —
-placeholder wrap changes with width, so measurement feeds back into itself and
-oscillates.
+excluded, `chat.css` declares its layer order (`theme, base, components,
+utilities`) **before** the `@import` rules — a layer statement that follows any
+other at-rule is invalid and is dropped, which silently flips `base` above the
+utilities and lets the reset erase every utility fill (the blank dark-button
+regression). The scoped base-layer substitute strips UA button/textarea chrome
+(default 1px borders, ButtonFace backgrounds) for every control inside the chat
+surfaces; utilities still win over it, and legacy unlayered rules still win over
+both where they target the same properties — those collisions are resolved only
+by the explicit bridge at the end of the file. That bridge also re-asserts the
+ink-scale text colors on chat buttons (`text-white`, `text-ink`, `text-ink-2`,
+`text-ink-3`, `text-danger`), because the legacy global `button { color:
+inherit }` is unlayered and would otherwise beat every layered color utility —
+leaving ink-filled controls with invisible ink-colored icons and labels. The
+reply reveal runs ~32ms per token and caps out (rendering instantly) for very
+long replies; the sweep is ~620ms + ~90ms outro and is one-shot. Both are fully
+removed under `prefers-reduced-motion`, which leaves the labels, receipt, and
+full reply text visible. The two-row composer layout is derived from the draft
+value (newline or labeled action), never from field measurement — placeholder
+wrap changes with width, so measurement feeds back into itself and oscillates.
 
 Delivery-surface layout differs where the page demands it. The floating panel
 is a fixed-height window, so its thread, task context, and composer stay one
@@ -1439,8 +1445,24 @@ in-app dock's documented deviation from the one-surface look. The `@` and `/`
 menus are detached everywhere: they portal to `document.body` with fixed
 coordinates measured from the prompt bar, so no scroll container or overflow
 boundary in either surface can clip them. Thread scrollers never inflate page
-scroll ranges, and the auto-scroll fires on turn mount (including the fly-in of
-an assistant reply) but never overrides `prefers-reduced-motion`.
+scroll ranges.
+
+**The dock is anchored to the viewport bottom in every content state.** Its
+sticky `bottom` pin only applies once the flow position is below the fold, so
+on a short page (the off-shift dashboard) the bar used to float mid-page with
+dead space beneath it. Dock views give the stage a column-flex layout with a
+viewport-tall minimum and a 16px bottom padding — the exact sticky offset — and
+the dock's auto top margin parks it there; the main keeps the composer's 82px
+overlap through a negative bottom margin, so long pages look unchanged. The
+resting and pinned positions are identical by construction.
+
+**Reply reveal rule** (`threadScrollTarget`, shared by both surfaces): a reader
+who scrolled up is never yanked; a turn that fits the thread pins to the end; a
+turn **taller** than the thread (a task card) reveals its first lines at the
+bottom edge so the conversation stays visible and the reply reads top-down; and
+opening the dock always lands at the end. The "was at bottom" test uses the
+thread height from before the arrival, so the growth of a tall reply cannot
+masquerade as a scroll-up.
 
 Companion window state lives in one place. The tray item is truthful at all
 times: it reads `Hide companion` whenever the window is on screen — including

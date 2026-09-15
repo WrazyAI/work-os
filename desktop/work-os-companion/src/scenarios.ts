@@ -168,7 +168,7 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
     proposals: scenario.emptyProposals ? [] : data.proposals,
     niftySync: scenario.niftyFailure ? { fresh: false, syncedAt: data.niftySync?.syncedAt ?? null, error: "Simulated Nifty provider failure" } : data.niftySync,
   };
-  if (scenario.dayState === "no_shift") result = { ...result, shift: null, prompt: { kind: null, nextPromptAt: null, required: false, reason: "No scheduled shift." } };
+  if (scenario.dayState === "no_shift") result = { ...result, shift: null, session: null, prompt: { kind: null, nextPromptAt: null, required: false, reason: "No scheduled shift." } };
   if (scenario.dayState !== "real" && scenario.dayState !== "no_shift") {
     const kind = scenario.dayState;
     const prompt = kind === "scheduled" || kind === "shift_start"

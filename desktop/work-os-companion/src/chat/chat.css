@@ -7,16 +7,16 @@
  * existing class names that we actually reuse here.
  * ───────────────────────────────────────────────────────────────────────── */
 
+/* Layer order MUST be declared before the imports: a layer statement that
+   follows any other at-rule is invalid and gets dropped, which would leave the
+   base reset ordered AFTER the utilities and let its `background: transparent`
+   erase every utility fill on chat buttons (the blank dark buttons regression). */
+@layer theme, base, components, utilities;
+
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 
 @source "../";
-
-/* Layer order is declared up front so the scoped preflight below sits between
-   theme and utilities: it strips UA chrome, and any utility still wins over it.
-   Legacy unlayered stylesheets beat all of these where they actually target a
-   property — those collisions are handled by the explicit bridge at the end. */
-@layer theme, base, utilities;
 
 @layer base {
   /* Scoped preflight substitute. The companion never resets legacy stylesheets,
@@ -304,6 +304,17 @@
   border: 0;
 }
 
+/* Legacy unlayered rules (styles.css `button { color: inherit }`) beat every
+   layered utility, so chat buttons re-assert the ink scale with unlayered,
+   scoped rules — the same bridge technique used for borders and backgrounds.
+   Without this the dark send button and other ink-filled controls render their
+   icons and labels in the inherited ink color, i.e. invisible on ink. */
+:is(.chat-surface, .avatar-panel, .chat-task-card, .chat-glide-menu, .chat-tabs, .approval-flow, .approval-results, [data-workos-promptbar]) button.text-white { color: var(--color-white); }
+:is(.chat-surface, .avatar-panel, .chat-task-card, .chat-glide-menu, .chat-tabs, .approval-flow, .approval-results, [data-workos-promptbar]) button.text-ink { color: var(--color-ink); }
+:is(.chat-surface, .avatar-panel, .chat-task-card, .chat-glide-menu, .chat-tabs, .approval-flow, .approval-results, [data-workos-promptbar]) button.text-ink-2 { color: var(--color-ink-2); }
+:is(.chat-surface, .avatar-panel, .chat-task-card, .chat-glide-menu, .chat-tabs, .approval-flow, .approval-results, [data-workos-promptbar]) button.text-ink-3 { color: var(--color-ink-3); }
+:is(.chat-surface, .avatar-panel, .chat-task-card, .chat-glide-menu, .chat-tabs, .approval-flow, .approval-results, [data-workos-promptbar]) button.text-danger { color: var(--color-danger); }
+
 /* UA button chrome on the shared tabs, in both surfaces. */
 .chat-tab {
   border: 0;
@@ -371,11 +382,11 @@
 .chat-surface:focus-within { border-color: var(--color-signal-strong); }
 
 /* In-app dock, closed state: the surface owns the card chrome (border, radius,
-   elevation) and the legacy shell stays transparent, mirroring the floating
-   panel's unified composer. */
+   elevation) and the legacy shell keeps its proportions (the bar's height and
+   inner padding) with transparent chrome, mirroring the floating panel. */
 .chat-surface .progress-input-shell {
-  min-height: 0;
-  padding: 0;
+  min-height: 56px;
+  padding: 7px 8px 7px 14px;
   border: 0;
   border-radius: 0;
   background: transparent;

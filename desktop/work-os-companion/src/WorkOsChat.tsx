@@ -14,6 +14,8 @@ export {
   WORK_OS_CHAT_SOURCES,
   workOsChatCommands,
   parseChatToken,
+  threadScrollTarget,
+  type ThreadScrollInput,
   isWideDraft,
   collapseConsecutiveAssistantDuplicates,
   type ChatTab,

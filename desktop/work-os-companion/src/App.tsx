@@ -21,7 +21,7 @@ import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -1956,13 +1956,14 @@ export default function App() {
     />;
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
+  const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
   return <div className="workspace">
     <aside className="rail">
       <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
       <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
       <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
     </aside>
-    <section className="stage">
+    <section className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
         days={outstandingQuery.data?.days ?? []}
         loading={outstandingQuery.isFetching && !outstandingQuery.data}
@@ -2102,7 +2103,7 @@ export default function App() {
           <MemorySettings />
         </main>
       )}
-      {(view === "day" || view === "tasks" && planHistoryDate === visibleDay?.shiftDate) && <ProgressComposer
+      {dockVisible && <ProgressComposer
         mode={sessionActive && view === "day" ? "progress" : "agenda"}
         input={input}
         open={progressComposerOpen}
@@ -2353,9 +2354,30 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const [sweepSignal, setSweepSignal] = useState(0);
   const bumpSweep = () => setSweepSignal((value) => value + 1);
+  const wasOpenRef = useRef(open);
+  const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
   useEffect(() => {
     const el = conversationRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    const newest = el.lastElementChild as HTMLElement | null;
+    const isTurn = !!newest && !newest.classList.contains("progress-history");
+    /* Compare the reader's position against the height before this arrival, so a
+       reply that grows the thread does not look like a scroll-up. */
+    const previousHeight = threadMetricsRef.current?.scrollHeight ?? el.scrollHeight;
+    const wasAtBottom = previousHeight - el.scrollTop - el.clientHeight < 48;
+    const target = threadScrollTarget({
+      clientHeight: el.clientHeight,
+      scrollTop: el.scrollTop,
+      scrollHeight: el.scrollHeight,
+      newestHeight: isTurn ? newest!.offsetHeight : 0,
+      newestTop: isTurn ? newest!.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
+      wasAtBottom,
+      forceBottom: justOpened,
+    });
+    if (target !== null) el.scrollTop = target;
+    threadMetricsRef.current = { scrollHeight: el.scrollHeight };
   }, [history.length, interpretation, pending, receipt, open]);
   const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
     { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },

@@ -1953,6 +1953,32 @@ body {
   filter: drop-shadow(0 18px 26px rgba(18, 27, 17, 0.12));
 }
 
+/* The dock must rest exactly where sticky pins it. Sticky can only shift an
+   element up, so on a short page (the off-shift dashboard) the bar's flow
+   position sat above the fold and it floated mid-page with dead space beneath
+   it. In dock views the stage becomes a column flexbox: the main keeps the
+   composer's overlap through a negative bottom margin, and the dock's auto top
+   margin parks it at the bottom of the viewport-tall stage — 16px above the
+   fold, the same place sticky pins it while a long page scrolls. */
+.stage.has-dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  /* The bar rests 16px above the fold in every breakpoint: the dock view's own
+     bottom padding is the sticky offset, so media-query padding changes cannot
+     move it. */
+  padding-bottom: 16px;
+}
+
+.stage.has-dock > main {
+  flex: 0 0 auto;
+  margin-bottom: -82px;
+}
+
+.stage.has-dock > .progress-dock {
+  margin-top: auto;
+}
+
 .agenda-dock .progress-input-shell {
   border-color: #bdceb3;
   box-shadow: 0 12px 34px rgba(49, 82, 31, 0.13);

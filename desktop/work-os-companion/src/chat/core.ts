@@ -129,3 +129,39 @@ export function collapseConsecutiveAssistantDuplicates<T extends CollapsibleTurn
   }
   return visible;
 }
+
+/* ─────────────────────────────────────────────────────────
+ * Thread reveal — where a scroller should land when content
+ * arrives. A tall reply (a task card) must reveal its first
+ * lines at the bottom edge instead of dumping the reader at
+ * its end, and a reader who scrolled up is never yanked.
+ * ───────────────────────────────────────────────────────── */
+
+export interface ThreadScrollInput {
+  clientHeight: number;
+  scrollTop: number;
+  scrollHeight: number;
+  /** Height of the newest turn, or 0 when the thread ends in the history block. */
+  newestHeight: number;
+  /** The newest turn's top relative to the scroller's visible top
+   *  (`newest.getBoundingClientRect().top - scroller.getBoundingClientRect().top`). */
+  newestTop: number;
+  /** Whether the reader was at the end of the thread before this arrival. */
+  wasAtBottom: boolean;
+  /** Always land at the end (e.g. the dock just opened). */
+  forceBottom?: boolean;
+  /** How much of a tall turn stays visible at the bottom edge. */
+  revealPx?: number;
+}
+
+/** Returns the scrollTop to apply, or null to leave the reader where they are. */
+export function threadScrollTarget(input: ThreadScrollInput): number | null {
+  const max = Math.max(0, input.scrollHeight - input.clientHeight);
+  if (input.forceBottom) return max;
+  if (!input.wasAtBottom) return null;
+  if (input.newestHeight > input.clientHeight) {
+    const reveal = input.revealPx ?? 96;
+    return Math.max(0, Math.min(input.scrollTop + input.newestTop - (input.clientHeight - reveal), max));
+  }
+  return max;
+}
