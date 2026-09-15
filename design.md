@@ -487,6 +487,8 @@ hover hands, and a pose per real workday state.
   glowing element.
 - **Palette.** Exactly three colors: ink `#182018`, paper `#f7f8f2`, signal
   `#a8f15b`. Failed states may add the danger red for a single concern mark.
+  One deliberate exception exists: the **late-start tone** (`tone="late"`, see
+  below), where the signal accents render danger red.
 - **Pose matrix.**
 
 | Pose | Visor | Used when |
@@ -500,6 +502,17 @@ hover hands, and a pose per real workday state.
 | `celebrate` | wink + sparkles | Task completed, plan confirmed, EOD submitted |
 | `recover` | downcast line, tilted body | Failed save, offline, degraded provider |
 
+- **Late-start tone.** A session that begins 30+ minutes after its scheduled
+  start carries a `late` tone on top of its pose: `--otto-signal` renders the
+  danger red `#d4493f` (brightened to `#e2604f` inside the dark floating orb),
+  and a small red clock mark appears beside the shell. The pose itself does not
+  change, so the shift state stays readable; the ink, paper, and visor colors
+  are untouched. The avatar status label reads “Late start — add a reason” and
+  the companion ring/dot use the red `late` variant. The tone clears the moment
+  a late-start reason is recorded — from the clock-in confirmation, the focus
+  editor’s reason field, or the dashboard reminder. The tone never blocks work:
+  it is a quiet, persistent prompt, not a modal, and it never carries
+  accusatory copy.
 - **Behavior.** Otto guides, reassures, and celebrates — never guilt-trips,
   never competes with primary work, never replaces a status label, and never
   becomes a dashboard card. It appears as a small quiet cue beside the Today,

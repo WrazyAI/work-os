@@ -19,6 +19,7 @@ import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
 import { buildPlanItemsFromInterpretation } from "./planItems";
+import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { Otto } from "./Otto";
@@ -51,6 +52,7 @@ interface DayFacts extends CompanionDayFacts {
   taskOptions: Array<{ id: string; title: string; dueDate: string | null; completed: boolean }>;
   planStatus: string | null;
   planItems: Array<{ id: string; task_id: string | null; title_snapshot: string; disposition: string; item_kind: string; completion_state: string }>;
+  lateReasonRequired: boolean;
 }
 
 interface AvatarTrace {
@@ -137,7 +139,7 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
-    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [],
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [], lateReasonRequired: false,
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
@@ -260,6 +262,7 @@ export default function AvatarApp(): React.ReactElement {
             item_kind: item.item_kind === "outcome" ? "outcome" : "nifty_task",
             completion_state: item.completion_state === "completed" ? "completed" : "open",
           })) : [],
+        lateReasonRequired: lateReasonRequired(day?.session),
       });
       setConnected(true);
       setDaySyncState("ready");
@@ -874,15 +877,21 @@ export default function AvatarApp(): React.ReactElement {
   }, [promptTurnId]);
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
-  const ringClass = !onShift ? "off" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
+  const ringClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
   const petPose = attentionDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : "focus";
+  const petTone = facts.lateReasonRequired ? "late" : "signal";
   const lastEntry = chat[chat.length - 1];
-  const statusText = !facts.loaded
-    ? daySyncState === "error" ? "Today is syncing" : "Loading today…"
-    : facts.niftySyncError ? "Nifty sync delayed"
-      : facts.niftySyncing ? "Nifty syncing…"
-        : daySyncState === "stale" ? "Showing last update"
-          : formatWorkOsDate(facts.shiftDate);
+  const statusText = facts.lateReasonRequired
+    ? "Late start — add a reason"
+    : !facts.loaded
+      ? (daySyncState === "error" ? "Today is syncing" : "Loading today…")
+      : facts.niftySyncError
+        ? "Nifty sync delayed"
+        : facts.niftySyncing
+          ? "Nifty syncing…"
+          : daySyncState === "stale"
+            ? "Showing last update"
+            : formatWorkOsDate(facts.shiftDate);
 
   // Agenda opens the composer once when it first becomes due; an explicit
   // collapse is respected until the shift or plan state actually changes.
@@ -947,7 +956,7 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-track" />
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
-          <Otto pose={petPose} className="avatar-pet" />
+          <Otto pose={petPose} tone={petTone} className="avatar-pet" />
           <span className="avatar-orb-state">{attentionDue ? "Check in" : !onShift ? "Resting" : facts.sessionState === "paused" ? "Paused" : "Focused"}</span>
           {showBadge && <span className="avatar-badge" />}
         </button>
@@ -957,7 +966,7 @@ export default function AvatarApp(): React.ReactElement {
       {expanded && (
         <div className="avatar-panel">
           <header className="avatar-head">
-            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} /></span><div><strong>Otto <em className={`avatar-live-dot is-${ringClass}`} /> <span>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</span></strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
+            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} tone={petTone} /></span><div><strong>Otto <em className={`avatar-live-dot is-${ringClass}`} /> <span>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</span></strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
             <div className="avatar-head-actions">
               {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
               {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}

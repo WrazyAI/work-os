@@ -8,6 +8,7 @@ import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
 
 type Json = Record<string, unknown>;
@@ -286,12 +287,17 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
   const context = shift ?? await unscheduledSessionContext(access, observed);
   const late = !!shift && observed.getTime() > Date.parse(shift.startsAt) + 15 * 60_000;
   if (late && body.late_acknowledged !== true) throw new Error("Late clock-in acknowledgement is required.");
+  const lateReason = value(body.late_reason);
+  if (lateReason && lateReason.length > 1000) throw new Error("Late-start reasons must be 1000 characters or fewer.");
+  const prolongedAbsence = !!shift && observed.getTime() >= Date.parse(shift.startsAt) + PROLONGED_ABSENCE_MINUTES * 60_000;
   const payload = {
     organization_id: access.organizationId, person_id: access.personId, schedule_id: shift?.scheduleId ?? null,
     shift_date: context.shiftDate, state: "clocked_in", timezone: context.timezone,
     scheduled_starts_at: shift?.startsAt ?? null, scheduled_ends_at: shift?.endsAt ?? null, clocked_in_at: observed.toISOString(),
     source: value(body.source) ?? "desktop", clock_in_idempotency_key: idempotencyKey,
     late_acknowledged_at: late ? observed.toISOString() : null, created_by: access.ctx.user.id,
+    late_reason: prolongedAbsence ? lateReason : null,
+    late_reason_provided_at: prolongedAbsence && lateReason ? observed.toISOString() : null,
     first_follow_up_at: null,
     exception_acknowledged_at: unscheduled ? observed.toISOString() : null,
     exception_reason: unscheduled ? exceptionReason ?? "Legacy client exception acknowledgement" : null,
@@ -435,7 +441,25 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   if (clockedOutByKey.error) throw new Error(`load idempotent clock-out: ${clockedOutByKey.error.message}`);
   if (clockedOutByKey.data) return { session: clockedOutByKey.data, plan: await loadPlan(access, clockedOutByKey.data.id as string) };
   const session = await activeSession(access); if (!session) throw new Error("No active work session.");
-  const action = value(body.action) as WorkSessionAction | null;
+  const rawAction = value(body.action);
+  if (rawAction === "late_reason") {
+    const reason = value(body.reason);
+    if (!reason) throw new Error("A late-start reason is required.");
+    if (reason.length > 1000) throw new Error("Late-start reasons must be 1000 characters or fewer.");
+    if (!lateReasonRequired({ ...session, late_reason: null })) {
+      throw new Error("This session did not start late enough to require a late-start reason.");
+    }
+    const recordedAt = new Date().toISOString();
+    const { data: recorded, error: recordError } = await db().from("work_sessions").update({
+      late_reason: reason,
+      late_reason_provided_at: recordedAt,
+      updated_at: recordedAt,
+    }).eq("id", session.id).eq("organization_id", access.organizationId).select("*").single();
+    if (recordError) throw new Error(`record late-start reason: ${recordError.message}`);
+    await audit(access, session.id as string, "late_reason", session.state as string, session.state as string, idempotencyKey, recordedAt, { reasonLength: reason.length }, source);
+    return { session: recorded, plan: await loadPlan(access, session.id as string) };
+  }
+  const action = rawAction as WorkSessionAction | null;
   if (!action || !["pause", "resume", "mark_active", "mark_eod_due", "clock_out"].includes(action)) throw new Error("A valid session action is required.");
   if (["pause", "resume"].includes(action) && !allowProviderBreakTransitions && await worktivityAuthoritativeBreaks(access.organizationId)) {
     throw new Error("Manual pause and resume are disabled: Worktivity OnBreak is the organization break source.");

@@ -103,6 +103,8 @@ export function PlanningSession({
   onInterpret,
   onRefine,
   onConfirm,
+  lateReasonRequired = false,
+  onSaveLateReason,
 }: {
   open: boolean;
   plan: DailyPlan | null;
@@ -112,6 +114,9 @@ export function PlanningSession({
   onInterpret: (input: string) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
   onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed">;
+  /** True while this workday started 30+ minutes late with no recorded reason. */
+  lateReasonRequired?: boolean;
+  onSaveLateReason?: (reason: string) => Promise<void>;
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<PlanningSessionState>("idle");
@@ -127,6 +132,9 @@ export function PlanningSession({
   const [pendingSelection, setPendingSelection] = useState<{ target: string; quote: string; start: number; end: number; rect: SelectionRect } | null>(null);
   const [openAnnotation, setOpenAnnotation] = useState<{ ids: string[]; rect: SelectionRect } | null>(null);
   const [pendingComment, setPendingComment] = useState("");
+  const [lateReasonDraft, setLateReasonDraft] = useState("");
+  const [lateReasonSaving, setLateReasonSaving] = useState(false);
+  const [lateReasonSaved, setLateReasonSaved] = useState(false);
   const reviewRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -183,6 +191,23 @@ export function PlanningSession({
     setEditedSummary(null);
     setPendingSelection(null);
     setPendingComment("");
+  };
+
+  /** Records the late-start reason on the session itself, independent of the
+   * plan confirm so it survives closing the planner without saving a draft. */
+  const saveLateReason = async () => {
+    if (!onSaveLateReason || !lateReasonDraft.trim() || lateReasonSaving) return;
+    setLateReasonSaving(true);
+    try {
+      await onSaveLateReason(lateReasonDraft.trim());
+      setLateReasonDraft("");
+      setLateReasonSaved(true);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Your late-start reason could not be saved.");
+      setState("save_error");
+    } finally {
+      setLateReasonSaving(false);
+    }
   };
 
   const build = async () => {
@@ -269,8 +294,11 @@ export function PlanningSession({
   const toggleFeedback = () => {
     if (feedbackMode) {
       // Comments are explicit: leaving edit mode never submits unfinished feedback.
-      setPendingSelection(null);
-      setPendingComment("");
+    setPendingSelection(null);
+    setPendingComment("");
+    setLateReasonDraft("");
+    setLateReasonSaving(false);
+    setLateReasonSaved(false);
       setOpenAnnotation(null);
       setFeedbackMode(false);
       setFeedbackDirty(false);
@@ -352,6 +380,16 @@ export function PlanningSession({
         <label htmlFor="planning-intent">What do you want to get done today?</label>
         <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder="Fix the failing integration test, then get the migration ready for review." />
         <small className="planning-provenance">Your words stay attached to the plan. Work OS only suggests structure for your review.</small>
+        {lateReasonRequired && <div className="planning-notice planning-late-reason" role="status">
+          <AlertTriangle size={16} />
+          <span><strong>Late start.</strong> This workday began 30+ minutes after your scheduled start. Record the reason to clear Otto’s red signal.</span>
+          <div className="planning-late-reason-field">
+            <label htmlFor="planning-late-reason">Reason for the late start</label>
+            <textarea id="planning-late-reason" maxLength={1000} value={lateReasonDraft} disabled={lateReasonSaving} onChange={(event) => setLateReasonDraft(event.target.value)} placeholder="What delayed your start?" />
+            <button type="button" className="secondary" disabled={!lateReasonDraft.trim() || lateReasonSaving} onClick={() => void saveLateReason()}>{lateReasonSaving ? "Saving…" : "Save reason"}</button>
+          </div>
+        </div>}
+        {lateReasonSaved && !lateReasonRequired && <div className="planning-confirmed" role="status"><CheckCircle2 size={17} /><span>Late-start reason recorded — Otto is back to his usual colour.</span></div>}
         {state === "interpreting" && <div className="planning-loading" role="status"><Wave className="planning-wave" /><span>Building a reviewable plan…</span></div>}
         {state === "refining" && <div className="planning-loading" role="status"><FadeArc size={16} /><span>Refining your plan with your feedback…</span></div>}
         {interpretation && <section className={`planning-review${feedbackMode ? " is-editing" : ""}`} ref={reviewRef} onMouseUp={captureDocumentSelection} onKeyUp={captureDocumentSelection}>
