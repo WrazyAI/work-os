@@ -37,19 +37,27 @@ const LADDER: Array<{ name: string; label: string; required: string[] }> = [
     label: "; Ladder 4: rename the still-running executable aside and continue",
     required: [
       "GetTickCount",
+      "GetCurrentProcessId",
       'Rename "$INSTDIR\\work-os-companion.exe" "$R0"',
       "Delete /REBOOTOK",
     ],
   },
 ] as const;
 
-/** Slice the code between this ladder's label comment and the next one. */
+/** Slice the code between this ladder's label comment and the next ladder
+ * label or the macro terminator, so each step's assertions stay scoped to
+ * that step's own code. */
 function section(label: string): string {
   const start = hooks.indexOf(label);
   assert.ok(start >= 0, `ladder label missing: ${label}`);
   const rest = start + label.length;
-  const end = rest + hooks.slice(rest).search(/; Ladder \d+:/);
-  return hooks.slice(rest, end < rest ? undefined : end);
+  const nextLadder = hooks.slice(rest).search(/; Ladder \d+:/);
+  const macroEnd = hooks.slice(rest).indexOf("!macroend");
+  const candidates = [nextLadder, macroEnd].filter(
+    (offset) => offset >= 0,
+  );
+  const end = Math.min(...candidates.map((offset) => offset + rest));
+  return hooks.slice(rest, end);
 }
 
 for (const [index, step] of LADDER.entries()) {

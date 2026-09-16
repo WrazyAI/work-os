@@ -89,10 +89,14 @@
   nsis_tauri_utils::FindProcess "work-os-companion.exe"
   Pop $R8
   ${If} $R8 == 0
-    ; Runtime-unique survivor name: GetTickCount is monotonic per session, so
-    ; sequential fallbacks within one run (or a re-run before reboot) collide.
+    ; Runtime-unique survivor name: the timer wraps after ~49 days, so pair
+    ; it with this installer's own process id — PIDs are effectively unique
+    ; across runs, deleting the previous run's leftover at reboot keeps the
+    ; directory tidy, and a failed-cleanup collision lands in the existing
+    ; rename-error branch rather than overwriting a mapped file.
     System::Call 'kernel32::GetTickCount()l.r0'
-    StrCpy $R0 "$INSTDIR\work-os-companion.exe.old-$R0"
+    System::Call 'kernel32::GetCurrentProcessId()i.r1'
+    StrCpy $R0 "$INSTDIR\work-os-companion.exe.old-$R0-$R1"
     Delete /REBOOTOK "$R0"
     ClearErrors
     Rename "$INSTDIR\work-os-companion.exe" "$R0"
