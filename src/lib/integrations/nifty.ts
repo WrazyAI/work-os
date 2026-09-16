@@ -197,6 +197,13 @@ async function getAccessToken(): Promise<string> {
   return refreshed.access_token;
 }
 
+/** Resolves the organization-scoped token without issuing an API call, so a
+ * create can prove credentials work BEFORE it records the outbox intent: a
+ * credential failure can never have created a provider task. */
+export async function ensureNiftyAccessToken(): Promise<void> {
+  await getAccessToken();
+}
+
 async function refreshNiftyAccessToken(): Promise<NiftyTokenResponse> {
   const clientId = env("NIFTY_CLIENT_ID");
   const clientSecret = env("NIFTY_CLIENT_SECRET");

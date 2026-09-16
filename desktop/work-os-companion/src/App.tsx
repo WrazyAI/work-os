@@ -11,7 +11,8 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
-import { diagnostics, exportDiagnostics, openDebuggerWindow, openLogsDir } from "./diagnostics";
+import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
+import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
@@ -1003,14 +1004,23 @@ export default function App() {
     if (flow.status !== "downloaded") return;
     // The install step ends in the process exiting on Windows (the installer
     // closes and relaunches the app), so the exit watchdog is armed first and
-    // disarmed again if the install rejects, keeping the app alive.
+    // disarmed again if the install rejects, keeping the app alive. Arming is a
+    // safety net, not a prerequisite: if the command is unavailable (for
+    // example after an ACL regression) the install still proceeds and the gap is
+    // reported to diagnostics instead of blocking the update.
     notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
     setUpdateFlow({ status: "installing", update: flow.update });
+    let watchdogArmed = false;
     try {
       await invoke("arm_update_exit_watchdog");
+      watchdogArmed = true;
+    } catch (value) {
+      diagnostics.warn("updater.watchdog_unavailable", errorMessage(value, "The exit watchdog could not be armed."));
+    }
+    try {
       await flow.update.install();
     } catch (value) {
-      await invoke("disarm_update_exit_watchdog").catch(() => undefined);
+      if (watchdogArmed) await invoke("disarm_update_exit_watchdog").catch(() => undefined);
       const message = errorMessage(value, "The update could not be installed.");
       diagnostics.warn("updater.install_failed", message);
       setUpdateFlow({ status: "downloaded", update: flow.update });

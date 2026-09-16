@@ -6,12 +6,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { providerCreateFailureDefinite } from "../src/lib/work-os-tasks";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 const proposals = read("src/lib/work-os-proposals.ts");
 const tasks = read("src/lib/work-os-tasks.ts");
 const migration = read("supabase/migrations/0044_work_task_provider_outbox.sql");
+const intentMigration = read("supabase/migrations/0047_work_task_provider_create_intent.sql");
 
 test("migration anchors the provider task id on the proposal", () => {
   assert.match(migration, /alter table work_task_proposals add column if not exists provider_task_id text/);
@@ -33,10 +35,67 @@ test("create_task adopts a recorded provider id before any provider work", () =>
 });
 
 test("orphan search is skipped on a first attempt and the hook records the id", () => {
-  assert.match(proposals, /opts\.firstAttempt \? null : await findNiftyTaskByMarker/);
+  assert.match(proposals, /opts\.firstAttempt[\s\S]{0,60}?findNiftyTaskByMarker/);
   assert.match(proposals, /const firstAttempt = proposal\.status === "pending";/);
   assert.match(proposals, /onProviderTaskCreated: async \(providerTaskId\) => \{[\s\S]*?rememberProviderTaskId\(proposal\.id as string, providerTaskId, applyAttempt\)/);
   assert.match(proposals, /The proposal lease moved to another attempt before the created task could be recorded\./);
+});
+
+test("migration records a pre-POST create intent", () => {
+  assert.match(intentMigration, /add column if not exists provider_create_issued_at timestamptz/);
+});
+
+test("the create intent is recorded after credentials and before the POST", () => {
+  const thunkAt = tasks.indexOf("niftyForOwner(userId, async () => {");
+  const tokenAt = tasks.indexOf("ensureNiftyAccessToken()");
+  const intentAt = tasks.indexOf("hooks?.beforeProviderCreate?.()");
+  const postAt = tasks.indexOf("createNiftyTask(payload)");
+  assert.ok(thunkAt > 0 && tokenAt > thunkAt, "credentials resolve inside the owner scope");
+  assert.ok(intentAt > tokenAt, "the intent write follows the credential proof");
+  assert.ok(postAt > intentAt, "the POST is dispatched only after the intent is durable");
+  const helperAt = proposals.indexOf("async function rememberProviderCreateIssued");
+  assert.ok(helperAt > 0);
+  const helper = proposals.slice(helperAt, proposals.indexOf("async function clearProviderCreateIssued"));
+  assert.match(helper, /\.eq\("status", "applying"\)\.eq\("apply_attempt", applyAttempt\)/, "intent write is fenced");
+});
+
+test("an unresolved intent refuses to POST again and searches with retries", () => {
+  const branchAt = proposals.indexOf('if (operation === "create_task")');
+  const branch = proposals.slice(branchAt, proposals.indexOf("if (!taskId)"));
+  const issuedAt = branch.indexOf('const createIssued = text((proposal as Json).provider_create_issued_at);');
+  const retriesAt = branch.indexOf("retries: 3, retryDelayMs: 1_500");
+  const refuseAt = branch.indexOf("if (createIssued) {");
+  const createAt = branch.indexOf("createTask(ownerId, body, {");
+  assert.ok(issuedAt > 0, "prior intent is read");
+  assert.ok(retriesAt > issuedAt, "uncertain attempts retry the provider listing");
+  assert.ok(refuseAt > retriesAt, "the refusal is the last check before create");
+  assert.ok(createAt > refuseAt, "create stays the final fallback");
+  assert.match(branch.slice(refuseAt, createAt), /may have created this task in Nifty but it is not listed yet/);
+});
+
+test("only a definite 4xx clears the intent", () => {
+  assert.match(proposals, /if \(providerCreateFailureDefinite\(error\)\) await clearProviderCreateIssued/);
+  const helperAt = proposals.indexOf("async function clearProviderCreateIssued");
+  assert.ok(helperAt > 0);
+  assert.match(proposals.slice(helperAt, helperAt + 400), /provider_create_issued_at: null/);
+  assert.match(read("src/lib/work-os-proposals.ts"), /may have created/i, "uncertain failures land in needs_review");
+});
+
+test("create failures classify by HTTP status", () => {
+  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 422 bad request")), true);
+  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 404 not found")), true);
+  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 500 boom")), false);
+  assert.equal(providerCreateFailureDefinite(new Error("The operation was aborted due to timeout")), false);
+  assert.equal(providerCreateFailureDefinite(new TypeError("fetch failed")), false);
+  assert.equal(providerCreateFailureDefinite("plain failure"), false);
+  assert.equal(providerCreateFailureDefinite(null), false);
+});
+
+test("an unparseable create response never finalizes without the id", () => {
+  const guardAt = tasks.indexOf("Nifty accepted the create but did not return the task");
+  const syncAt = tasks.indexOf("await syncNifty(userId);\n  return { providerResult: result };");
+  assert.ok(guardAt > 0, "outbox mode throws instead of returning a provider result");
+  assert.ok(syncAt > guardAt, "the legacy fallback stays for non-outbox callers");
 });
 
 test("the outbox write is fenced on the live attempt", () => {

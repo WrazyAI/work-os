@@ -3,6 +3,7 @@ identifier = "allow-avatar-commands"
 description = "Allow the floating companion window to fire click-to-focus notifications."
 commands.allow = [
   "notify_focus",
+  "focus_main",
   "hide_avatar",
   "show_avatar"
 ]

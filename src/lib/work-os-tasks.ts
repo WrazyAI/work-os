@@ -4,6 +4,7 @@ import {
   completeNiftyTask,
   createNiftyTask,
   deleteNiftyTask,
+  ensureNiftyAccessToken,
   getNiftyTask,
   listNiftyTasks,
   normalizeNiftyTaskPayload,
@@ -225,10 +226,28 @@ async function finalizeCreatedNiftyTask(userId: string, initial: NormalizedNifty
   return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
 }
 
+/** True when a create failure is a definitive provider rejection: the request
+ * was answered with HTTP 4xx, so Nifty cannot have created the task. Anything
+ * else — timeout, network failure, 5xx — is uncertain and must never be
+ * retried with another POST. */
+export function providerCreateFailureDefinite(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const match = message.match(/\bHTTP\s+(\d{3})\b/);
+  if (!match) return false;
+  const status = Number(match[1]);
+  return status >= 400 && status < 500;
+}
+
 export async function createTask(
   userId: string,
   body: Json,
-  hooks?: { onProviderTaskCreated?: (providerTaskId: string) => Promise<void> },
+  hooks?: {
+    /** Runs after credentials are proven and immediately before the POST is
+     * dispatched, so the caller can record a durable create intent. Throwing
+     * here aborts before any provider request is attempted. */
+    beforeProviderCreate?: () => Promise<void>;
+    onProviderTaskCreated?: (providerTaskId: string) => Promise<void>;
+  },
 ) {
   const name = nonEmptyString(body.name);
   const taskGroupId = nonEmptyString(body.task_group_id);
@@ -242,7 +261,13 @@ export async function createTask(
     structuredMappings.has("expected_outcome") ? null : body.expected_outcome,
     structuredMappings.has("definition_of_done") ? null : body.definition_of_done,
   );
-  const result = await niftyForOwner(userId, () => createNiftyTask(payload));
+  const result = await niftyForOwner(userId, async () => {
+    // Prove credentials before the intent is recorded: a credential failure
+    // cannot have created a provider task, so it must not look uncertain.
+    if (hooks?.beforeProviderCreate) await ensureNiftyAccessToken();
+    await hooks?.beforeProviderCreate?.();
+    return createNiftyTask(payload);
+  });
   const initial = normalizeNiftyTaskPayload(result);
   if (initial) {
     // Outbox anchor: persist the provider id before any further provider write
@@ -251,6 +276,13 @@ export async function createTask(
     // this task unmapped, where the caller's marker search can still adopt it.
     if (hooks?.onProviderTaskCreated) await hooks.onProviderTaskCreated(initial.id);
     return finalizeCreatedNiftyTask(userId, initial, body);
+  }
+  if (hooks?.beforeProviderCreate) {
+    // The POST was dispatched (or at least issued) but the response could not
+    // be parsed, so the created task cannot be identified. Never finalize as
+    // applied without the id: fail into the uncertain path, where a retry
+    // adopts the task by marker instead of creating a second one.
+    throw new Error("Nifty accepted the create but did not return the task; a retry will adopt it by marker.");
   }
   await syncNifty(userId);
   return { providerResult: result };
@@ -273,21 +305,28 @@ export async function adoptProviderTask(userId: string, providerTaskId: string, 
 export async function findNiftyTaskByMarker(
   userId: string,
   marker: string,
-  params?: { projectId?: string; taskGroupId?: string; maxPages?: number },
+  params?: { projectId?: string; taskGroupId?: string; maxPages?: number; retries?: number; retryDelayMs?: number },
 ) {
   const pageSize = 100;
   const maxPages = Math.max(1, params?.maxPages ?? 3);
-  for (let page = 0; page < maxPages; page += 1) {
-    const { tasks, hasMore } = await niftyForOwner(userId, () => listNiftyTasks({
-      ...(params?.projectId ? { project_id: params.projectId } : {}),
-      ...(params?.taskGroupId ? { task_group_id: params.taskGroupId } : {}),
-      include_subtasks: "true",
-      limit: String(pageSize),
-      offset: String(page * pageSize),
-    }));
-    const found = tasks.find((task) => (task.description ?? "").includes(marker));
-    if (found) return found;
-    if (hasMore === false || tasks.length < pageSize) break;
+  const attempts = Math.max(1, params?.retries ?? 1);
+  const delayMs = Math.max(0, params?.retryDelayMs ?? 0);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    for (let page = 0; page < maxPages; page += 1) {
+      const { tasks, hasMore } = await niftyForOwner(userId, () => listNiftyTasks({
+        ...(params?.projectId ? { project_id: params.projectId } : {}),
+        ...(params?.taskGroupId ? { task_group_id: params.taskGroupId } : {}),
+        include_subtasks: "true",
+        limit: String(pageSize),
+        offset: String(page * pageSize),
+      }));
+      const found = tasks.find((task) => (task.description ?? "").includes(marker));
+      if (found) return found;
+      if (hasMore === false || tasks.length < pageSize) break;
+    }
+    // Provider listings can lag a just-created task; give the uncertain path a
+    // bounded chance to see it before refusing to continue.
+    if (attempt < attempts - 1 && delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   return null;
 }
