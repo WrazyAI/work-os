@@ -167,4 +167,14 @@ describe("operational visualizations", () => {
     expect(insightMath).toContain('completed: "Outcomes completed"');
     expect(insightMath).toContain('label: "Blockers"');
   });
+
+  it("renders the grounded synthesis as bold-labelled short paragraphs with an evidence fallback", () => {
+    const synthesisCard = readFileSync(resolve(root, "src/InsightSynthesis.tsx"), "utf8");
+    expect(app).toContain("<InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />");
+    expect(synthesisCard).toContain('<ChatMarkdown text={state.text} />');
+    expect(synthesisCard).toContain('state.mode === "evidence"');
+    expect(synthesisCard).toContain("showing the exact fact record instead");
+    expect(synthesisCard).toContain("every figure is checked against the record");
+    expect(synthesisCard).not.toContain("Selects only from the verified facts below");
+  });
 });

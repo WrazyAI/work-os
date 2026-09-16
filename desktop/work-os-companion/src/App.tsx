@@ -40,6 +40,7 @@ import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } 
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { MemorySettings } from "./MemorySettings";
+import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
 import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrendChart, UpdateKindChart } from "./InsightCharts";
@@ -2746,14 +2747,14 @@ const durationLabel = (seconds: number) => `${Math.floor(seconds / 3600)}h ${Mat
 
 function PersonalInsights({ data, loading, range, onRange, onReference, onCorrect }: { data: InsightsData | null; loading: boolean; range: "day" | "7d" | "30d"; onRange: (value: "day" | "7d" | "30d") => void; onReference: (reference: InsightDay["references"][number]) => void; onCorrect: (quality: NonNullable<InsightDay["sessionQuality"]>, date: string) => void }) {
   const notifications = useNotifications();
-  const [synthesis, setSynthesis] = useState<{ status: "loading" | "ready" | "failed"; text?: string } | null>(null);
+  const [synthesis, setSynthesis] = useState<InsightSynthesisState | null>(null);
   const liveInsights = new URLSearchParams(window.location.search).has("liveinsights");
   const synthesize = () => {
     if (!data || synthesis?.status === "loading") return;
     setSynthesis({ status: "loading" });
-    apiRequest<{ synthesis: string }>("/api/work-os/me/insights/synthesize", {
+    apiRequest<{ synthesis: string; mode?: "ai" | "evidence" }>("/api/work-os/me/insights/synthesize", {
       method: "POST", body: JSON.stringify({ range, through: data.through }),
-    }).then((result) => setSynthesis({ status: "ready", text: String(result.synthesis) }))
+    }).then((result) => setSynthesis(result.synthesis ? { status: "ready", text: String(result.synthesis), mode: result.mode } : { status: "failed" }))
       .catch(() => {
         setSynthesis({ status: "failed" });
         notifications.info("The assistant is unavailable — the deterministic brief below stands as-is.", "Synthesis unavailable");
@@ -2808,20 +2809,7 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
       <span>Worktivity observed {data?.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</span>
     </div>
 
-    {data && !loading && <section className="panel insight-synthesis" aria-label="AI synthesis">
-      <header>
-        <div>
-          <span><Sparkles size={14} /> AI synthesis</span>
-          <h3>{synthesis?.status === "ready" ? "The assistant's read of your range." : "Your record, narrated."}</h3>
-        </div>
-        <button disabled={synthesis?.status === "loading"} onClick={synthesize}>{synthesis?.status === "loading" ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}</button>
-      </header>
-      {synthesis?.status === "ready"
-        ? <p className="synthesis-text">{synthesis.text}</p>
-        : synthesis?.status === "failed"
-          ? <p className="synthesis-fallback">The assistant is unavailable — the deterministic brief and exact values below stand as-is.</p>
-          : <p className="synthesis-hint">Selects only from the verified facts below — never writes new numbers, and the deterministic brief always stands on its own.</p>}
-    </section>}
+    {data && !loading && <InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />}
 
     {loading && !data ? <section className="panel"><InsightsSkeleton /></section> : data ? <>
       <div className="metric-grid">

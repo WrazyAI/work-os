@@ -55,6 +55,17 @@ describe("companion launch window", () => {
     });
     expect(avatarWindow).toMatchObject({ width: 164, height: 188, resizable: false });
   });
+
+  it("permits blob and data images so authenticated screenshot previews render", () => {
+    const config = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
+    const csp = String(config.app.security.csp);
+    const imgSrc = csp.split(";").map((part: string) => part.trim()).find((part: string) => part.startsWith("img-src"));
+    expect(imgSrc).toContain("blob:");
+    expect(imgSrc).toContain("data:");
+    const gallery = readFileSync(resolve(root, "src/ScreenshotGallery.tsx"), "utf8");
+    expect(gallery).toContain("URL.createObjectURL");
+    expect(gallery).toContain("onError={() => { setFailed(true); setUrl(null); }}");
+  });
 });
 
 describe("floating companion integration", () => {

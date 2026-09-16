@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activityEvidenceRollup, deterministicInsightBrief, effectiveBreakObservation, insightConsistency, insightDateWindow, outcomeTiming, planAdherenceRollup, previousInsightWindow, updateKindRollup } from "../src/lib/work-os-insights";
+import { activityEvidenceRollup, deterministicInsightBrief, effectiveBreakObservation, formatDuration, insightConsistency, insightDateWindow, outcomeTiming, planAdherenceRollup, previousInsightWindow, updateKindRollup } from "../src/lib/work-os-insights";
 import { projectWorkspaceDay } from "../src/lib/work-os-daily-workspace";
 import { buildInsightSynthesisPrompt } from "../src/lib/aiInsights";
 
@@ -113,6 +113,22 @@ test("consistency reports goal/update rhythm, best day, and the closing streak",
   assert.deepEqual(stats.bestDay, { date: "2026-08-16", tasksCompleted: 3 });
   assert.equal(stats.commitmentRate, 60);
   assert.deepEqual(insightConsistency([], { planned: 0, plannedCompleted: 0 }).bestDay, null);
+});
+
+test("durations in facts and deltas are always hours and minutes", () => {
+  assert.equal(formatDuration(0), "0m");
+  assert.equal(formatDuration(2880), "48m");
+  assert.equal(formatDuration(5400), "1h 30m");
+  assert.equal(formatDuration(10080), "2h 48m");
+  assert.equal(formatDuration(10800), "3h");
+  const days = [
+    { date: "2026-08-14", planned: 1, plannedCompleted: 1, tasksCompleted: 1, updates: 1, observedSeconds: 10080 },
+    { date: "2026-08-15", planned: 1, plannedCompleted: 1, tasksCompleted: 1, updates: 1, observedSeconds: 7200 },
+  ];
+  const comparison = { days: [{ date: "2026-08-12", tasksCompleted: 1, observedSeconds: 7200 }] };
+  const text = deterministicInsightBrief(days, [], { comparison }).wins.join(" ");
+  assert.match(text, /moved up 2h 48m/);
+  assert.doesNotMatch(text, /\d+\.\d+\s*h/);
 });
 
 test("the expanded brief grounds blockers, on-time outcomes, rhythm, and deltas", () => {

@@ -156,6 +156,17 @@ function sumDays(days: Json[], key: string) {
   return days.reduce((sum, day) => sum + Number(day[key] ?? 0), 0);
 }
 
+/** Every duration the employee reads is spoken in hours and minutes — never
+ * decimal hours such as "2.8h". */
+export function formatDuration(seconds: number) {
+  const totalMinutes = Math.round(Math.abs(Number(seconds) || 0) / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!hours) return `${minutes}m`;
+  if (!minutes) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 /**
  * Deterministic, record-bound insight language. Every sentence restates stored
  * values only; nothing becomes a productivity score. The AI synthesis may
@@ -208,9 +219,8 @@ export function deterministicInsightBrief(days: Json[], references: Json[], extr
       const direction = completed > previousCompleted ? "up from" : "down from";
       wins.push(`Task outcomes were ${direction} ${previousCompleted} in the equal earlier period.`);
     }
-    if (previousObserved > 0 && currentObserved > 0) {
-      const deltaHours = Math.round(((currentObserved - previousObserved) / 3600) * 10) / 10;
-      if (deltaHours !== 0) wins.push(`Observed work time moved ${deltaHours > 0 ? "up" : "down"} ${Math.abs(deltaHours)}h against the equal earlier period.`);
+    if (previousObserved > 0 && currentObserved > 0 && currentObserved !== previousObserved) {
+      wins.push(`Observed work time moved ${currentObserved > previousObserved ? "up" : "down"} ${formatDuration(Math.abs(currentObserved - previousObserved))} against the equal earlier period.`);
     }
   }
   if (late > 0) attention.push(`${late} outcome${late === 1 ? "" : "s"} landed after ${late === 1 ? "its" : "their"} due date${late === 1 ? "" : "s"}.`);

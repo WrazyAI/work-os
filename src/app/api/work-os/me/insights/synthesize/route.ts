@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;
       return NextResponse.json({ error: result.detail ?? "AI synthesis unavailable", reason: result.reason }, { status });
     }
-    return NextResponse.json({ synthesis: result.synthesis, model: result.model });
+    return NextResponse.json({ synthesis: result.synthesis, mode: result.mode, model: result.model });
   } catch (error) {
     return jsonError(error);
   }

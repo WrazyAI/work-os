@@ -1,4 +1,4 @@
-import { getPersonalInsights, type InsightRange } from "@/lib/work-os-insights";
+import { formatDuration, getPersonalInsights, type InsightRange } from "@/lib/work-os-insights";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
@@ -32,19 +32,65 @@ export interface InsightSource {
 
 export interface InsightSelection { winIds: string[]; attentionIds: string[]; nextFocusIds: string[] }
 
-const INSIGHT_SELECTION_SCHEMA = {
-  name: "work_os_insight_selection",
+const INSIGHT_SYNTHESIS_SCHEMA = {
+  name: "work_os_insight_synthesis",
   strict: true,
   schema: {
     type: "object", additionalProperties: false,
-    required: ["winIds", "attentionIds", "nextFocusIds"],
+    required: ["highlight", "attention", "focus", "winIds", "attentionIds", "nextFocusIds"],
     properties: {
-      winIds: { type: "array", items: { type: "string" }, maxItems: 3 },
-      attentionIds: { type: "array", items: { type: "string" }, maxItems: 3 },
-      nextFocusIds: { type: "array", items: { type: "string" }, maxItems: 3 },
+      highlight: { type: "string" },
+      attention: { type: "string" },
+      focus: { type: "string" },
+      winIds: { type: "array", items: { type: "string" }, maxItems: 4 },
+      attentionIds: { type: "array", items: { type: "string" }, maxItems: 4 },
+      nextFocusIds: { type: "array", items: { type: "string" }, maxItems: 4 },
     },
   },
 } as const;
+
+/** Where the displayed synthesis came from: the assistant's validated prose, or
+ * the deterministic evidence rendering when validation fails. */
+export type InsightSynthesisMode = "ai" | "evidence";
+
+export interface InsightNarrative {
+  highlight: string;
+  attention: string;
+  focus: string;
+}
+
+const NARRATIVE_SECTION_MIN = 30;
+const NARRATIVE_SECTION_MAX = 460;
+
+/** A narrative section is accepted only when it is a short paragraph with no
+ * decimals (decimal hours are never allowed) and is checked against the record
+ * by the caller with `numbersGroundedIn`. */
+export function normalizeNarrativeSection(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+  if (cleaned.length < NARRATIVE_SECTION_MIN || cleaned.length > NARRATIVE_SECTION_MAX) return null;
+  if (/\d+\.\d+/.test(cleaned)) return null;
+  return cleaned;
+}
+
+export function normalizeInsightNarrative(raw: unknown): InsightNarrative | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const highlight = normalizeNarrativeSection(value.highlight);
+  const attention = normalizeNarrativeSection(value.attention);
+  const focus = normalizeNarrativeSection(value.focus);
+  return highlight && attention && focus ? { highlight, attention, focus } : null;
+}
+
+/** Short paragraphs under bold, deterministic section labels. Rendered by the
+ * companion's ChatMarkdown subset. */
+export function composeInsightNarrative(narrative: InsightNarrative): string {
+  return [
+    "**What went well**", "", narrative.highlight,
+    "", "**Needs attention**", "", narrative.attention,
+    "", "**Next focus**", "", narrative.focus,
+  ].join("\n");
+}
 
 function insightFacts(data: Pick<InsightSource, "wins" | "attention" | "nextFocus">) {
   return {
@@ -70,44 +116,56 @@ export function normalizeInsightSelection(raw: unknown, data: Pick<InsightSource
   return winIds && attentionIds && nextFocusIds ? { winIds, attentionIds, nextFocusIds } : null;
 }
 
-/** Uses the model only as a selector; all displayed language comes from exact stored facts. */
+/** Uses the model as a selector; all displayed language comes from exact stored facts. */
 export function renderInsightSelection(selection: InsightSelection, data: Pick<InsightSource, "wins" | "attention" | "nextFocus">): string {
   const facts = insightFacts(data);
   const select = (ids: string[], group: Array<{ id: string; text: string }>) => ids.map((id) => group.find((fact) => fact.id === id)?.text).filter((text): text is string => Boolean(text));
   const wins = select(selection.winIds, facts.wins);
   const attention = select(selection.attentionIds, facts.attention);
   const nextFocus = select(selection.nextFocusIds, facts.focus);
-  return [
-    wins.length ? `What went well: ${wins.join(" ")}` : "What went well: No wins were selected from this record.",
-    attention.length ? `Needs attention: ${attention.join(" ")}` : "Needs attention: Nothing was selected from this record.",
-    nextFocus.length ? `Next focus: ${nextFocus.join(" ")}` : "Next focus: No next focus was selected from this record.",
-  ].join(" ");
+  return composeInsightNarrative({
+    highlight: wins.length ? wins.join(" ") : "No wins were selected from this record.",
+    attention: attention.length ? attention.join(" ") : "Nothing was selected from this record.",
+    focus: nextFocus.length ? nextFocus.join(" ") : "No next focus was selected from this record.",
+  });
 }
 
-export function buildInsightSynthesisPrompt(data: InsightSource): string {
-  const hours = (seconds: number) => `${Math.round(seconds / 360) / 10}h`;
+/** The exact record the synthesis must stay inside; also the grounding text for
+ * the invented-number check. Instruction lines are deliberately excluded so a
+ * model cannot borrow a number from its own instructions. */
+export function buildInsightGroundingText(data: InsightSource): string {
   const dayLines = data.days.map((day) =>
-    `- ${day.date}: ${hours(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
+    `- ${day.date}: ${formatDuration(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
   ).join("\n");
   const kinds = data.updateKinds;
   const patterns = data.consistency;
   return [
-    `Write a personal work synthesis for ${data.from} → ${data.through} (${data.range}).`,
-    "Ground every statement in the exact values below. Never invent numbers, tasks, or days.",
-    "",
     `Deterministic summary: ${data.summary}`,
     `Wins: ${insightFacts(data).wins.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
     `Needs attention: ${insightFacts(data).attention.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "nothing flagged"}`,
     `Next focus: ${insightFacts(data).focus.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
-    `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items, ${data.totals.outcomesOnTime ?? 0} outcomes on time, ${data.totals.outcomesLate ?? 0} outcomes late.`,
+    `Totals: ${formatDuration(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items, ${data.totals.outcomesOnTime ?? 0} outcomes on time, ${data.totals.outcomesLate ?? 0} outcomes late.`,
     ...(kinds ? [`Update mix: ${kinds.progress} progress, ${kinds.starting} starts, ${kinds.completionClaim} completion claims, ${kinds.blocked} blockers, ${kinds.priorityChange} priority changes, ${kinds.unplannedWork} unplanned work.`] : []),
     ...(patterns ? [`Rhythm: ${patterns.daysWithGoal}/${patterns.dayCount} days with a written goal, ${patterns.daysWithUpdate}/${patterns.dayCount} days with a substantive update, ${patterns.daysWithCompletion}/${patterns.dayCount} days with a completed outcome, ${patterns.currentStreak}-day closing streak${patterns.bestDay ? `, best day ${patterns.bestDay.date} with ${patterns.bestDay.tasksCompleted} completed` : ""}.`] : []),
-    ...(data.previousTotals ? [`Earlier equal period: ${data.previousTotals.tasksCompleted ?? 0} Nifty outcomes, ${hours(Number(data.previousTotals.observedSeconds ?? 0))} observed, ${data.previousTotals.plannedCompleted ?? 0}/${data.previousTotals.planned ?? 0} planned tasks completed.`] : []),
+    ...(data.previousTotals ? [`Earlier equal period: ${data.previousTotals.tasksCompleted ?? 0} Nifty outcomes, ${formatDuration(Number(data.previousTotals.observedSeconds ?? 0))} observed, ${data.previousTotals.plannedCompleted ?? 0}/${data.previousTotals.planned ?? 0} planned tasks completed.`] : []),
     "Daily record:",
     dayLines || "(no days recorded)",
+  ].join("\n");
+}
+
+export function buildInsightSynthesisPrompt(data: InsightSource): string {
+  return [
+    `Write a personal work synthesis for ${data.from} → ${data.through} (${data.range}).`,
+    "Ground every statement in the exact values below. Never invent numbers, tasks, or days.",
+    "Express every duration in hours and minutes, for example 2h 48m or 48m. Never use decimal hours such as 2.8h.",
+    "Write one short paragraph per section: highlight (what went well), attention (what needs attention), and focus (the next focus).",
+    "Use 2–3 sentences per paragraph. Bold the most important figure or phrase in each paragraph with **double asterisks**.",
+    "Keep activity context labeled as observed context: it never proves task completion and is never a productivity score.",
+    "",
+    buildInsightGroundingText(data),
     ...(data.contextBlock ? ["", `Additional context (live day state and recalled history — informational only; never a selectable fact and never completion evidence):\n${data.contextBlock}`] : []),
     "",
-    "Return ONLY JSON with winIds, attentionIds, and nextFocusIds. Select IDs from matching lists; do not emit prose, numbers, or facts.",
+    "Return ONLY JSON with highlight, attention, focus (short paragraphs), and winIds, attentionIds, nextFocusIds (IDs selected from the matching lists above).",
   ].filter(Boolean).join("\n");
 }
 
@@ -134,6 +192,7 @@ export function normalizeSynthesis(raw: unknown): string | null {
 export interface SynthesisResult {
   ok: boolean;
   synthesis?: string;
+  mode?: InsightSynthesisMode;
   model?: string;
   reason?: SynthesisFailure;
   detail?: string;
@@ -182,11 +241,11 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
       body: JSON.stringify({
         model: INSIGHTS_MODEL,
         messages: [
-          { role: "system", content: "You are the Work OS assistant. Select only verified insight fact IDs. Never write prose, numbers, or unsupported facts." },
+          { role: "system", content: "You are the Work OS assistant. Ground every number in the record the user provides; never invent figures, tasks, days, or events. Express durations in hours and minutes (2h 48m, 48m) — never decimal hours such as 2.8h. Write short paragraphs (2–3 sentences) and bold the most important figure in each with **double asterisks**. Never call anything a productivity score, and never treat activity context as task completion. Return only the JSON object the user asks for." },
           { role: "user", content: prompt },
         ],
         temperature: 0.3,
-        max_tokens: 500,
+        max_tokens: 700,
       }),
       signal: AbortSignal.timeout(SYNTHESIS_TIMEOUT_MS),
     });
@@ -195,16 +254,42 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     const content = payload.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");
-    if (start < 0 || end <= start) return { ok: false, reason: "ai_malformed", detail: "no selection JSON" };
-    const selection = normalizeInsightSelection(JSON.parse(content.slice(start, end + 1)), {
-      wins: (data.brief.wins ?? []).map(String), attention: (data.brief.attention ?? []).map(String), nextFocus: (data.brief.nextFocus ?? []).map(String),
+    if (start < 0 || end <= start) return { ok: false, reason: "ai_malformed", detail: "no synthesis JSON" };
+    const parsed = JSON.parse(content.slice(start, end + 1)) as Record<string, unknown>;
+    const facts = {
+      wins: (data.brief.wins ?? []).map(String),
+      attention: (data.brief.attention ?? []).map(String),
+      nextFocus: (data.brief.nextFocus ?? []).map(String),
+    };
+    const selection = normalizeInsightSelection(parsed, facts);
+    const groundingText = buildInsightGroundingText({
+      range: data.range ?? range,
+      from: data.from,
+      through: data.through,
+      summary: String(data.brief.summary ?? ""),
+      wins: facts.wins,
+      attention: facts.attention,
+      nextFocus: facts.nextFocus,
+      totals: data.totals,
+      days: data.days.map((day) => ({
+        date: day.date, observedSeconds: day.observedSeconds, planned: day.planned,
+        plannedCompleted: day.plannedCompleted, tasksCompleted: day.tasksCompleted, trackedMinutes: Number((day as { trackedMinutes?: number }).trackedMinutes ?? 0),
+      })),
+      updateKinds: (data as { updateKinds?: InsightSource["updateKinds"] }).updateKinds ?? null,
+      consistency: (data as { consistency?: InsightSource["consistency"] }).consistency ?? null,
+      previousTotals: (data as { comparison?: { totals?: Record<string, number> } }).comparison?.totals ?? null,
     });
-    if (!selection) return { ok: false, reason: "ai_malformed", detail: "selection referenced invalid facts" };
-    return { ok: true, synthesis: renderInsightSelection(selection, {
-      wins: (data.brief.wins ?? []).map(String), attention: (data.brief.attention ?? []).map(String), nextFocus: (data.brief.nextFocus ?? []).map(String),
-    }), model: INSIGHTS_MODEL };
+    const narrative = normalizeInsightNarrative(parsed);
+    if (narrative
+      && numbersGroundedIn(narrative.highlight, groundingText)
+      && numbersGroundedIn(narrative.attention, groundingText)
+      && numbersGroundedIn(narrative.focus, groundingText)) {
+      return { ok: true, synthesis: composeInsightNarrative(narrative), mode: "ai", model: INSIGHTS_MODEL };
+    }
+    if (!selection) return { ok: false, reason: "ai_malformed", detail: "synthesis referenced invalid facts or figures" };
+    return { ok: true, synthesis: renderInsightSelection(selection, facts), mode: "evidence", model: INSIGHTS_MODEL };
   } catch (error) {
-    if (error instanceof SyntaxError) return { ok: false, reason: "ai_malformed", detail: "invalid selection JSON" };
+    if (error instanceof SyntaxError) return { ok: false, reason: "ai_malformed", detail: "invalid synthesis JSON" };
     return { ok: false, reason: "ai_unavailable", detail: error instanceof Error ? error.message : "provider call failed" };
   }
 }

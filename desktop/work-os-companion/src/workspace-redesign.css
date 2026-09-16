@@ -5440,9 +5440,10 @@ button:not(:disabled):active {
 .eod-shot-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 9px; align-items: center; width: 100%; padding: 5px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 10px; line-height: 1.4; text-align: left; cursor: zoom-in; }
 .eod-shot-row:hover, .eod-shot-row:focus-visible { border-color: var(--line); background: var(--surface); }
 .eod-shot-rows > li > .eod-shot-row-copy { padding: 5px 5px 5px 74px; }
-.eod-shot-row-copy { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; font-size: 10px; line-height: 1.4; }
+.eod-shot-row-copy { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; min-width: 0; font-size: 10px; line-height: 1.4; }
+.eod-shot-row-copy > span { min-width: 0; overflow-wrap: anywhere; }
 .eod-shot-thumb { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
-.eod-shot-carousel { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
+.eod-shot-carousel { display: flex; gap: 8px; max-width: 100%; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
 .eod-shot-tile { display: grid; gap: 4px; flex: 0 0 auto; width: 92px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; text-align: left; cursor: zoom-in; }
 .eod-shot-tile-image { width: 92px; height: 56px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); }
 .eod-shot-tile:hover .eod-shot-tile-image, .eod-shot-tile:focus-visible .eod-shot-tile-image { border-color: var(--ink); }
@@ -5456,9 +5457,11 @@ button:not(:disabled):active {
 .eod-shot-modal-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(760px, 100%); max-height: min(640px, calc(100vh - 48px)); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 18px; background: #f7f5ed; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38); overflow: hidden; animation: modalRise 0.24s ease both; }
 .eod-shot-modal-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .eod-shot-modal-panel > header strong { font-size: 12px; }
-.eod-shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; padding: 14px; overflow-y: auto; }
-.eod-shot-grid-item { display: grid; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 9px; text-align: left; cursor: zoom-in; }
-.eod-shot-grid-item > span { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-variant-numeric: tabular-nums; }
+.eod-shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr)); gap: 10px; padding: 14px; overflow-y: auto; overflow-x: clip; }
+.eod-shot-grid-item { display: grid; gap: 5px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 9px; text-align: left; cursor: zoom-in; }
+.eod-shot-grid-item > span { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; font-variant-numeric: tabular-nums; }
+.eod-shot-grid-item > span small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eod-shot-grid-image, .eod-shot-tile-image, .eod-shot-thumb { display: block; max-width: 100%; }
 .eod-shot-grid-image { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
 .eod-shot-lightbox { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 48px 24px; background: rgba(8, 10, 8, 0.78); backdrop-filter: blur(6px); animation: modalFade 0.18s ease both; }
 .eod-shot-lightbox figure { position: relative; display: grid; gap: 10px; width: min(880px, 100%); margin: 0; }
@@ -5751,6 +5754,23 @@ button:not(:disabled):active {
   color: var(--ink);
   font-size: 12px;
   line-height: 1.6;
+}
+.synthesis-text .chat-markdown {
+  display: grid;
+  gap: 10px;
+}
+.synthesis-text .chat-markdown p {
+  margin: 0;
+  max-width: 74ch;
+}
+.synthesis-text .chat-markdown strong {
+  font-weight: 600;
+}
+.synthesis-text .chat-markdown .chat-markdown-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 
 .synthesis-hint,

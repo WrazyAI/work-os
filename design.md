@@ -820,7 +820,17 @@ Use neutral observation terms. Never imply quality, intent, productivity, or com
 
 ### 18.4 Recalled memory context
 
-When Work Memory feeds an agent prompt (updates, check-ins, EOD drafting and refinement, plan interpret and refine, insights synthesis), recalled history and profile facts are context only: they are dated, labeled as history, and never selectable facts, never completion evidence, and never a productivity judgment. The live day state is presented separately as current fact. The insights output remains exact-ID selection rendered from stored facts, so recalled context can influence which verified facts are chosen but never adds prose or figures. A dev-only prompt probe (inactive in production) exposes the assembled context for automated verification.
+When Work Memory feeds an agent prompt (updates, check-ins, EOD drafting and refinement, plan interpret and refine, insights synthesis), recalled history and profile facts are context only: they are dated, labeled as history, and never selectable facts, never completion evidence, and never a productivity judgment. The live day state is presented separately as current fact. Recalled context can influence emphasis but never adds prose, figures, or evidence to the output. A dev-only prompt probe (inactive in production) exposes the assembled context for automated verification.
+
+**Insights synthesis contract (validated prose).** The insights narrative is the one
+surface where the model writes its own sentences. It is accepted only when every
+figure it writes appears in the exact stored record (the deterministic brief,
+totals, update mix, rhythm, earlier-period totals, and daily record). Prose is
+rejected — and the deterministic exact-ID rendering shown instead — when a number
+is not grounded, when a decimal number appears (durations are always hours and
+minutes), when a section is missing, or when a section exceeds its short-paragraph
+length bound. The displayed result always records which mode was used so the
+reader knows whether they are reading validated prose or the exact fact record.
 
 ## 19. Page-specific guidance
 
@@ -1914,9 +1924,12 @@ Insights follows summary → comparison → exact record:
 
 1. Page intro, Day / 7 days / 30 days range control, and a freshness chip row
    (Nifty synced, Worktivity observed, and a red-led chip when sync is delayed).
-2. AI synthesis card: the model selects only from verified fact sentences and
-   never writes prose or numbers. The hint copy states that contract, and the
-   deterministic brief stands alone when the assistant is unavailable.
+2. AI synthesis card: the assistant writes three short grounded paragraphs
+   (highlight, attention, focus) under bold section labels. Every figure it
+   writes must appear in the exact record below; decimal numbers are rejected
+   and durations are always hours and minutes (`2h 48m`, `48m`). When validation
+   fails the card shows the deterministic exact-fact rendering and says so. The
+   hint copy states the ground rules instead of promising a fixed behaviour.
 3. A four-tile metric row for separate evidence classes, never a composite score.
 4. Evidence-based brief with Wins, Needs attention, and Next focus; an empty
    class renders a quiet placeholder line instead of a blank box.

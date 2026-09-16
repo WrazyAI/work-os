@@ -38,7 +38,7 @@ export function ScreenshotImage({ summaryId, size, alt, className, srcOverride }
   }, [size, srcOverride, summaryId]);
   if (failed) return <span className={`eod-shot-unavailable ${className ?? ""}`}>Unavailable</span>;
   if (!url) return <span className={`eod-shot-skeleton ${className ?? ""}`} aria-hidden="true" />;
-  return <img className={className} src={url} alt={alt} loading="lazy" />;
+  return <img className={className} src={url} alt={alt} loading="lazy" onError={() => { setFailed(true); setUrl(null); }} />;
 }
 
 export type PreviewResolver = (summaryId: string, size: "thumb" | "preview" | "full") => string | null;
