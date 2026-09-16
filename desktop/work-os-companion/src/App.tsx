@@ -965,11 +965,8 @@ export default function App() {
               const message = errorMessage(value, "The update could not be installed.");
               diagnostics.warn("updater.install_failed", message);
               setUpdateStatus("");
-              showError(
-                new Error(`${message} To recover, quit Work OS from the system tray and run the setup installer again.`),
-                message,
-                "Update failed",
-              );
+              const recoveryMessage = `${message} To recover, quit Work OS from the system tray and run the setup installer again.`;
+              showError(recoveryMessage, recoveryMessage, "Update failed");
             });
           },
         });
