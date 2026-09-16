@@ -1438,18 +1438,22 @@ export default function App() {
         interpretation_metadata: interpretation ? { model: "work-os-plan", promptVersion: "work-os-plan-v1", interpretedAt: new Date().toISOString(), clarificationCount: interpretation.clarifications.length, sourceContext: ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates"], clarifications: interpretation.clarifications } : undefined,
         ...(interpretation ? { clarification_answers: clarificationAnswers } : {}),
         items,
-      }) as DailyPlan & { queued?: boolean; taskCreation?: { tasks?: number; subtasks?: number; failed?: number } };
+      }) as DailyPlan & { queued?: boolean; taskCreation?: { tasks?: number; subtasks?: number; failed?: number; reused?: number } };
       if (saved.queued) {
         setPlanSaveState("offline");
         return "queued";
       }
-      if (active && saved.taskCreation && ((saved.taskCreation.tasks ?? 0) > 0 || (saved.taskCreation.subtasks ?? 0) > 0 || (saved.taskCreation.failed ?? 0) > 0)) {
+      if (active && saved.taskCreation && ((saved.taskCreation.tasks ?? 0) > 0 || (saved.taskCreation.subtasks ?? 0) > 0 || (saved.taskCreation.failed ?? 0) > 0 || (saved.taskCreation.reused ?? 0) > 0)) {
         const createdTasks = saved.taskCreation.tasks ?? 0;
         const createdSubtasks = saved.taskCreation.subtasks ?? 0;
+        const reusedTasks = saved.taskCreation.reused ?? 0;
+        const continued = reusedTasks
+          ? `, continued ${reusedTasks} existing task${reusedTasks === 1 ? "" : "s"}`
+          : "";
         notifications.success(
           saved.taskCreation.failed
-            ? `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"} and ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}; ${saved.taskCreation.failed} could not be created and will retry.`
-            : `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"} from your plan.`,
+            ? `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"}${continued} and ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}; ${saved.taskCreation.failed} could not be created and will retry.`
+            : `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"}${continued} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"} from your plan.`,
           "Plan materialized",
         );
       }

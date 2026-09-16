@@ -21,11 +21,13 @@ export { syncNiftyPersonTasks, syncNiftyTask } from "@/lib/work-os-nifty-sync";
 export { syncWorktivityEvidence, syncWorktivityRoster, upsertWorktivityEmployee } from "@/lib/work-os-worktivity";
 export {
   addTaskProgress,
+  adoptProviderTask,
   archiveTask,
   completeTask,
   createTask,
   deleteTask,
   DEFAULT_NIFTY_LEDGER_PROJECT_ID,
+  findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,
   isNiftyTaskAttributableToMember,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
@@ -102,6 +103,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(taskDetails, /requirePerson: true/);
   assert.match(applyInterpretation, /status: 410/);
   assert.match(applyInterpretation, /persisted proposal/);
+  // The retired direct-apply receipt path is gone for good: the tables are
+  // dropped by migration 0045 and the orphaned lib no longer exists.
+  assert.equal(existsSync(new URL("../src/lib/work-os-approved-update.ts", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../supabase/migrations/0045_drop_work_companion_commands.sql", import.meta.url)), true);
   assert.match(interpretedProposals, /Idempotency-Key is required/);
   assert.match(interpretedProposals, /requirePerson: true/);
   assert.match(interpretedProposals, /proposeInterpretedWorkUpdate/);

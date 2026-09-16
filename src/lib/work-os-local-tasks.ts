@@ -10,6 +10,12 @@ export const LOCAL_TASK_PROVIDER = "local";
 const MAX_TITLE = 240;
 const MAX_DESCRIPTION = 20_000;
 
+/** A repeat goal title (the same commitment typed on a new day) continues the
+ * recent open task instead of creating a second row. Bounded to the last week
+ * and matched on normalized title so genuinely distinct same-named efforts
+ * older than the window are never merged. */
+export const LOCAL_TASK_REUSE_WINDOW_DAYS = 7;
+
 export type MaterializedPlanTask = {
   itemId: string | null;
   taskId: string;
@@ -21,6 +27,8 @@ export type PlanTaskMaterialization = {
   tasks: number;
   subtasks: number;
   failed: number;
+  /** Repeat goals that continued a recent open task instead of creating one. */
+  reused: number;
   created: MaterializedPlanTask[];
 };
 
@@ -38,6 +46,11 @@ export function planTaskMarker(...parts: string[]) {
   return `work-os-plan:${createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 20)}`;
 }
 
+/** Comparison form for repeat goals: trimmed, whitespace-collapsed, case-folded. */
+export function normalizeTaskTitle(value: unknown): string {
+  return (typeof value === "string" ? value : "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function normalizeCriterion(value: unknown): string | null {
   const criterion = typeof value === "string" ? value.trim() : "";
   if (!criterion) return null;
@@ -52,6 +65,31 @@ async function findLocalTaskByMarker(organizationId: string, marker: string) {
     .contains("raw", { planMarker: marker }).maybeSingle();
   if (result.error) throw new Error(`load plan task by marker: ${result.error.message}`);
   return (result.data as Json | null) ?? null;
+}
+
+/** Finds the open Work OS task a repeat goal title should continue. Matching is
+ * deliberately narrow: same person, local provider, still open, due inside the
+ * window ending on the plan date, and normalized-title equality (compared in
+ * JS so titles containing SQL wildcards can never over-match). */
+async function findReusableLocalTask(access: WorkOsAccess, title: string, planDate: string) {
+  const normalized = normalizeTaskTitle(title);
+  if (!normalized) return null;
+  const since = new Date(`${planDate}T12:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - LOCAL_TASK_REUSE_WINDOW_DAYS);
+  let query = db().from("work_tasks").select("*")
+    .eq("organization_id", access.organizationId)
+    .eq("provider", LOCAL_TASK_PROVIDER)
+    .eq("completed", false)
+    .not("status", "in", "(archived,deleted)")
+    .gte("due_date", since.toISOString().slice(0, 10))
+    .lte("due_date", planDate)
+    .order("due_date", { ascending: false })
+    .limit(50);
+  if (access.personId) query = query.contains("assignee_person_ids", [access.personId]);
+  const result = await query;
+  if (result.error) throw new Error(`load repeat Work OS task: ${result.error.message}`);
+  const candidates = (result.data ?? []) as Json[];
+  return candidates.find((task) => normalizeTaskTitle(task.title) === normalized) ?? null;
 }
 
 async function createLocalTaskRow(access: WorkOsAccess, input: {
@@ -120,7 +158,7 @@ export async function materializePlanLocalTasks(
   planDate: string,
   entries: PlanTaskEntry[],
 ): Promise<PlanTaskMaterialization> {
-  const summary: PlanTaskMaterialization = { tasks: 0, subtasks: 0, failed: 0, created: [] };
+  const summary: PlanTaskMaterialization = { tasks: 0, subtasks: 0, failed: 0, reused: 0, created: [] };
   const parents = new Map<string, { row: Json; criteria: string[] }>();
 
   for (const entry of entries) {
@@ -132,18 +170,31 @@ export async function materializePlanLocalTasks(
       } else {
         const marker = markerFor(String(planId), "goal", entry.title.toLowerCase());
         parent = await findLocalTaskByMarker(access.organizationId, marker);
-        if (!parent) {
-          parent = await createLocalTaskRow(access, {
-            title: entry.title,
-            description: entry.objective,
-            dueDate: planDate,
-            parent: null,
-            marker,
-          });
-          summary.tasks += 1;
-        } else {
+        if (parent) {
           // Heal attribution for a task created before an earlier day-event write failed.
           await recordLocalTaskCreationEvent(access, parent, planDate, new Date().toISOString());
+        } else {
+          // A repeat title continues the recent open task instead of creating a
+          // duplicate. The plan item link below makes later re-confirms reuse
+          // that task directly, without another window search.
+          parent = await findReusableLocalTask(access, entry.title, planDate);
+          if (parent) {
+            summary.reused += 1;
+            await audit(access, "plan.task_reused", "work_daily_plan", String(planId), {
+              taskId: parent.id,
+              title: entry.title,
+              dueDate: parent.due_date,
+            });
+          } else {
+            parent = await createLocalTaskRow(access, {
+              title: entry.title,
+              description: entry.objective,
+              dueDate: planDate,
+              parent: null,
+              marker,
+            });
+            summary.tasks += 1;
+          }
         }
         if (entry.itemId) {
           const link = await db().from("work_daily_plan_items")
@@ -193,11 +244,12 @@ export async function materializePlanLocalTasks(
     }
   }
 
-  if (summary.tasks || summary.subtasks || summary.failed) {
+  if (summary.tasks || summary.subtasks || summary.failed || summary.reused) {
     await audit(access, "plan.tasks_materialized", "work_daily_plan", String(planId), {
       tasks: summary.tasks,
       subtasks: summary.subtasks,
       failed: summary.failed,
+      reused: summary.reused,
       provider: LOCAL_TASK_PROVIDER,
     });
   }

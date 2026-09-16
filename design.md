@@ -1944,6 +1944,16 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   build. The plan item is then linked to its task (`item_kind='local_task'`), so
   re-confirms and refreshes never duplicate work: a linked item is retained, and
   creation is additionally guarded by plan-scoped content markers.
+- **Repeat titles.** A commitment whose title matches an open Work OS task for
+  the same employee, due within the last 7 days (normalized: trimmed,
+  whitespace-collapsed, case-insensitive), continues that task instead of
+  creating a second one. The plan item links to the existing task, whose due
+  date is left unchanged, so the day shows it once as unfinished work and the
+  receipt says `continued N existing tasks` rather than counting it as created.
+  The window is deliberately narrow: same-named efforts older than a week — or
+  for another person, or already completed/archived — still create a new task,
+  and subtasks remain parent-scoped so identical criteria under different goals
+  never merge.
 - **Failure.** A failed creation is best-effort and audited; the item stays
   unlinked and retries on the next confirm. When any goal fails, the confirm
   receipt says how many could not be created instead of claiming success.
