@@ -3,9 +3,10 @@ import {
   adoptProviderTask,
   createEvidence,
   createTask,
+  DEFAULT_NIFTY_LEDGER_PROJECT_ID,
   findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
-  listPersonTasks,
+  isNiftyTaskAttributableToMember,
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
@@ -256,95 +257,164 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
   throw new Error("unsupported proposal operation");
 }
 
+/** Task-reference exemptions: these operations either create a task or only
+ * read a view, so they carry no existing-task requirement. */
+const TASK_EXEMPT_OPERATIONS = ["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"];
+
+/** Resolves one referenced task straight from Work OS and verifies the
+ * employee may act on it: assigned to them, or — only for the configured
+ * ledger project — attributable through the creator/subscriber metadata a
+ * legacy imported row carries. The organization scope keeps a shared owner
+ * account from reaching another workspace's tasks. */
+async function resolveProposalTask(input: {
+  ownerId: string;
+  organizationId: string;
+  personId: string;
+  ledgerProjectId: string;
+  niftyMemberId: string | null;
+  taskId: string;
+}): Promise<Json> {
+  let task: Json;
+  try {
+    task = await getTaskByLocalOrProviderId(input.ownerId, input.taskId);
+  } catch {
+    throw new Error("That task is no longer in your task list. Refresh and try again.");
+  }
+  if (["archived", "deleted"].includes(String(task.status ?? ""))) throw new Error("That task was removed from your task list.");
+  const taskOrganizationId = text(task.organization_id);
+  if (taskOrganizationId && taskOrganizationId !== input.organizationId) throw new Error("That task is not assigned to you.");
+  const assigned = Array.isArray(task.assignee_person_ids) && (task.assignee_person_ids as unknown[]).includes(input.personId);
+  const attributable = text(task.provider_project_id) === input.ledgerProjectId
+    && isNiftyTaskAttributableToMember(task, input.niftyMemberId);
+  if (!assigned && !attributable) throw new Error("That task is not assigned to you.");
+  return task;
+}
+
+/** A status move needs an existing status column for the task's own project.
+ * The candidate id is checked directly so a large project cannot cap the
+ * query and reject a valid column. */
+async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: string | null, input: string) {
+  if (!taskGroupId || !input.includes(taskGroupId)) {
+    throw new Error("A status move requires an existing status column for this project.");
+  }
+  const taskProjectId = text(task.provider_project_id);
+  if (!taskProjectId) throw new Error("A status move requires an existing status column for this project.");
+  const { data, error } = await db().from("work_tasks").select("id")
+    .eq("user_id", ownerId).eq("provider_project_id", taskProjectId).eq("task_group_id", taskGroupId).limit(1);
+  if (error) throw new Error(`load task status column: ${error.message}`);
+  if (!data?.length) throw new Error("A status move requires an existing status column for this project.");
+}
+
 /** Stores an assistant interpretation for review. This endpoint creates no
- * Nifty/task mutation; only a later accepted proposal can apply one. */
+ * task mutation; only a later accepted proposal can apply one.
+ *
+ * Each operation resolves its task directly from Work OS (local or provider
+ * id) instead of a paged provider view, so carried-over and recently created
+ * tasks can never fall outside an arbitrary window. Failures are reported per
+ * operation so one stale task cannot reject the whole batch. */
 export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const input = text(body.input_text);
   if (!input || input.length > 4000) throw new Error("input_text is required");
   const operations = interpretedOperations(body.operations);
   const personId = access.personId as string;
   const ownerId = await organizationOwnerId(access.organizationId);
-  // Drafting a proposal uses the locally cached task view the employee just
-  // saw; the day poll keeps that cache fresh. Do NOT block here on a provider
-  // sync — it pages the whole account and took over two minutes, so the UI
-  // appeared to do nothing. Approval re-syncs and staleness-checks before
-  // anything is filed, so correctness is preserved.
-  const available = await listPersonTasks(ownerId, personId, { includeLedgerHistory: true, limit: 500 }) as Json[];
-  const byId = new Map(available.flatMap((task) => [[String(task.id), task], [text(task.provider_task_id) ?? "", task]]));
+  const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", ownerId).eq("id", personId).maybeSingle();
+  if (personResult.error) throw new Error(`load proposal person mapping: ${personResult.error.message}`);
+  const niftyMemberId = (personResult.data?.nifty_member_id as string | null | undefined) ?? null;
+  const ledgerProjectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_LEDGER_PROJECT_ID;
   const proposals: Array<Json & { client_operation_index: number }> = [];
+  const failures: Array<{ client_operation_index: number; error: string }> = [];
+  const resolved = new Map<string, Json>();
   for (const [index, operation] of operations.entries()) {
-    const operationKey = `${idempotencyKey}:${index}`;
-    const { data: existing, error: existingError } = await db().from("work_task_proposals").select("*")
-      .eq("organization_id", access.organizationId).eq("person_id", personId).eq("idempotency_key", operationKey).maybeSingle();
-    if (existingError) throw new Error(`load idempotent interpreted proposal: ${existingError.message}`);
-    if (existing) {
-      proposals.push({ ...(existing as Json), client_operation_index: index });
-      continue;
-    }
-    const task = operation.taskId ? byId.get(operation.taskId) : null;
-    if (!["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(operation.op) && !task) throw new Error(`The selected task is no longer available for proposed update ${index + 1}`);
-    if (operation.op === "modify_task_status") {
-      const taskProjectId = text(task?.provider_project_id);
-      const knownTaskGroupIds = new Set((taskProjectId ? available : [])
-        .filter((candidate) => text(candidate.provider_project_id) === taskProjectId)
-        .map((candidate) => text(candidate.task_group_id))
-        .filter((id): id is string => !!id));
-      if (!operation.taskGroupId || !input.includes(operation.taskGroupId) || !knownTaskGroupIds.has(operation.taskGroupId)) {
-        throw new Error("A Nifty status move requires an employee-supplied, existing task_group_id for this project");
+    try {
+      const operationKey = `${idempotencyKey}:${index}`;
+      const { data: existing, error: existingError } = await db().from("work_task_proposals").select("*")
+        .eq("organization_id", access.organizationId).eq("person_id", personId).eq("idempotency_key", operationKey).maybeSingle();
+      if (existingError) throw new Error(`load idempotent interpreted proposal: ${existingError.message}`);
+      if (existing) {
+        proposals.push({ ...(existing as Json), client_operation_index: index });
+        continue;
       }
-    }
-    const providerOperation: ProposalOperation = operation.op === "record_progress" ? "log_progress"
-      : operation.op === "record_blocker" ? "add_blocker"
-      : operation.op === "add_task" ? "create_task"
-      : operation.op === "modify_task_description" || operation.op === "modify_task_status" || operation.op === "modify_subtask" ? "update_task"
-      : operation.op === "add_subtask" ? "add_subtask"
-      : operation.op === "delete_subtask" ? "delete_task"
-      : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks" ? "display_tasks"
-      : operation.op as ProposalOperation;
-    const beforeState = task ? {
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      completed: task.completed,
-      due_date: task.due_date,
-      start_date: task.start_date,
-      task_group_id: task.task_group_id,
-      parent_provider_task_id: task.parent_provider_task_id,
-    } : {};
-    const proposedChange: Json = operation.op === "create_task" || operation.op === "add_task"
-      ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement, task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5" }
-      : operation.op === "record_progress"
-        ? { summary: operation.statement }
-        : operation.op === "record_blocker"
-          ? { description: operation.statement }
-          : operation.op === "modify_task_description" || operation.op === "modify_subtask"
+      const needsTask = !TASK_EXEMPT_OPERATIONS.includes(operation.op);
+      let task: Json | null = null;
+      if (needsTask && operation.taskId) {
+        const cached = resolved.get(operation.taskId);
+        if (cached) {
+          task = cached;
+        } else {
+          task = await resolveProposalTask({
+            ownerId,
+            organizationId: access.organizationId,
+            personId,
+            ledgerProjectId,
+            niftyMemberId,
+            taskId: operation.taskId,
+          });
+          resolved.set(operation.taskId, task);
+        }
+      }
+      if (needsTask && !task) throw new Error("That task is no longer in your task list. Refresh and try again.");
+      if (operation.op === "modify_task_status") {
+        await assertKnownTaskGroup(ownerId, task as Json, operation.taskGroupId, input);
+      }
+      const providerOperation: ProposalOperation = operation.op === "record_progress" ? "log_progress"
+        : operation.op === "record_blocker" ? "add_blocker"
+        : operation.op === "add_task" ? "create_task"
+        : operation.op === "modify_task_description" || operation.op === "modify_task_status" || operation.op === "modify_subtask" ? "update_task"
+        : operation.op === "add_subtask" ? "add_subtask"
+        : operation.op === "delete_subtask" ? "delete_task"
+        : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks" ? "display_tasks"
+        : operation.op as ProposalOperation;
+      const beforeState = task ? {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        completed: task.completed,
+        due_date: task.due_date,
+        start_date: task.start_date,
+        task_group_id: task.task_group_id,
+        parent_provider_task_id: task.parent_provider_task_id,
+      } : {};
+      const proposedChange: Json = operation.op === "create_task" || operation.op === "add_task"
+        ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement, task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5" }
+        : operation.op === "record_progress"
+          ? { summary: operation.statement }
+          : operation.op === "record_blocker"
             ? { description: operation.statement }
-            : operation.op === "modify_task_status"
-              ? { task_group_id: operation.taskGroupId as string }
-              : operation.op === "add_subtask"
-                ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement }
-                : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks"
-                  ? { view: operation.op === "display_overdue_tasks" ? "overdue" : "pending", limit: operation.limit }
-                  : {};
-    const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
-      organization_id: access.organizationId,
-      person_id: personId,
-      task_id: task?.id ?? null,
-      operation: providerOperation,
-      input_text: input,
-      before_state: beforeState,
-      proposed_change: proposedChange,
-      model: "desktop_interpretation",
-      prompt_version: "desktop-interpretation-v1",
-      idempotency_key: operationKey,
-      created_by: access.ctx.user.id,
-    }).select("*").single();
-    if (proposalError) throw new Error(`create interpreted proposal: ${proposalError.message}`);
-    await audit(access, "proposal.interpreted", "task_proposal", proposal.id as string, { operation: providerOperation, clientOperationIndex: index });
-    proposals.push({ ...(proposal as Json), client_operation_index: index });
+            : operation.op === "modify_task_description" || operation.op === "modify_subtask"
+              ? { description: operation.statement }
+              : operation.op === "modify_task_status"
+                ? { task_group_id: operation.taskGroupId as string }
+                : operation.op === "add_subtask"
+                  ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement }
+                  : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks"
+                    ? { view: operation.op === "display_overdue_tasks" ? "overdue" : "pending", limit: operation.limit }
+                    : {};
+      const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
+        organization_id: access.organizationId,
+        person_id: personId,
+        task_id: task?.id ?? null,
+        operation: providerOperation,
+        input_text: input,
+        before_state: beforeState,
+        proposed_change: proposedChange,
+        model: "desktop_interpretation",
+        prompt_version: "desktop-interpretation-v1",
+        idempotency_key: operationKey,
+        created_by: access.ctx.user.id,
+      }).select("*").single();
+      if (proposalError) throw new Error(`create interpreted proposal: ${proposalError.message}`);
+      await audit(access, "proposal.interpreted", "task_proposal", proposal.id as string, { operation: providerOperation, clientOperationIndex: index });
+      proposals.push({ ...(proposal as Json), client_operation_index: index });
+    } catch (error) {
+      failures.push({
+        client_operation_index: index,
+        error: error instanceof Error && error.message ? error.message : "That update could not be filed. Refresh and try again.",
+      });
+    }
   }
-  return { proposals };
+  return { proposals, failures };
 }
 
 async function restorePlanRemoval(access: WorkOsAccess, proposal: Json) {

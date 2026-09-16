@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { INTERPRET_RESPONSE_SCHEMA, parseInterpretation } from "../src/lib/aiInterpret";
+import { INTERPRET_RESPONSE_SCHEMA, orderInterpretationTasks, parseInterpretation } from "../src/lib/aiInterpret";
 
 const TASKS = [
   { id: "t-1", title: "Ship the debugger fix", completed: false },
@@ -78,4 +78,32 @@ test("strict-schema nulls for optional fields are normalized away", () => {
   assert.equal(parsed?.reply, "Got it.");
   assert.equal(parsed?.claims[0]?.taskId, undefined);
   assert.equal(parsed?.operations.length, 0);
+});
+
+test("interpretation context is ordered for today's work, not oldest-first", () => {
+  const rows = [
+    { id: "old-due", title: "January compliance review", due_date: "2026-01-16", completed: false, provider_updated_at: "2026-01-16T10:00:00Z" },
+    { id: "today-due", title: "Ship the proposals fix", due_date: "2026-09-16", completed: false, provider_updated_at: "2026-09-16T01:00:00Z" },
+    { id: "no-due-recent", title: "Carried over null-due task", due_date: null, completed: false, provider_updated_at: "2026-09-15T22:00:00Z" },
+    { id: "done-yesterday", title: "Finished yesterday", due_date: "2026-09-15", completed: true, provider_updated_at: "2026-09-15T20:00:00Z" },
+  ];
+  const ordered = orderInterpretationTasks(rows, "2026-09-16");
+  assert.deepEqual(ordered.map((task) => task.id), ["today-due", "old-due", "no-due-recent", "done-yesterday"]);
+  assert.equal(ordered[0]?.completed, false);
+  assert.equal(ordered.at(-1)?.completed, true);
+});
+
+test("interpretation context caps at the newest open work and skips malformed rows", () => {
+  const rows: Array<Record<string, unknown>> = Array.from({ length: 320 }, (_, index) => ({
+    id: `task-${index}`,
+    title: `Task ${index}`,
+    due_date: null,
+    completed: false,
+    provider_updated_at: new Date(Date.UTC(2026, 0, 1) + index * 60_000).toISOString(),
+  }));
+  rows.push({ id: 42, title: "bad id" });
+  const ordered = orderInterpretationTasks(rows, "2026-09-16", 300);
+  assert.equal(ordered.length, 300);
+  assert.equal(ordered[0]?.id, "task-319");
+  assert.ok(!ordered.some((task) => task.title === "bad id"));
 });

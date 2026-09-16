@@ -23,7 +23,7 @@ import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal,
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -1855,12 +1855,20 @@ export default function App() {
       if (!review || (!review.operations.length && !review.reply)) throw new Error("The assistant couldn't map that to work yet.");
       const mutating = review.operations.map((op, index) => ({ op, index })).filter(({ op }) => isMutatingToolOp(op));
       if (mutating.length) advanceTrace("Filing proposals");
-      const proposals = mutating.length ? await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      const filing = mutating.length ? await apiRequest<{
+        proposals: Array<{ id: string; client_operation_index: number }>;
+        failures?: Array<{ client_operation_index: number; error: string }>;
+      }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
-      }) : { proposals: [] };
-      const proposalIdByOriginal = new Map(proposals.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
-      const operations = review.operations.map((op, index) => ({ ...op, enabled: isMutatingToolOp(op), proposalId: proposalIdByOriginal.get(index) }));
+      }) : { proposals: [] as Array<{ id: string; client_operation_index: number }>, failures: [] as Array<{ client_operation_index: number; error: string }> };
+      const proposalIdByOriginal = new Map(filing.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
+      const failureByOriginal = new Map((filing.failures ?? []).map((failure) => [mutating[failure.client_operation_index]?.index, failure.error]));
+      if (failureByOriginal.size) notifications.error([...failureByOriginal.values()][0]!, "Some updates could not be filed");
+      const operations = review.operations.map((op, index) => {
+        const failure = failureByOriginal.get(index);
+        return { ...op, enabled: isMutatingToolOp(op) && !failure, proposalId: proposalIdByOriginal.get(index), failure };
+      });
       // Read-only display tools fetch immediately — viewing tasks mutates
       // nothing, so there is nothing to approve.
       const displayResults: ToolCallResult[] = [];
@@ -1878,7 +1886,7 @@ export default function App() {
       const reviewId = crypto.randomUUID();
       setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined, reviewId });
       setComposerThinking(null);
-      setComposerHistory((current) => [...current, { id: reviewId, role: "assistant", text: review.reply || "Here's what I understood.", meta: mutating.length ? `${mutating.length} proposed update${mutating.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString(), operations, toolResults: displayResults.length ? displayResults : undefined }]);
+      setComposerHistory((current) => [...current, { id: reviewId, role: "assistant", text: review.reply || "Here's what I understood.", meta: filing.proposals.length ? `${filing.proposals.length} proposed update${filing.proposals.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString(), operations, toolResults: displayResults.length ? displayResults : undefined }]);
       void sharePendingTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions });
     }).catch((value) => {
       setInterpretation(null);
@@ -2013,7 +2021,10 @@ export default function App() {
     const inputText = `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`;
     setBusy(true); setError("");
     try {
-      const { proposals } = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      const { proposals, failures } = await apiRequest<{
+        proposals: Array<{ id: string; client_operation_index: number }>;
+        failures?: Array<{ client_operation_index: number; error: string }>;
+      }>("/api/work-os/me/proposals", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
@@ -2022,16 +2033,25 @@ export default function App() {
         }),
       });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
-      const operations: ProposedOperation[] = tasks.map((task, index) => ({
-        op: "complete_task", statement: `Employee confirmed completion of ${task.title}.`, taskId: task.id, taskTitle: task.title, proposalId: byIndex.get(index), enabled: true,
-      }));
-      if (operations.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
-      setPendingProgressUpdate(inputText);
-      const reviewId = interpretation?.reviewId ?? crypto.randomUUID();
-      setInterpretation((current) => current ? { ...current, operations: [...current.operations, ...operations], reviewId: current.reviewId ?? reviewId } : {
-        status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.", reviewId,
-      });
-      void sharePendingTools({ reviewId, input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
+      const operations: ProposedOperation[] = tasks.flatMap((task, index) => byIndex.has(index)
+        ? [{ op: "complete_task" as const, statement: `Employee confirmed completion of ${task.title}.`, taskId: task.id, taskTitle: task.title, proposalId: byIndex.get(index), enabled: true }]
+        : []);
+      const failed = (failures ?? []).map((failure) => ({ title: tasks[failure.client_operation_index]?.title, error: failure.error }));
+      if (operations.length) {
+        setPendingProgressUpdate(inputText);
+        const reviewId = interpretation?.reviewId ?? crypto.randomUUID();
+        setInterpretation((current) => current ? { ...current, operations: [...current.operations, ...operations], reviewId: current.reviewId ?? reviewId } : {
+          status: "ready", operations, taskOptions: interpretationTaskOptions(), reply: "Review the selected task completions before anything changes.", reviewId,
+        });
+        void sharePendingTools({ reviewId, input: inputText, reply: "Review the selected task completions before anything changes.", operations, results: [], taskOptions: interpretationTaskOptions() });
+      }
+      if (failed.length) {
+        // Some selections were stale (usually a task that left the list).
+        // Refresh so those rows drop out, keep the filed proposals, and
+        // surface the reason without discarding the successful ones.
+        void refresh({ dayOnly: true }).catch(() => undefined);
+        throw new Error(partialFilingMessage(operations.length, failed));
+      }
     } finally {
       setBusy(false);
     }
@@ -2457,17 +2477,19 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   onRetryOperation?: (result: ToolCallResult) => void;
 }) {
   const mutating = interpretation.operations.filter(isMutatingToolOp);
+  const actionable = mutating.filter((op) => !op.failure);
+  const unfiled = mutating.filter((op) => !!op.failure);
   const mutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
   const hasResults = mutationResults.length > 0;
-  const hasPendingMutations = mutating.some((op) => !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
+  const hasPendingMutations = actionable.some((op) => !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
   const proposedTaskIds = interpretation.operations
-    .filter((op) => op.op === "complete_task" && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
+    .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
     .map((op) => op.taskId)
     .filter((id): id is string => !!id);
   return <>
-    <strong>{mutating.length ? (hasResults ? "Action results" : "Review proposed actions") : "Assistant shortcuts"}</strong>
+    <strong>{!actionable.length && unfiled.length ? "Updates not filed" : actionable.length ? (hasResults ? "Action results" : "Review proposed actions") : "Assistant shortcuts"}</strong>
     {interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}
-    <p>{mutating.length ? (hasResults ? "Each provider result is shown below." : "Choose what to record. Nothing changes until the final confirmation.") : "Loaded inline below. Viewing never needs approval."}</p>
+    <p>{!actionable.length && unfiled.length ? "Nothing was recorded. The reasons are listed below." : actionable.length ? (hasResults ? "Each provider result is shown below." : "Choose what to record. Nothing changes until the final confirmation.") : "Loaded inline below. Viewing never needs approval."}</p>
     <ChatSectionBoundary label="assistant actions">
       <div className="interpretation-list">
         {interpretation.operations.map((op, index) => {
@@ -2490,6 +2512,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
         {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
+        {unfiled.map((op, index) => <p key={`unfiled-${index}`} className="tool-display-error">{op.taskTitle ? `${op.taskTitle}: ` : ""}{op.failure}</p>)}
       </div>
     </ChatSectionBoundary>
   </>;

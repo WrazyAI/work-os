@@ -19,6 +19,9 @@ export interface ProposedOperation {
   limit?: number;
   page?: NavigatePage;
   proposalId?: string;
+  /** Set when the operation could not be filed for review (usually the task
+   * left the list). The operation is then disabled and explained inline. */
+  failure?: string;
   /** Employee inclusion toggle — nothing files without this. */
   enabled: boolean;
 }
@@ -189,13 +192,23 @@ export function interpretationFallbackReason(error: unknown): string {
   const message = error instanceof Error ? error.message : error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
     ? (error as { message: string }).message
     : "";
-  return reason === "nifty_failure"
-    ? "Your tasks could not be loaded from Nifty. Choose the update type instead."
-    : /ai_unavailable|ai_unconfigured|503|501/i.test(`${reason} ${message}`)
-    ? "The assistant is unavailable right now."
-    : /offline|network|fetch/i.test(`${reason} ${message}`)
-      ? "You appear to be offline."
-      : "The assistant couldn't read that update.";
+  if (reason === "nifty_failure") return "Your tasks could not be loaded. Choose the update type instead.";
+  if (/ai_unavailable|ai_unconfigured|503|501/i.test(`${reason} ${message}`)) return "The assistant is unavailable right now.";
+  if (/ai_malformed/i.test(`${reason} ${message}`)) return "The assistant couldn't read that update. Rephrase it or choose the update type.";
+  if (/offline|network|fetch/i.test(`${reason} ${message}`)) return "You appear to be offline.";
+  // Server-side filing errors carry actionable copy ("…no longer in your task
+  // list…"). Surface it instead of a generic unreadable-update message.
+  return message || "The assistant couldn't read that update.";
+}
+
+/** Summary for a completion batch where some operations could not be filed.
+ * Names up to two affected tasks and carries the server's reason. */
+export function partialFilingMessage(filed: number, failed: Array<{ title?: string; error: string }>): string {
+  const first = failed[0];
+  if (!filed) return first?.error ?? "The completion proposals were not saved.";
+  const names = failed.map((entry) => entry.title?.trim()).filter((title): title is string => !!title).slice(0, 2);
+  const named = names.length ? ` (${names.join(", ")}${failed.length > names.length ? "…" : ""})` : "";
+  return `${failed.length} of ${filed + failed.length} tasks could not be filed${named}: ${first?.error ?? "try again."}`;
 }
 
 // ── EOD composer helpers ──────────────────────────────────────────────────

@@ -167,6 +167,33 @@ function InAppToolsSection() {
         }}
         toolContext={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
       />
+      <h2 style={{ margin: 0, fontSize: 14 }}>In-app filing outcomes</h2>
+      <ProgressComposer
+        {...composer}
+        pending="File these two completions"
+        interpretation={{
+          status: "ready",
+          operations: [
+            { op: "complete_task" as const, statement: "Employee confirmed completion of Repair provider sync.", taskId: "t-overdue", taskTitle: "Repair provider sync", enabled: false, failure: "That task is no longer in your task list. Refresh and try again." },
+            { op: "complete_task" as const, statement: "Employee confirmed completion of Ship the avatar review flow.", taskId: "t-today", taskTitle: "Ship the avatar review flow", enabled: false, failure: "That task is not assigned to you." },
+          ],
+          taskOptions: [],
+          reply: "I could not file either completion.",
+        }}
+      />
+      <ProgressComposer
+        {...composer}
+        pending="File the completions I selected"
+        interpretation={{
+          status: "ready",
+          operations: [
+            { op: "complete_task" as const, statement: "Employee confirmed completion of Repair provider sync.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "p-partial", enabled: true },
+            { op: "complete_task" as const, statement: "Employee confirmed completion of Document release evidence.", taskId: "t-11", taskTitle: "Document release evidence", enabled: false, failure: "That task is no longer in your task list. Refresh and try again." },
+          ],
+          taskOptions: [],
+          reply: "One completion is ready for review; the other task left your list.",
+        }}
+      />
     </section>
   );
 }
