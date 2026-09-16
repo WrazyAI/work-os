@@ -114,3 +114,34 @@ Backend tests require a project credential on `WrazyOS API`: provision a temp
 admin account, set it with `testsprite project credential <id> --type "API key"
 --credential-file <pw>`, then run the `Prod audit` tests. The credential and the
 temp account were deleted at the end of this audit.
+
+## 8. Local SEO client workspace recovery (2026-09-16, evening)
+
+**Symptom:** every client-scoped SEO OS skill failed immediately with
+`Attempt N could not start: The selected Local SEO client could not be resolved safely.`
+
+**Root cause:** client resolution reads `~/agent-os/local-seo/clients/<slug>/client.md`
+(gitignored local data). The VPS had **zero `client.md` files** (one tracked
+`campaigns/` folder only); the nine curated workspaces live on the operator's dev
+box and never synced. Client-less runs were unaffected, which is why only
+client-scoped skills broke.
+
+**Fix (data + code, commit `cbb2ef4ea`):**
+- Restored nine client workspaces on the VPS (client.md, brand-voice*, client-knowledge/**,
+  AGENTS.md, approval/analytics/boundary policies, client-config.json, citations) with a
+  per-file copy (no bulk sync); scaffolded `deploy-system` from its control-plane record
+  with the canonical `createLocalSeoClient` writer. Snapshot taken first
+  (`/home/dev/local-seo-clients-backup-20260916T172618Z.tgz`).
+- Hardening: the SEO OS executor now materializes a missing workspace from the DB client and
+  retries once; the resolver's 400 lists available clients; new readiness check
+  `scripts/check-local-seo-workspaces.mts`.
+
+**Verified:**
+- `POST /api/seo/local/agent` (`citations` + `acme-plumbing`) → 200 start, cancel 200.
+- `POST /api/seo/local/team` (`team` + `acme-plumbing`) → 200 start with resolved client name, cancel 200.
+- SEO OS executor `POST /api/seo-os/local/run` (client_id) → 201 task, `run_started` event, no `could not be started`.
+- `test/local-seo-client-resolver.test.mts` 8/8; full suite 105/105; typecheck clean;
+  readiness check: all 10 clients resolve.
+
+**Residual:** `seo_clients` has duplicate rows (2 per client, 20 total) — cleanup candidate.
+`deploy-system` materializes as folder `deploy-monitor` and resolves via scored identity.
