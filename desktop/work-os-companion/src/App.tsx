@@ -1448,13 +1448,19 @@ export default function App() {
         const createdTasks = saved.taskCreation.tasks ?? 0;
         const createdSubtasks = saved.taskCreation.subtasks ?? 0;
         const reusedTasks = saved.taskCreation.reused ?? 0;
-        const continued = reusedTasks
-          ? `, continued ${reusedTasks} existing task${reusedTasks === 1 ? "" : "s"}`
-          : "";
+        const failedTasks = saved.taskCreation.failed ?? 0;
+        const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+        // Build the receipt from the counts that actually happened: a
+        // reuse-only confirm must never say "Created 0 Work OS tasks".
+        const pieces: string[] = [];
+        if (createdTasks) pieces.push(`created ${plural(createdTasks, "Work OS task")}`);
+        if (reusedTasks) pieces.push(`continued ${plural(reusedTasks, "existing task")}`);
+        if (createdSubtasks) pieces.push(`added ${plural(createdSubtasks, "subtask")}`);
+        const summary = pieces.length ? `Plan applied: ${pieces.join(", ")}.` : "Plan saved.";
         notifications.success(
-          saved.taskCreation.failed
-            ? `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"}${continued} and ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}; ${saved.taskCreation.failed} could not be created and will retry.`
-            : `Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"}${continued} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"} from your plan.`,
+          failedTasks
+            ? `${summary} ${plural(failedTasks, "task")} could not be created and will retry.`
+            : summary,
           "Plan materialized",
         );
       }

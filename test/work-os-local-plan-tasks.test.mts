@@ -53,6 +53,8 @@ test("the reuse lookup is narrow: window, person, still open, local only", () =>
   assert.match(lookup, /\.lte\("due_date", planDate\)/);
   assert.match(lookup, /setUTCDate\(since\.getUTCDate\(\) - LOCAL_TASK_REUSE_WINDOW_DAYS\)/);
   assert.match(lookup, /\.contains\("assignee_person_ids", \[access\.personId\]\)/);
+  assert.match(lookup, /\.order\("due_date", \{ ascending: false \}\)[\s\S]{0,120}?\.order\("id", \{ ascending: true \}\)/, "stable secondary order for paging");
+  assert.match(lookup, /\.range\(page \* pageSize, page \* pageSize \+ pageSize - 1\)/, "all rows in the window are paged");
   assert.match(lookup, /normalizeTaskTitle\(task\.title\) === normalized/, "wildcards cannot over-match");
   assert.equal(LOCAL_TASK_REUSE_WINDOW_DAYS, 7);
   assert.doesNotMatch(lookup, /ilike\(/, "no SQL wildcard matching for user titles");

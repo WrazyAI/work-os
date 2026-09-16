@@ -525,15 +525,18 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (proposal.status === "applying") {
     const applyingSince = new Date(proposal.updated_at as string).getTime();
     if (Date.now() - applyingSince <= 5 * 60_000) return withOutcome(proposal);
-    // The fence matches the attempt that was stalled when it was read, so a
-    // lease that a concurrent claimant just replaced is never flipped back.
+    // The fence always matches the attempt that was stalled when it was read —
+    // including a null attempt — so a lease a concurrent claimant just
+    // replaced is never flipped back.
     let recovery = db().from("work_task_proposals").update({
       status: "failed",
       apply_attempt: null,
       failure_reason: "Previous provider application did not finalize; reconciling before retry.",
       updated_at: new Date().toISOString(),
     }).eq("id", proposalId).eq("status", "applying");
-    if (proposal.apply_attempt) recovery = recovery.eq("apply_attempt", proposal.apply_attempt as string);
+    recovery = proposal.apply_attempt
+      ? recovery.eq("apply_attempt", proposal.apply_attempt as string)
+      : recovery.is("apply_attempt", null);
     const { data: recovered, error: recoveryError } = await recovery.select("*").maybeSingle();
     if (recoveryError) throw new Error(`recover stalled Work OS proposal: ${recoveryError.message}`);
     if (recovered) Object.assign(proposal, recovered);

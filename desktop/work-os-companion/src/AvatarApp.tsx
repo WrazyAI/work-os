@@ -741,7 +741,7 @@ export default function AvatarApp(): React.ReactElement {
       if (interpretation) {
         if (!interpretation.buildId) throw new Error("Build the plan again before confirming it.");
         const items = buildPlanItemsFromInterpretation(facts.planItems, interpretation, answers);
-        const confirmation = await apiRequest<{ taskCreation?: { tasks?: number; subtasks?: number; failed?: number } }>("/api/work-os/me/plan", {
+        const confirmation = await apiRequest<{ taskCreation?: { tasks?: number; subtasks?: number; failed?: number; reused?: number } }>("/api/work-os/me/plan", {
           method: "PUT",
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({
@@ -764,8 +764,15 @@ export default function AvatarApp(): React.ReactElement {
         const materialized = confirmation?.taskCreation;
         const createdTasks = materialized?.tasks ?? 0;
         const createdSubtasks = materialized?.subtasks ?? 0;
-        const materializeCopy = materialized && (createdTasks || createdSubtasks)
-          ? ` Created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"} with ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}.`
+        const reusedTasks = materialized?.reused ?? 0;
+        // Report the counts that actually happened: a reuse-only confirm must
+        // never claim "Created 0 Work OS tasks".
+        const bits: string[] = [];
+        if (createdTasks) bits.push(`created ${createdTasks} Work OS task${createdTasks === 1 ? "" : "s"}`);
+        if (reusedTasks) bits.push(`continued ${reusedTasks} existing task${reusedTasks === 1 ? "" : "s"}`);
+        if (createdSubtasks) bits.push(`added ${createdSubtasks} subtask${createdSubtasks === 1 ? "" : "s"}`);
+        const materializeCopy = materialized && bits.length
+          ? ` Plan applied: ${bits.join(", ")}.`
           : materialized?.failed
             ? ` ${materialized.failed} plan task${materialized.failed === 1 ? "" : "s"} could not be created — they will retry on your next confirm.`
             : "";

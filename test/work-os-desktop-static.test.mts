@@ -385,8 +385,12 @@ assert.match(localTaskSurfaces, /\{taskSourceLabel\(task\)\} is the task record/
 assert.match(localTaskSurfaces, /localTask\?: boolean/);
 const companionTypes = read("src/types.ts");
 assert.match(companionTypes, /item_kind: "nifty_task" \| "outcome" \| "local_task"/);
-assert.match(avatar, /Created \$\{createdTasks\} Work OS task/);
-assert.match(app, /Created \$\{createdTasks\} Work OS task/);
+// The receipt is built from the counts that actually happened, so a
+// reuse-only confirm never claims "Created 0 Work OS tasks".
+assert.match(avatar, /created \$\{createdTasks\} Work OS task/);
+assert.match(avatar, /continued \$\{reusedTasks\} existing task/);
+assert.match(app, /created \$\{plural\(createdTasks, "Work OS task"\)\}/);
+assert.match(app, /continued \$\{plural\(reusedTasks, "existing task"\)\}/);
 
 const localTasks = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-local-tasks.ts"), "utf8");
 assert.match(localTasks, /export const LOCAL_TASK_PROVIDER = "local"/);

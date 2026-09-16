@@ -63,7 +63,8 @@ test("stalled-lease recovery is fenced to the attempt it read", () => {
   const recoveryAt = proposals.indexOf("Previous provider application did not finalize");
   const recovery = proposals.slice(recoveryAt - 800, recoveryAt + 700);
   assert.match(recovery, /\.eq\("id", proposalId\)\.eq\("status", "applying"\)/);
-  assert.match(recovery, /if \(proposal\.apply_attempt\) recovery = recovery\.eq\("apply_attempt", proposal\.apply_attempt as string\)/);
+  assert.match(recovery, /recovery\.eq\("apply_attempt", proposal\.apply_attempt as string\)/);
+  assert.match(recovery, /recovery\.is\("apply_attempt", null\)/, "null attempts are fenced explicitly");
   assert.match(recovery, /apply_attempt: null/);
 });
 

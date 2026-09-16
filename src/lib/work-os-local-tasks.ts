@@ -76,20 +76,30 @@ async function findReusableLocalTask(access: WorkOsAccess, title: string, planDa
   if (!normalized) return null;
   const since = new Date(`${planDate}T12:00:00Z`);
   since.setUTCDate(since.getUTCDate() - LOCAL_TASK_REUSE_WINDOW_DAYS);
-  let query = db().from("work_tasks").select("*")
-    .eq("organization_id", access.organizationId)
-    .eq("provider", LOCAL_TASK_PROVIDER)
-    .eq("completed", false)
-    .not("status", "in", "(archived,deleted)")
-    .gte("due_date", since.toISOString().slice(0, 10))
-    .lte("due_date", planDate)
-    .order("due_date", { ascending: false })
-    .limit(50);
-  if (access.personId) query = query.contains("assignee_person_ids", [access.personId]);
-  const result = await query;
-  if (result.error) throw new Error(`load repeat Work OS task: ${result.error.message}`);
-  const candidates = (result.data ?? []) as Json[];
-  return candidates.find((task) => normalizeTaskTitle(task.title) === normalized) ?? null;
+  // Page the whole window with a deterministic order (due date, then id) so a
+  // match beyond the first page is still found and the pages never overlap.
+  const pageSize = 50;
+  const maxPages = 4;
+  for (let page = 0; page < maxPages; page += 1) {
+    let query = db().from("work_tasks").select("*")
+      .eq("organization_id", access.organizationId)
+      .eq("provider", LOCAL_TASK_PROVIDER)
+      .eq("completed", false)
+      .not("status", "in", "(archived,deleted)")
+      .gte("due_date", since.toISOString().slice(0, 10))
+      .lte("due_date", planDate)
+      .order("due_date", { ascending: false })
+      .order("id", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+    if (access.personId) query = query.contains("assignee_person_ids", [access.personId]);
+    const result = await query;
+    if (result.error) throw new Error(`load repeat Work OS task: ${result.error.message}`);
+    const candidates = (result.data ?? []) as Json[];
+    const match = candidates.find((task) => normalizeTaskTitle(task.title) === normalized);
+    if (match) return match;
+    if (candidates.length < pageSize) break;
+  }
+  return null;
 }
 
 async function createLocalTaskRow(access: WorkOsAccess, input: {
