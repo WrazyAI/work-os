@@ -372,6 +372,33 @@ select:focus-visible {
   font-weight: 700;
 }
 .notification-action:hover { background: color-mix(in srgb, var(--notification-accent) 9%, transparent); }
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.notification-actions .notification-action { margin-top: 0; }
+.notification-action.quiet {
+  border-color: transparent;
+  color: #545b58;
+}
+.notification-action.quiet:hover { background: rgba(30, 34, 29, 0.08); color: var(--ink); }
+.notification-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--notification-accent) 16%, transparent);
+  overflow: hidden;
+}
+.notification-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--notification-accent);
+  transition: width 160ms linear;
+}
+.notification-flyout.locked { grid-template-columns: 36px minmax(0, 1fr); }
 .notification-flyout > i {
   position: absolute;
   z-index: -1;
