@@ -84,7 +84,7 @@ export function parseSelect(spec: string | undefined): ParsedSelect {
   const baseParts: string[] = [];
   const embeds: EmbedSpec[] = [];
   for (const part of splitTopLevel(spec)) {
-    const match = part.match(/^([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)(![a-z]+)?\(([\s\S]*)\)$/);
+    const match = part.match(/^(?:([A-Za-z_][A-Za-z0-9_]*):)?([A-Za-z_][A-Za-z0-9_]*)(![a-z]+)?\(([\s\S]*)\)$/);
     if (!match) {
       baseParts.push(part);
       continue;
@@ -92,7 +92,7 @@ export function parseSelect(spec: string | undefined): ParsedSelect {
     const [, alias, table, modifier, inner] = match;
     const nested = parseSelect(inner);
     embeds.push({
-      alias,
+      alias: alias || table,
       table,
       inner: modifier === "!inner",
       columns: nested.base === "*" ? "*" : splitTopLevel(nested.base),
