@@ -195,7 +195,15 @@ assert.match(app, /method: "PATCH"/);
 assert.match(app, /MoreHorizontal/);
 assert.match(app, /queryAvailableUpdate\(saved\)/);
 assert.match(app, /result\.headers/);
-assert.match(app, /downloadAndInstall\(undefined, \{ headers \}\)/);
+assert.match(app, /update\.download\(undefined, \{ headers \}\)/);
+assert.match(app, /arm_update_exit_watchdog/);
+assert.match(app, /disarm_update_exit_watchdog/);
+assert.match(app, /update\.install\(\)/);
+const updateInstallOrder: number[] = [/update\.download\(undefined/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
+assert.ok(
+  updateInstallOrder[0] < updateInstallOrder[1] && updateInstallOrder[1] < updateInstallOrder[2],
+  "updater flow must run download, then arm the watchdog, then install",
+);
 assert.doesNotMatch(app, /if \(!window\.confirm\(warning\)\)/);
 assert.doesNotMatch(app, /openTaskComposer\(task\)/);
 assert.doesNotMatch(app, /Nifty task group ID/);

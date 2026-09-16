@@ -61,6 +61,7 @@ describe("updateAvailableCopy", () => {
     expect(copy.title).toContain("0.2.61");
     expect(copy.message).toContain("0.2.61");
     expect(copy.message).toMatch(/restart/i);
+    expect(copy.message).toMatch(/run the setup again/i);
     expect(copy.actionLabel).toBe("Install & restart");
   });
 

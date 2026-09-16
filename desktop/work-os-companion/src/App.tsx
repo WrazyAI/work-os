@@ -3,7 +3,7 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
@@ -909,8 +909,22 @@ export default function App() {
   }
 
   async function installAvailableUpdate(update: Update, headers: Record<string, string>) {
-    setUpdateStatus(`Installing ${update.version}…`);
-    await update.downloadAndInstall(undefined, { headers });
+    // Download first: on Windows the updater plugin's install step launches
+    // the NSIS installer (which closes and relaunches the app) and then exits
+    // this process itself, so nothing after `install` runs there. The exit
+    // watchdog is armed only after the download so the grace timer cannot
+    // fire during a long download, and it is disarmed again when the install
+    // rejects, keeping the still-running app alive.
+    setUpdateStatus(`Downloading ${update.version}…`);
+    await update.download(undefined, { headers });
+    setUpdateStatus(`Closing Work OS to install ${update.version}…`);
+    await invoke("arm_update_exit_watchdog");
+    try {
+      await update.install();
+    } catch (value) {
+      await invoke("disarm_update_exit_watchdog").catch(() => undefined);
+      throw value;
+    }
     await relaunch();
   }
 
@@ -951,7 +965,11 @@ export default function App() {
               const message = errorMessage(value, "The update could not be installed.");
               diagnostics.warn("updater.install_failed", message);
               setUpdateStatus("");
-              showError(message, message, "Update failed");
+              showError(
+                message,
+                `${message} To recover, quit Work OS from the system tray and run the setup installer again.`,
+                "Update failed",
+              );
             });
           },
         });
