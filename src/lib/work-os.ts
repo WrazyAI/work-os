@@ -21,10 +21,12 @@ export { syncNiftyPersonTasks, syncNiftyTask } from "@/lib/work-os-nifty-sync";
 export { syncWorktivityEvidence, syncWorktivityRoster, upsertWorktivityEmployee } from "@/lib/work-os-worktivity";
 export {
   addTaskProgress,
+  adoptProviderTask,
   archiveTask,
   completeTask,
   createTask,
   deleteTask,
+  findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,
   isNiftyTaskAttributableToMember,

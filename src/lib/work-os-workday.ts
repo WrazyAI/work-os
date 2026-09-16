@@ -833,7 +833,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
         } catch {
           // Materialization is best-effort: a creation failure must never undo
           // a confirmed plan. Unlinked items retry on the next confirm.
-          taskCreation = { tasks: 0, subtasks: 0, failed: entries.length, created: [] };
+          taskCreation = { tasks: 0, subtasks: 0, failed: entries.length, reused: 0, created: [] };
         }
       }
     }

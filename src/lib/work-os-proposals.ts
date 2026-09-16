@@ -1,7 +1,9 @@
 import {
   addTaskProgress,
+  adoptProviderTask,
   createEvidence,
   createTask,
+  findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
   listPersonTasks,
   syncNiftyTask,
@@ -85,7 +87,19 @@ export async function getWorkOsProposal(access: WorkOsAccess, proposalId: string
   return data;
 }
 
-async function applyProposal(access: WorkOsAccess, proposal: Json) {
+/** Fenced write of the provider task id onto the applying proposal. Returns
+ * false when the lease moved on, so a stale worker never overwrites the live
+ * attempt's outbox anchor. */
+async function rememberProviderTaskId(proposalId: string, providerTaskId: string, applyAttempt: string): Promise<boolean> {
+  const { data, error } = await db().from("work_task_proposals").update({
+    provider_task_id: providerTaskId,
+    updated_at: new Date().toISOString(),
+  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("id").maybeSingle();
+  if (error) throw new Error(`record provider task id: ${error.message}`);
+  return Boolean(data);
+}
+
+async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt: string, opts: { firstAttempt: boolean }) {
   const operation = proposal.operation as ProposalOperation;
   const change = proposal.proposed_change as Json;
   if (operation === "remove_from_plan") {
@@ -112,16 +126,44 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
   if (operation === "create_task") {
     if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
     const marker = `Work OS proposal: ${proposal.id}`;
+    const body = {
+      ...change,
+      description: [text(change.description), marker].filter(Boolean).join("\n\n"),
+    };
+    // Outbox replay: this proposal already created its provider task. Adopt it
+    // instead of issuing a second Nifty POST; the tail fills in anything the
+    // interrupted attempt had not written yet.
+    const recordedProviderId = text(proposal.provider_task_id);
+    if (recordedProviderId) return adoptProviderTask(ownerId, recordedProviderId, body);
     // A full provider sync does not belong in a request path: the local
     // mirror already holds anything a previous attempt created, so the
     // marker lookup alone reconciles a retry after an interrupted filing.
     const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
       .eq("organization_id", access.organizationId).ilike("description", `%${marker}%`).maybeSingle();
     if (existingError) throw new Error(`reconcile Nifty task proposal: ${existingError.message}`);
-    if (existing) return existing;
-    return createTask(ownerId, {
-      ...change,
-      description: [text(change.description), marker].filter(Boolean).join("\n\n"),
+    if (existing) {
+      // Upgrade the mirror-era reconcile to an id-based anchor so later retries
+      // never depend on the marker text surviving in Nifty.
+      if (text(existing.provider_task_id)) await rememberProviderTaskId(proposal.id as string, String(existing.provider_task_id), applyAttempt);
+      return existing;
+    }
+    // Provider-side reconcile for the narrow crash window between the Nifty
+    // POST and the outbox write. The marker makes that orphan adoptable. Only
+    // retries pay for the provider listing: a first attempt cannot have one.
+    const orphan = opts.firstAttempt ? null : await findNiftyTaskByMarker(ownerId, marker, {
+      projectId: text(change.project_id) ?? undefined,
+      taskGroupId: text(change.task_group_id) ?? undefined,
+    });
+    if (orphan) {
+      await rememberProviderTaskId(proposal.id as string, orphan.id, applyAttempt);
+      return adoptProviderTask(ownerId, orphan.id, body);
+    }
+    return createTask(ownerId, body, {
+      onProviderTaskCreated: async (providerTaskId) => {
+        if (!await rememberProviderTaskId(proposal.id as string, providerTaskId, applyAttempt)) {
+          throw new Error("The proposal lease moved to another attempt before the created task could be recorded.");
+        }
+      },
     });
   }
   if (!taskId) throw new Error("proposal task is required");
@@ -413,11 +455,16 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (proposal.status === "applying") {
     const applyingSince = new Date(proposal.updated_at as string).getTime();
     if (Date.now() - applyingSince <= 5 * 60_000) return withOutcome(proposal);
-    const { data: recovered, error: recoveryError } = await db().from("work_task_proposals").update({
+    // The fence matches the attempt that was stalled when it was read, so a
+    // lease that a concurrent claimant just replaced is never flipped back.
+    let recovery = db().from("work_task_proposals").update({
       status: "failed",
+      apply_attempt: null,
       failure_reason: "Previous provider application did not finalize; reconciling before retry.",
       updated_at: new Date().toISOString(),
-    }).eq("id", proposalId).eq("status", "applying").select("*").maybeSingle();
+    }).eq("id", proposalId).eq("status", "applying");
+    if (proposal.apply_attempt) recovery = recovery.eq("apply_attempt", proposal.apply_attempt as string);
+    const { data: recovered, error: recoveryError } = await recovery.select("*").maybeSingle();
     if (recoveryError) throw new Error(`recover stalled Work OS proposal: ${recoveryError.message}`);
     if (recovered) Object.assign(proposal, recovered);
   }
@@ -487,6 +534,9 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       throw error;
     }
   }
+  // Read before the claim: a proposal that was still pending has never been
+  // applied, so its provider-side orphan search can be skipped.
+  const firstAttempt = proposal.status === "pending";
   const applyAttempt = randomUUID();
   const { data: applying, error: applyingError } = await db().from("work_task_proposals").update({
     status: "applying",
@@ -511,7 +561,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       .then(() => undefined, () => undefined);
   }, 60_000);
   try {
-    const providerResult = await applyProposal(access, applying as Json);
+    const providerResult = await applyProposal(access, applying as Json, applyAttempt, { firstAttempt });
     const { data, error } = await db().from("work_task_proposals").update({
       status: "applied",
       provider_result: providerResult ?? {},

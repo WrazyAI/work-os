@@ -203,7 +203,33 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   return hydrateTaskAssignees(userId, withProgress);
 }
 
-export async function createTask(userId: string, body: Json) {
+type NormalizedNiftyTask = NonNullable<ReturnType<typeof normalizeNiftyTaskPayload>>;
+
+// Assignees, mapped fields, and the mirror write are shared by fresh creates
+// and by adoption of a task a previous attempt already created.
+async function finalizeCreatedNiftyTask(userId: string, initial: NormalizedNiftyTask, body: Json) {
+  const requestedAssignees = stringValues(body.assignees);
+  if (requestedAssignees.length) {
+    await niftyForOwner(userId, () => assignNiftyTask(initial.id, requestedAssignees));
+  }
+  await applyMappedFields(userId, initial.id, body);
+  let normalized = initial;
+  for (let attempt = 0; attempt < (requestedAssignees.length ? 6 : 1); attempt += 1) {
+    normalized = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(initial.id))) ?? normalized;
+    if (requestedAssignees.every((assignee) => normalized.assignees.includes(assignee))) break;
+    if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  const missingAssignees = requestedAssignees.filter((assignee) => !normalized.assignees.includes(assignee));
+  if (missingAssignees.length) throw new Error(`Nifty did not confirm ${missingAssignees.length} requested assignee${missingAssignees.length === 1 ? "" : "s"}`);
+  const task = await upsertNiftyTask(userId, normalized) as Json;
+  return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
+}
+
+export async function createTask(
+  userId: string,
+  body: Json,
+  hooks?: { onProviderTaskCreated?: (providerTaskId: string) => Promise<void> },
+) {
   const name = nonEmptyString(body.name);
   const taskGroupId = nonEmptyString(body.task_group_id);
   if (!name) throw new Error("name is required");
@@ -219,24 +245,51 @@ export async function createTask(userId: string, body: Json) {
   const result = await niftyForOwner(userId, () => createNiftyTask(payload));
   const initial = normalizeNiftyTaskPayload(result);
   if (initial) {
-    const requestedAssignees = stringValues(body.assignees);
-    if (requestedAssignees.length) {
-      await niftyForOwner(userId, () => assignNiftyTask(initial.id, requestedAssignees));
-    }
-    await applyMappedFields(userId, initial.id, body);
-    let normalized = initial;
-    for (let attempt = 0; attempt < (requestedAssignees.length ? 6 : 1); attempt += 1) {
-      normalized = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(initial.id))) ?? normalized;
-      if (requestedAssignees.every((assignee) => normalized.assignees.includes(assignee))) break;
-      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    const missingAssignees = requestedAssignees.filter((assignee) => !normalized.assignees.includes(assignee));
-    if (missingAssignees.length) throw new Error(`Nifty did not confirm ${missingAssignees.length} requested assignee${missingAssignees.length === 1 ? "" : "s"}`);
-    const task = await upsertNiftyTask(userId, normalized) as Json;
-    return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
+    // Outbox anchor: persist the provider id before any further provider write
+    // or mirror work, so a retry adopts this task instead of creating a second.
+    // A throwing hook means the caller's lease was lost — aborting here keeps
+    // this task unmapped, where the caller's marker search can still adopt it.
+    if (hooks?.onProviderTaskCreated) await hooks.onProviderTaskCreated(initial.id);
+    return finalizeCreatedNiftyTask(userId, initial, body);
   }
   await syncNifty(userId);
   return { providerResult: result };
+}
+
+/** Completes a create whose provider task already exists — a previous attempt
+ * created it but never recorded the id or mirrored it. Runs the same tail as
+ * createTask so missing assignments and mapped fields are filled in. */
+export async function adoptProviderTask(userId: string, providerTaskId: string, body: Json) {
+  const initial = normalizeNiftyTaskPayload(await niftyForOwner(userId, () => getNiftyTask(providerTaskId)));
+  if (!initial) throw new Error("The provider task could not be loaded for adoption");
+  return finalizeCreatedNiftyTask(userId, initial, body);
+}
+
+/** Finds a provider task an interrupted attempt already created for this
+ * proposal. The proposal id travels inside the task description marker, so a
+ * crash between the Nifty POST and the id write is still recoverable. Only
+ * called on retries; pages a bounded window because the list API's filters are
+ * not guaranteed to be applied server-side. */
+export async function findNiftyTaskByMarker(
+  userId: string,
+  marker: string,
+  params?: { projectId?: string; taskGroupId?: string; maxPages?: number },
+) {
+  const pageSize = 100;
+  const maxPages = Math.max(1, params?.maxPages ?? 3);
+  for (let page = 0; page < maxPages; page += 1) {
+    const { tasks, hasMore } = await niftyForOwner(userId, () => listNiftyTasks({
+      ...(params?.projectId ? { project_id: params.projectId } : {}),
+      ...(params?.taskGroupId ? { task_group_id: params.taskGroupId } : {}),
+      include_subtasks: "true",
+      limit: String(pageSize),
+      offset: String(page * pageSize),
+    }));
+    const found = tasks.find((task) => (task.description ?? "").includes(marker));
+    if (found) return found;
+    if (hasMore === false || tasks.length < pageSize) break;
+  }
+  return null;
 }
 
 export async function updateTask(userId: string, taskId: string, patch: Json) {
