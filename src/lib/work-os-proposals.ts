@@ -2,6 +2,7 @@ import {
   addTaskProgress,
   createEvidence,
   createTask,
+  DEFAULT_NIFTY_LEDGER_PROJECT_ID,
   getTaskByLocalOrProviderId,
   isNiftyTaskAttributableToMember,
   syncNiftyTask,
@@ -219,38 +220,47 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
 const TASK_EXEMPT_OPERATIONS = ["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"];
 
 /** Resolves one referenced task straight from Work OS and verifies the
- * employee may act on it: assigned to them, or (legacy imports) attributable
- * through the creator/subscriber metadata the row carries. */
-async function resolveProposalTask(ownerId: string, personId: string, niftyMemberId: string | null, taskId: string): Promise<Json> {
+ * employee may act on it: assigned to them, or — only for the configured
+ * ledger project — attributable through the creator/subscriber metadata a
+ * legacy imported row carries. The organization scope keeps a shared owner
+ * account from reaching another workspace's tasks. */
+async function resolveProposalTask(input: {
+  ownerId: string;
+  organizationId: string;
+  personId: string;
+  ledgerProjectId: string;
+  niftyMemberId: string | null;
+  taskId: string;
+}): Promise<Json> {
   let task: Json;
   try {
-    task = await getTaskByLocalOrProviderId(ownerId, taskId);
+    task = await getTaskByLocalOrProviderId(input.ownerId, input.taskId);
   } catch {
     throw new Error("That task is no longer in your task list. Refresh and try again.");
   }
   if (["archived", "deleted"].includes(String(task.status ?? ""))) throw new Error("That task was removed from your task list.");
-  const assigned = Array.isArray(task.assignee_person_ids) && (task.assignee_person_ids as unknown[]).includes(personId);
-  if (!assigned && !isNiftyTaskAttributableToMember(task, niftyMemberId)) throw new Error("That task is not assigned to you.");
+  const taskOrganizationId = text(task.organization_id);
+  if (taskOrganizationId && taskOrganizationId !== input.organizationId) throw new Error("That task is not assigned to you.");
+  const assigned = Array.isArray(task.assignee_person_ids) && (task.assignee_person_ids as unknown[]).includes(input.personId);
+  const attributable = text(task.provider_project_id) === input.ledgerProjectId
+    && isNiftyTaskAttributableToMember(task, input.niftyMemberId);
+  if (!assigned && !attributable) throw new Error("That task is not assigned to you.");
   return task;
 }
 
-/** A status move needs an existing status column for the task's own project. */
+/** A status move needs an existing status column for the task's own project.
+ * The candidate id is checked directly so a large project cannot cap the
+ * query and reject a valid column. */
 async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: string | null, input: string) {
-  const taskProjectId = text(task.provider_project_id);
-  const known = new Set<string>();
-  if (taskProjectId) {
-    const { data, error } = await db().from("work_tasks").select("task_group_id")
-      .eq("user_id", ownerId).eq("provider_project_id", taskProjectId)
-      .not("task_group_id", "is", null).limit(2000);
-    if (error) throw new Error(`load task status columns: ${error.message}`);
-    for (const row of data ?? []) {
-      const id = text((row as Json).task_group_id);
-      if (id) known.add(id);
-    }
-  }
-  if (!taskGroupId || !input.includes(taskGroupId) || !known.has(taskGroupId)) {
+  if (!taskGroupId || !input.includes(taskGroupId)) {
     throw new Error("A status move requires an existing status column for this project.");
   }
+  const taskProjectId = text(task.provider_project_id);
+  if (!taskProjectId) throw new Error("A status move requires an existing status column for this project.");
+  const { data, error } = await db().from("work_tasks").select("id")
+    .eq("user_id", ownerId).eq("provider_project_id", taskProjectId).eq("task_group_id", taskGroupId).limit(1);
+  if (error) throw new Error(`load task status column: ${error.message}`);
+  if (!data?.length) throw new Error("A status move requires an existing status column for this project.");
 }
 
 /** Stores an assistant interpretation for review. This endpoint creates no
@@ -269,6 +279,7 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", ownerId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load proposal person mapping: ${personResult.error.message}`);
   const niftyMemberId = (personResult.data?.nifty_member_id as string | null | undefined) ?? null;
+  const ledgerProjectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_LEDGER_PROJECT_ID;
   const proposals: Array<Json & { client_operation_index: number }> = [];
   const failures: Array<{ client_operation_index: number; error: string }> = [];
   const resolved = new Map<string, Json>();
@@ -284,12 +295,19 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
       }
       const needsTask = !TASK_EXEMPT_OPERATIONS.includes(operation.op);
       let task: Json | null = null;
-      if (operation.taskId) {
+      if (needsTask && operation.taskId) {
         const cached = resolved.get(operation.taskId);
         if (cached) {
           task = cached;
         } else {
-          task = await resolveProposalTask(ownerId, personId, niftyMemberId, operation.taskId);
+          task = await resolveProposalTask({
+            ownerId,
+            organizationId: access.organizationId,
+            personId,
+            ledgerProjectId,
+            niftyMemberId,
+            taskId: operation.taskId,
+          });
           resolved.set(operation.taskId, task);
         }
       }

@@ -87,7 +87,7 @@ export interface TaskListOptions {
   includeLedgerHistory?: boolean;
 }
 
-const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
+export const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
 
 function stringValues(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
