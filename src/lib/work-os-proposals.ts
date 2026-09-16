@@ -188,7 +188,7 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
       return adoptProviderTask(ownerId, orphan.id, body);
     }
     if (createIssued) {
-      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet. Check Nifty and retry — the retry adopts the existing task instead of creating a second one.");
+      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet; checking Nifty is required before retrying. The retry adopts the existing task instead of creating a second one.");
     }
     try {
       return await createTask(ownerId, body, {
