@@ -26,6 +26,7 @@ export {
   completeTask,
   createTask,
   deleteTask,
+  DEFAULT_NIFTY_LEDGER_PROJECT_ID,
   findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,

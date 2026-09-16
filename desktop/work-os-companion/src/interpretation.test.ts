@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, pendingApprovalCount, proposalApprovalCommand, toolCallKey } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, partialFilingMessage, pendingApprovalCount, proposalApprovalCommand, toolCallKey } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -67,6 +67,22 @@ describe("normalizeInterpretation", () => {
     expect(interpretationFallbackReason(new Error("The assistant couldn't read that update."))).toContain("couldn't");
     expect(interpretationFallbackReason({ reason: "ai_malformed", message: "invalid response" })).toContain("couldn't");
     expect(interpretationFallbackReason({ reason: "nifty_failure", message: "Nifty unavailable" })).toContain("tasks");
+  });
+
+  it("surfaces server filing errors verbatim so stale-task copy is actionable", () => {
+    expect(interpretationFallbackReason(new Error("That task is no longer in your task list. Refresh and try again.")))
+      .toContain("no longer in your task list");
+  });
+
+  it("summarizes a partially filed completion batch without hiding the reason", () => {
+    expect(partialFilingMessage(0, [{ title: "Fix the build", error: "That task is not assigned to you." }]))
+      .toBe("That task is not assigned to you.");
+    const partial = partialFilingMessage(2, [{ title: "Fix the build", error: "That task is no longer in your task list. Refresh and try again." }]);
+    expect(partial).toContain("1 of 3 tasks could not be filed");
+    expect(partial).toContain("Fix the build");
+    expect(partial).toContain("no longer in your task list");
+    expect(partialFilingMessage(1, [{ title: "A", error: "x" }, { title: "B", error: "y" }, { title: "C", error: "z" }]))
+      .toContain("(A, B…");
   });
 });
 
