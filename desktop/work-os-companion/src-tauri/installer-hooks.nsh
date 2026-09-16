@@ -89,28 +89,36 @@
   nsis_tauri_utils::FindProcess "work-os-companion.exe"
   Pop $R8
   ${If} $R8 == 0
-    ; Runtime-unique survivor name: the timer wraps after ~49 days, so pair
-    ; it with this installer's own process id — PIDs are effectively unique
-    ; across runs, deleting the previous run's leftover at reboot keeps the
-    ; directory tidy, and a failed-cleanup collision lands in the existing
-    ; rename-error branch rather than overwriting a mapped file.
-    System::Call 'kernel32::GetTickCount()l.r0'
-    System::Call 'kernel32::GetCurrentProcessId()i.r1'
-    StrCpy $R0 "$INSTDIR\work-os-companion.exe.old-$R0-$R1"
-    Delete /REBOOTOK "$R0"
-    ClearErrors
-    Rename "$INSTDIR\work-os-companion.exe" "$R0"
-    ${If} ${Errors}
+    ${If} ${FileExists} "$INSTDIR\work-os-companion.exe"
+      ; Runtime-unique survivor name: the timer wraps after ~49 days, so pair
+      ; it with this installer's own process id — PIDs are effectively unique
+      ; across runs, deleting the previous run's leftover at reboot keeps the
+      ; directory tidy, and a failed-cleanup collision lands in the existing
+      ; rename-error branch rather than overwriting a mapped file.
+      System::Call 'kernel32::GetTickCount()l.r0'
+      System::Call 'kernel32::GetCurrentProcessId()i.r1'
+      StrCpy $R0 "$INSTDIR\work-os-companion.exe.old-$R0-$R1"
+      Delete /REBOOTOK "$R0"
       ClearErrors
-      ; The rename failed, so the path is still owned by a locked file and
-      ; the fresh copy cannot be written. Escalate to the manual guidance.
-      IfSilent wkosquiet_${WKOS_UNIQUE}
-      MessageBox MB_OK|MB_ICONEXCLAMATION "Work OS Companion is still running and could not be closed automatically. Right-click the companion icon in the system tray and choose Quit (or end work-os-companion.exe in Task Manager), then run this installer again."
-      wkosquiet_${WKOS_UNIQUE}:
-      Abort
+      Rename "$INSTDIR\work-os-companion.exe" "$R0"
+      ${If} ${Errors}
+        ClearErrors
+        ; The rename failed, so the path is still owned by a locked file and
+        ; the fresh copy cannot be written. Escalate to the manual guidance.
+        IfSilent wkosquiet_${WKOS_UNIQUE}
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Work OS Companion is still running and could not be closed automatically. Right-click the companion icon in the system tray and choose Quit (or end work-os-companion.exe in Task Manager), then run this installer again."
+        wkosquiet_${WKOS_UNIQUE}:
+        Abort
+      ${EndIf}
+      Delete /REBOOTOK "$R0"
+      DetailPrint "A stopped Work OS Companion kept running; its old copy will finish exiting on the next restart."
+    ${Else}
+      ; The executable is already gone from disk (for example a crashed
+      ; installer or an uninstall that ran while the process survived), so
+      ; there is no locked file to work around: keep the install moving and
+      ; write a fresh binary over an empty path.
+      DetailPrint "The old Work OS Companion directory had no executable left; installing a fresh copy."
     ${EndIf}
-    Delete /REBOOTOK "$R0"
-    DetailPrint "A stopped Work OS Companion kept running; its old copy will finish exiting on the next restart."
   ${EndIf}
   !undef WKOS_UNIQUE
 !macroend

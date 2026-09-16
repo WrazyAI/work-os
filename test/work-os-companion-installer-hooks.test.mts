@@ -38,6 +38,7 @@ const LADDER: Array<{ name: string; label: string; required: string[] }> = [
     required: [
       "GetTickCount",
       "GetCurrentProcessId",
+      "FileExists} \"$INSTDIR\\work-os-companion.exe\"",
       'Rename "$INSTDIR\\work-os-companion.exe" "$R0"',
       "Delete /REBOOTOK",
     ],
