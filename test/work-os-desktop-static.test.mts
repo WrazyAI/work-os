@@ -195,11 +195,19 @@ assert.match(app, /method: "PATCH"/);
 assert.match(app, /MoreHorizontal/);
 assert.match(app, /queryAvailableUpdate\(saved\)/);
 assert.match(app, /result\.headers/);
-assert.match(app, /update\.download\(undefined, \{ headers \}\)/);
+assert.match(app, /update\.download\(\(event\) =>/);
+assert.match(app, /applyDownloadEvent\(progress, event\)/);
 assert.match(app, /arm_update_exit_watchdog/);
 assert.match(app, /disarm_update_exit_watchdog/);
 assert.match(app, /update\.install\(\)/);
-const updateInstallOrder: number[] = [/update\.download\(undefined/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
+assert.match(app, /UPDATE_CHECK_INTERVAL_MS/);
+assert.match(app, /setInterval\(\(\) => \{/);
+assert.match(app, /"Update now"/);
+assert.match(app, /label: "Later", kind: "quiet"/);
+assert.match(app, /"Retry"/);
+assert.match(app, /locked: true/);
+assert.match(app, /updateRowCopy\(updateRowSummary, installedVersion\)/);
+const updateInstallOrder: number[] = [/update\.download\(\(event\)/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
 assert.ok(
   updateInstallOrder[0] < updateInstallOrder[1] && updateInstallOrder[1] < updateInstallOrder[2],
   "updater flow must run download, then arm the watchdog, then install",

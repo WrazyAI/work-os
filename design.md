@@ -904,6 +904,47 @@ On shift:
 - Do not reset later typing when an earlier draft request completes.
 - Treat provider connection success and consent as separate concepts.
 
+### 19.8 Update delivery
+
+The companion is a long-lived tray app, so update discovery, download, and
+install are one explicit, resumable flow rather than a launch-time surprise.
+
+- **Discovery cadence.** In-app checks run on launch and then every twenty
+  minutes while a signed-in session is live and automatic checks are on.
+  Periodic checks are silent unless a build is available; the persistent
+  flyout is the only surface they raise. A check never interrupts or
+  re-pings a version already surfaced, downloading, downloaded, or
+  installing; a newer version replaces a pending older one.
+- **Flyout states.** Available: "Update N is ready" with a `Download update`
+  action. Downloading: a **locked** card (no dismiss) showing
+  "Downloading N… X MB of Y MB" and a progress bar (`role="progressbar"` with
+  `aria-valuetext` in megabytes; bar hidden when the server omits a total,
+  with the received-bytes text carrying the state). Downloaded: "Update N is
+  downloaded" with `Update now` (primary) and `Later` (quiet); the card's
+  close control is equivalent to Later. Failed: the error tone (red tint)
+  with the reason plus "Check your connection and try again" and a `Retry`
+  action; the card is dismissible again.
+- **Progress updates replace in place.** Progress repaints reuse the flyout's
+  persistent key so the card never stacks or flickers; repaints throttle to
+  integer-percent steps (or 256 KB steps when the total is unknown).
+- **Deferral.** Later/dismiss keeps the downloaded artifact for the session;
+  Settings shows the downloaded version with an `Install` action. Deferral
+  does not survive an app restart — the next session re-checks and re-offers.
+- **Settings parity.** The Desktop updates row always reflects the same flow
+  state (checking, available, downloading with live bytes, downloaded, failed,
+  installing) and offers the matching single action: Check, Download, Retry,
+  or Install. The automatic-checks toggle states the real cadence.
+- **Install safety.** The exit watchdog is armed only at the install step and
+  disarmed if it rejects; install failures keep the downloaded artifact so
+  Install can be retried, and the error surface names the manual setup path.
+- **Copy convention.** Release labels render the two-digit patch display form
+  (0.3.3 shows as 0.3.03); canonical versions stay unpadded wherever tools
+  compare them.
+
+Notification cards support these states through optional `actions` (primary
+and quiet variants), `progress`, and `locked` fields; the single-action
+`action` shape remains valid for every other notification.
+
 ## 20. Implementation guidance
 
 ### 20.1 Tokens first
