@@ -966,8 +966,8 @@ export default function App() {
               diagnostics.warn("updater.install_failed", message);
               setUpdateStatus("");
               showError(
+                new Error(`${message} To recover, quit Work OS from the system tray and run the setup installer again.`),
                 message,
-                `${message} To recover, quit Work OS from the system tray and run the setup installer again.`,
                 "Update failed",
               );
             });
