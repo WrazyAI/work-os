@@ -162,7 +162,7 @@ function sumDays(days: Json[], key: string) {
  * select these facts by index but never writes new prose or numbers.
  */
 export function deterministicInsightBrief(days: Json[], references: Json[], extras: {
-  comparison?: { totals: Json; days: Json[] } | null;
+  comparison?: { days: Json[]; totals?: Json } | null;
   consistency?: InsightConsistency | null;
 } = {}) {
   const latest = days.at(-1) ?? {};
