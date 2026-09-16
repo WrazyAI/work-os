@@ -34,6 +34,7 @@ export {
   listPersonTasks,
   listTasks,
   moveTaskToParent,
+  providerCreateFailureDefinite,
   updateTask,
 } from "@/lib/work-os-tasks";
 export type { TaskListOptions } from "@/lib/work-os-tasks";

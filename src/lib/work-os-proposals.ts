@@ -7,6 +7,7 @@ import {
   findNiftyTaskByMarker,
   getTaskByLocalOrProviderId,
   isNiftyTaskAttributableToMember,
+  providerCreateFailureDefinite,
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
@@ -94,10 +95,32 @@ export async function getWorkOsProposal(access: WorkOsAccess, proposalId: string
 async function rememberProviderTaskId(proposalId: string, providerTaskId: string, applyAttempt: string): Promise<boolean> {
   const { data, error } = await db().from("work_task_proposals").update({
     provider_task_id: providerTaskId,
+    provider_create_issued_at: null,
     updated_at: new Date().toISOString(),
   }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("id").maybeSingle();
   if (error) throw new Error(`record provider task id: ${error.message}`);
   return Boolean(data);
+}
+
+/** Fenced record that a provider create is about to be dispatched. From here
+ * on a retry must never POST again until the outcome is known: the id write
+ * (above) or a definite rejection (below) resolves the intent. */
+async function rememberProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<boolean> {
+  const { data, error } = await db().from("work_task_proposals").update({
+    provider_create_issued_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("id").maybeSingle();
+  if (error) throw new Error(`record provider create intent: ${error.message}`);
+  return Boolean(data);
+}
+
+/** A definite rejection (HTTP 4xx) proves no task was created, so the intent is
+ * cleared and a corrected retry may POST again. */
+async function clearProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<void> {
+  await db().from("work_task_proposals").update({
+    provider_create_issued_at: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt);
 }
 
 async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt: string, opts: { firstAttempt: boolean }) {
@@ -148,24 +171,42 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
       if (text(existing.provider_task_id)) await rememberProviderTaskId(proposal.id as string, String(existing.provider_task_id), applyAttempt);
       return existing;
     }
-    // Provider-side reconcile for the narrow crash window between the Nifty
-    // POST and the outbox write. The marker makes that orphan adoptable. Only
-    // retries pay for the provider listing: a first attempt cannot have one.
-    const orphan = opts.firstAttempt ? null : await findNiftyTaskByMarker(ownerId, marker, {
-      projectId: text(change.project_id) ?? undefined,
-      taskGroupId: text(change.task_group_id) ?? undefined,
-    });
+    // A previous attempt recorded that it dispatched a create without ever
+    // recording the created id. Its listing is allowed to lag the creation, so
+    // search patiently across bounded retries — and NEVER POST again from an
+    // unresolved intent. A duplicate is worse than a retry.
+    const createIssued = text((proposal as Json).provider_create_issued_at);
+    const orphan = opts.firstAttempt
+      ? null
+      : await findNiftyTaskByMarker(ownerId, marker, {
+          projectId: text(change.project_id) ?? undefined,
+          taskGroupId: text(change.task_group_id) ?? undefined,
+          ...(createIssued ? { retries: 3, retryDelayMs: 1_500 } : {}),
+        });
     if (orphan) {
       await rememberProviderTaskId(proposal.id as string, orphan.id, applyAttempt);
       return adoptProviderTask(ownerId, orphan.id, body);
     }
-    return createTask(ownerId, body, {
-      onProviderTaskCreated: async (providerTaskId) => {
-        if (!await rememberProviderTaskId(proposal.id as string, providerTaskId, applyAttempt)) {
-          throw new Error("The proposal lease moved to another attempt before the created task could be recorded.");
-        }
-      },
-    });
+    if (createIssued) {
+      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet. Check Nifty and retry — the retry adopts the existing task instead of creating a second one.");
+    }
+    try {
+      return await createTask(ownerId, body, {
+        beforeProviderCreate: async () => {
+          if (!await rememberProviderCreateIssued(proposal.id as string, applyAttempt)) {
+            throw new Error("The proposal lease moved to another attempt before the task could be created.");
+          }
+        },
+        onProviderTaskCreated: async (providerTaskId) => {
+          if (!await rememberProviderTaskId(proposal.id as string, providerTaskId, applyAttempt)) {
+            throw new Error("The proposal lease moved to another attempt before the created task could be recorded.");
+          }
+        },
+      });
+    } catch (error) {
+      if (providerCreateFailureDefinite(error)) await clearProviderCreateIssued(proposal.id as string, applyAttempt);
+      throw error;
+    }
   }
   if (!taskId) throw new Error("proposal task is required");
   if (operation === "add_subtask") {
@@ -668,7 +709,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     return withOutcome(data);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Proposal application failed";
-    const needsReview = /required before|evidence is required|task_group_id is required/i.test(reason);
+    const needsReview = /required before|evidence is required|task_group_id is required|may have created/i.test(reason);
     await db().from("work_task_proposals").update({
       status: needsReview ? "needs_review" : "failed",
       failure_reason: reason,
