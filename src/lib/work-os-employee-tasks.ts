@@ -155,10 +155,11 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
     exactAt,
     provenance: "employee_explicit",
   });
-  await audit(access, completed ? "task.completed" : "task.reopened", "nifty_task", task.provider_task_id as string, {
+  const local = String(task.provider ?? "") === "local";
+  await audit(access, completed ? "task.completed" : "task.reopened", local ? "work_os_task" : "nifty_task", task.provider_task_id as string, {
     source: "employee_explicit",
   });
-  return { task: updated, providerStatus: "nifty_confirmed" };
+  return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 /** Returns provider-backed task rows for a read-only assistant selection card. */

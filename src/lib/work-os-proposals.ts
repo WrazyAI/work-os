@@ -452,7 +452,9 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       // does not fit inside an approval request. The refresh is bounded too:
       // on timeout we compare against the last mirrored state and let the
       // idempotent write proceed instead of failing the employee's decision.
-      if (text(target.provider_task_id)) {
+      // Work OS-native tasks have no provider record — the mirror is the
+      // authority, so a refresh would only fail with a 404.
+      if (target.provider !== "local" && text(target.provider_task_id)) {
         try {
           await withTimeout(syncNiftyTask(ownerId, String(target.provider_task_id)), STALENESS_REFRESH_TIMEOUT_MS, "Task refresh");
         } catch (refreshError) {
