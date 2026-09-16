@@ -227,41 +227,128 @@ export function insightsFixture(day: DayData, range: "day" | "7d" | "30d"): impo
   const plannedCompleted = tasks.filter((task) => task.completed === true).length;
   const planned = tasks.length;
   const open = planned - plannedCompleted;
-  const summary = `On-device record for ${shiftDate}: ${plannedCompleted} of ${planned} tasks completed, ${Math.round(observedSeconds / 360) / 10}h observed. The server brief replaces this when the connection returns.`;
+  const count = range === "day" ? 1 : range === "7d" ? 7 : 30;
+  const shiftDateIso = (offset: number) => {
+    const parsed = new Date(`${shiftDate}T12:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) return shiftDate;
+    parsed.setUTCDate(parsed.getUTCDate() - offset);
+    return parsed.toISOString().slice(0, 10);
+  };
+  const buildDay = (offset: number, scale: number): import("./types").InsightDay => {
+    const date = shiftDateIso(offset);
+    const isToday = offset === 0;
+    const seed = (offset * 7 + 3) % 11;
+    const dayObserved = isToday ? observedSeconds : Math.round(21600 * scale * (0.55 + ((offset * 13) % 45) / 100));
+    const dayPlanned = isToday ? planned : 3 + (seed % 4);
+    const dayCompleted = isToday ? plannedCompleted : Math.min(dayPlanned, (seed + offset) % (dayPlanned + 1));
+    const dayOutcomes = isToday ? plannedCompleted : Math.max(0, dayCompleted + ((offset % 3 === 0) ? 1 : 0));
+    const onTime = Math.max(0, dayOutcomes - (offset % 4 === 0 ? 1 : 0));
+    const late = Math.max(0, dayOutcomes - onTime);
+    const updates = isToday ? (Number(day.signals?.employeeUpdates ?? 0)) : (offset * 3) % 5;
+    const blocked = offset % 5 === 2 ? 1 : 0;
+    return {
+      date,
+      observedSeconds: dayObserved,
+      pausedSeconds: Math.round(dayObserved * 0.08),
+      pauseRatio: 0.08,
+      planStatus: isToday ? ((day.plan?.status as "none" | "draft" | "confirmed" | "closed") ?? "none") : "confirmed",
+      planned: dayPlanned,
+      plannedCompleted: dayCompleted,
+      carryOver: offset % 6 === 1 ? 2 : 0,
+      overdue: offset % 7 === 3 ? 1 : 0,
+      updates,
+      updatesByKind: {
+        progress: Math.max(0, updates - (blocked ? 1 : 0) - (offset % 3 === 1 ? 1 : 0)),
+        starting: offset % 4 === 0 ? 1 : 0,
+        completionClaim: offset % 3 === 1 ? 1 : 0,
+        blocked,
+        priorityChange: offset % 8 === 5 ? 1 : 0,
+        unplannedWork: offset % 6 === 4 ? 1 : 0,
+      },
+      outputEvidence: isToday ? (day.evidence ?? []).length : (offset % 3 === 0 ? 2 : 1),
+      activityContext: isToday && day.attendance ? 1 : offset % 2 === 0 ? 1 : 0,
+      trackedMinutes: isToday ? 0 : Math.round(120 * scale * (0.4 + ((offset * 17) % 60) / 100)),
+      topApps: [
+        { name: "Figma", minutes: Math.round(60 * scale * (0.5 + ((offset * 5) % 40) / 100)) },
+        { name: "Chrome", minutes: Math.round(45 * scale * (0.4 + ((offset * 9) % 35) / 100)) },
+        { name: "Slack", minutes: Math.round(25 * scale) },
+      ],
+      tasksCompleted: dayOutcomes,
+      tasksOpen: Math.max(0, dayPlanned - dayCompleted),
+      goal: isToday
+        ? { text: day.plan?.focus_summary ?? day.plan?.freeform_intent ?? null, provenance: day.plan?.goal_provenance ?? null }
+        : { text: offset % 3 === 0 ? null : "Ship the client milestone", provenance: offset % 3 === 1 ? "ai_draft" : "employee" },
+      goalSet: isToday ? Boolean(day.plan?.freeform_intent || day.plan?.focus_summary) : offset % 3 !== 0,
+      completed: dayOutcomes,
+      progressed: Math.max(0, updates - 1),
+      deferred: offset % 6 === 2 ? 1 : 0,
+      carried: offset % 6 === 1 ? 2 : 0,
+      unplanned: offset % 5 === 1 ? 1 : 0,
+      outcomesOnTime: onTime,
+      outcomesLate: late,
+      sessionCorrections: offset % 9 === 4 ? 1 : 0,
+      planAdherence: { selected: dayPlanned, selectedCompleted: dayCompleted, deferred: offset % 6 === 2 ? 1 : 0, removalProposed: 0 },
+      sessionQuality: offset % 9 === 4
+        ? { status: "needs_correction", message: "Session end was not observed.", sessionId: `fixture-session-${date}` }
+        : { status: "valid", message: null },
+      references: [],
+    };
+  };
+  const days = Array.from({ length: count }, (_, index) => buildDay(count - 1 - index, 1));
+  const previousDays = Array.from({ length: count }, (_, index) => buildDay(count - 1 - index + count, 0.75));
+  const sum = (rows: import("./types").InsightDay[], key: keyof import("./types").InsightDay) =>
+    rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+  const totalsOf = (rows: import("./types").InsightDay[]) => ({
+    observedSeconds: sum(rows, "observedSeconds"),
+    pausedSeconds: sum(rows, "pausedSeconds"),
+    planned: sum(rows, "planned"),
+    plannedCompleted: sum(rows, "plannedCompleted"),
+    carryOver: sum(rows, "carryOver"),
+    overdue: sum(rows, "overdue"),
+    updates: sum(rows, "updates"),
+    outputEvidence: sum(rows, "outputEvidence"),
+    activityContext: sum(rows, "activityContext"),
+    trackedMinutes: sum(rows, "trackedMinutes"),
+    tasksCompleted: sum(rows, "tasksCompleted"),
+    tasksOpen: sum(rows, "tasksOpen"),
+    completed: sum(rows, "completed"),
+    progressed: sum(rows, "progressed"),
+    deferred: sum(rows, "deferred"),
+    carried: sum(rows, "carried"),
+    unplanned: sum(rows, "unplanned"),
+    outcomesOnTime: sum(rows, "outcomesOnTime"),
+    outcomesLate: sum(rows, "outcomesLate"),
+    sessionCorrections: sum(rows, "sessionCorrections"),
+  });
+  const totals = totalsOf(days);
+  const updateKinds = days.reduce(
+    (acc, row) => {
+      const kinds = row.updatesByKind;
+      if (!kinds) return acc;
+      acc.progress += kinds.progress; acc.starting += kinds.starting; acc.completionClaim += kinds.completionClaim;
+      acc.blocked += kinds.blocked; acc.priorityChange += kinds.priorityChange; acc.unplannedWork += kinds.unplannedWork;
+      return acc;
+    },
+    { progress: 0, starting: 0, completionClaim: 0, blocked: 0, priorityChange: 0, unplannedWork: 0 },
+  );
+  const consistency = {
+    dayCount: days.length,
+    daysWithGoal: days.filter((row) => row.goalSet === true).length,
+    daysWithUpdate: days.filter((row) => Number(row.updates ?? 0) > 0).length,
+    daysWithCompletion: days.filter((row) => Number(row.tasksCompleted ?? 0) > 0).length,
+    currentStreak: (() => { let streak = 0; for (let index = days.length - 1; index >= 0; index -= 1) { const row = days[index]; if (Number(row.tasksCompleted ?? 0) > 0 || Number(row.updates ?? 0) > 0) streak += 1; else break; } return streak; })(),
+    commitmentRate: totals.planned ? Math.round((totals.plannedCompleted / totals.planned) * 100) : null,
+    bestDay: days.reduce<{ date: string; tasksCompleted: number } | null>((best, row) => (!best || row.tasksCompleted > best.tasksCompleted ? { date: row.date, tasksCompleted: row.tasksCompleted } : best), null),
+  };
   return {
     range,
-    from: shiftDate,
+    from: days[0]?.date ?? shiftDate,
     through: shiftDate,
-    days: [{
-      date: shiftDate,
-      observedSeconds,
-      pausedSeconds: session?.paused_seconds ?? 0,
-      planStatus: (day.plan?.status as "none" | "draft" | "confirmed" | "closed") ?? "none",
-      planned,
-      plannedCompleted,
-      carryOver: 0,
-      overdue: 0,
-      updates: 0,
-      outputEvidence: day.evidence?.length ?? 0,
-      activityContext: day.attendance ? 1 : 0,
-      tasksCompleted: plannedCompleted,
-      tasksOpen: open,
-      goal: { text: day.plan?.focus_summary ?? day.plan?.freeform_intent ?? null, provenance: day.plan?.goal_provenance ?? null },
-      references: [],
-    }],
-    totals: {
-      observedSeconds,
-      pausedSeconds: session?.paused_seconds ?? 0,
-      planned,
-      plannedCompleted,
-      carryOver: 0,
-      overdue: 0,
-      updates: 0,
-      outputEvidence: day.evidence?.length ?? 0,
-      activityContext: day.attendance ? 1 : 0,
-      tasksCompleted: plannedCompleted,
-      tasksOpen: open,
-    },
+    days,
+    totals,
+    updateKinds,
+    consistency,
+    comparison: { range, from: previousDays[0]?.date ?? shiftDate, through: previousDays.at(-1)?.date ?? shiftDate, days: previousDays, totals: totalsOf(previousDays) },
     brief: {
       generated: false,
       summary: `Offline record — ${open ? `${open} task${open === 1 ? "" : "s"} still open.` : "Everything on today's plate is complete."}`,

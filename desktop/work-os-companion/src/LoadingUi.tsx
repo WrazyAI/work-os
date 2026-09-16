@@ -132,14 +132,29 @@ export function TaskDetailSkeleton() {
 export function InsightsSkeleton() {
   return <div className="skeleton-insights" aria-busy="true" aria-label="Building your work record">
     <div className="skeleton-kpi-row">
-      {Array.from({ length: 3 }, (_, index) => <div className="skeleton-block skeleton-kpi" key={index}>
+      {Array.from({ length: 4 }, (_, index) => <div className="skeleton-block skeleton-kpi" key={index}>
         <Skeleton className="skeleton-line skeleton-kicker" />
         <Skeleton className="skeleton-line skeleton-value" />
+        <Skeleton className="skeleton-line skeleton-spark" />
       </div>)}
     </div>
     <div className="skeleton-block skeleton-chart">
       <Skeleton className="skeleton-line skeleton-kicker" />
       <div className="skeleton-bars">{Array.from({ length: 7 }, (_, index) => <Skeleton className="skeleton-bar" key={index} style={{ height: `${34 + ((index * 23) % 56)}%` }} />)}</div>
+    </div>
+    <div className="skeleton-split">
+      <div className="skeleton-block skeleton-donut">
+        <Skeleton className="skeleton-line skeleton-kicker" />
+        <div className="skeleton-donut-shape" />
+      </div>
+      <div className="skeleton-block skeleton-lines-card">
+        <Skeleton className="skeleton-line skeleton-kicker" />
+        {Array.from({ length: 4 }, (_, index) => <Skeleton className="skeleton-line skeleton-row" key={index} />)}
+      </div>
+    </div>
+    <div className="skeleton-block skeleton-heatmap">
+      <Skeleton className="skeleton-line skeleton-kicker" />
+      <div className="skeleton-heatmap-grid">{Array.from({ length: 35 }, (_, index) => <Skeleton className="skeleton-cell" key={index} />)}</div>
     </div>
   </div>;
 }

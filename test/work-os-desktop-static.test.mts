@@ -125,7 +125,7 @@ assert.match(app, /Clocked out/);
 assert.match(app, /task-state/);
 assert.doesNotMatch(app, /evidence-kind \$\{task\.completed/);
 assert.match(app, /You are the write barrier/);
-assert.match(app, /Observed time and task completion · separate scales/);
+assert.match(app, /Observed time and planned commitments · separate scales, named in the legend/);
 assert.doesNotMatch(app, /width: active \? "42%"/);
 assert.match(app, /Promise\.allSettled/);
 assert.match(app, /bootstrap\.day\.degraded/);

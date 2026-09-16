@@ -1,0 +1,809 @@
+/* Insights chart kit — bespoke SVG/CSS visuals.
+   Every series keeps its own scale; activity context is never merged into an
+   outcome measure. Motion explains entry and state only, and is removed under
+   prefers-reduced-motion. */
+
+/* Chart labels must remain readable at native Windows scaling: no chart text
+   below 10px, tabular numerals for every value. */
+.chart-tooltip,
+.trend-day-label,
+.trend-legend,
+.trend-chart-table,
+.donut-legend,
+.bar-breakdown,
+.on-time-legend,
+.consistency-chips,
+.heatmap-readout {
+  font-variant-numeric: tabular-nums;
+}
+
+.insights-page {
+  display: grid;
+  gap: 14px;
+}
+
+/* --- Metric tiles ------------------------------------------------------- */
+
+.insight-metric {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 2px;
+  overflow: hidden;
+  animation: insight-rise 240ms var(--ease-product) both;
+}
+
+.insight-metric > svg {
+  color: var(--muted);
+}
+
+.insight-metric > small {
+  color: var(--muted);
+}
+
+.insight-metric > strong {
+  font: 600 26px/1.15 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-metric-detail {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.insight-metric .sparkline {
+  align-self: end;
+  width: 100%;
+  height: 30px;
+  margin-top: 8px;
+}
+
+.activity-sparkline {
+  width: 100%;
+  height: 36px;
+}
+
+.sparkline-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.sparkline-area {
+  fill: rgba(23, 25, 20, 0.07);
+  stroke: none;
+}
+
+.insight-metric .delta-badge {
+  margin-top: 6px;
+}
+
+/* --- Delta badges ------------------------------------------------------- */
+
+.delta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.delta-badge b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.delta-badge small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.delta-badge.better {
+  border-color: rgba(130, 189, 57, 0.55);
+  background: rgba(184, 255, 90, 0.16);
+}
+
+.delta-badge.worse {
+  border-color: rgba(200, 78, 66, 0.35);
+  background: rgba(200, 78, 66, 0.07);
+}
+
+/* --- Trend chart -------------------------------------------------------- */
+
+.trend-chart-wrap {
+  position: relative;
+}
+
+.trend-plot {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 42px;
+  gap: 10px;
+}
+
+.trend-plot.single-scale {
+  grid-template-columns: 46px minmax(0, 1fr);
+}
+
+.trend-axis-right {
+  text-align: left;
+}
+
+.trend-axis {
+  height: 236px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px 0 30px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-canvas {
+  position: relative;
+  height: 236px;
+  padding: 6px 0 30px;
+}
+
+.trend-grid {
+  position: absolute;
+  inset: 6px 0 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.trend-grid i {
+  height: 1px;
+  background: repeating-linear-gradient(90deg, #d8d8cf 0 3px, transparent 3px 7px);
+}
+
+.trend-days {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.trend-day {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 1fr 22px;
+  gap: 4px;
+}
+
+.trend-bar {
+  align-self: end;
+  justify-self: center;
+  width: min(22px, 62%);
+  min-height: 2px;
+  border: 0;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #3c4037, var(--ink));
+  padding: 0;
+  transform-origin: bottom;
+  animation: bar-grow 360ms var(--ease-product) both;
+  animation-delay: calc(var(--bar-index, 0) * 20ms);
+  transition: background 150ms var(--ease-product), box-shadow 150ms var(--ease-product);
+}
+
+.trend-bar:hover,
+.trend-bar.active {
+  background: linear-gradient(180deg, #4b5145, #2a2d26);
+  box-shadow: 0 0 0 2px rgba(130, 189, 57, 0.3);
+}
+
+.trend-line-layer {
+  position: absolute;
+  inset: 6px 0 30px;
+  width: 100%;
+  height: calc(100% - 36px);
+  z-index: 2;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.trend-line {
+  fill: none;
+  stroke: #82bd39;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 100;
+  animation: line-draw 700ms var(--ease-product) 120ms both;
+}
+
+.trend-day-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-day-label.sparse {
+  opacity: 0.75;
+}
+
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.trend-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.trend-legend i,
+.trend-legend b {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--ink);
+}
+
+.trend-legend b {
+  background: #82bd39;
+}
+
+.trend-legend small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 8px;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  max-width: 260px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: var(--white);
+  box-shadow: 0 18px 60px rgba(18, 27, 17, 0.14);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: tooltip-in 160ms var(--ease-product) both;
+}
+
+.chart-tooltip strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.chart-tooltip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--ink);
+}
+
+.swatch.completion,
+.swatch.on-time {
+  background: #82bd39;
+}
+
+.swatch.observed {
+  background: var(--ink);
+}
+
+.swatch.late {
+  background: #c8845a;
+}
+
+.trend-chart-table {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+
+.trend-chart-table caption {
+  padding-bottom: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: left;
+}
+
+.trend-chart-table th,
+.trend-chart-table td {
+  border-top: 1px solid var(--line);
+  padding: 7px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-chart-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* --- Donut / work mix --------------------------------------------------- */
+
+.donut-wrap {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.donut-figure {
+  position: relative;
+  width: 148px;
+  height: 148px;
+}
+
+.donut-figure svg {
+  width: 100%;
+  height: 100%;
+}
+
+.donut-track {
+  fill: none;
+  stroke: rgba(23, 25, 20, 0.07);
+  stroke-width: 16;
+}
+
+.donut-slice {
+  fill: none;
+  stroke-width: 16;
+  stroke-linecap: butt;
+  animation: slice-in 420ms var(--ease-product) both;
+  animation-delay: calc(var(--slice-index, 0) * 70ms);
+  transition: opacity 150ms var(--ease-product);
+}
+
+.donut-slice:hover {
+  opacity: 0.82;
+}
+
+.slice-completed { stroke: var(--ink); }
+.slice-progressed { stroke: #82bd39; }
+.slice-deferred { stroke: #c9b56a; }
+.slice-carried { stroke: #c8845a; }
+.slice-unplanned { stroke: #a9ada2; }
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.donut-center strong {
+  font: 600 24px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.donut-center small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.donut-legend {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.donut-legend li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.donut-legend li.empty {
+  opacity: 0.45;
+}
+
+.donut-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.donut-legend i.slice-completed { background: var(--ink); }
+.donut-legend i.slice-progressed { background: #82bd39; }
+.donut-legend i.slice-deferred { background: #c9b56a; }
+.donut-legend i.slice-carried { background: #c8845a; }
+.donut-legend i.slice-unplanned { background: #a9ada2; }
+
+.donut-legend b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Horizontal breakdown bars ------------------------------------------ */
+
+.bar-breakdown {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-breakdown li {
+  display: grid;
+  grid-template-columns: minmax(96px, 132px) minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.bar-label {
+  display: grid;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.bar-label em {
+  color: #983e35;
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bar-breakdown li.attention .bar-label {
+  color: var(--ink);
+}
+
+.bar-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(23, 25, 20, 0.06);
+}
+
+.bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--ink);
+  transform-origin: left;
+  animation: bar-slide 360ms var(--ease-product) both;
+  animation-delay: calc(var(--bar-index, 0) * 26ms);
+}
+
+.bar-breakdown li.attention .bar-track i {
+  background: #c8845a;
+}
+
+.bar-breakdown b {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.bar-breakdown b small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* --- On-time outcomes --------------------------------------------------- */
+
+.on-time {
+  display: grid;
+  gap: 9px;
+}
+
+.on-time-bar {
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(23, 25, 20, 0.06);
+}
+
+.on-time-fill {
+  background: #82bd39;
+  animation: bar-slide 420ms var(--ease-product) both;
+  transform-origin: left;
+}
+
+.late-fill {
+  background: #c8845a;
+  animation: bar-slide 420ms var(--ease-product) 60ms both;
+  transform-origin: left;
+}
+
+.on-time-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.on-time-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.on-time-legend b {
+  margin-left: auto;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Heatmap ------------------------------------------------------------ */
+
+.heatmap-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.heatmap {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.heatmap-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, 16px);
+  gap: 4px;
+  margin-right: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: right;
+}
+
+.heatmap-week {
+  display: grid;
+  grid-template-rows: repeat(7, 16px);
+  gap: 4px;
+}
+
+.heatmap-cell {
+  width: 16px;
+  height: 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0;
+  background: rgba(23, 25, 20, 0.06);
+  transition: transform 120ms var(--ease-product), box-shadow 120ms var(--ease-product);
+  animation: cell-in 240ms var(--ease-product) both;
+}
+
+.heatmap-cell.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.heatmap-cell.bucket-1 { background: rgba(130, 189, 57, 0.28); }
+.heatmap-cell.bucket-2 { background: rgba(130, 189, 57, 0.5); }
+.heatmap-cell.bucket-3 { background: rgba(130, 189, 57, 0.72); }
+.heatmap-cell.bucket-4 { background: #6ea32c; }
+
+.heatmap-cell:hover,
+.heatmap-cell.active {
+  box-shadow: 0 0 0 2px rgba(23, 25, 20, 0.35);
+  transform: translateY(-1px);
+}
+
+.heatmap-readout {
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.heatmap-readout.muted {
+  color: var(--muted);
+}
+
+.heatmap-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* --- Consistency chips -------------------------------------------------- */
+
+.consistency-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.consistency-chips li {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface-raised, var(--white));
+  animation: insight-rise 240ms var(--ease-product) both;
+}
+
+.consistency-chips small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.consistency-chips strong {
+  font: 600 20px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.consistency-chips span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+/* --- Insights layout ---------------------------------------------------- */
+
+.insights-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.freshness-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.freshness-chips span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.freshness-chips span.stale {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.insight-empty-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* --- Motion ------------------------------------------------------------- */
+
+@keyframes bar-grow {
+  from { transform: scaleY(0.02); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes bar-slide {
+  from { transform: scaleX(0.02); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes line-draw {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes slice-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cell-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes insight-rise {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; transform: translate(-50%, 3px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trend-bar,
+  .bar-track i,
+  .on-time-fill,
+  .late-fill,
+  .trend-line,
+  .donut-slice,
+  .heatmap-cell,
+  .insight-metric,
+  .consistency-chips li,
+  .chart-tooltip {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* --- Responsive --------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  .insights-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .donut-wrap {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+  .donut-figure {
+    width: 132px;
+    height: 132px;
+  }
+}
+
+@media (max-width: 620px) {
+  .trend-plot,
+  .trend-legend {
+    display: none;
+  }
+  .trend-chart-table {
+    display: table;
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bar-breakdown li {
+    grid-template-columns: minmax(78px, 1fr) minmax(0, 1.4fr) 38px;
+  }
+  .consistency-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

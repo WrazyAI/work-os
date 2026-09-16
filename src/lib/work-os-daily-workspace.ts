@@ -145,7 +145,7 @@ export function resolveTaskDayAttribution(task: Json, events: Json[], date: stri
   return null;
 }
 
-async function employeeContext(access: WorkOsAccess, at = new Date()) {
+export async function employeeContext(access: WorkOsAccess, at = new Date()) {
   if (!access.personId) throw new Error("Work OS employee profile is required for the daily workspace");
   const { data, error } = await db().from("work_people").select("nifty_member_id")
     .eq("organization_id", access.organizationId).eq("id", access.personId).single();
@@ -157,47 +157,31 @@ async function employeeContext(access: WorkOsAccess, at = new Date()) {
   return { niftyMemberId: data.nifty_member_id as string | null, timezone, currentDate: localDateForTimezone(at, timezone) };
 }
 
-export async function resolveDailyWorkspace(
-  access: WorkOsAccess,
-  requestedDate?: string | null,
-  options: { cursor?: string | null; limit?: number; now?: Date } = {},
-): Promise<DailyWorkspaceRecord> {
-  const now = options.now ?? new Date();
-  const context = await employeeContext(access, now);
-  const date = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : context.currentDate;
-  const ownerId = workOsOrganizationOwnerId(access);
-  const [tasksResult, eventsResult, planResult, sessionResult] = await Promise.all([
-    db().from("work_tasks")
-      .select("*,project:work_projects(id,name,provider_project_id)")
-      .eq("user_id", ownerId)
-      .eq("organization_id", access.organizationId)
-      .not("status", "in", "(archived,deleted)")
-      .order("provider_created_at", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .limit(2500),
-    db().from("work_task_day_events").select("*")
-      .eq("organization_id", access.organizationId).eq("local_date", date)
-      .order("observed_at", { ascending: true }).order("id", { ascending: true }),
-    db().from("work_daily_plans").select("id,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
-      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
-      .eq("shift_date", date).maybeSingle(),
-    db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,correction_status,correction_reason")
-      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
-      .eq("shift_date", date).maybeSingle(),
-  ]);
-  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["goal", planResult], ["session", sessionResult]] as const) {
-    if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
-  }
-
-  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
-  const attributable = allTasks.filter((task) =>
-    (Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId))
-    || isNiftyTaskAttributableToMember(task, context.niftyMemberId)
-  );
-  const attributableIds = new Set(attributable.map((task) => String(task.id)));
-  const events = (eventsResult.data ?? []).filter((event: any) =>
-    event.person_id === access.personId || attributableIds.has(String(event.task_id))
-  ) as Json[];
+/**
+ * Pure per-day projection shared by `resolveDailyWorkspace` (single day) and
+ * personal insights (many days). Both callers preload the same queries; this
+ * function owns the attribution semantics so the two paths cannot drift.
+ */
+export function projectWorkspaceDay(input: {
+  date: string;
+  currentDate: string;
+  allTasks: Json[];
+  attributable: Json[];
+  events: Json[];
+  plan: Json | null;
+  session: Json | null;
+}): {
+  goal: DailyWorkspaceRecord["goal"];
+  tasks: DailyWorkspaceTaskRow[];
+  completed: number;
+  total: number;
+  overdueCount: number;
+  commitmentCompleted: number;
+  commitmentTotal: number;
+  carryOverGroups: DailyWorkspaceRecord["carryOverGroups"];
+  sessionQuality: DailyWorkspaceRecord["sessionQuality"];
+} {
+  const { date, allTasks, attributable, events, plan, session } = input;
   const eventsByTask = new Map<string, Json[]>();
   for (const event of events) {
     const list = eventsByTask.get(String(event.task_id)) ?? [];
@@ -207,7 +191,7 @@ export async function resolveDailyWorkspace(
 
   const childrenByParent = new Map<string, Json[]>();
   const planItemsByTaskId = new Map<string, Json>();
-  for (const item of Array.isArray(planResult.data?.items) ? planResult.data.items as Json[] : []) {
+  for (const item of Array.isArray(plan?.items) ? plan.items as Json[] : []) {
     if (item.task_id && item.disposition !== "removed") planItemsByTaskId.set(String(item.task_id), item);
   }
   const parents = attributable.filter((task) => !task.parent_task_id && !task.parent_provider_task_id);
@@ -266,13 +250,6 @@ export async function resolveDailyWorkspace(
     } as DailyWorkspaceTaskRow);
   }
   resolved.sort((left, right) => cursorValue(right).localeCompare(cursorValue(left)));
-  const after = decodeWorkspaceCursor(options.cursor);
-  const afterFiltered = after ? resolved.filter((row) => cursorValue(row) < after) : resolved;
-  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
-  const page = afterFiltered.slice(0, limit);
-  const next = afterFiltered.length > page.length && page.length
-    ? encodeWorkspaceCursor(cursorValue(page[page.length - 1]))
-    : null;
 
   const overdue = parents.filter((task) => task.completed !== true && dateOf(task.due_date) !== null && dateOf(task.due_date)! < date);
   const yesterday = addDays(date, -1);
@@ -289,21 +266,16 @@ export async function resolveDailyWorkspace(
     .sort(([left], [right]) => left === "yesterday" ? -1 : right === "yesterday" ? 1 : left === "older" ? 1 : right === "older" ? -1 : right.localeCompare(left))
     .map(([key, group]) => ({ key, ...group }));
 
-  const plan = planResult.data as Json | null;
-  const session = sessionResult.data as Json | null;
   const committed = resolved.filter((task) => task.dayDisposition !== "deferred");
   const sessionStatus = !session ? "none" : session.correction_status === "needs_correction"
     ? "needs_correction" : session.correction_status === "corrected" ? "corrected" : "valid";
   return {
-    date,
-    currentDate: context.currentDate,
-    readOnly: date !== context.currentDate,
     goal: {
       ...dailyGoalDisplay(plan),
       suggestionTaskIds: Array.isArray(plan?.suggestion_task_ids) ? plan.suggestion_task_ids : [],
       revision: typeof plan?.revision === "number" ? plan.revision : null,
     },
-    tasks: page,
+    tasks: resolved,
     completed: resolved.filter((task) => task.completed === true).length,
     total: resolved.length,
     overdueCount: overdue.length,
@@ -316,6 +288,74 @@ export async function resolveDailyWorkspace(
       sessionId: session?.id ? String(session.id) : null,
       clockedInAt: session?.clocked_in_at ?? null,
     },
+  };
+}
+
+export async function resolveDailyWorkspace(
+  access: WorkOsAccess,
+  requestedDate?: string | null,
+  options: { cursor?: string | null; limit?: number; now?: Date } = {},
+): Promise<DailyWorkspaceRecord> {
+  const now = options.now ?? new Date();
+  const context = await employeeContext(access, now);
+  const date = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : context.currentDate;
+  const ownerId = workOsOrganizationOwnerId(access);
+  const [tasksResult, eventsResult, planResult, sessionResult] = await Promise.all([
+    db().from("work_tasks")
+      .select("*,project:work_projects(id,name,provider_project_id)")
+      .eq("user_id", ownerId)
+      .eq("organization_id", access.organizationId)
+      .not("status", "in", "(archived,deleted)")
+      .order("provider_created_at", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
+      .limit(2500),
+    db().from("work_task_day_events").select("*")
+      .eq("organization_id", access.organizationId).eq("local_date", date)
+      .order("observed_at", { ascending: true }).order("id", { ascending: true }),
+    db().from("work_daily_plans").select("id,freeform_intent,focus_summary,goal_provenance,suggestion_task_ids,revision,status,items:work_daily_plan_items(task_id,completion_state,disposition)")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("shift_date", date).maybeSingle(),
+    db().from("work_sessions").select("id,state,clocked_in_at,clocked_out_at,correction_status,correction_reason")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("shift_date", date).maybeSingle(),
+  ]);
+  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["goal", planResult], ["session", sessionResult]] as const) {
+    if (result.error) throw new Error(`load daily workspace ${label}: ${result.error.message}`);
+  }
+
+  const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
+  const attributable = allTasks.filter((task) =>
+    (Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId))
+    || isNiftyTaskAttributableToMember(task, context.niftyMemberId)
+  );
+  const attributableIds = new Set(attributable.map((task) => String(task.id)));
+  const events = (eventsResult.data ?? []).filter((event: any) =>
+    event.person_id === access.personId || attributableIds.has(String(event.task_id))
+  ) as Json[];
+  const projected = projectWorkspaceDay({
+    date,
+    currentDate: context.currentDate,
+    allTasks,
+    attributable,
+    events,
+    plan: (planResult.data as Json | null) ?? null,
+    session: (sessionResult.data as Json | null) ?? null,
+  });
+
+  const after = decodeWorkspaceCursor(options.cursor);
+  const afterFiltered = after ? projected.tasks.filter((row) => cursorValue(row) < after) : projected.tasks;
+  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
+  const page = afterFiltered.slice(0, limit);
+  const next = afterFiltered.length > page.length && page.length
+    ? encodeWorkspaceCursor(cursorValue(page[page.length - 1]))
+    : null;
+
+  return {
+    date,
+    currentDate: context.currentDate,
+    readOnly: date !== context.currentDate,
+    ...projected,
+    tasks: page,
     cursor: { next },
   };
 }

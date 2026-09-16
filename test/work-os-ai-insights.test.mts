@@ -5,8 +5,11 @@ import { buildInsightSynthesisPrompt, normalizeInsightSelection, normalizeSynthe
 const DATA = {
   range: "7d" as const, from: "2026-08-21", through: "2026-08-27",
   summary: "A steady week.", wins: ["Shipped the debugger fix"], attention: ["Packaging blocked"], nextFocus: ["Finish the release"],
-  totals: { observedSeconds: 18000, planned: 10, plannedCompleted: 7, tasksCompleted: 5, outputEvidence: 3 },
-  days: [{ date: "2026-08-27", observedSeconds: 3600, planned: 2, plannedCompleted: 1, tasksCompleted: 1 }],
+  totals: { observedSeconds: 18000, planned: 10, plannedCompleted: 7, tasksCompleted: 5, outputEvidence: 3, outcomesOnTime: 4, outcomesLate: 1 },
+  days: [{ date: "2026-08-27", observedSeconds: 3600, planned: 2, plannedCompleted: 1, tasksCompleted: 1, trackedMinutes: 45 }],
+  updateKinds: { progress: 6, starting: 1, completionClaim: 2, blocked: 2, priorityChange: 1, unplannedWork: 1 },
+  consistency: { dayCount: 7, daysWithGoal: 6, daysWithUpdate: 5, daysWithCompletion: 4, currentStreak: 3, commitmentRate: 70, bestDay: { date: "2026-08-25", tasksCompleted: 3 } },
+  previousTotals: { observedSeconds: 14400, planned: 8, plannedCompleted: 4, tasksCompleted: 3, outcomesOnTime: 2, outcomesLate: 2 },
 };
 
 test("the prompt grounds the model in exact values and forbids invention", () => {
@@ -15,7 +18,12 @@ test("the prompt grounds the model in exact values and forbids invention", () =>
   assert.match(prompt, /7\/10 planned tasks completed/);
   assert.match(prompt, /Shipped the debugger fix/);
   assert.match(prompt, /never invent/i);
-  assert.match(prompt, /2026-08-27: 1h observed, 1\/2 planned tasks done/);
+  assert.match(prompt, /2026-08-27: 1h observed, 45m tracked activity context, 1\/2 planned tasks done/);
+  assert.match(prompt, /4 outcomes on time, 1 outcomes late/);
+  assert.match(prompt, /2 blockers/);
+  assert.match(prompt, /6\/7 days with a written goal/);
+  assert.match(prompt, /Earlier equal period: 3 Nifty outcomes, 4h observed/);
+  assert.match(prompt, /Return ONLY JSON with winIds, attentionIds, and nextFocusIds/i);
 });
 
 test("normalizes synthesis to bounded plain prose and rejects junk", () => {

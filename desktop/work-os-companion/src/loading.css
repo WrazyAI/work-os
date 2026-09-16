@@ -274,7 +274,52 @@
 }
 
 .skeleton-insights .skeleton-kpi-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.skeleton-spark {
+  height: 26px;
+  margin-top: 10px;
+}
+
+.skeleton-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.skeleton-donut-shape {
+  width: 132px;
+  height: 132px;
+  margin: 12px auto 0;
+  border-radius: 50%;
+  background: rgba(23, 25, 20, 0.06);
+}
+
+.skeleton-lines-card .skeleton-row {
+  height: 12px;
+  margin-top: 12px;
+}
+
+.skeleton-lines-card .skeleton-row:nth-child(3) {
+  width: 78%;
+}
+
+.skeleton-lines-card .skeleton-row:nth-child(5) {
+  width: 62%;
+}
+
+.skeleton-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 18px);
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.skeleton-cell {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
 }
 
 .skeleton-chart {

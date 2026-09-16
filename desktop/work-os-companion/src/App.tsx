@@ -41,7 +41,10 @@ import { PlanningSession, type PlanningInterpretation } from "./PlanningSession"
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { MemorySettings } from "./MemorySettings";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
+import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
+import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrendChart, UpdateKindChart } from "./InsightCharts";
 import "./plan-insights.css";
+import "./insight-charts.css";
 
 type AssetSource = string | { src: string };
 const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
@@ -2753,20 +2756,159 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
     if (!correctionMessage) return;
     notifications.persistent("insights-session-correction", correctionMessage, "Session needs correction", "error");
   }, [correctionMessage, notifications]);
-  return <main className="page insights-page"><div className="insights-heading"><PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." /><div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div></div>
+
+  const rangeLabel = range === "day" ? "this day" : range === "7d" ? "these 7 days" : "these 30 days";
+  const series = useMemo(() => (data ? insightSeries(data.days) : []), [data]);
+  const flowSlices = useMemo(() => (data ? flowBreakdown(data.days) : []), [data]);
+  const updateSlices = useMemo(() => (data ? updateKindBreakdown(data.updateKinds ?? data.days) : []), [data]);
+  const timing = useMemo(() => (data ? onTimeRate(data.days) : null), [data]);
+  const heatmap = useMemo(() => (data ? heatmapCells(data.days) : []), [data]);
+  const chips = useMemo(() => (data ? consistencyChips(data.consistency, data.days) : []), [data]);
+  const deltas = useMemo(() => (data ? periodDeltas(data.totals, data.comparison?.totals) : []), [data]);
+  const deltaFor = (key: string) => deltas.find((stat) => stat.key === key) ?? null;
+  const hasRecord = !!data?.days.some((day) => day.observedSeconds > 0 || day.tasksCompleted > 0 || day.updates > 0 || day.outputEvidence > 0 || (day.trackedMinutes ?? 0) > 0);
+  const blockedTotal = updateSlices.find((slice) => slice.key === "blocked")?.value ?? 0;
+  const pausedTotal = data ? data.totals.pausedSeconds : 0;
+  const observedTotal = data ? data.totals.observedSeconds : 0;
+  const pauseShare = observedTotal + pausedTotal > 0 ? Math.round((pausedTotal / (observedTotal + pausedTotal)) * 100) : null;
+
+  return <main className="page insights-page">
+    <div className="insights-heading">
+      <PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." />
+      <div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} aria-pressed={range === value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div>
+    </div>
+    <div className="freshness-chips">
+      {data?.freshness.stale ? <span className="stale">Nifty sync delayed{staleAt ? ` · ${formatWorkOsDateTime(staleAt)}` : ""}</span> : null}
+      <span>Nifty synced {data?.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"}</span>
+      <span>Worktivity observed {data?.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</span>
+    </div>
+
     {data && !loading && <section className="panel insight-synthesis" aria-label="AI synthesis">
-        <header><div><span><Sparkles size={14} /> AI synthesis</span><h3>{synthesis?.status === "ready" ? "The assistant's read of your week." : "Your record, narrated."}</h3></div>
-        <button disabled={synthesis?.status === "loading"} onClick={synthesize}>{synthesis?.status === "loading" ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}</button></header>
-        {synthesis?.status === "ready" ? <p className="synthesis-text">{synthesis.text}</p> : synthesis?.status === "failed" ? <p className="synthesis-fallback">The assistant is unavailable — the deterministic brief and exact values below stand as-is.</p> : <p className="synthesis-hint">A calm narrative grounded strictly in the exact values on this page. Never invented.</p>}
-      </section>}
-      {loading && !data ? <section className="panel"><InsightsSkeleton /></section> : data ? <>
-      <div className="metric-grid"><Metric icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} /><article className="metric"><ListChecks size={18} /><small>Daily tasks</small><CompletionRing compact completed={data.totals.plannedCompleted} total={data.totals.planned} label="complete" /></article><Metric icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} /><Metric icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} /></div>
-      <section className="panel insight-brief"><header><div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div><small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small></header><div><section><strong>Wins</strong>{data.brief.wins.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Needs attention</strong>{data.brief.attention.map((item) => <p key={item}>{item}</p>)}</section><section><strong>Next focus</strong>{data.brief.nextFocus.map((item) => <p key={item}>{item}</p>)}</section></div></section>
-      <section className="panel trend-panel"><div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and task completion · separate scales</small></div><div className="trend-plot"><div className="trend-axis" aria-hidden="true"><span>8h</span><span>4h</span><span>0h</span></div><div className="trend-chart" role="img" aria-label="Observed work time and daily task completion by day"><div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>{data.days.map((day) => { const observedHeight = Math.min(100, day.observedSeconds / (8 * 3600) * 100); const completionHeight = day.planned ? day.plannedCompleted / day.planned * 100 : 0; return <div className="trend-day" key={day.date}><div className="trend-bars"><i title={`${durationLabel(day.observedSeconds)} observed`} style={{ height: `${observedHeight}%` }}><span>{durationLabel(day.observedSeconds)}</span></i><b title={`${day.plannedCompleted} of ${day.planned} daily tasks`} style={{ height: `${completionHeight}%` }}><span>{day.planned ? `${Math.round(completionHeight)}%` : "—"}</span></b></div><span>{formatWorkOsDate(day.date)}</span></div>; })}</div></div><div className="trend-legend"><span><i /> Observed session time <small>8-hour scale</small></span><span><b /> Daily task completion <small>0–100%</small></span></div>
-         <div className="insight-table-wrap"><table><caption>Exact personal insight values</caption><thead><tr><th>Date</th><th>Observed</th><th>Paused</th><th>Daily tasks</th><th>Tasks done</th><th>Updates</th><th>Tracked</th><th>Output evidence</th><th>Session quality</th></tr></thead><tbody>{data.days.map((day) => <tr key={day.date}><td>{formatWorkOsDate(day.date)}</td><td>{durationLabel(day.observedSeconds)}</td><td>{durationLabel(day.pausedSeconds)}</td><td>{day.plannedCompleted}/{day.planned}</td><td>{day.tasksCompleted}</td><td>{day.updates}</td><td>{day.trackedMinutes ? `${day.trackedMinutes}m` : "—"}</td><td>{day.outputEvidence}</td><td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td></tr>)}</tbody></table></div>
+      <header>
+        <div>
+          <span><Sparkles size={14} /> AI synthesis</span>
+          <h3>{synthesis?.status === "ready" ? "The assistant's read of your range." : "Your record, narrated."}</h3>
+        </div>
+        <button disabled={synthesis?.status === "loading"} onClick={synthesize}>{synthesis?.status === "loading" ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}</button>
+      </header>
+      {synthesis?.status === "ready"
+        ? <p className="synthesis-text">{synthesis.text}</p>
+        : synthesis?.status === "failed"
+          ? <p className="synthesis-fallback">The assistant is unavailable — the deterministic brief and exact values below stand as-is.</p>
+          : <p className="synthesis-hint">Selects only from the verified facts below — never writes new numbers, and the deterministic brief always stands on its own.</p>}
+    </section>}
+
+    {loading && !data ? <section className="panel"><InsightsSkeleton /></section> : data ? <>
+      <div className="metric-grid">
+        <MetricTile icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} detail={rangeLabel}>
+          <Sparkline values={series.map((point) => point.observedMinutes)} label={`Observed minutes per day for ${rangeLabel}`} />
+          {deltaFor("observedMinutes") ? <DeltaBadge stat={deltaFor("observedMinutes")!} /> : null}
+        </MetricTile>
+        <MetricTile icon={ListChecks} label="Commitments completed" value={`${data.totals.plannedCompleted}/${data.totals.planned}`} detail={`planned commitments · ${rangeLabel}`}>
+          <Sparkline values={data.days.map((day) => day.plannedCompleted)} label={`Planned commitments completed per day for ${rangeLabel}`} />
+          {deltaFor("plannedCompleted") ? <DeltaBadge stat={deltaFor("plannedCompleted")!} /> : null}
+        </MetricTile>
+        <MetricTile icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} detail={`completed task outcomes · ${rangeLabel}`}>
+          <Sparkline values={data.days.map((day) => day.tasksCompleted)} label={`Completed task outcomes per day for ${rangeLabel}`} />
+          {deltaFor("tasksCompleted") ? <DeltaBadge stat={deltaFor("tasksCompleted")!} /> : null}
+        </MetricTile>
+        <MetricTile icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} detail={`artifacts and records · ${rangeLabel}`}>
+          <Sparkline values={data.days.map((day) => day.outputEvidence)} label={`Output evidence items per day for ${rangeLabel}`} />
+          {deltaFor("outputEvidence") ? <DeltaBadge stat={deltaFor("outputEvidence")!} /> : null}
+        </MetricTile>
+      </div>
+      {!hasRecord ? <p className="insight-empty-note">No work record is stored for {rangeLabel} yet. Charts fill in as days are recorded — the goal, updates, and evidence you add show up here first.</p> : null}
+
+      <section className="panel insight-brief">
+        <header>
+          <div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div>
+          <small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small>
+        </header>
+        <div>
+          <section><strong>Wins</strong>{data.brief.wins.length ? data.brief.wins.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">Nothing recorded for this range yet.</p>}</section>
+          <section><strong>Needs attention</strong>{data.brief.attention.length ? data.brief.attention.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">Nothing needs attention in this range.</p>}</section>
+          <section><strong>Next focus</strong>{data.brief.nextFocus.length ? data.brief.nextFocus.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">No next focus was recorded.</p>}</section>
+        </div>
       </section>
-      {activityTotals.trackedMinutes > 0 && <section className="panel insight-activity"><div className="card-title"><span><Activity size={17} /> Activity context</span><small>{activityTotals.trackedMinutes} tracked minutes · Worktivity app/site summary</small></div><ul className="activity-app-list">{activityTotals.topApps.map((app) => <li key={app.name}><span>{app.name}</span><b>{app.minutes}m</b></li>)}</ul><p className="activity-provenance">Observed app and site usage, shown as neutral context. It is not a productivity score and never proves task completion.</p></section>}
-      <section className="panel insight-drilldown"><div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>{latest?.references?.length ? <div>{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div> : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}<footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer></section>
+
+      <section className="panel trend-panel">
+        <div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and planned commitments · separate scales, named in the legend</small></div>
+        <TrendChart points={series} rangeLabel={rangeLabel} />
+      </section>
+
+      <div className="insights-split">
+        <section className="panel insight-flow">
+          <div className="card-title"><span><LayoutDashboard size={17} /> Work mix</span><small>Every record kept in its own class</small></div>
+          {flowSlices.some((slice) => slice.value > 0)
+            ? <FlowDonut slices={flowSlices} ariaLabel={`Work mix for ${rangeLabel}: ${flowSlices.map((slice) => `${slice.value} ${slice.label.toLowerCase()}`).join(", ")}`} />
+            : <p className="insight-empty-note">No outcomes, updates, deferrals, or carry-over recorded in this range.</p>}
+        </section>
+        <section className="panel insight-updates">
+          <div className="card-title"><span><MessageSquareText size={17} /> Updates &amp; blockers</span><small>{blockedTotal > 0 ? `${blockedTotal} blocker${blockedTotal === 1 ? "" : "s"} raised — reviewed below` : "No blockers raised in this range"}</small></div>
+          <UpdateKindChart slices={updateSlices} />
+          <p className="activity-provenance">Update kinds come from the employee&apos;s own recorded updates. Blockers and priority changes are shown rather than folded into a single count.</p>
+        </section>
+      </div>
+
+      <section className="panel insight-rhythm">
+        <div className="card-title"><span><CalendarDays size={17} /> Consistency &amp; rhythm</span><small>{pauseShare === null ? "Days, updates, and closing streak" : `Paused share ${pauseShare}% of observed+paused time`}</small></div>
+        <ConsistencyChips chips={chips} />
+        <div className="rhythm-heatmap">
+          <HeatmapGrid cells={heatmap} rangeLabel={rangeLabel} />
+        </div>
+        <div className="rhythm-timing">
+          <div className="card-title"><span><CheckCircle2 size={16} /> Completed outcomes with a due date</span><small>Undated work is never classified either way</small></div>
+          {timing ? <OnTimeBar onTime={timing.onTime} late={timing.late} percent={timing.percent} /> : null}
+        </div>
+      </section>
+
+      {activityTotals.trackedMinutes > 0 && <section className="panel insight-activity">
+        <div className="card-title"><span><Activity size={17} /> Activity context</span><small>{activityTotals.trackedMinutes} tracked minutes · Worktivity app/site summary</small></div>
+        <div className="activity-grid">
+          <BarBreakdown
+            ariaLabel={`Tracked minutes by app for ${rangeLabel}`}
+            rows={activityTotals.topApps.map((app) => ({ key: app.name, label: app.name, value: app.minutes, detail: "min" }))}
+          />
+          <div className="activity-trend">
+            <small>Tracked minutes per day</small>
+            <Sparkline className="activity-sparkline" values={series.map((point) => point.trackedMinutes)} label={`Tracked activity minutes per day for ${rangeLabel}`} />
+          </div>
+        </div>
+        <p className="activity-provenance">Observed app and site usage, shown as neutral context. It is not a productivity score and never proves task completion.</p>
+      </section>}
+
+      <div className="insight-table-wrap">
+        <table>
+          <caption>Exact personal insight values · {formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</caption>
+          <thead>
+            <tr><th>Date</th><th>Observed</th><th>Paused</th><th>Commitments</th><th>Outcomes</th><th>On time</th><th>Late</th><th>Updates</th><th>Blockers</th><th>Tracked</th><th>Output evidence</th><th>Session quality</th></tr>
+          </thead>
+          <tbody>
+            {data.days.map((day) => <tr key={day.date}>
+              <td>{formatWorkOsDate(day.date)}</td>
+              <td>{durationLabel(day.observedSeconds)}</td>
+              <td>{durationLabel(day.pausedSeconds)}</td>
+              <td>{day.plannedCompleted}/{day.planned}</td>
+              <td>{day.tasksCompleted}</td>
+              <td>{day.outcomesOnTime ?? 0}</td>
+              <td>{(day.outcomesLate ?? 0) > 0 ? day.outcomesLate : "—"}</td>
+              <td>{day.updates}</td>
+              <td>{(day.updatesByKind?.blocked ?? 0) > 0 ? day.updatesByKind!.blocked : "—"}</td>
+              <td>{day.trackedMinutes ? `${day.trackedMinutes}m` : "—"}</td>
+              <td>{day.outputEvidence}</td>
+              <td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+
+      <section className="panel insight-drilldown">
+        <div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>
+        {latest?.references?.length
+          ? <div>{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div>
+          : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}
+        <footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer>
+      </section>
       <p className="insight-disclaimer">These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.</p>
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;

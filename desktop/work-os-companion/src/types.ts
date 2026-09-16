@@ -56,6 +56,40 @@ export interface DailyPlan {
   items: DailyPlanItem[];
 }
 
+export interface InsightUpdateKinds {
+  progress: number;
+  starting: number;
+  completionClaim: number;
+  blocked: number;
+  priorityChange: number;
+  unplannedWork: number;
+}
+
+export interface InsightPlanAdherence {
+  selected: number;
+  selectedCompleted: number;
+  deferred: number;
+  removalProposed: number;
+}
+
+export interface InsightConsistency {
+  dayCount: number;
+  daysWithGoal: number;
+  daysWithUpdate: number;
+  daysWithCompletion: number;
+  currentStreak: number;
+  commitmentRate: number | null;
+  bestDay: { date: string; tasksCompleted: number } | null;
+}
+
+export interface InsightComparison {
+  range: "day" | "7d" | "30d";
+  from: string;
+  through: string;
+  days: InsightDay[];
+  totals: Omit<InsightDay, "date" | "planStatus" | "references">;
+}
+
 export interface InsightDay {
   date: string;
   observedSeconds: number;
@@ -66,6 +100,9 @@ export interface InsightDay {
   carryOver: number;
   overdue: number;
   updates: number;
+  updatesByKind?: InsightUpdateKinds;
+  /** Observed pause share of observed+paused time (0–1); never a productivity measure. */
+  pauseRatio?: number;
   outputEvidence: number;
   activityContext: number;
   /** Worktivity app/site summary minutes for the day (neutral activity context). */
@@ -74,11 +111,17 @@ export interface InsightDay {
   tasksCompleted: number;
   tasksOpen: number;
   goal?: { text: string | null; provenance: string | null };
+  goalSet?: boolean;
   completed?: number;
   progressed?: number;
   deferred?: number;
   carried?: number;
   unplanned?: number;
+  /** Outcomes completed on or before their due date; undated work is unclassified. */
+  outcomesOnTime?: number;
+  outcomesLate?: number;
+  sessionCorrections?: number;
+  planAdherence?: InsightPlanAdherence;
   breakFreshness?: "manual" | "observed" | "stale" | "unknown";
   sessionQuality?: { status: string; message: string | null; sessionId?: string | null; clockedInAt?: string | null };
   references: Array<{ type: "plan" | "task" | "check_in" | "evidence"; id: string; date: string; label: string; target: string }>;
@@ -90,6 +133,12 @@ export interface InsightsData {
   through: string;
   days: InsightDay[];
   totals: Omit<InsightDay, "date" | "planStatus" | "references">;
+  /** Range-level update mix; blocked/priority/unplanned stay visible. */
+  updateKinds?: InsightUpdateKinds;
+  /** Deterministic rhythm stats; absent on older cached payloads. */
+  consistency?: InsightConsistency;
+  /** The equal-length window immediately before this one, when the server provides it. */
+  comparison?: InsightComparison;
   brief: { generated: boolean; summary: string; wins: string[]; attention: string[]; nextFocus: string[]; referenceIds: string[] };
   freshness: { niftySyncedAt: string | null; worktivityObservedAt: string | null; stale?: boolean; staleAt?: string | null; error?: string | null };
 }

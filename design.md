@@ -1912,28 +1912,67 @@ each criterion → subtask title (trimmed to the 240-character title limit).
 
 Insights follows summary → comparison → exact record:
 
-1. Page intro and Day / 7 days / 30 days range control.
-2. A small metric row for separate evidence classes, never a composite score.
-3. Evidence-based brief with Wins, Needs attention, and Next focus.
-4. Trend visualization when at least two comparable dates exist.
-5. Exact-values table or drilldown for auditability.
-6. Source freshness and limitation note.
+1. Page intro, Day / 7 days / 30 days range control, and a freshness chip row
+   (Nifty synced, Worktivity observed, and a red-led chip when sync is delayed).
+2. AI synthesis card: the model selects only from verified fact sentences and
+   never writes prose or numbers. The hint copy states that contract, and the
+   deterministic brief stands alone when the assistant is unavailable.
+3. A four-tile metric row for separate evidence classes, never a composite score.
+4. Evidence-based brief with Wins, Needs attention, and Next focus; an empty
+   class renders a quiet placeholder line instead of a blank box.
+5. Trend visualization when at least two comparable dates exist.
+6. Work mix and update composition.
+7. Consistency and rhythm.
+8. Activity context, exact-values table, latest-day drilldown.
+9. Source freshness and limitation note.
 
 Use no more than four primary metric tiles in the first row. A tile is at least
-126px high on wide desktop and contains one icon, label, and value/progress object.
-Observed duration, daily-task completion, Nifty outcomes, and output evidence use
-separate labels and scales. A dual-series chart must provide a legend that names
-both scales; it may not visually imply that activity time and task completion are
-the same measure.
+126px high on wide desktop and contains one icon, label, a value, an optional
+sparkline of that same class, and an optional delta chip against the equal-length
+earlier period. Observed duration, planned-commitment completion, Nifty outcomes,
+and output evidence use separate labels and scales. A dual-series chart must
+provide a legend that names both scales; it may not visually imply that activity
+time and task completion are the same measure.
+
+Chart kit contract (desktop companion `InsightCharts.tsx` + `insight-charts.css`):
+
+- **Workday trend.** Dark bars are observed session minutes on the left axis; a
+  single green line is planned-commitment completion on a 0–100% right axis with
+  its own 100/50/0 labels. The legend names both scales in words. Bar labels
+  thin out by stride when the range is dense; every bar is a focusable control
+  whose tooltip and accessible name carry the exact date, observed duration,
+  completion, outcomes, updates, and blockers.
+- **Work mix.** A donut with fixed, labeled classes — Outcomes completed,
+  Progress updates, Deferred, Carried over, Unplanned — plus a legend that
+  repeats every value. No class is ever merged or weighted.
+- **Updates & blockers.** Horizontal bars for Progress, Starts, Completion
+  claims, Blockers, Priority changes, and Unplanned work. Blockers, priority
+  changes, and unplanned work carry a `needs attention` label when non-zero.
+- **Consistency & rhythm.** Stat chips (goals written, updates recorded, days
+  with outcomes, commitments completed, closing streak, largest day) above a
+  Monday-first calendar heatmap of completed outcomes and a stacked on-time vs
+  late bar for outcomes that carried a due date. Undated work is never
+  classified either way.
+- **Activity context.** Top apps as horizontal bars plus a tracked-minutes
+  sparkline, always inside the neutral-context panel with its provenance line.
 
 Charts reserve their geometry while loading, include exact accessible text, and
-fall back to a table at narrow widths. Stale data remains visible with a local
-freshness notice rather than disappearing behind a spinner.
+fall back to the same values as a plain table at narrow widths. Stale data remains
+visible with a local freshness notice rather than disappearing behind a spinner.
+
+Motion is explanatory only: bars grow from their baseline once, the completion
+line draws once, cells and tiles fade in with a short stagger, and reduced motion
+renders the final state instantly. No looping, bouncing, or overshoot.
 
 Selecting a range must render that range's record or a skeleton — never the
 previous range's chart and table. A record whose `range`/`through` does not
 match the active selection is treated as absent; the synthesis narrative resets
 with it. Refreshing revalidates the active range only.
+
+Grounded facts may include comparison deltas (equal earlier period), outcome
+timing with due dates, blocker and update-kind counts, goal/update consistency,
+and closing streaks. Every sentence restates stored values; none of them becomes
+a productivity score.
 
 Activity context is an explicit evidence class: tracked app/site minutes from
 Worktivity summaries may appear as a `Tracked` column, an aggregated top-app

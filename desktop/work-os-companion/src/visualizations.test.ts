@@ -9,6 +9,9 @@ const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8")
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
 const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
+const insightChartStyles = readFileSync(resolve(root, "src/insight-charts.css"), "utf8");
+const insightCharts = readFileSync(resolve(root, "src/InsightCharts.tsx"), "utf8");
+const insightMath = readFileSync(resolve(root, "src/insights.ts"), "utf8");
 const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
 
 describe("operational visualizations", () => {
@@ -16,8 +19,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("Clock in when you begin. Activity observation stays separate.");
     expect(app).toContain("Worktivity observation");
     expect(workspaceStyles).toContain(".pulse-provider-popover.active");
-    expect(app).toContain("Observed time and task completion · separate scales");
-    expect(insightStyles).toContain("truth-preserving trend visualization");
+    expect(app).toContain("Observed time and planned commitments · separate scales, named in the legend");
+    expect(insightChartStyles).toContain("Every series keeps its own scale");
     expect(app).toContain("Observed active time");
     expect(app).toContain("Clocked in");
     expect(app).toContain("Clocked out");
@@ -142,6 +145,26 @@ describe("operational visualizations", () => {
     expect(app).toContain('event.key !== "Tab"');
     expect(styles).toContain("Finishing-quality accessibility and legibility floor");
     expect(styles).toContain('[role="menuitem"]):focus-visible');
-    expect(insightStyles).toContain("Chart labels must remain readable at native Windows scaling");
+    expect(insightChartStyles).toContain("Chart labels must remain readable at native Windows scaling");
+  });
+
+  it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
+    expect(app).toContain("TrendChart");
+    expect(app).toContain("FlowDonut");
+    expect(app).toContain("HeatmapGrid");
+    expect(app).toContain("OnTimeBar");
+    expect(app).toContain("DeltaBadge");
+    expect(app).toContain("UpdateKindChart");
+    expect(app).toContain("ConsistencyChips");
+    expect(app).toContain("BarBreakdown");
+    expect(insightCharts).toContain('role="img"');
+    expect(insightCharts).toContain("aria-label");
+    expect(insightCharts).toContain("No dated outcomes");
+    expect(app).toContain("Undated work is never classified either way");
+    expect(insightChartStyles).toContain("prefers-reduced-motion");
+    expect(insightChartStyles).toContain(".trend-chart-table");
+    expect(insightChartStyles).toContain(".heatmap-cell.bucket-4");
+    expect(insightMath).toContain('completed: "Outcomes completed"');
+    expect(insightMath).toContain('label: "Blockers"');
   });
 });

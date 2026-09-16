@@ -20,6 +20,12 @@ export interface InsightSource {
   nextFocus: string[];
   totals: Record<string, number>;
   days: Array<{ date: string; observedSeconds: number; planned: number; plannedCompleted: number; tasksCompleted: number; trackedMinutes?: number }>;
+  /** Range-level update mix; blocked/priority/unplanned stay visible. */
+  updateKinds?: { progress: number; starting: number; completionClaim: number; blocked: number; priorityChange: number; unplannedWork: number } | null;
+  /** Deterministic rhythm stats (goal/update consistency, streak, best day). */
+  consistency?: { dayCount: number; daysWithGoal: number; daysWithUpdate: number; daysWithCompletion: number; currentStreak: number; commitmentRate: number | null; bestDay: { date: string; tasksCompleted: number } | null } | null;
+  /** Totals for the equal-length window immediately before this one. */
+  previousTotals?: Record<string, number> | null;
   /** Live day state + recalled history; informational only, never selectable. */
   contextBlock?: string;
 }
@@ -83,6 +89,8 @@ export function buildInsightSynthesisPrompt(data: InsightSource): string {
   const dayLines = data.days.map((day) =>
     `- ${day.date}: ${hours(day.observedSeconds)} observed, ${day.trackedMinutes ?? 0}m tracked activity context, ${day.plannedCompleted}/${day.planned} planned tasks done, ${day.tasksCompleted} Nifty outcomes`,
   ).join("\n");
+  const kinds = data.updateKinds;
+  const patterns = data.consistency;
   return [
     `Write a personal work synthesis for ${data.from} → ${data.through} (${data.range}).`,
     "Ground every statement in the exact values below. Never invent numbers, tasks, or days.",
@@ -91,7 +99,10 @@ export function buildInsightSynthesisPrompt(data: InsightSource): string {
     `Wins: ${insightFacts(data).wins.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
     `Needs attention: ${insightFacts(data).attention.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "nothing flagged"}`,
     `Next focus: ${insightFacts(data).focus.map((fact) => `${fact.id}: ${fact.text}`).join("; ") || "none recorded"}`,
-    `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items.`,
+    `Totals: ${hours(data.totals.observedSeconds)} observed, ${data.totals.trackedMinutes ?? 0}m tracked activity context, ${data.totals.plannedCompleted}/${data.totals.planned} planned tasks completed, ${data.totals.tasksCompleted} Nifty outcomes, ${data.totals.outputEvidence} output evidence items, ${data.totals.outcomesOnTime ?? 0} outcomes on time, ${data.totals.outcomesLate ?? 0} outcomes late.`,
+    ...(kinds ? [`Update mix: ${kinds.progress} progress, ${kinds.starting} starts, ${kinds.completionClaim} completion claims, ${kinds.blocked} blockers, ${kinds.priorityChange} priority changes, ${kinds.unplannedWork} unplanned work.`] : []),
+    ...(patterns ? [`Rhythm: ${patterns.daysWithGoal}/${patterns.dayCount} days with a written goal, ${patterns.daysWithUpdate}/${patterns.dayCount} days with a substantive update, ${patterns.daysWithCompletion}/${patterns.dayCount} days with a completed outcome, ${patterns.currentStreak}-day closing streak${patterns.bestDay ? `, best day ${patterns.bestDay.date} with ${patterns.bestDay.tasksCompleted} completed` : ""}.`] : []),
+    ...(data.previousTotals ? [`Earlier equal period: ${data.previousTotals.tasksCompleted ?? 0} Nifty outcomes, ${hours(Number(data.previousTotals.observedSeconds ?? 0))} observed, ${data.previousTotals.plannedCompleted ?? 0}/${data.previousTotals.planned ?? 0} planned tasks completed.`] : []),
     "Daily record:",
     dayLines || "(no days recorded)",
     ...(data.contextBlock ? ["", `Additional context (live day state and recalled history — informational only; never a selectable fact and never completion evidence):\n${data.contextBlock}`] : []),
@@ -159,6 +170,9 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
       date: day.date, observedSeconds: day.observedSeconds, planned: day.planned,
       plannedCompleted: day.plannedCompleted, tasksCompleted: day.tasksCompleted, trackedMinutes: Number((day as { trackedMinutes?: number }).trackedMinutes ?? 0),
     })),
+    updateKinds: (data as { updateKinds?: InsightSource["updateKinds"] }).updateKinds ?? null,
+    consistency: (data as { consistency?: InsightSource["consistency"] }).consistency ?? null,
+    previousTotals: (data as { comparison?: { totals?: Record<string, number> } }).comparison?.totals ?? null,
     contextBlock,
   });
   try {
