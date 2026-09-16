@@ -89,7 +89,7 @@ describe("updateAvailableCopy", () => {
     const copy = updateAvailableCopy("0.2.61");
     expect(copy.title).toContain("0.2.61");
     expect(copy.message).toContain("0.2.61");
-    expect(copy.message).toMatch(/download it now/i);
+    expect(copy.message).toMatch(/ready to download now/i);
     expect(copy.message).toMatch(/later from settings/i);
     expect(copy.actionLabel).toBe("Download update");
   });

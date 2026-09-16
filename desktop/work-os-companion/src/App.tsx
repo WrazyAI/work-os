@@ -1005,8 +1005,8 @@ export default function App() {
     // disarmed again if the install rejects, keeping the app alive.
     notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
     setUpdateFlow({ status: "installing", update: flow.update });
-    await invoke("arm_update_exit_watchdog");
     try {
+      await invoke("arm_update_exit_watchdog");
       await flow.update.install();
     } catch (value) {
       await invoke("disarm_update_exit_watchdog").catch(() => undefined);

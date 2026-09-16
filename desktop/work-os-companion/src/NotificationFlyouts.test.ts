@@ -79,6 +79,7 @@ describe("application notification flyouts", () => {
     const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notification], onDismiss: () => undefined }));
     expect(markup).toContain('class="notification-flyout info persistent locked"');
     expect(markup).toContain('role="progressbar"');
+    expect(markup).toContain('aria-label="Download progress"');
     expect(markup).toContain('aria-valuenow="50"');
     expect(markup).toContain('aria-valuetext="2.4 MB of 4.8 MB"');
     expect(markup).toContain("width:50%");

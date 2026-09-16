@@ -167,7 +167,7 @@ export function updateAvailableCopy(version: string): {
   const display = displayUpdateVersion(version);
   return {
     title: `Update ${display} is ready`,
-    message: `Version ${display} is ready. Download it now, or start it later from Settings.`,
+    message: `Version ${display} is ready to download now, or later from Settings.`,
     actionLabel: "Download update",
   };
 }

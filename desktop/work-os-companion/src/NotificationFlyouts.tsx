@@ -157,6 +157,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
       {progress && progressPercent !== null && <div
         className="notification-progress"
         role="progressbar"
+        aria-label="Download progress"
         aria-valuemin={0}
         aria-valuemax={progress.max}
         aria-valuenow={progress.value ?? undefined}
