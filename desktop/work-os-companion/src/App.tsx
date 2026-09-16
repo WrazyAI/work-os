@@ -32,7 +32,7 @@ import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parent
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { Otto } from "./Otto";
 import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
@@ -51,7 +51,7 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "completed" | "all";
-type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
@@ -410,6 +410,7 @@ export default function App() {
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
   const outstandingQuery = useOutstandingEodsQuery({ enabled: signedIn && !syncBypass });
   const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
+  const screenshotGalleryQuery = useEodScreenshotsQuery({ enabled: signedIn && !syncBypass, date: eodDate ?? day?.shiftDate ?? null });
 
   useEffect(() => {
     if (compactDayQuery.data) applyDayPayload(compactDayQuery.data);
@@ -2086,6 +2087,7 @@ export default function App() {
                     redrafting={eodRedrafting}
                     clockedOut={eodClockedOut}
                     screenshotContext={eodDraft?.screenshots ?? null}
+                    screenshotGallery={screenshotGalleryQuery.data ?? null}
                     screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}

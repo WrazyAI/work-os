@@ -119,6 +119,35 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
 }
 
+/** Authenticated binary fetch for protected media such as screenshot previews. */
+export async function apiRequestBlob(path: string): Promise<Blob> {
+  return diagnostics.withSpan("api.requestBlob", async () => {
+    if (syncBypassActive) throw new SyncBypassError();
+    const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
+    if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+      throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${cleanBase(session.apiBase)}${path}`, {
+        signal: AbortSignal.timeout(30_000),
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          "X-Work-OS-Organization-Id": session.organizationId,
+        },
+      });
+    } catch (error) {
+      const failure = classifyRequestFailure(error);
+      throw new ApiRequestError(failure.message, null, true);
+    }
+    if (!response.ok) {
+      throw new ApiRequestError(`Screenshot preview failed (${response.status})`, response.status, RETRYABLE_STATUS.has(response.status));
+    }
+    return response.blob();
+  }, { path, method: "GET", statusHint: "blob" }, "sync");
+}
+
 type TaskCompletionResponse = {
   task: { completed?: boolean };
   providerStatus?: string;

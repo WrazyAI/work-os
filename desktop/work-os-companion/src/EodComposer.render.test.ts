@@ -36,4 +36,38 @@ describe("EodComposer review surface", () => {
     expect(markup).toContain("Select text in the preview to add a note");
     expect(markup).not.toContain("Draft notes");
   });
+
+  it("renders the screenshot gallery with a carousel and honest breakdown", () => {
+    const frames = Array.from({ length: 9 }, (_, index) => ({
+      summaryId: `frame-${index + 1}`,
+      capturedAt: `2026-09-14T1${index}:00:00.000Z`,
+      visibleApp: index % 2 ? "VS Code" : "Google Chrome",
+      summary: `Frame ${index + 1} shows work in progress.`,
+      confidence: 0.95,
+    }));
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      source: "ai" as const,
+      screenshotContext: { processed: 9, excluded: 69, failed: 0, observations: frames.slice(-4) },
+      screenshotGallery: { processed: 9, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, viewable: frames },
+      screenshotResolveSrc: () => "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E",
+    }));
+    expect(markup).toContain("9 screenshot samples analyzed for this day");
+    expect(markup).toContain("eod-shot-carousel");
+    expect(markup).toContain("+2");
+    expect(markup).toContain("more");
+    expect(markup).toContain("9 analyzed");
+    expect(markup).toContain("69 flagged as sensitive (images deleted)");
+    expect(markup).not.toContain("excluded by privacy policy");
+    expect(markup).toContain("Screenshot captured at 18:00 in Google Chrome");
+  });
+
+  it("hides the gallery panel when the day has no frames", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      screenshotGallery: { processed: 0, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, viewable: [] },
+    }));
+    expect(markup).not.toContain("eod-screenshot-context");
+    expect(markup).not.toContain("eod-shot-carousel");
+  });
 });

@@ -332,3 +332,19 @@ export interface OutstandingEodsData {
   count: number;
   days: OutstandingEodDay[];
 }
+
+export interface EodScreenshotItem {
+  summaryId: string;
+  capturedAt: string;
+  visibleApp: string | null;
+  summary: string;
+  confidence: number;
+}
+
+export interface EodScreenshotGallery {
+  processed: number;
+  excludedPolicy: number;
+  excludedSensitive: number;
+  unavailable: number;
+  viewable: EodScreenshotItem[];
+}

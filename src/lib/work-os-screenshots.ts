@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { mkdir as fsMkdir } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStorageBackend } from "@/lib/db/storage";
 import { canAccessWorkOsPerson } from "@/lib/work-os-api";
@@ -211,9 +212,16 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
           work_context: { type: ["string", "null"] },
           possible_task_reference: { type: ["string", "null"] },
           confidence: { type: "number", minimum: 0, maximum: 1 },
-          contains_sensitive_content: { type: "boolean" },
+          contains_sensitive_content: {
+            type: "boolean",
+            description: "True only when the image visibly exposes credentials or secrets (passwords, API keys, tokens, private keys), personal or customer-identifying data, private message contents, financial or health records, or similarly regulated content. Ordinary work context is NOT sensitive: source code, terminal commands and output without secrets, application or browser UI, dashboards, documents being worked on, and general web pages must be false.",
+          },
+          sensitive_reason: {
+            type: ["string", "null"],
+            description: "One short phrase naming what is sensitive (for example 'API key visible' or 'customer email thread'). Null when contains_sensitive_content is false.",
+          },
         },
-        required: ["summary", "visible_app", "work_context", "possible_task_reference", "confidence", "contains_sensitive_content"],
+        required: ["summary", "visible_app", "work_context", "possible_task_reference", "confidence", "contains_sensitive_content", "sensitive_reason"],
         additionalProperties: false,
       },
     },
@@ -231,6 +239,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
             "This is supporting activity context, not proof of productivity or completion.",
             "Do not infer identity, intent, effort, pay eligibility, deception, task status, or output quality.",
             "Do not reproduce secrets, message contents, personal data, credentials, or customer details.",
+            "Flag contains_sensitive_content only for the explicit list in the tool description; routine code, terminals, application UI, and ordinary work documents are not sensitive.",
             "Use unclear language when the image does not support a specific observation.",
           ].join("\n"),
         },
@@ -259,6 +268,9 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
     possibleTaskReference: result.possible_task_reference ? String(result.possible_task_reference) : null,
     confidence: Math.max(0, Math.min(1, Number(result.confidence) || 0)),
     containsSensitiveContent: result.contains_sensitive_content === true,
+    sensitiveReason: typeof result.sensitive_reason === "string" && result.sensitive_reason.trim()
+      ? result.sensitive_reason.trim().slice(0, 160)
+      : null,
   };
 }
 
@@ -318,6 +330,7 @@ export async function summarizeWorktivityScreenshots(
         evidence_event_id: event.id,
         source_reference: sourceReference,
         processing_status: "excluded",
+        visible_context: { exclusionKind: "policy" },
         failure_reason: "Excluded by sensitive app/domain policy.",
         prompt_version: PROMPT_VERSION,
         storage_path: null,
@@ -352,18 +365,20 @@ export async function summarizeWorktivityScreenshots(
           storage_path: null,
           source_reference: sourceReference,
           summary: "Screenshot excluded after sensitive-content detection.",
-          visible_context: {},
+          visible_context: { exclusionKind: "sensitive", sensitiveReason: observation.sensitiveReason },
           confidence: observation.confidence,
           processing_status: "excluded",
           model: MODEL,
           prompt_version: PROMPT_VERSION,
-          failure_reason: "Excluded after sensitive-content detection.",
+          failure_reason: observation.sensitiveReason
+            ? `Excluded after sensitive-content detection: ${observation.sensitiveReason}.`
+            : "Excluded after sensitive-content detection.",
           updated_at: new Date().toISOString(),
         }, { onConflict: "evidence_event_id" }).select("*").single();
         if (error) throw new Error(`record sensitive screenshot exclusion: ${error.message}`);
         await db().from("work_evidence_events").update({
           summary: "Screenshot excluded after sensitive-content detection.",
-          metadata: { worktivityLogId: log.ID, needsReview: false, excludedSensitive: true },
+          metadata: { worktivityLogId: log.ID, needsReview: false, excludedSensitive: true, sensitiveReason: observation.sensitiveReason },
           updated_at: new Date().toISOString(),
         }).eq("id", event.id);
         results.push(data);
@@ -726,4 +741,112 @@ export async function deleteExpiredWorkOsScreenshots() {
     if (updateError) throw new Error(`mark expired screenshots deleted: ${updateError.message}`);
   }
   return { deleted: ids.length };
+}
+
+export type ScreenshotExclusionKind = "policy" | "sensitive";
+
+/** Classifies an excluded frame from its stored context, with a fallback for
+ * rows written before exclusion kinds were recorded. */
+export function screenshotExclusionKind(visibleContext: unknown, failureReason: unknown): ScreenshotExclusionKind {
+  const kind = visibleContext && typeof visibleContext === "object" ? (visibleContext as { exclusionKind?: unknown }).exclusionKind : null;
+  if (kind === "policy" || kind === "sensitive") return kind;
+  return /sensitive app\/domain policy/i.test(String(failureReason ?? "")) ? "policy" : "sensitive";
+}
+
+export type EodScreenshotItem = {
+  summaryId: string;
+  capturedAt: string;
+  visibleApp: string | null;
+  summary: string;
+  confidence: number;
+};
+
+export type EodScreenshotGallery = {
+  processed: number;
+  excludedPolicy: number;
+  excludedSensitive: number;
+  unavailable: number;
+  viewable: EodScreenshotItem[];
+};
+
+/** Viewable frames for one day plus an honest breakdown of the rest. Only
+ * retained, unexpired images are listed; sensitive and policy exclusions have
+ * no image left to show. */
+export async function listEodScreenshots(organizationId: string, personId: string, date: string): Promise<EodScreenshotGallery> {
+  const gallery: EodScreenshotGallery = { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, viewable: [] };
+  const events = await db().from("work_evidence_events").select("id,occurred_at")
+    .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
+    .like("external_event_id", "screenshot:%")
+    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+  if (events.error) throw new Error(`load screenshot gallery events: ${events.error.message}`);
+  const occurredBy = new Map((events.data ?? []).map((row: any) => {
+    const at = row.occurred_at instanceof Date ? row.occurred_at.toISOString() : String(row.occurred_at ?? "");
+    return [String(row.id), at];
+  }));
+  const ids = [...occurredBy.keys()];
+  if (!ids.length) return gallery;
+  const rows = await db().from("work_screenshot_summaries")
+    .select("id,processing_status,failure_reason,storage_path,expires_at,deleted_at,summary,visible_context,confidence,evidence_event_id")
+    .in("evidence_event_id", ids);
+  if (rows.error) throw new Error(`load screenshot gallery: ${rows.error.message}`);
+  for (const row of (rows.data ?? []) as Array<Record<string, any>>) {
+    const context = (row.visible_context ?? {}) as Record<string, unknown>;
+    if (row.processing_status === "excluded") {
+      if (screenshotExclusionKind(context, row.failure_reason) === "policy") gallery.excludedPolicy += 1;
+      else gallery.excludedSensitive += 1;
+      continue;
+    }
+    if (row.processing_status === "failed") { gallery.unavailable += 1; continue; }
+    if (!isRetainedScreenshotAvailable(row)) { gallery.unavailable += 1; continue; }
+    gallery.processed += 1;
+    gallery.viewable.push({
+      summaryId: String(row.id),
+      capturedAt: occurredBy.get(String(row.evidence_event_id)) ?? "",
+      visibleApp: context.visibleApp != null ? String(context.visibleApp) : null,
+      summary: String(row.summary ?? ""),
+      confidence: Number(row.confidence ?? 0),
+    });
+  }
+  gallery.viewable.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+  return gallery;
+}
+
+export type ScreenshotPreviewSize = "thumb" | "preview" | "full";
+
+/** Decrypts one retained screenshot and returns displayable bytes. Own frames
+ * are viewable for the employee's own EOD draft; everyone else follows the
+ * flagged/disputed review rule. Every view is audited. */
+export async function previewWorkOsScreenshot(access: WorkOsAccess, summaryId: string, size: ScreenshotPreviewSize) {
+  const { data: summary, error } = await db().from("work_screenshot_summaries")
+    .select("*, evidence:work_evidence_events(person_id, correction_status, metadata)")
+    .eq("organization_id", access.organizationId)
+    .eq("id", summaryId)
+    .single();
+  if (error) throw new Error(`load screenshot preview: ${error.message}`);
+  const evidence = summary.evidence as Json;
+  if (!evidence?.person_id || !(await canAccessWorkOsPerson(access, String(evidence.person_id)))) throw new Error("forbidden");
+  const ownScreenshot = access.personId && evidence.person_id === access.personId;
+  const metadata = (evidence.metadata ?? {}) as Json;
+  const reviewable = evidence.correction_status === "disputed" || metadata.needsReview === true;
+  if (!canAccessRawScreenshot({ ownScreenshot: !!ownScreenshot, reviewable })) throw new Error("raw screenshot access is limited to flagged or disputed review");
+  if (!isRetainedScreenshotAvailable(summary)) throw new Error("retained screenshot is no longer available");
+  const { data: encrypted, error: downloadError } = await getStorageBackend().download(BUCKET, summary.storage_path);
+  if (downloadError || !encrypted) throw new Error(`load retained screenshot: ${downloadError?.message ?? "not found"}`);
+  const plaintext = Buffer.from(decryptScreenshot(new Uint8Array(encrypted.arrayBuffer)));
+  const contentType = String((summary.encryption_metadata as Json | null)?.contentType || "image/jpeg");
+  const { error: logError } = await db().from("work_screenshot_access_log").insert({
+    organization_id: access.organizationId,
+    screenshot_summary_id: summaryId,
+    accessed_by: access.ctx.user.id,
+    reason: ownScreenshot ? "EOD draft review (own screenshots)" : "Evidence review preview",
+  });
+  if (logError) throw new Error(`audit screenshot access: ${logError.message}`);
+  if (size === "full") return { bytes: plaintext, contentType };
+  const width = size === "thumb" ? 200 : 720;
+  try {
+    const resized = await sharp(plaintext).rotate().resize({ width, withoutEnlargement: true }).webp({ quality: size === "thumb" ? 70 : 78 }).toBuffer();
+    return { bytes: resized, contentType: "image/webp" };
+  } catch {
+    return { bytes: plaintext, contentType };
+  }
 }
