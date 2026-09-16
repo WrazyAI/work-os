@@ -239,3 +239,35 @@ test("web employee drafts EODs for outstanding historical days", async () => {
   assert.match(outstanding, /role="dialog"/);
   assert.match(outstanding, /outstandingRowMeta/);
 });
+
+test("proposal application is lease-fenced and reports explicit outcomes", async () => {
+  const proposals = await source("src/lib/work-os-proposals.ts");
+  assert.match(proposals, /export function proposalOutcome/);
+  assert.match(proposals, /const applyAttempt = randomUUID\(\);/);
+  assert.match(proposals, /\.eq\("apply_attempt", applyAttempt\)/);
+  assert.match(proposals, /clearInterval\(heartbeat\)/);
+  assert.match(proposals, /proposal\.apply_lease_lost/);
+  assert.match(proposals, /return withOutcome\(/);
+});
+
+test("EOD review refuses self-approval", async () => {
+  const eod = await source("src/lib/work-os-eod.ts");
+  assert.match(eod, /report\.person_id === access\.personId/);
+  assert.match(eod, /cannot review your own EOD report/i);
+});
+
+test("admin routes honor the selected organization", async () => {
+  const api = await source("src/lib/work-os-api.ts");
+  assert.match(api, /export async function requireWorkOsAdmin\(organizationId\?: string \| null\)/);
+  assert.match(api, /roles: \["admin"\], organizationId: organizationId \?\? null/);
+  const tasks = await source("src/app/api/work-os/tasks/route.ts");
+  assert.match(tasks, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\)\)/);
+  const status = await source("src/app/api/work-os/status/route.ts");
+  assert.match(status, /export async function GET\(req: Request\)/);
+  assert.match(status, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\)\)/);
+});
+
+test("local task completion is idempotent", async () => {
+  const tasks = await source("src/lib/work-os-tasks.ts");
+  assert.match(tasks, /if \(task\.completed === completed\) return task;/);
+});

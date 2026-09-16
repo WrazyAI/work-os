@@ -36,7 +36,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ propos
     const { proposalId } = await params;
     const body = await req.json();
     body.decision_idempotency_key = req.headers.get("idempotency-key") || body.decision_idempotency_key;
-    return NextResponse.json({ proposal: await reviewWorkOsProposal(auth.access, proposalId, body) });
+    const proposal = await reviewWorkOsProposal(auth.access, proposalId, body);
+    // Surface the explicit outcome in both shapes: inside the row (for replay
+    // readers) and at the top level (for callers that read the response body
+    // directly, e.g. the reject paths).
+    return NextResponse.json({ proposal, outcome: (proposal as { outcome?: string }).outcome ?? null });
   } catch (error) {
     return jsonError(error);
   }

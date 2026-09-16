@@ -60,14 +60,26 @@ export function shouldAutoCheckUpdate(input: {
 
 export const UPDATE_AVAILABLE_KEY = "work-os-update-available";
 
+/** Human-facing release naming convention: the patch segment renders with
+ * two digits (0.3.1 displays as 0.3.01). SemVer itself forbids leading
+ * zeros, so canonical versions stay unpadded wherever tools compare them;
+ * only UI copy pads. Patches of ten or more keep their natural width. */
+export function displayUpdateVersion(version: string): string {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)(.*)$/);
+  if (!match) return version;
+  const [, major, minor, patch, suffix] = match;
+  return patch.length < 2 ? `${major}.${minor}.0${patch}${suffix}` : version;
+}
+
 export function updateAvailableCopy(version: string): {
   title: string;
   message: string;
   actionLabel: string;
 } {
+  const display = displayUpdateVersion(version);
   return {
-    title: `Update ${version} is ready`,
-    message: `Version ${version} is ready to install. The app restarts once.`,
+    title: `Update ${display} is ready`,
+    message: `Version ${display} is ready to install. Work OS restarts itself; if it does not come back, run the setup again.`,
     actionLabel: "Install & restart",
   };
 }

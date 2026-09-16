@@ -113,7 +113,7 @@ export function PlanningSession({
   onClose: () => void;
   onInterpret: (input: string) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
-  onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed">;
+  onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
   /** True while this workday started 30+ minutes late with no recorded reason. */
   lateReasonRequired?: boolean;
   onSaveLateReason?: (reason: string) => Promise<void>;
@@ -278,6 +278,14 @@ export function PlanningSession({
       const result = await onConfirm(input.trim(), effective, clarificationAnswers);
       if (result === "confirmed") { setState("confirmed"); return; }
       if (result === "conflict") { setState("conflict"); return; }
+      if (result === "rebuild") {
+        // The AI build expired or was already used. Drop the stale draft so the
+        // footer offers Build again instead of retrying a dead build id.
+        resetDraftState();
+        setError("The AI plan build expired. Build the plan again to confirm it.");
+        setState("drafting");
+        return;
+      }
       if (result === "failed") { setState("save_error"); return; }
       setState(result === "queued" ? "offline_fallback" : "saved");
     } catch (value) {

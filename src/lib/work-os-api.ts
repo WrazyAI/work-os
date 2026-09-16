@@ -236,11 +236,14 @@ export async function requireWorkOsPersonAccess(access: WorkOsAccess, personId: 
   return NextResponse.json({ error: "forbidden" }, { status: 403 });
 }
 
-export async function requireWorkOsAdmin(): Promise<
+export async function requireWorkOsAdmin(organizationId?: string | null): Promise<
   | { ctx: WorkOsAccess["ctx"]; access: WorkOsAccess; response?: never }
   | { response: NextResponse; ctx?: never; access?: never }
 > {
-  const result = await requireWorkOsAccess({ roles: ["admin"] });
+  // Honor the caller's selected organization. Without it, loadMembership picks
+  // the user's oldest membership, which silently writes to the wrong tenant
+  // for anyone who belongs to more than one organization.
+  const result = await requireWorkOsAccess({ roles: ["admin"], organizationId: organizationId ?? null });
   if (result.response) return { response: result.response };
   return { ctx: result.access.ctx, access: result.access };
 }

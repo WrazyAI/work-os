@@ -246,6 +246,8 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
     if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
     if ("description" in patch) row.description = nonEmptyString(patch.description);
     if ("due_date" in patch) row.due_date = nonEmptyString(patch.due_date);
+    if ("blocked" in patch) row.blocked = patch.blocked === true;
+    if ("blocked_reason" in patch) row.blocked_reason = nonEmptyString(patch.blocked_reason);
     if ("completed" in patch) {
       row.completed = patch.completed === true;
       row.status = row.completed ? "completed" : "open";
@@ -286,6 +288,9 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
 export async function completeTask(userId: string, taskId: string, completed = true) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
   if (task.provider === "local") {
+    // Idempotent: re-completing an already-completed task must not move its
+    // completion timestamp or emit a second day event.
+    if (task.completed === completed) return task;
     return selectFirst(
       db().from("work_tasks").update({
         completed,

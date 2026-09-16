@@ -285,8 +285,29 @@ export async function fileApprovedOperations(
         const data = result && typeof result === "object" && "proposal" in result
           ? (result as { proposal: unknown }).proposal
           : result;
-        outcome.recorded += 1;
-        outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state.", data });
+        // The server states the real outcome; a 200 alone is not proof the
+        // action applied (it may be stale, rejected, or still applying).
+        const row = proposalRow(result);
+        const serverOutcome = typeof row?.outcome === "string" ? row.outcome : null;
+        const serverReason = typeof row?.failure_reason === "string" && row.failure_reason.trim() ? row.failure_reason.trim() : null;
+        if (serverOutcome === "applying") {
+          outcome.processing += 1;
+          outcome.results.push({ op, status: "processing", message: "The server is still processing this change. Do not retry — recheck Review in a moment." });
+        } else if (serverOutcome === "stale" || serverOutcome === "rejected") {
+          const message = serverReason ?? (serverOutcome === "stale"
+            ? "The task changed after this proposal was drafted. Create a new proposal from the current task state."
+            : "This action was already rejected and was not filed.");
+          outcome.failed.push({ op, message });
+          outcome.results.push({ op, status: "failed", message });
+        } else if (serverOutcome === "failed" || serverOutcome === "needs_review") {
+          const message = serverReason ?? "Not filed. The server reported this action as failed.";
+          outcome.failed.push({ op, message });
+          outcome.results.push({ op, status: "failed", message, retryable: serverOutcome === "failed" });
+        } else {
+          // `applied` (or a legacy server without an explicit outcome).
+          outcome.recorded += 1;
+          outcome.results.push({ op, status: "recorded", message: "Recorded. Provider confirmation follows the normal sync state.", data });
+        }
       }
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : "The change could not be filed.";

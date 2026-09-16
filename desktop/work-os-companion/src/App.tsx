@@ -3,10 +3,10 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
+import { UPDATE_AVAILABLE_KEY, displayUpdateVersion, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
@@ -582,7 +582,7 @@ export default function App() {
       setInstalledVersion("Unavailable in browser preview");
       return;
     }
-    void getVersion().then(setInstalledVersion).catch(() => setInstalledVersion("Unavailable"));
+    void getVersion().then((value) => setInstalledVersion(displayUpdateVersion(value))).catch(() => setInstalledVersion("Unavailable"));
   }, []);
 
   useEffect(() => {
@@ -909,8 +909,22 @@ export default function App() {
   }
 
   async function installAvailableUpdate(update: Update, headers: Record<string, string>) {
-    setUpdateStatus(`Installing ${update.version}…`);
-    await update.downloadAndInstall(undefined, { headers });
+    // Download first: on Windows the updater plugin's install step launches
+    // the NSIS installer (which closes and relaunches the app) and then exits
+    // this process itself, so nothing after `install` runs there. The exit
+    // watchdog is armed only after the download so the grace timer cannot
+    // fire during a long download, and it is disarmed again when the install
+    // rejects, keeping the still-running app alive.
+    setUpdateStatus(`Downloading ${displayUpdateVersion(update.version)}…`);
+    await update.download(undefined, { headers });
+    setUpdateStatus(`Closing Work OS to install ${displayUpdateVersion(update.version)}…`);
+    await invoke("arm_update_exit_watchdog");
+    try {
+      await update.install();
+    } catch (value) {
+      await invoke("disarm_update_exit_watchdog").catch(() => undefined);
+      throw value;
+    }
     await relaunch();
   }
 
@@ -942,7 +956,7 @@ export default function App() {
       }
       if (silent) {
         const copy = updateAvailableCopy(result.update.version);
-        setUpdateStatus(`Version ${result.update.version} is ready.`);
+        setUpdateStatus(`Version ${displayUpdateVersion(result.update.version)} is ready.`);
         notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
           label: copy.actionLabel,
           onClick: () => {
@@ -951,14 +965,15 @@ export default function App() {
               const message = errorMessage(value, "The update could not be installed.");
               diagnostics.warn("updater.install_failed", message);
               setUpdateStatus("");
-              showError(message, message, "Update failed");
+              const recoveryMessage = `${message} To recover, quit Work OS from the system tray and run the setup installer again.`;
+              showError(recoveryMessage, recoveryMessage, "Update failed");
             });
           },
         });
         return;
       }
-      setUpdateStatus(`Installing ${result.update.version}…`);
-      notifications.info(`Downloading and installing ${result.update.version}.`, "Update available");
+      setUpdateStatus(`Installing ${displayUpdateVersion(result.update.version)}…`);
+      notifications.info(`Downloading and installing ${displayUpdateVersion(result.update.version)}.`, "Update available");
       await installAvailableUpdate(result.update, result.headers);
     } catch (value) {
       const message = errorMessage(value, "The update catalog could not be checked.");
@@ -1305,7 +1320,7 @@ export default function App() {
     return { ...result.interpretation, buildId: result.build_id };
   }
 
-  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed"> {
+  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild"> {
     if (syncBypassRef.current) {
       // Offline fixtures stay on-device. Debugger fixtures without a server plan
       // (e.g. Shift start) simply resolve — the modal owns its confirmed state.
@@ -1372,6 +1387,12 @@ export default function App() {
         resyncPlanFromServer();
         notifications.info("Showing the saved plan from your workspace. Close and reopen the focus editor to change it.", "Plan refreshed");
         return "conflict";
+      }
+      // An expired/used AI build cannot be retried with the same build id;
+      // surface it so the editor drops the stale draft and offers Build again.
+      if (/AI build/i.test(message)) {
+        notifications.info("The AI plan build expired. Build the plan again to confirm it.", "Build again");
+        return "rebuild";
       }
       setPlanSaveState("offline");
       return "failed";
@@ -1823,8 +1844,10 @@ export default function App() {
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
-            await apiRequest(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
-            return { op, status: "denied", message: "Skipped. This action did not run." };
+            const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
+            if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
+            if (row.outcome === "applying") return { op, status: "processing", message: "The server is still applying this action — it cannot be skipped right now." };
+            return { op, status: "failed", message: row.failure_reason?.trim() || (row.outcome === "applied" ? "This action was already applied and cannot be skipped." : "This action could not be skipped.") };
           } catch (value) {
             return { op, status: "failed", message: errorMessage(value, "This action could not be skipped.") };
           }

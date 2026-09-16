@@ -598,8 +598,12 @@ export default function AvatarApp(): React.ReactElement {
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
-            await apiRequest(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }) });
-            return { op: { ...op, enabled: false }, status: "denied", message: "Skipped. This action was not recorded." };
+            const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }) });
+            // A 200 is not proof of rejection: the action may already have
+            // applied (or be mid-apply) in another window.
+            if (row?.outcome === "rejected" || !row?.outcome) return { op: { ...op, enabled: false }, status: "denied", message: "Skipped. This action was not recorded." };
+            if (row.outcome === "applying") return { op, status: "processing", message: "The server is still applying this action — it cannot be skipped right now." };
+            return { op, status: "failed", message: row.failure_reason?.trim() || (row.outcome === "applied" ? "This action was already applied and cannot be skipped." : "This action could not be skipped.") };
           } catch (value) {
             return { op, status: "failed", message: value instanceof Error ? value.message : "This action could not be skipped." };
           }
@@ -770,7 +774,9 @@ export default function AvatarApp(): React.ReactElement {
         id: `agenda-error-${Date.now()}`, role: "system",
         text: /changed on another device|already confirmed/i.test(message)
           ? "This plan changed on another device. Open the main window to review it before confirming again."
-          : message,
+          : /AI build/i.test(message)
+            ? "The AI plan build expired. Send your agenda again to rebuild it."
+            : message,
       }]);
     } finally { setFiling(false); }
   }, [facts.planItems, facts.shiftDate, loadDay]);

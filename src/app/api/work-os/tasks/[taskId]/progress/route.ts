@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ taskId: string }> }) {
-  const auth = await requireWorkOsAdmin();
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
   if ("response" in auth) return auth.response;
   try {
     const { taskId } = await params;

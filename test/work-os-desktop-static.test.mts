@@ -195,7 +195,15 @@ assert.match(app, /method: "PATCH"/);
 assert.match(app, /MoreHorizontal/);
 assert.match(app, /queryAvailableUpdate\(saved\)/);
 assert.match(app, /result\.headers/);
-assert.match(app, /downloadAndInstall\(undefined, \{ headers \}\)/);
+assert.match(app, /update\.download\(undefined, \{ headers \}\)/);
+assert.match(app, /arm_update_exit_watchdog/);
+assert.match(app, /disarm_update_exit_watchdog/);
+assert.match(app, /update\.install\(\)/);
+const updateInstallOrder: number[] = [/update\.download\(undefined/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
+assert.ok(
+  updateInstallOrder[0] < updateInstallOrder[1] && updateInstallOrder[1] < updateInstallOrder[2],
+  "updater flow must run download, then arm the watchdog, then install",
+);
 assert.doesNotMatch(app, /if \(!window\.confirm\(warning\)\)/);
 assert.doesNotMatch(app, /openTaskComposer\(task\)/);
 assert.doesNotMatch(app, /Nifty task group ID/);
@@ -404,5 +412,19 @@ assert.match(avatar, /id: shared\.reviewId, role: "assistant" as const,/);
 assert.match(app, /reviewId: shared\.reviewId \}/);
 assert.match(app, /const reviewId = crypto\.randomUUID\(\);/);
 assert.doesNotMatch(app, /meta: "shared review"/);
+
+// ── Truthful receipts, build recovery, and sign-out hygiene ──
+const interpretation = read("src/interpretation.ts");
+assert.match(interpretation, /const serverOutcome = typeof row\?\.outcome === "string" \? row\.outcome : null;/);
+assert.match(interpretation, /serverOutcome === "stale" \|\| serverOutcome === "rejected"/);
+assert.match(app, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
+assert.match(avatar, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
+assert.match(app, /if \(\/AI build\/i\.test\(message\)\)/);
+assert.match(planner, /if \(result === "rebuild"\)/);
+assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
+assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);
+assert.match(vaultSource, /const CHAT_SCOPE_KEYS = "chat-scope-keys";/);
+assert.match(vaultSource, /for \(const key of scopes\) await remove\(key\);/);
+assert.match(vaultSource, /rememberChatScope\(scope\)/);
 
 console.log("Work OS desktop static checks passed.");

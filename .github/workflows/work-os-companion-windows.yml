@@ -110,7 +110,16 @@ jobs:
           foreach ($entry in @{ "tauri.conf.json" = $tauriVersion; "package.json" = $packageVersion; "Cargo.toml" = $cargoVersion }.GetEnumerator()) {
             if ($entry.Value -ne $version) { throw "$($entry.Key) version $($entry.Value) does not match release version $version" }
           }
+          # Display convention: the patch segment renders with two digits
+          # (0.3.1 releases as 0.3.01). SemVer forbids leading zeros, so
+          # tauri.conf.json, package.json, Cargo.toml, and the updater
+          # manifest keep the canonical unpadded version; only the release
+          # tag and human-facing titles use the padded display form.
+          $versionParts = $version.Split('.')
+          $displayVersion = "$($versionParts[0]).$($versionParts[1])." + [string]$versionParts[2].PadLeft(2, '0')
+          $tag = "$tagPrefix$displayVersion"
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "display_version=$displayVersion" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "tag=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publish=$publish" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -218,10 +227,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_DISPLAY: ${{ steps.release.outputs.display_version }}
           RELEASE_STAGE: ${{ steps.assets.outputs.stage }}
         run: |
           $ErrorActionPreference = "Stop"
-          $title = "UNSIGNED INTERNAL - Work OS Companion $env:RELEASE_VERSION"
+          $title = "UNSIGNED INTERNAL - Work OS Companion $env:RELEASE_DISPLAY"
           $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
           @"
           ## Unsigned internal build

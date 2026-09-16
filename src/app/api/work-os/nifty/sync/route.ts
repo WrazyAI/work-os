@@ -5,8 +5,8 @@ import { syncNifty, syncWorktivityRoster } from "@/lib/work-os";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
-  const auth = await requireWorkOsAdmin();
+export async function POST(req: Request) {
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
   if ("response" in auth) return auth.response;
   try {
     const ownerId = workOsOrganizationOwnerId(auth.access);
