@@ -200,6 +200,40 @@ fn toggle_companion(app: &tauri::AppHandle) {
     }
 }
 
+/// Guarantees the process dies once an exit has been requested. A graceful
+/// shutdown can deadlock inside DLL detach (WebView2/COM teardown), leaving a
+/// half-dead "Not Responding" process that then holds the executable locked
+/// and blocks the installer. Once armed, a detached watchdog force-terminates
+/// the process if the graceful exit has not completed after the grace window.
+/// On a normal fast exit the process is gone long before the timer fires, so
+/// the watchdog simply dies with it.
+#[cfg(windows)]
+fn arm_exit_watchdog(grace_seconds: u64) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(grace_seconds));
+        // SAFETY: terminating the current process; the handle is a static
+        // pseudo-handle and the call only fails if the process is already
+        // exiting, which is exactly the outcome we want.
+        let _ = unsafe {
+            windows_sys::Win32::System::Threading::TerminateProcess(
+                windows_sys::Win32::System::Threading::GetCurrentProcess(),
+                0,
+            )
+        };
+    });
+}
+
+/// Armed from the frontend a beat before the updater's Windows install step
+/// (which ends in `std::process::exit(0)`), so a hung detach during that exit
+/// cannot leave a zombie process holding the executable lock.
+#[tauri::command]
+fn arm_update_exit_watchdog() {
+    arm_exit_watchdog(4);
+}
+
+#[cfg(not(windows))]
+fn arm_exit_watchdog(_grace_seconds: u64) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -220,6 +254,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
+            arm_update_exit_watchdog,
             notify_focus,
             focus_main,
             hide_avatar,
@@ -259,7 +294,10 @@ pub fn run() {
                     show_main(app);
                     let _ = app.emit("work-os://capture", ());
                 }
-                "quit" => app.exit(0),
+                "quit" => {
+                    arm_exit_watchdog(4);
+                    app.exit(0);
+                }
                 _ => {}
             })
             .on_tray_icon_event(|tray, event| {
@@ -279,6 +317,7 @@ pub fn run() {
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
+                        diagnostics::host_event(&handle, "window.main.close_hidden", "Close requested; hid to tray instead of exiting", diagnostics::DiagnosticLevel::Info);
                         if let Some(window) = handle.get_webview_window("main") {
                             let _ = window.hide();
                         }
@@ -290,6 +329,13 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Work OS Companion");
+        .build(tauri::generate_context!())
+        .expect("error while building Work OS Companion")
+        .run(|_app, event| {
+            // Arm the terminate watchdog when the process begins exiting so a
+            // hung detach (WebView2/COM) can never outlive the exit request.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                arm_exit_watchdog(4);
+            }
+        });
 }

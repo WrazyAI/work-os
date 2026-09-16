@@ -3,7 +3,7 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
@@ -909,8 +909,14 @@ export default function App() {
   }
 
   async function installAvailableUpdate(update: Update, headers: Record<string, string>) {
-    setUpdateStatus(`Installing ${update.version}…`);
-    await update.downloadAndInstall(undefined, { headers });
+    // Download first so the exit watchdog below is armed only a beat before
+    // the install. On Windows the updater plugin's install step launches the
+    // NSIS installer (which closes and relaunches the app) and then exits this
+    // process itself, so nothing after `install` runs there.
+    setUpdateStatus(`Closing Work OS to install ${update.version}…`);
+    await update.download(undefined, { headers });
+    await invoke("arm_update_exit_watchdog");
+    await update.install();
     await relaunch();
   }
 
@@ -949,7 +955,7 @@ export default function App() {
             notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
             void installAvailableUpdate(result.update, result.headers).catch((value: unknown) => {
               const message = errorMessage(value, "The update could not be installed.");
-              diagnostics.warn("updater.install_failed", message);
+              diagnostics.warn("updater.install_failed", `${message} If this repeats, quit Work OS from the system tray and run the setup installer again.`);
               setUpdateStatus("");
               showError(message, message, "Update failed");
             });

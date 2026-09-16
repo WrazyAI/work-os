@@ -67,7 +67,7 @@ export function updateAvailableCopy(version: string): {
 } {
   return {
     title: `Update ${version} is ready`,
-    message: `Version ${version} is ready to install. The app restarts once.`,
+    message: `Version ${version} is ready to install. Work OS restarts itself; if it does not come back, run the setup again.`,
     actionLabel: "Install & restart",
   };
 }

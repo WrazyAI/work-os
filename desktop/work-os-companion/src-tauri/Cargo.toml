@@ -1,6 +1,6 @@
 [package]
 name = "work-os-companion"
-version = "0.2.100"
+version = "0.3.0"
 description = "WrazyOS employee companion"
 authors = ["Wrazy"]
 edition = "2021"
@@ -37,6 +37,7 @@ work-os-diagnostics-core = { path = "diagnostics-core" }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.2"
+windows-sys = { version = "0.60", default-features = false, features = ["Win32_System_Threading"] }
 
 [profile.dev.package.scrypt]
 opt-level = 3
