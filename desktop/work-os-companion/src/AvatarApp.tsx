@@ -8,7 +8,7 @@ import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay } from "./workOsQueries";
-import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, partialFilingMessage, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
@@ -699,13 +699,25 @@ export default function AvatarApp(): React.ReactElement {
     }));
     setFiling(true);
     try {
-      const { proposals } = await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      const { proposals, failures } = await apiRequest<{
+        proposals: Array<{ id: string; client_operation_index: number }>;
+        failures?: Array<{ client_operation_index: number; error: string }>;
+      }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, operations }),
       });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
       const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
-      if (reviewed.some((operation) => !operation.proposalId)) throw new Error("The completion proposals were not saved.");
+      const failed = (failures ?? []).map((failure) => ({ title: tasks[failure.client_operation_index]?.title, error: failure.error }));
+      if (failed.length) {
+        const filed = reviewed.filter((operation) => !!operation.proposalId);
+        if (!filed.length) throw new Error(partialFilingMessage(0, failed));
+        setProposedTaskIds((current) => new Set([...current, ...tasks.filter((task, index) => byIndex.has(index)).map((task) => task.id)]));
+        const reviewId = crypto.randomUUID();
+        setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: filed }]);
+        void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: filed, results: [], taskOptions: [] });
+        throw new Error(partialFilingMessage(filed.length, failed));
+      }
       setProposedTaskIds((current) => new Set([...current, ...tasks.map((task) => task.id)]));
       const reviewId = crypto.randomUUID();
       setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);

@@ -221,10 +221,43 @@ export async function interpretWorkUpdate(
   return { ok: true, interpretation, model: INTERPRET_MODEL };
 }
 
-/** Loads the employee's open tasks for task matching and id validation. */
-export async function loadInterpretationTasks(ownerId: string, personId: string): Promise<Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }>> {
-  const rows = await listPersonTasks(ownerId, personId, { limit: 200, includeCompleted: true }) as unknown as Array<Record<string, unknown>>;
+/** How prominently a task should appear to the interpreter: open work that is
+ * due today or overdue first, then other open work, then recently completed
+ * tasks. Due-date ordering alone buries today's tasks behind years of older
+ * ones. */
+function interpretationTaskRank(task: Record<string, unknown>, today: string): number {
+  if (task.completed === true) return 2;
+  const due = typeof task.due_date === "string" ? task.due_date.slice(0, 10) : null;
+  return due && due <= today ? 0 : 1;
+}
+
+function interpretationTaskActivity(task: Record<string, unknown>): string {
+  return String(task.provider_updated_at ?? task.updated_at ?? task.provider_created_at ?? task.created_at ?? "");
+}
+
+/** Recency-first ordering shared by the interpreter context; exported for
+ * tests so the bias stays pinned. */
+export function orderInterpretationTasks(
+  rows: Array<Record<string, unknown>>,
+  today: string,
+  limit = 300,
+): Array<{ id: string; title: string; completed: boolean; taskGroupId?: string | null }> {
   return rows
     .filter((row) => typeof row.id === "string" && typeof row.title === "string")
-    .map((row) => ({ id: row.id as string, title: row.title as string, completed: row.completed === true, taskGroupId: typeof row.task_group_id === "string" ? row.task_group_id : null }));
+    .sort((left, right) => interpretationTaskRank(left, today) - interpretationTaskRank(right, today)
+      || interpretationTaskActivity(right).localeCompare(interpretationTaskActivity(left)))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      completed: row.completed === true,
+      taskGroupId: typeof row.task_group_id === "string" ? row.task_group_id : null,
+    }));
+}
+
+/** Loads the employee's tasks for task matching and id validation, ordered
+ * for how people actually talk to the assistant (today first). */
+export async function loadInterpretationTasks(ownerId: string, personId: string) {
+  const rows = await listPersonTasks(ownerId, personId, { limit: 500, includeCompleted: true }) as unknown as Array<Record<string, unknown>>;
+  return orderInterpretationTasks(rows, new Date().toISOString().slice(0, 10));
 }

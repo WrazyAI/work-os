@@ -90,7 +90,7 @@ export function ApprovalFlow({
   onRetry?: (result: ToolCallResult) => void;
 }) {
   const pending = useMemo(() => operations.map((op, index) => ({ op, index })).filter(({ op }) =>
-    isMutatingToolOp(op) && !results.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId))), [operations, results]);
+    isMutatingToolOp(op) && !op.failure && !results.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId))), [operations, results]);
   const signature = pending.map(({ op, index }) => operationKey(op, index)).join("|");
   const [step, setStep] = useState(0);
   const [decisions, setDecisions] = useState<Record<string, ApprovalDecision>>({});
