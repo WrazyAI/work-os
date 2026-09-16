@@ -143,5 +143,21 @@ client-scoped skills broke.
 - `test/local-seo-client-resolver.test.mts` 8/8; full suite 105/105; typecheck clean;
   readiness check: all 10 clients resolve.
 
+### Follow-up verification (after "did you actually test everything?")
+
+The first pass had real gaps; they were closed and one more bug was found:
+
+- **Full coverage matrix:** all **10 clients** resolve and all **13 registered skills**
+  start through their executor routes — `COVERAGE-RESULT pass=23 fail=0` (start + cancel).
+- **Auto-heal branch, exercised live:** removed `acme-plumbing/client.md`, triggered the
+  SEO OS executor → **it failed** because `createLocalSeoClient` throws when a client
+  folder exists without `client.md` ("folder already exists but has no canonical client
+  record") — precisely the heal case; the executor swallowed the error and retried to no
+  effect. Fixed in `df00d5593` (write `client.md` + scaffold instead of throwing);
+  re-tested: workspace re-materialized, run started, curated file restored — all-pass.
+- **UI path (TestSprite):** `Prod audit: SEO OS delegates a client-scoped skill without
+  resolution errors` (test `4e9c304f-c619-4d07-aef8-d5f2704a3520`) **passed** — SEO OS →
+  Agents → Skills → Delegate Citations to Acme Plumbing, accepted with no resolution error.
+
 **Residual:** `seo_clients` has duplicate rows (2 per client, 20 total) — cleanup candidate.
 `deploy-system` materializes as folder `deploy-monitor` and resolves via scored identity.
