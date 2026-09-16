@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  INITIAL_UPDATE_DOWNLOAD_PROGRESS,
   UPDATE_AVAILABLE_KEY,
+  UPDATE_CHECK_CADENCE_COPY,
+  UPDATE_CHECK_INTERVAL_MS,
+  applyDownloadEvent,
   displayUpdateVersion,
+  formatMegabytes,
   isManagedUpdateChannel,
   shouldAutoCheckUpdate,
   updateAuthHeaders,
   updateAvailableCopy,
   updateChannelOrigin,
+  updateDownloadedCopy,
+  updateDownloadFailedCopy,
+  updateProgressDetails,
+  updateRowCopy,
 } from "./updater";
 
 describe("updateChannelOrigin", () => {
@@ -76,16 +85,87 @@ describe("displayUpdateVersion", () => {
 });
 
 describe("updateAvailableCopy", () => {
-  it("names the exact version and the restart consequence", () => {
+  it("names the exact version and offers a deferred download", () => {
     const copy = updateAvailableCopy("0.2.61");
     expect(copy.title).toContain("0.2.61");
     expect(copy.message).toContain("0.2.61");
-    expect(copy.message).toMatch(/restart/i);
-    expect(copy.message).toMatch(/run the setup again/i);
-    expect(copy.actionLabel).toBe("Install & restart");
+    expect(copy.message).toMatch(/download it now/i);
+    expect(copy.message).toMatch(/later from settings/i);
+    expect(copy.actionLabel).toBe("Download update");
   });
 
   it("uses a stable flyout key so repeats replace instead of stacking", () => {
     expect(UPDATE_AVAILABLE_KEY).toBe("work-os-update-available");
+  });
+});
+
+describe("background check cadence", () => {
+  it("checks every twenty minutes and derives the settings copy", () => {
+    expect(UPDATE_CHECK_INTERVAL_MS).toBe(20 * 60 * 1000);
+    expect(UPDATE_CHECK_CADENCE_COPY).toBe("every 20 minutes");
+  });
+});
+
+describe("applyDownloadEvent", () => {
+  it("folds Started, Progress, and Finished into byte progress", () => {
+    const started = applyDownloadEvent(INITIAL_UPDATE_DOWNLOAD_PROGRESS, { event: "Started", data: { contentLength: 5_000_000 } });
+    expect(started).toEqual({ receivedBytes: 0, totalBytes: 5_000_000, status: "downloading" });
+    const midway = applyDownloadEvent(started, { event: "Progress", data: { chunkLength: 2_500_000 } });
+    expect(midway.receivedBytes).toBe(2_500_000);
+    const finished = applyDownloadEvent(midway, { event: "Finished" });
+    expect(finished.status).toBe("downloaded");
+    expect(finished.receivedBytes).toBe(2_500_000);
+  });
+
+  it("keeps a missing content length nullable", () => {
+    const started = applyDownloadEvent(INITIAL_UPDATE_DOWNLOAD_PROGRESS, { event: "Started", data: {} });
+    expect(started.totalBytes).toBeNull();
+  });
+});
+
+describe("download progress copy", () => {
+  it("reports received of total with a percentage when the total is known", () => {
+    const details = updateProgressDetails({ receivedBytes: 2_500_000, totalBytes: 5_000_000, status: "downloading" });
+    expect(details.valueText).toBe("2.4 MB of 4.8 MB");
+    expect(details.percent).toBe(50);
+  });
+
+  it("falls back to received bytes when the total is unknown", () => {
+    const details = updateProgressDetails({ receivedBytes: 1_048_576, totalBytes: null, status: "downloading" });
+    expect(details.valueText).toBe("1.0 MB downloaded");
+    expect(details.percent).toBeNull();
+  });
+
+  it("scales megabytes past one hundred without decimals", () => {
+    expect(formatMegabytes(157_286_400)).toBe("150 MB");
+    expect(formatMegabytes(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("updateRowCopy", () => {
+  it("reads every flow state back to the user", () => {
+    expect(updateRowCopy({ status: "idle" }, "0.3.2")).toBe("Installed version 0.3.2");
+    expect(updateRowCopy({ status: "checking" }, "0.3.2")).toContain("Checking securely");
+    expect(updateRowCopy({ status: "available", version: "0.3.3" }, "0.3.2")).toContain("Version 0.3.03 available");
+    expect(updateRowCopy({ status: "downloading", version: "0.3.3", progress: { receivedBytes: 2_500_000, totalBytes: 5_000_000, status: "downloading" } }, "0.3.2")).toBe("Downloading 0.3.03… 2.4 MB of 4.8 MB");
+    expect(updateRowCopy({ status: "downloaded", version: "0.3.3" }, "0.3.2")).toBe("Version 0.3.03 downloaded — ready to install");
+    expect(updateRowCopy({ status: "failed", version: "0.3.3", message: "Network unreachable." }, "0.3.2")).toContain("Version 0.3.03 download failed · Network unreachable.");
+    expect(updateRowCopy({ status: "installing", version: "0.3.3" }, "0.3.2")).toBe("Closing Work OS to install 0.3.03…");
+  });
+});
+
+describe("update lifecycle copy", () => {
+  it("offers the deferral path once downloaded", () => {
+    const copy = updateDownloadedCopy("0.3.3");
+    expect(copy.message).toContain("0.3.03");
+    expect(copy.message).toMatch(/update now/i);
+    expect(copy.message).toMatch(/later from settings/i);
+  });
+
+  it("names the failure and the recovery step", () => {
+    const copy = updateDownloadFailedCopy("0.3.3", "The download did not finish.");
+    expect(copy.title).toBe("Update download failed");
+    expect(copy.message).toContain("0.3.03");
+    expect(copy.message).toMatch(/check your connection and try again/i);
   });
 });

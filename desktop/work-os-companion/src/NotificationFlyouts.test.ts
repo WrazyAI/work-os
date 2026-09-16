@@ -64,4 +64,69 @@ describe("application notification flyouts", () => {
     expect(app).toContain('aria-current={view === id ? "page" : undefined}');
     expect(app).toContain("title={label}");
   });
+
+  it("renders download progress as an accessible bar without a dismiss while locked", () => {
+    const notification: AppNotification = {
+      id: "update",
+      tone: "info",
+      title: "Downloading update",
+      message: "Downloading 0.3.03… 2.4 MB of 4.8 MB",
+      persistence: "persistent",
+      persistenceKey: "work-os-update-available",
+      locked: true,
+      progress: { value: 50, max: 100, valueText: "2.4 MB of 4.8 MB" },
+    };
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notification], onDismiss: () => undefined }));
+    expect(markup).toContain('class="notification-flyout info persistent locked"');
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).toContain('aria-valuenow="50"');
+    expect(markup).toContain('aria-valuetext="2.4 MB of 4.8 MB"');
+    expect(markup).toContain("width:50%");
+    expect(markup).not.toContain("Dismiss Downloading update");
+  });
+
+  it("renders primary and quiet actions side by side once downloaded", () => {
+    const notification: AppNotification = {
+      id: "update",
+      tone: "info",
+      title: "Update downloaded",
+      message: "Version 0.3.03 is downloaded. Update now, or install it later from Settings.",
+      persistence: "persistent",
+      persistenceKey: "work-os-update-available",
+      actions: [
+        { label: "Update now", kind: "primary", onClick: () => undefined },
+        { label: "Later", kind: "quiet", onClick: () => undefined },
+      ],
+    };
+    const markup = renderToStaticMarkup(createElement(NotificationFlyouts, { notifications: [notification], onDismiss: () => undefined }));
+    expect(markup).toContain("Update now");
+    expect(markup).toContain("Later");
+    expect(markup).toContain('class="notification-action quiet"');
+    expect(markup).toContain("Dismiss Update downloaded");
+  });
+
+  it("replaces a persistent card in place when progress advances", () => {
+    const started = appendNotification([], {
+      tone: "info",
+      title: "Downloading update",
+      message: "Downloading 0.3.03… 0.0 MB of 4.8 MB",
+      persistence: "persistent",
+      persistenceKey: "work-os-update-available",
+      progress: { value: 0, max: 100, valueText: "0.0 MB of 4.8 MB" },
+      locked: true,
+    });
+    const advanced = appendNotification(started, {
+      tone: "info",
+      title: "Downloading update",
+      message: "Downloading 0.3.03… 2.4 MB of 4.8 MB",
+      persistence: "persistent",
+      persistenceKey: "work-os-update-available",
+      progress: { value: 50, max: 100, valueText: "2.4 MB of 4.8 MB" },
+      locked: true,
+    });
+    expect(advanced).toHaveLength(1);
+    expect(advanced[0]?.id).toBe(started[0]?.id);
+    expect(advanced[0]?.progress?.value).toBe(50);
+    expect(advanced[0]?.locked).toBe(true);
+  });
 });

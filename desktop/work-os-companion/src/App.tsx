@@ -6,7 +6,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { UPDATE_AVAILABLE_KEY, displayUpdateVersion, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
+import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
@@ -61,6 +61,17 @@ type MissedClockOutCorrection = { sessionId: string; date: string; clockedInAt: 
 type ProgressUpdateKind = "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
 type ProgressReceipt = { text: string; message: string; kind: ProgressUpdateKind; queued?: boolean };
 type ProgressPanel = "update" | "goal";
+/** Update delivery flow shared by the flyout and the Settings row. The
+ * plugin's Update object stays referenced while it holds native resources
+ * (downloaded installer bytes, version catalog entry). */
+type UpdateFlow =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available"; update: Update; headers: Record<string, string> }
+  | { status: "downloading"; update: Update; headers: Record<string, string>; progress: UpdateDownloadProgress }
+  | { status: "downloaded"; update: Update }
+  | { status: "failed"; update: Update; headers: Record<string, string>; message: string }
+  | { status: "installing"; update: Update };
 type ComposerMode = "progress" | "agenda";
 const views: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: "day", label: "My Day", icon: LayoutDashboard }, { id: "tasks", label: "Tasks", icon: ListChecks },
@@ -169,7 +180,17 @@ export default function App() {
   const [queueAttentionCount, setQueueAttentionCount] = useState(0);
   const [apiBase, setApiBase] = useState("");
   const [autoStart, setAutoStart] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState("");
+  const [updateFlow, setUpdateFlow] = useState<UpdateFlow>({ status: "idle" });
+  const updateFlowRef = useRef<UpdateFlow>({ status: "idle" });
+  const updateCheckInFlightRef = useRef(false);
+  const updatePaintRef = useRef<unknown>(null);
+  const updateRowSummary: UpdateRowCopyInput =
+    updateFlow.status === "available" ? { status: "available", version: updateFlow.update.version }
+    : updateFlow.status === "downloading" ? { status: "downloading", version: updateFlow.update.version, progress: updateFlow.progress }
+    : updateFlow.status === "downloaded" ? { status: "downloaded", version: updateFlow.update.version }
+    : updateFlow.status === "failed" ? { status: "failed", version: updateFlow.update.version, message: updateFlow.message }
+    : updateFlow.status === "installing" ? { status: "installing", version: updateFlow.update.version }
+    : { status: updateFlow.status };
   const [vaultReady, setVaultReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
@@ -586,6 +607,20 @@ export default function App() {
     void getVersion().then((value) => setInstalledVersion(displayUpdateVersion(value))).catch(() => setInstalledVersion("Unavailable"));
   }, []);
 
+  // The companion is a long-lived tray app, so releases dropped mid-session
+  // would otherwise go unnoticed until a restart. Re-check silently on the
+  // shared cadence; the flow gate skips while a download or install is live.
+  useEffect(() => { updateFlowRef.current = updateFlow; }, [updateFlow]);
+  useEffect(() => {
+    if (!isTauri() || !session || !autoCheckUpdates) return;
+    const timer = window.setInterval(() => {
+      const flow = updateFlowRef.current;
+      if (flow.status !== "idle" && flow.status !== "available" && flow.status !== "failed") return;
+      void checkForUpdates({ silent: true });
+    }, UPDATE_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [autoCheckUpdates, session]);
+
   useEffect(() => {
     if (!session) return;
     const recover = async () => { if (syncBypassRef.current || !navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); };
@@ -909,78 +944,128 @@ export default function App() {
     }
   }
 
-  async function installAvailableUpdate(update: Update, headers: Record<string, string>) {
-    // Download first: on Windows the updater plugin's install step launches
-    // the NSIS installer (which closes and relaunches the app) and then exits
-    // this process itself, so nothing after `install` runs there. The exit
-    // watchdog is armed only after the download so the grace timer cannot
-    // fire during a long download, and it is disarmed again when the install
-    // rejects, keeping the still-running app alive.
-    setUpdateStatus(`Downloading ${displayUpdateVersion(update.version)}…`);
-    await update.download(undefined, { headers });
-    setUpdateStatus(`Closing Work OS to install ${displayUpdateVersion(update.version)}…`);
+  /** Closes the plugin's native download resource when a pending entry is
+   * replaced, so superseded installers cannot pin memory. */
+  function discardUpdateEntry(flow: UpdateFlow) {
+    if (flow.status === "available" || flow.status === "failed") {
+      void flow.update.close().catch(() => undefined);
+    }
+  }
+
+  async function beginUpdateDownload() {
+    const flow = updateFlowRef.current;
+    if (flow.status !== "available" && flow.status !== "failed") return;
+    const { update, headers } = flow;
+    const display = displayUpdateVersion(update.version);
+    updatePaintRef.current = null;
+    setUpdateFlow({ status: "downloading", update, headers, progress: INITIAL_UPDATE_DOWNLOAD_PROGRESS });
+    const publishProgress = (progress: UpdateDownloadProgress, force = false) => {
+      const details = updateProgressDetails(progress);
+      const paintKey = details.percent ?? Math.floor(progress.receivedBytes / (256 * 1024));
+      if (!force && updatePaintRef.current === paintKey) return;
+      updatePaintRef.current = paintKey;
+      notifications.persistent(UPDATE_AVAILABLE_KEY, `Downloading ${display}… ${details.valueText}`, "Downloading update", "info", {
+        progress: { value: details.percent, max: 100, valueText: details.valueText },
+        locked: true,
+      });
+    };
+    publishProgress(INITIAL_UPDATE_DOWNLOAD_PROGRESS, true);
+    let progress = INITIAL_UPDATE_DOWNLOAD_PROGRESS;
+    try {
+      await update.download((event) => {
+        progress = applyDownloadEvent(progress, event);
+        setUpdateFlow((current) => current.status === "downloading" ? { ...current, progress } : current);
+        publishProgress(progress);
+      }, { headers });
+    } catch (value) {
+      const message = errorMessage(value, "The download did not finish.");
+      diagnostics.warn("updater.download_failed", message);
+      setUpdateFlow({ status: "failed", update, headers, message });
+      const copy = updateDownloadFailedCopy(update.version, message);
+      notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "error", {
+        actions: [{ label: "Retry", kind: "primary", onClick: () => void beginUpdateDownload() }],
+      });
+      return;
+    }
+    setUpdateFlow({ status: "downloaded", update });
+    const copy = updateDownloadedCopy(update.version);
+    notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
+      actions: [
+        { label: "Update now", kind: "primary", onClick: () => void installDownloadedUpdate() },
+        { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
+      ],
+    });
+  }
+
+  async function installDownloadedUpdate() {
+    const flow = updateFlowRef.current;
+    if (flow.status !== "downloaded") return;
+    // The install step ends in the process exiting on Windows (the installer
+    // closes and relaunches the app), so the exit watchdog is armed first and
+    // disarmed again if the install rejects, keeping the app alive.
+    notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
+    setUpdateFlow({ status: "installing", update: flow.update });
     await invoke("arm_update_exit_watchdog");
     try {
-      await update.install();
+      await flow.update.install();
     } catch (value) {
       await invoke("disarm_update_exit_watchdog").catch(() => undefined);
-      throw value;
+      const message = errorMessage(value, "The update could not be installed.");
+      diagnostics.warn("updater.install_failed", message);
+      setUpdateFlow({ status: "downloaded", update: flow.update });
+      const recoveryMessage = `${message} To recover, quit Work OS from the system tray and run the setup installer again.`;
+      showError(recoveryMessage, recoveryMessage, "Update failed");
+      return;
     }
     await relaunch();
   }
 
   async function checkForUpdates({ silent = false }: { silent?: boolean } = {}) {
-    if (!silent) setUpdateStatus("Checking securely…");
+    if (updateCheckInFlightRef.current) return;
+    const previous = updateFlowRef.current;
+    if (previous.status === "downloading" || previous.status === "downloaded" || previous.status === "installing") return;
+    updateCheckInFlightRef.current = true;
+    setUpdateFlow({ status: "checking" });
     try {
       const saved = await secureState.session();
       if (!saved) {
-        if (!silent) {
-          setUpdateStatus("");
-          notifications.info("Sign in first, then check for updates.", "Not signed in");
-        }
+        setUpdateFlow(previous);
+        if (!silent) notifications.info("Sign in first, then check for updates.", "Not signed in");
         return;
       }
       const result = await queryAvailableUpdate(saved);
       if (result.status === "managed") {
-        if (!silent) {
-          setUpdateStatus("");
-          notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
-        }
+        setUpdateFlow(previous);
+        if (!silent) notifications.info("Updates are managed by your WrazyOS server.", "Managed update channel");
         return;
       }
       if (result.status === "current") {
-        if (!silent) {
-          setUpdateStatus("");
-          notifications.success("You already have the latest internal build.", "Work OS is up to date");
-        }
+        // A pending entry may be stale (for example a pulled release).
+        if (previous.status === "available" || previous.status === "failed") discardUpdateEntry(previous);
+        setUpdateFlow({ status: "idle" });
+        if (!silent) notifications.success("You already have the latest internal build.", "Work OS is up to date");
         return;
       }
-      if (silent) {
-        const copy = updateAvailableCopy(result.update.version);
-        setUpdateStatus(`Version ${displayUpdateVersion(result.update.version)} is ready.`);
-        notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
-          label: copy.actionLabel,
-          onClick: () => {
-            notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
-            void installAvailableUpdate(result.update, result.headers).catch((value: unknown) => {
-              const message = errorMessage(value, "The update could not be installed.");
-              diagnostics.warn("updater.install_failed", message);
-              setUpdateStatus("");
-              const recoveryMessage = `${message} To recover, quit Work OS from the system tray and run the setup installer again.`;
-              showError(recoveryMessage, recoveryMessage, "Update failed");
-            });
-          },
-        });
+      if ((previous.status === "available" || previous.status === "failed") && previous.update.version === result.update.version) {
+        // Same version already surfaced: keep its state (and failure/retry
+        // affordance) and release the redundant check result.
+        void result.update.close().catch(() => undefined);
+        setUpdateFlow(previous);
         return;
       }
-      setUpdateStatus(`Installing ${displayUpdateVersion(result.update.version)}…`);
-      notifications.info(`Downloading and installing ${displayUpdateVersion(result.update.version)}.`, "Update available");
-      await installAvailableUpdate(result.update, result.headers);
+      if (previous.status === "available" || previous.status === "failed") discardUpdateEntry(previous);
+      setUpdateFlow({ status: "available", update: result.update, headers: result.headers });
+      const copy = updateAvailableCopy(result.update.version);
+      notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
+        action: { label: copy.actionLabel, onClick: () => void beginUpdateDownload() },
+      });
     } catch (value) {
       const message = errorMessage(value, "The update catalog could not be checked.");
       diagnostics.warn("updater.check_failed", message);
-      setUpdateStatus("");
+      setUpdateFlow(previous.status === "available" || previous.status === "failed" ? previous : { status: "idle" });
       if (!silent) showError(message, message, "Update failed");
+    } finally {
+      updateCheckInFlightRef.current = false;
     }
   }
 
@@ -989,7 +1074,7 @@ export default function App() {
     setAutoCheckUpdates(enabled);
     try {
       await secureState.saveSettings({ apiBase, autoCheckUpdates: enabled });
-      notifications.success(enabled ? "Work OS will check for updates on launch." : "Work OS will no longer check for updates on launch.", "Update setting saved");
+      notifications.success(enabled ? `Work OS will check for updates on launch and ${UPDATE_CHECK_CADENCE_COPY}.` : "Work OS will no longer check for updates automatically.", "Update setting saved");
     } catch (value) {
       setAutoCheckUpdates(previous);
       showError(errorMessage(value, "The update setting could not be saved."), "The update setting could not be saved.", "Setting not saved");
@@ -2158,8 +2243,15 @@ export default function App() {
             <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting>
             <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
             <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
-            <Setting title="Desktop updates" detail={updateStatus ? `${updateStatus} · Installed version ${installedVersion}` : `Installed version ${installedVersion}`}><button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button></Setting>
-            <Setting title="Automatic update checks" detail="Check on launch and show a flyout when a new build is ready"><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
+            <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
+              {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
+              {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
+              {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
+              {updateFlow.status === "checking" && <span className="status-dot">Checking</span>}
+              {updateFlow.status === "downloading" && <span className="status-dot">Downloading</span>}
+              {updateFlow.status === "installing" && <span className="status-dot">Installing</span>}
+            </Setting>
+            <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready`}><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
             <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting>
             <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button type="button" className="quiet-action" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
             <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
