@@ -1870,11 +1870,20 @@ raises the floating selection annotator; saved notes collect in a `Draft notes`
 tray whose quote chips flash the matching passage in the draft, and refining
 sends the notes plus free-text feedback while the bottleneck answer is never
 included. The AI request receives the report narrative, feedback, and bounded
-annotations, never the bottleneck answer. When every task in the
-current-day list is complete, disable the bottleneck field, clear any prior value,
-and omit the bottleneck section from the submitted report. Otherwise the employee
-must provide a bottleneck before submission. A failed refinement preserves both
-the report, feedback, and bottleneck input.
+annotations, never the bottleneck answer. The required bottleneck entry renders
+before the optional refine area so the mandatory ask is never buried behind an
+optional one. A failed refinement preserves both the report, feedback, and
+bottleneck input.
+
+The bottleneck requirement is resolved from wherever the employee actually
+answered: the dedicated field first, then a real `## Bottleneck` section in the
+report draft (the server's `(needs your input — …)` placeholder never counts).
+A typed answer is never cleared in the background; when every task in the
+current-day list becomes complete, the field is disabled but its value is
+retained, and the bottleneck section is omitted from the submitted report.
+Otherwise a submission without a resolved answer is blocked, and the disabled
+`Submit EOD` control always names its blocker in the footer: the missing reason,
+an empty report, a draft still in flight, or a running refinement.
 
 ### 29.1b Plan draft refinement
 
