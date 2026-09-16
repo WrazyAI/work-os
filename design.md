@@ -1960,6 +1960,28 @@ show availability and review state first, request a reason before access, audit
 the access, and present the image in a modal with a neutral descriptive alt label.
 Never use a screenshot thumbnail as a decorative productivity indicator.
 
+The EOD composer's own-screenshot review panel is the employee-facing exception
+to the reason prompt: the employee is reviewing their own frames, so access is
+implicit and every view is still audited. Its contract is fixed:
+
+- The collapsed section states how many frames were analyzed for the day and the
+  limitation that sampled context never proves completion, effort, or quality.
+- Observation rows show the frame that produced them as a 64x40 thumbnail beside
+  the capture time and neutral summary. Frames without a retained image stay
+  text-only; they never show a broken image or a placeholder that implies content.
+- A horizontal carousel of the seven most recent retained frames ends with a
+  `+N more` tile that opens the full day as a multi-column grid modal. Selecting
+  any frame opens a lightbox with the full-size image, a caption naming capture
+  time and app, keyboard arrow navigation, and Escape-to-close with focus
+  restored to the invoking tile.
+- The counts line is honest per disposition: analyzed, flagged as sensitive
+  (image deleted), excluded by the employee's own exclusions, and unavailable.
+  Never collapse a sensitive exclusion into "privacy policy" when it was the
+  model's sensitivity filter, and never imply a deleted frame can be recovered.
+- Thumbnails and previews are server-rendered from the retained encrypted frame;
+  the browser never receives the stored object directly. Preview responses are
+  private-cached and every fetch is written to the screenshot access log.
+
 Dispute/correction actions are visually secondary but discoverable. A disputed
 record remains in the timeline with its correction status rather than vanishing.
 
