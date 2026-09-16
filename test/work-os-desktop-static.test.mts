@@ -405,4 +405,18 @@ assert.match(app, /reviewId: shared\.reviewId \}/);
 assert.match(app, /const reviewId = crypto\.randomUUID\(\);/);
 assert.doesNotMatch(app, /meta: "shared review"/);
 
+// ── Truthful receipts, build recovery, and sign-out hygiene ──
+const interpretation = read("src/interpretation.ts");
+assert.match(interpretation, /const serverOutcome = typeof row\?\.outcome === "string" \? row\.outcome : null;/);
+assert.match(interpretation, /serverOutcome === "stale" \|\| serverOutcome === "rejected"/);
+assert.match(app, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
+assert.match(avatar, /row\.outcome === "applied" \? "This action was already applied and cannot be skipped\."/);
+assert.match(app, /if \(\/AI build\/i\.test\(message\)\)/);
+assert.match(planner, /if \(result === "rebuild"\)/);
+assert.match(planner, /The AI plan build expired\. Build the plan again to confirm it\./);
+assert.match(avatar, /The AI plan build expired\. Send your agenda again to rebuild it\./);
+assert.match(vaultSource, /const CHAT_SCOPE_KEYS = "chat-scope-keys";/);
+assert.match(vaultSource, /for \(const key of scopes\) await remove\(key\);/);
+assert.match(vaultSource, /rememberChatScope\(scope\)/);
+
 console.log("Work OS desktop static checks passed.");

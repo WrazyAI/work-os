@@ -26,6 +26,19 @@ export interface WorkOsConversationTurn {
 }
 
 let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
+
+/** Chat scopes are dynamic keys; remember every scope this device wrote so a
+ * sign-out can clear another employee's conversations and pending reviews. */
+const CHAT_SCOPE_KEYS = "chat-scope-keys";
+async function rememberChatScope(scope: string) {
+  try {
+    const keys = new Set((await get<string[]>(CHAT_SCOPE_KEYS)) ?? []);
+    const before = keys.size;
+    keys.add(`conversation:${scope}`);
+    keys.add(`pending-tools:${scope}`);
+    if (keys.size !== before) await set(CHAT_SCOPE_KEYS, [...keys]);
+  } catch { /* best effort: clearing falls back to session-scoped keys */ }
+}
 const defaultApiBase = import.meta.env.VITE_WORK_OS_API_URL || "https://app.wrazyos.com";
 
 function httpsOrigin(value: string) {
@@ -113,6 +126,11 @@ export const secureState = {
     await remove("offline-queue");
     await remove("day-snapshot");
     await remove("query-cache");
+    // Conversations and pending approval cards are per-shift keys; remove each
+    // scope this device wrote so a sign-out leaves no employee data behind.
+    const scopes = (await get<string[]>(CHAT_SCOPE_KEYS)) ?? [];
+    for (const key of scopes) await remove(key);
+    await remove(CHAT_SCOPE_KEYS);
   },
   queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
   saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),
@@ -153,6 +171,7 @@ export const secureState = {
   saveConversation: (scope: string, turns: WorkOsConversationTurn[]) => {
     if (!isTauri()) return Promise.resolve();
     return (async () => {
+      await rememberChatScope(scope);
       const stored = (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [];
       await set(`conversation:${scope}`, mergeConversationTurns(stored, turns));
     })();
@@ -162,7 +181,7 @@ export const secureState = {
    * the avatar so cards raised in either surface appear in both. */
   pendingTools: async (scope: string) => isTauri() ? (await get<PendingToolReview>(`pending-tools:${scope}`)) ?? null : null,
   savePendingTools: (scope: string, review: PendingToolReview) => isTauri()
-    ? set(`pending-tools:${scope}`, review)
+    ? rememberChatScope(scope).then(() => set(`pending-tools:${scope}`, review))
     : Promise.resolve(),
   clearPendingTools: (scope: string) => isTauri() ? remove(`pending-tools:${scope}`) : Promise.resolve(),
   pendingAuth: async () => {

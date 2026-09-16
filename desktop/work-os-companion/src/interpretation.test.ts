@@ -139,6 +139,35 @@ describe("fileApprovedOperations", () => {
     expect(outcome.results.map((result) => result.status)).toEqual(["recorded", "failed", "failed"]);
   });
 
+  it("never reports a stale or applying 200 as recorded", async () => {
+    const transport = {
+      reviewProposal: async (id: string) => {
+        if (id === "proposal-stale") return { id, status: "stale", outcome: "stale", failure_reason: "The task changed after this proposal was drafted." };
+        if (id === "proposal-applying") return { id, status: "applying", outcome: "applying" };
+        if (id === "proposal-rejected") return { id, status: "rejected", outcome: "rejected" };
+        return { id, status: "applied", outcome: "applied" };
+      },
+    };
+    const outcome = await fileApprovedOperations(ops([
+      { op: "complete_task", taskId: "t-1", proposalId: "proposal-stale" },
+      { op: "record_progress", taskId: "t-2", proposalId: "proposal-applying" },
+      { op: "record_progress", taskId: "t-3", proposalId: "proposal-rejected" },
+      { op: "record_progress", taskId: "t-4", proposalId: "proposal-applied" },
+    ]), transport);
+    expect(outcome.recorded).toBe(1);
+    expect(outcome.processing).toBe(1);
+    expect(outcome.failed).toHaveLength(2);
+    expect(outcome.failed[0]?.message).toContain("task changed");
+    expect(outcome.results.map((result) => result.status)).toEqual(["failed", "processing", "failed", "recorded"]);
+  });
+
+  it("treats a legacy 200 without an outcome as recorded", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "record_progress" }]), {
+      reviewProposal: async () => ({ id: "proposal-1", status: "applied" }),
+    });
+    expect(outcome.recorded).toBe(1);
+  });
+
   it("uses the persisted proposal as a tool-result payload", async () => {
     const outcome = await fileApprovedOperations(ops([{ op: "display_pending_tasks" }]), {
       reviewProposal: async () => ({ proposal: { provider_result: { view: "pending", tasks: [{ id: "task-1" }] } } }),

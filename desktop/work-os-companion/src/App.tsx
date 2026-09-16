@@ -1305,7 +1305,7 @@ export default function App() {
     return { ...result.interpretation, buildId: result.build_id };
   }
 
-  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed"> {
+  async function confirmPlanning(input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>): Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild"> {
     if (syncBypassRef.current) {
       // Offline fixtures stay on-device. Debugger fixtures without a server plan
       // (e.g. Shift start) simply resolve — the modal owns its confirmed state.
@@ -1372,6 +1372,12 @@ export default function App() {
         resyncPlanFromServer();
         notifications.info("Showing the saved plan from your workspace. Close and reopen the focus editor to change it.", "Plan refreshed");
         return "conflict";
+      }
+      // An expired/used AI build cannot be retried with the same build id;
+      // surface it so the editor drops the stale draft and offers Build again.
+      if (/AI build/i.test(message)) {
+        notifications.info("The AI plan build expired. Build the plan again to confirm it.", "Build again");
+        return "rebuild";
       }
       setPlanSaveState("offline");
       return "failed";
@@ -1823,8 +1829,10 @@ export default function App() {
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
-            await apiRequest(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
-            return { op, status: "denied", message: "Skipped. This action did not run." };
+            const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
+            if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
+            if (row.outcome === "applying") return { op, status: "processing", message: "The server is still applying this action — it cannot be skipped right now." };
+            return { op, status: "failed", message: row.failure_reason?.trim() || (row.outcome === "applied" ? "This action was already applied and cannot be skipped." : "This action could not be skipped.") };
           } catch (value) {
             return { op, status: "failed", message: errorMessage(value, "This action could not be skipped.") };
           }

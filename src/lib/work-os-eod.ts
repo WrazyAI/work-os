@@ -433,6 +433,9 @@ export async function reviewWorkOsEod(access: WorkOsAccess, reportId: string, bo
     .single();
   if (loadError) throw new Error(`load EOD report for review: ${loadError.message}`);
   if (report.status !== "pending_review") throw new Error("only pending reports can be reviewed");
+  // Review integrity: a manager who is also an employee must never approve,
+  // reject, or edit their own report. Another reviewer must handle it.
+  if (report.person_id === access.personId) throw new Error("You cannot review your own EOD report. Ask another manager to review it.");
   const ownerId = await organizationOwnerId(access.organizationId);
   const reviewed = await reviewReport(ownerId, reportId, access.ctx.user.id, body) as Json;
   if (typeof body.markdown === "string" && body.markdown !== report.markdown) {

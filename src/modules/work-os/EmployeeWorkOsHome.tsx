@@ -279,11 +279,21 @@ export default function EmployeeWorkOsHome() {
     },
   });
   const review = useMutation({
-    mutationFn: ({ id, decision }: { id: string; decision: "accept" | "reject" }) => fetchJson(`/api/work-os/proposals/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-      body: JSON.stringify({ decision }),
-    }),
+    mutationFn: async ({ id, decision }: { id: string; decision: "accept" | "reject" }) => {
+      const row = await fetchJson<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+        body: JSON.stringify({ decision }),
+      });
+      // A 200 is not proof the decision landed: the proposal may be stale,
+      // already decided in another window, or still applying.
+      const expected = decision === "accept" ? "applied" : "rejected";
+      if (row?.outcome && row.outcome !== expected) {
+        throw new Error(row.failure_reason?.trim()
+          || (row.outcome === "applying" ? "This action is still being applied. Recheck in a moment." : `This action could not be ${decision === "accept" ? "approved" : "rejected"}.`));
+      }
+      return row;
+    },
     onSuccess: () => void refresh(),
   });
   const saveGoal = useMutation({

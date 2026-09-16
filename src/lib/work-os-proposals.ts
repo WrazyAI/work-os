@@ -7,6 +7,7 @@ import {
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
+import { randomUUID } from "node:crypto";
 import { activeSession } from "@/lib/work-os-workday";
 import {
   audit,
@@ -179,7 +180,12 @@ async function applyProposal(access: WorkOsAccess, proposal: Json) {
       .eq("organization_id", access.organizationId).eq("task_id", task.id as string)
       .eq("person_id", proposal.person_id as string).eq("description", description).eq("status", "active").maybeSingle();
     if (existingError) throw new Error(`reconcile task blocker: ${existingError.message}`);
-    if (existing) return existing;
+    if (existing) {
+      // Heal the retry: the blocker row exists from an earlier attempt, but
+      // the task flag may not have been written before that attempt failed.
+      await updateTask(ownerId, taskId, { blocked: true, blocked_reason: description });
+      return existing;
+    }
     const { data, error } = await db().from("work_task_blockers").insert({
       organization_id: access.organizationId,
       task_id: task.id,
@@ -381,6 +387,17 @@ export async function proposeWorkOsPlanRemoval(access: WorkOsAccess, body: Json,
   return { proposal, planItem: updatedItem };
 }
 
+/** Explicit outcome so clients never report a 200 as "recorded" when the
+ * proposal was stale, rejected, or still applying. */
+export function proposalOutcome(status: unknown): string {
+  const value = typeof status === "string" ? status : "";
+  return ["applied", "rejected", "applying", "stale", "failed", "needs_review", "pending"].includes(value) ? value : value || "unknown";
+}
+
+function withOutcome<T extends Json>(row: T): T & { outcome: string } {
+  return { ...row, outcome: proposalOutcome(row.status) };
+}
+
 export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: string, body: Json) {
   const decision = text(body.decision);
   if (decision !== "accept" && decision !== "reject") throw new Error("decision must be accept or reject");
@@ -395,7 +412,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   const decisionKey = text(body.decision_idempotency_key);
   if (proposal.status === "applying") {
     const applyingSince = new Date(proposal.updated_at as string).getTime();
-    if (Date.now() - applyingSince <= 5 * 60_000) return proposal;
+    if (Date.now() - applyingSince <= 5 * 60_000) return withOutcome(proposal);
     const { data: recovered, error: recoveryError } = await db().from("work_task_proposals").update({
       status: "failed",
       failure_reason: "Previous provider application did not finalize; reconciling before retry.",
@@ -404,7 +421,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     if (recoveryError) throw new Error(`recover stalled Work OS proposal: ${recoveryError.message}`);
     if (recovered) Object.assign(proposal, recovered);
   }
-  if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) return proposal;
+  if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) return withOutcome(proposal);
   if (decision === "reject" && ["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
     if (proposal.operation === "remove_from_plan") await restorePlanRemoval(access, proposal as Json);
     const { data, error } = await db().from("work_task_proposals").update({
@@ -416,9 +433,9 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     }).eq("id", proposalId).select("*").single();
     if (error) throw new Error(`reject Work OS proposal: ${error.message}`);
     await audit(access, "proposal.rejected", "task_proposal", proposalId);
-    return data;
+    return withOutcome(data);
   }
-  if (!["pending", "failed", "needs_review"].includes(proposal.status)) return proposal;
+  if (!["pending", "failed", "needs_review"].includes(proposal.status)) return withOutcome(proposal);
   const proposedChange = proposal.proposed_change as Json;
   // Completion and reopen are idempotent state writes whose target is
   // validated inside the employee task service, so unrelated provider drift
@@ -455,7 +472,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
         }).eq("id", proposalId).select("*").single();
         if (staleError) throw new Error(`mark stale Work OS proposal: ${staleError.message}`);
         await audit(access, "proposal.stale", "task_proposal", proposalId);
-        return stale;
+        return withOutcome(stale);
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Task refresh failed";
@@ -468,8 +485,10 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       throw error;
     }
   }
+  const applyAttempt = randomUUID();
   const { data: applying, error: applyingError } = await db().from("work_task_proposals").update({
     status: "applying",
+    apply_attempt: applyAttempt,
     proposed_change: proposedChange,
     decided_by: access.ctx.user.id,
     decided_at: new Date().toISOString(),
@@ -480,16 +499,29 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (applyingError) throw new Error(`claim Work OS proposal: ${applyingError.message}`);
   if (!applying) {
     const { data } = await db().from("work_task_proposals").select("*").eq("id", proposalId).single();
-    return data;
+    return data ? withOutcome(data) : data;
   }
+  // Heartbeat keeps the lease fresh while the provider work runs, so a stalled
+  // >5-minute recovery can only ever happen when this worker is actually gone.
+  const heartbeat = setInterval(() => {
+    void db().from("work_task_proposals").update({ updated_at: new Date().toISOString() })
+      .eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt)
+      .then(() => undefined, () => undefined);
+  }, 60_000);
   try {
     const providerResult = await applyProposal(access, applying as Json);
     const { data, error } = await db().from("work_task_proposals").update({
       status: "applied",
       provider_result: providerResult ?? {},
       updated_at: new Date().toISOString(),
-    }).eq("id", proposalId).select("*").single();
+    }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("*").maybeSingle();
     if (error) throw new Error(`finalize Work OS proposal: ${error.message}`);
+    if (!data) {
+      // The lease was recovered by another attempt; never overwrite its state.
+      await audit(access, "proposal.apply_lease_lost", "task_proposal", proposalId, { operation: proposal.operation });
+      const { data: current } = await db().from("work_task_proposals").select("*").eq("id", proposalId).single();
+      return current ? withOutcome(current) : proposal;
+    }
     if (proposal.check_in_id) {
       await db().from("work_check_ins").update({ substantive: true }).eq("id", proposal.check_in_id as string);
     }
@@ -503,7 +535,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       if (sessionError) throw new Error(`record substantive proposal response: ${sessionError.message}`);
     }
     await audit(access, "proposal.applied", "task_proposal", proposalId, { operation: proposal.operation });
-    return data;
+    return withOutcome(data);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Proposal application failed";
     const needsReview = /required before|evidence is required|task_group_id is required/i.test(reason);
@@ -511,8 +543,10 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       status: needsReview ? "needs_review" : "failed",
       failure_reason: reason,
       updated_at: new Date().toISOString(),
-    }).eq("id", proposalId);
+    }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt);
     await audit(access, "proposal.failed", "task_proposal", proposalId, { operation: proposal.operation, reason, needsReview });
     throw error;
+  } finally {
+    clearInterval(heartbeat);
   }
 }

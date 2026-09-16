@@ -286,6 +286,9 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
 export async function completeTask(userId: string, taskId: string, completed = true) {
   const task = await getTaskByLocalOrProviderId(userId, taskId);
   if (task.provider === "local") {
+    // Idempotent: re-completing an already-completed task must not move its
+    // completion timestamp or emit a second day event.
+    if (task.completed === completed) return task;
     return selectFirst(
       db().from("work_tasks").update({
         completed,
