@@ -114,6 +114,14 @@ async function rememberProviderCreateIssued(proposalId: string, applyAttempt: st
   return Boolean(data);
 }
 
+/** Truthy when a timestamp column is set. The pg driver returns timestamptz
+ * columns as Date objects, so a string-only check silently reads null. */
+function hasTimestamp(value: unknown): boolean {
+  return value instanceof Date
+    ? !Number.isNaN(value.getTime())
+    : typeof value === "string" && value.trim().length > 0;
+}
+
 /** A definite rejection (HTTP 4xx) proves no task was created, so the intent is
  * cleared and a corrected retry may POST again. */
 async function clearProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<void> {
@@ -175,7 +183,7 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
     // recording the created id. Its listing is allowed to lag the creation, so
     // search patiently across bounded retries — and NEVER POST again from an
     // unresolved intent. A duplicate is worse than a retry.
-    const createIssued = text((proposal as Json).provider_create_issued_at);
+    const createIssued = hasTimestamp((proposal as Json).provider_create_issued_at);
     const orphan = opts.firstAttempt
       ? null
       : await findNiftyTaskByMarker(ownerId, marker, {

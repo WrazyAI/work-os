@@ -62,7 +62,7 @@ test("the create intent is recorded after credentials and before the POST", () =
 test("an unresolved intent refuses to POST again and searches with retries", () => {
   const branchAt = proposals.indexOf('if (operation === "create_task")');
   const branch = proposals.slice(branchAt, proposals.indexOf("if (!taskId)"));
-  const issuedAt = branch.indexOf('const createIssued = text((proposal as Json).provider_create_issued_at);');
+  const issuedAt = branch.indexOf("const createIssued = hasTimestamp((proposal as Json).provider_create_issued_at);");
   const retriesAt = branch.indexOf("retries: 3, retryDelayMs: 1_500");
   const refuseAt = branch.indexOf("if (createIssued) {");
   const createAt = branch.indexOf("createTask(ownerId, body, {");
@@ -79,6 +79,7 @@ test("only a definite 4xx clears the intent", () => {
   assert.ok(helperAt > 0);
   assert.match(proposals.slice(helperAt, helperAt + 400), /provider_create_issued_at: null/);
   assert.match(read("src/lib/work-os-proposals.ts"), /may have created/i, "uncertain failures land in needs_review");
+  assert.match(proposals, /function hasTimestamp\(value: unknown\)[\s\S]{0,140}?value instanceof Date/, "timestamps are read as Date objects, not strings");
 });
 
 test("create failures classify by HTTP status", () => {
