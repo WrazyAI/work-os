@@ -199,7 +199,7 @@ assert.match(app, /update\.download\(undefined, \{ headers \}\)/);
 assert.match(app, /arm_update_exit_watchdog/);
 assert.match(app, /disarm_update_exit_watchdog/);
 assert.match(app, /update\.install\(\)/);
-const updateInstallOrder: string[] = [/update\.download\(undefined/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
+const updateInstallOrder: number[] = [/update\.download\(undefined/, /arm_update_exit_watchdog/, /update\.install\(\)/].map((expression) => (app as string).search(expression));
 assert.ok(
   updateInstallOrder[0] < updateInstallOrder[1] && updateInstallOrder[1] < updateInstallOrder[2],
   "updater flow must run download, then arm the watchdog, then install",
