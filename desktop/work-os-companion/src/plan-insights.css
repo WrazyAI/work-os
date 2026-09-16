@@ -191,11 +191,12 @@
   line-height: 1.5;
   color: var(--muted);
 }
-.insight-table-wrap {
-  overflow: auto;
+.insight-table-wrap .scroll-fade-region {
+  padding-right: 6px;
 }
 .insight-table-wrap table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 9px;
 }
@@ -218,11 +219,12 @@
 .insight-drilldown {
   margin-top: 12px;
 }
-.insight-drilldown > div {
+.insight-drilldown .drilldown-list {
   display: grid;
   gap: 6px;
+  padding-bottom: 10px;
 }
-.insight-drilldown > div > button {
+.insight-drilldown .drilldown-list > button {
   display: grid;
   grid-template-columns: 90px 1fr auto;
   align-items: center;
@@ -295,4 +297,20 @@
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
+}
+
+/* Rhythm split: heatmap on the left, stat rows and timing on the right. */
+.rhythm-timing {
+  display: grid;
+  gap: 10px;
+}
+.rhythm-timing .card-title {
+  margin: 0;
+}
+.split-chart-title {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }

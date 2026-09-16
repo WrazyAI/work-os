@@ -309,11 +309,38 @@
   width: 62%;
 }
 
+.skeleton-trend-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 18px;
+  align-items: end;
+}
+
+.skeleton-trend-facts {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 10px;
+}
+
+.skeleton-rhythm-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 28px;
+  align-items: start;
+}
+
 .skeleton-heatmap-grid {
   display: grid;
   grid-template-columns: repeat(7, 18px);
   gap: 5px;
-  margin-top: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 980px) {
+  .skeleton-trend-split,
+  .skeleton-rhythm-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .skeleton-cell {

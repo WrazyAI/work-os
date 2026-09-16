@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consistencyChips, flowBreakdown, heatmapCells, insightChartData, insightSeries, niceCeil, niceTicks, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
+import { consistencyChips, flowBreakdown, heatmapCells, heatmapColumns, insightChartData, insightSeries, niceCeil, niceTicks, onTimeRate, periodDeltas, sharePercent, trendAxis, trendLineSegments, trendSummary, updateKindBreakdown } from "./insights";
 import type { DayData, InsightDay } from "./types";
 
 const baseDay: DayData = {
@@ -103,6 +103,77 @@ describe("insight chart builders", () => {
     const cells = heatmapCells(days);
     expect(cells.map((cell) => [cell.weekday, cell.weekIndex, cell.bucket])).toEqual([[0, 0, 0], [1, 0, 1], [2, 0, 3], [0, 1, 4]]);
     expect(heatmapCells([])).toEqual([]);
+  });
+
+  it("groups heatmap cells into fixed seven-day columns with month labels", () => {
+    const cells = heatmapCells([
+      day({ date: "2026-08-31", tasksCompleted: 1 }),
+      day({ date: "2026-09-01", tasksCompleted: 2 }),
+      day({ date: "2026-09-07", tasksCompleted: 3 }),
+    ]);
+    const columns = heatmapColumns(cells);
+    expect(columns).toHaveLength(2);
+    expect(columns.every((column) => column.days.length === 7)).toBe(true);
+    expect(columns[0].monthLabel).toBe("Aug");
+    expect(columns[1].monthLabel).toBe("Sep");
+    expect(columns[0].days[0]?.date).toBe("2026-08-31");
+    expect(columns[0].days[1]?.date).toBe("2026-09-01");
+    expect(columns[1].days[0]?.date).toBe("2026-09-07");
+    expect(columns[1].days[1]).toBeNull();
+    expect(heatmapColumns([])).toEqual([]);
+  });
+
+  it("scales the trend axis to round hour ticks with aligned percentages", () => {
+    const axis = trendAxis(387);
+    expect(axis.max).toBe(480);
+    expect(axis.ticks).toEqual([0, 120, 240, 360, 480]);
+    expect(axis.percents).toEqual([0, 25, 50, 75, 100]);
+    expect(axis.ticks[axis.ticks.length - 1]).toBe(axis.max);
+    expect(axis.ticks.every((tick) => tick <= axis.max)).toBe(true);
+    const short = trendAxis(47);
+    expect(short.max).toBe(80);
+    expect(short.ticks).toEqual([0, 20, 40, 60, 80]);
+    const empty = trendAxis(0);
+    expect(empty.max).toBeGreaterThan(0);
+    expect(empty.ticks[0]).toBe(0);
+    expect(empty.percents).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it("breaks the completion line at days without planned commitments", () => {
+    const series = insightSeries([
+      day({ date: "2026-08-17", planned: 4, plannedCompleted: 2 }),
+      day({ date: "2026-08-18", planned: 4, plannedCompleted: 4 }),
+      day({ date: "2026-08-19", planned: 0, plannedCompleted: 0 }),
+      day({ date: "2026-08-20", planned: 4, plannedCompleted: 1 }),
+    ]);
+    const segments = trendLineSegments(series);
+    expect(segments).toHaveLength(2);
+    expect(segments[0].points).toEqual([{ index: 0, percent: 50 }, { index: 1, percent: 100 }]);
+    expect(segments[1].points).toEqual([{ index: 3, percent: 25 }]);
+    expect(trendLineSegments([])).toEqual([]);
+  });
+
+  it("summarises the trend without counting empty days as zero performance", () => {
+    const series = insightSeries([
+      day({ date: "2026-08-17", observedSeconds: 7200, planned: 2, plannedCompleted: 1 }),
+      day({ date: "2026-08-18", observedSeconds: 0, planned: 0, plannedCompleted: 0 }),
+      day({ date: "2026-08-19", observedSeconds: 14400, planned: 2, plannedCompleted: 2 }),
+    ]);
+    const summary = trendSummary(series);
+    expect(summary.peak).toMatchObject({ date: "2026-08-19", observedMinutes: 240 });
+    expect(summary.averageMinutes).toBe(120);
+    expect(summary.zeroDays).toBe(1);
+    expect(summary.recordedDays).toBe(2);
+    expect(summary.averageCompletionPercent).toBe(75);
+    expect(trendSummary([])).toMatchObject({ peak: null, averageMinutes: 0, zeroDays: 0, averageCompletionPercent: null });
+  });
+
+  it("computes range shares without dividing by zero", () => {
+    expect(sharePercent(25, 100)).toBe(25);
+    expect(sharePercent(1, 3)).toBe(33);
+    expect(sharePercent(5, 0)).toBe(0);
+    expect(sharePercent(Number.NaN, 10)).toBe(0);
+    expect(sharePercent(200, 100)).toBe(100);
   });
 
   it("summarises consistency without falling back to a score", () => {

@@ -98,6 +98,112 @@ export function niceTicks(max: number, count = 4): number[] {
   return ticks;
 }
 
+export interface TrendAxis {
+  /** Axis top in minutes; every bar scales against this so gridlines and labels align. */
+  max: number;
+  /** Five round minute values from 0 to the top. */
+  ticks: number[];
+  /** Percent fraction of each tick, always 0/25/50/75/100 so the right axis stays round. */
+  percents: number[];
+}
+
+export function trendAxis(observedMinutes: number): TrendAxis {
+  const max = Math.max(0, Number(observedMinutes) || 0);
+  const inHours = max >= 60;
+  const scaled = inHours ? max / 60 : max;
+  const step = niceCeil(Math.max(scaled / 4, inHours ? 1 : 10));
+  const top = step * 4;
+  const ticks = [0, step, step * 2, step * 3, top].map((tick) => Math.round((inHours ? tick * 60 : tick) * 100) / 100);
+  return { max: inHours ? top * 60 : top, ticks, percents: [0, 25, 50, 75, 100] };
+}
+
+export interface TrendLinePoint {
+  index: number;
+  percent: number;
+}
+
+/** A contiguous run of days with a recorded completion percentage. Null days
+ * break the line instead of being bridged, so the chart never implies data that
+ * was not recorded. */
+export interface TrendLineSegment {
+  points: TrendLinePoint[];
+}
+
+export function trendLineSegments(points: InsightSeriesPoint[]): TrendLineSegment[] {
+  const segments: TrendLineSegment[] = [];
+  let current: TrendLinePoint[] = [];
+  points.forEach((point, index) => {
+    if (typeof point.completionPercent === "number" && Number.isFinite(point.completionPercent)) {
+      current.push({ index, percent: point.completionPercent });
+      return;
+    }
+    if (current.length) {
+      segments.push({ points: current });
+      current = [];
+    }
+  });
+  if (current.length) segments.push({ points: current });
+  return segments;
+}
+
+export interface TrendSummary {
+  peak: { date: string; label: string; observedMinutes: number } | null;
+  averageMinutes: number;
+  zeroDays: number;
+  recordedDays: number;
+  averageCompletionPercent: number | null;
+}
+
+export function trendSummary(points: InsightSeriesPoint[]): TrendSummary {
+  const recorded = points.filter((point) => point.observedMinutes > 0);
+  const peak = recorded.reduce<InsightSeriesPoint | null>((best, point) => (!best || point.observedMinutes > best.observedMinutes ? point : best), null);
+  const completions = points.filter((point) => point.completionPercent !== null);
+  return {
+    peak: peak ? { date: peak.date, label: peak.label, observedMinutes: peak.observedMinutes } : null,
+    averageMinutes: points.length ? Math.round(points.reduce((sum, point) => sum + point.observedMinutes, 0) / points.length) : 0,
+    zeroDays: points.filter((point) => point.observedMinutes === 0).length,
+    recordedDays: recorded.length,
+    averageCompletionPercent: completions.length
+      ? Math.round(completions.reduce((sum, point) => sum + (point.completionPercent ?? 0), 0) / completions.length)
+      : null,
+  };
+}
+
+/** Share of a range total, used by the donut legend and the bar lists. */
+export function sharePercent(value: number, total: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
+}
+
+function monthLabel(date: string): string {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, { month: "short", timeZone: "UTC" }).format(parsed);
+}
+
+export interface HeatmapColumn {
+  index: number;
+  /** Month name on the first column it appears in, else null. */
+  monthLabel: string | null;
+  /** Monday-first week; null for days outside the range. */
+  days: Array<HeatmapCell | null>;
+}
+
+export function heatmapColumns(cells: HeatmapCell[]): HeatmapColumn[] {
+  if (!cells.length) return [];
+  const weeks = Math.max(...cells.map((cell) => cell.weekIndex)) + 1;
+  let lastMonth = "";
+  return Array.from({ length: weeks }, (_, weekIndex) => {
+    const columnCells = cells.filter((cell) => cell.weekIndex === weekIndex);
+    const days = Array.from({ length: 7 }, (_, weekday) => columnCells.find((cell) => cell.weekday === weekday) ?? null);
+    const first = days.find((cell): cell is HeatmapCell => cell !== null) ?? null;
+    const month = first ? monthLabel(first.date) : "";
+    const label = month && month !== lastMonth ? month : null;
+    if (month) lastMonth = month;
+    return { index: weekIndex, monthLabel: label, days };
+  });
+}
+
 export type FlowKey = "completed" | "progressed" | "deferred" | "carried" | "unplanned";
 
 export interface FlowSlice {

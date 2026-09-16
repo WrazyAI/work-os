@@ -157,6 +157,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("UpdateKindChart");
     expect(app).toContain("ConsistencyChips");
     expect(app).toContain("BarBreakdown");
+    expect(app).toContain("TrackedBars");
+    expect(app).toContain("ScrollFadeRegion");
     expect(insightCharts).toContain('role="img"');
     expect(insightCharts).toContain("aria-label");
     expect(insightCharts).toContain("No dated outcomes");
@@ -166,6 +168,23 @@ describe("operational visualizations", () => {
     expect(insightChartStyles).toContain(".heatmap-cell.bucket-4");
     expect(insightMath).toContain('completed: "Outcomes completed"');
     expect(insightMath).toContain('label: "Blockers"');
+  });
+
+  it("keeps every chart flat, split, and bounded instead of vertically scrolled", () => {
+    expect(insightChartStyles).toContain(".heatmap-scroll");
+    expect(insightChartStyles).toMatch(/\.heatmap-scroll \{[\s\S]*overflow-y: clip/);
+    expect(insightChartStyles).toContain(".scroll-fade-region");
+    expect(insightChartStyles).toContain(".insight-split.mirror");
+    expect(insightChartStyles).toContain(".scroll-fade-strip.top");
+    expect(insightCharts).toContain("useScrollEdges");
+    expect(insightCharts).toContain("trendLineSegments");
+    expect(insightCharts).toContain("trendAxis");
+    expect(insightCharts).toContain("heatmapColumns");
+    expect(insightCharts).toContain("sharePercent");
+    expect(app).toContain("maxHeight={360}");
+    expect(app).toContain("maxHeight={320}");
+    expect(app).toContain('className="insight-split mirror"');
+    expect(readFileSync(resolve(root, "src/ScrollFadeRegion.tsx"), "utf8")).toContain('role="region"');
   });
 
   it("renders the grounded synthesis as bold-labelled short paragraphs with an evidence fallback", () => {

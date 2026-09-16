@@ -291,7 +291,15 @@ export function insightsFixture(day: DayData, range: "day" | "7d" | "30d"): impo
       sessionQuality: offset % 9 === 4
         ? { status: "needs_correction", message: "Session end was not observed.", sessionId: `fixture-session-${date}` }
         : { status: "valid", message: null },
-      references: [],
+      references: isToday
+        ? [
+            ...(day.plan
+              ? [{ type: "plan" as const, id: `plan-${date}`, date, label: day.plan.focus_summary ?? day.plan.freeform_intent ?? "Daily workspace", target: date }]
+              : []),
+            ...(day.tasks ?? []).map((task) => ({ type: "task" as const, id: String(task.task_id ?? task.id), date, label: String(task.title ?? task.title_snapshot ?? "Task"), target: String(task.id ?? "") })),
+            ...(day.evidence ?? []).map((item) => ({ type: "evidence" as const, id: String(item.id), date, label: String(item.title ?? "Output evidence"), target: String(item.id) })),
+          ]
+        : [],
     };
   };
   const days = Array.from({ length: count }, (_, index) => buildDay(count - 1 - index, 1));

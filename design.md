@@ -2000,33 +2000,64 @@ time and task completion are the same measure.
 
 Chart kit contract (desktop companion `InsightCharts.tsx` + `insight-charts.css`):
 
+- **No chart scrolls vertically.** A chart's height is its content; it never
+  nests a vertical scrollbar, never stretches to fill a taller sibling, and
+  never leaves a pocket of dead space beside short data. Chart cards that share
+  a row center or stretch their content deliberately (work mix centers; bar
+  lists align to the top).
+- **Split first, stacked only when narrow.** Chart cards use a chart-left /
+  data-right split with adjacent cards alternating sides (`.insight-split` and
+  `.insight-split.mirror`) so the page does not read as one repeated column.
+  Below 980px every split collapses to one column in DOM order.
+- **Horizontal scroll is allowed and bounded.** A chart wider than its column
+  scrolls sideways with edge fades that appear only while more content remains
+  in that direction; it still must not scroll vertically.
 - **Workday trend.** Dark bars are observed session minutes on the left axis; a
-  single green line is planned-commitment completion on a 0–100% right axis with
-  its own 100/50/0 labels. The legend names both scales in words. Bar labels
-  thin out by stride when the range is dense; every bar is a focusable control
+  single green line is planned-commitment completion on a 0–100% right axis.
+  The axis top is a round value (`8h`, `30m`) with gridlines aligned to five
+  `0/25/50/75/100` rows, and bars scale against that top so ticks and labels
+  agree. The completion line breaks at days without planned commitments and
+  renders a point marker per recorded day, so it never bridges unrecorded time.
+  A zero-observed day shows a quiet stub, never a floating dash. A right-hand
+  summary column names the peak day, daily average, recorded-day count, and
+  average completion, and the legend names both scales in words. Bar labels
+  thin out by stride when the range is dense; every day is a focusable control
   whose tooltip and accessible name carry the exact date, observed duration,
-  completion, outcomes, updates, and blockers.
+  completion, outcomes, updates, and blockers. A single-day range states that a
+  trend needs two recorded days instead of drawing one bar.
 - **Work mix.** A donut with fixed, labeled classes — Outcomes completed,
-  Progress updates, Deferred, Carried over, Unplanned — plus a legend that
-  repeats every value. No class is ever merged or weighted.
-- **Updates & blockers.** Horizontal bars for Progress, Starts, Completion
-  claims, Blockers, Priority changes, and Unplanned work. Blockers, priority
-  changes, and unplanned work carry a `needs attention` label when non-zero.
-- **Consistency & rhythm.** Stat chips (goals written, updates recorded, days
-  with outcomes, commitments completed, closing streak, largest day) above a
-  Monday-first calendar heatmap of completed outcomes and a stacked on-time vs
-  late bar for outcomes that carried a due date. Undated work is never
-  classified either way.
-- **Activity context.** Top apps as horizontal bars plus a tracked-minutes
-  sparkline, always inside the neutral-context panel with its provenance line.
+  Progress updates, Deferred, Carried over, Unplanned — beside a compact legend
+  that repeats every count and its share of the range. Hovering a slice or a
+  legend row lights the pair, dims the rest, and swaps the center readout from
+  the range total to that class. No class is ever merged or weighted.
+- **Updates & blockers.** Rows are label-above-track: the head line carries the
+  label (with `needs attention` for non-zero blockers, priority changes, and
+  unplanned work) and `value · % of range`; a slim rounded track shows the same
+  share. An all-zero range renders one quiet sentence instead of zeroed rows.
+- **Consistency & rhythm.** A Monday-first calendar heatmap of completed
+  outcomes sits beside the stat rows (goals written, updates recorded, days with
+  outcomes, commitments completed, closing streak, largest day) and a stacked
+  on-time vs late bar for outcomes that carried a due date. The heatmap keeps
+  seven fixed weekday rows, month labels, an intensity legend, and a reserved
+  hover readout; cells scale between 16px and 30px, and the strip scrolls
+  sideways only. Undated work is never classified either way.
+- **Activity context.** Top apps as the same label-above-track rows with
+  `minutes · % of tracked` beside a per-day tracked-minutes bar chart, always
+  inside the neutral-context panel with its provenance line.
+
+Long records bound themselves. The exact-values table and the latest-day record
+render inside a `ScrollFadeRegion`: a fixed max height, internal scrolling, and
+frosted top/bottom edges that appear only while content remains in that
+direction. Each region is a focusable `role="region"` with an accessible label,
+so keyboard users can scroll the record directly.
 
 Charts reserve their geometry while loading, include exact accessible text, and
 fall back to the same values as a plain table at narrow widths. Stale data remains
 visible with a local freshness notice rather than disappearing behind a spinner.
 
 Motion is explanatory only: bars grow from their baseline once, the completion
-line draws once, cells and tiles fade in with a short stagger, and reduced motion
-renders the final state instantly. No looping, bouncing, or overshoot.
+line fades in once, cells and tiles fade in with a short stagger, and reduced
+motion renders the final state instantly. No looping, bouncing, or overshoot.
 
 Selecting a range must render that range's record or a skeleton — never the
 previous range's chart and table. A record whose `range`/`through` does not

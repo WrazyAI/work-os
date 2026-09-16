@@ -140,7 +140,10 @@ export function InsightsSkeleton() {
     </div>
     <div className="skeleton-block skeleton-chart">
       <Skeleton className="skeleton-line skeleton-kicker" />
-      <div className="skeleton-bars">{Array.from({ length: 7 }, (_, index) => <Skeleton className="skeleton-bar" key={index} style={{ height: `${34 + ((index * 23) % 56)}%` }} />)}</div>
+      <div className="skeleton-trend-split">
+        <div className="skeleton-bars">{Array.from({ length: 7 }, (_, index) => <Skeleton className="skeleton-bar" key={index} style={{ height: `${34 + ((index * 23) % 56)}%` }} />)}</div>
+        <div className="skeleton-trend-facts">{Array.from({ length: 4 }, (_, index) => <Skeleton className="skeleton-line skeleton-row" key={index} />)}</div>
+      </div>
     </div>
     <div className="skeleton-split">
       <div className="skeleton-block skeleton-donut">
@@ -154,7 +157,10 @@ export function InsightsSkeleton() {
     </div>
     <div className="skeleton-block skeleton-heatmap">
       <Skeleton className="skeleton-line skeleton-kicker" />
-      <div className="skeleton-heatmap-grid">{Array.from({ length: 35 }, (_, index) => <Skeleton className="skeleton-cell" key={index} />)}</div>
+      <div className="skeleton-rhythm-split">
+        <div className="skeleton-heatmap-grid">{Array.from({ length: 35 }, (_, index) => <Skeleton className="skeleton-cell" key={index} />)}</div>
+        <div className="skeleton-lines-card">{Array.from({ length: 4 }, (_, index) => <Skeleton className="skeleton-line skeleton-row" key={index} />)}</div>
+      </div>
     </div>
   </div>;
 }

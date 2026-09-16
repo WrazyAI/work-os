@@ -43,7 +43,8 @@ import { MemorySettings } from "./MemorySettings";
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
-import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -2940,10 +2941,13 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
         </div>
       </section>
 
-      <section className="panel trend-panel">
+      {series.length >= 2 ? <section className="panel trend-panel">
         <div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and planned commitments · separate scales, named in the legend</small></div>
         <TrendChart points={series} rangeLabel={rangeLabel} />
-      </section>
+      </section> : <section className="panel trend-panel">
+        <div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>A trend needs at least two recorded days</small></div>
+        <p className="insight-empty-note">Switch to 7 days or 30 days to compare observed time against planned commitments.</p>
+      </section>}
 
       <div className="insights-split">
         <section className="panel insight-flow">
@@ -2961,32 +2965,40 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
 
       <section className="panel insight-rhythm">
         <div className="card-title"><span><CalendarDays size={17} /> Consistency &amp; rhythm</span><small>{pauseShare === null ? "Days, updates, and closing streak" : `Paused share ${pauseShare}% of observed+paused time`}</small></div>
-        <ConsistencyChips chips={chips} />
-        <div className="rhythm-heatmap">
-          <HeatmapGrid cells={heatmap} rangeLabel={rangeLabel} />
-        </div>
-        <div className="rhythm-timing">
-          <div className="card-title"><span><CheckCircle2 size={16} /> Completed outcomes with a due date</span><small>Undated work is never classified either way</small></div>
-          {timing ? <OnTimeBar onTime={timing.onTime} late={timing.late} percent={timing.percent} /> : null}
+        <div className="insight-split">
+          <div className="split-chart">
+            <HeatmapGrid cells={heatmap} rangeLabel={rangeLabel} />
+          </div>
+          <div className="split-data">
+            <ConsistencyChips chips={chips} />
+            <div className="rhythm-timing">
+              <div className="card-title"><span><CheckCircle2 size={16} /> Completed outcomes with a due date</span><small>Undated work is never classified either way</small></div>
+              {timing ? <OnTimeBar onTime={timing.onTime} late={timing.late} percent={timing.percent} /> : null}
+            </div>
+          </div>
         </div>
       </section>
 
       {activityTotals.trackedMinutes > 0 && <section className="panel insight-activity">
         <div className="card-title"><span><Activity size={17} /> Activity context</span><small>{activityTotals.trackedMinutes} tracked minutes · Worktivity app/site summary</small></div>
-        <div className="activity-grid">
-          <BarBreakdown
-            ariaLabel={`Tracked minutes by app for ${rangeLabel}`}
-            rows={activityTotals.topApps.map((app) => ({ key: app.name, label: app.name, value: app.minutes, detail: "min" }))}
-          />
-          <div className="activity-trend">
-            <small>Tracked minutes per day</small>
-            <Sparkline className="activity-sparkline" values={series.map((point) => point.trackedMinutes)} label={`Tracked activity minutes per day for ${rangeLabel}`} />
+        <div className="insight-split mirror">
+          <div className="split-data">
+            <BarBreakdown
+              ariaLabel={`Tracked minutes by app for ${rangeLabel}`}
+              rows={activityTotals.topApps.map((app) => ({ key: app.name, label: app.name, value: app.minutes, detail: "min" }))}
+              total={activityTotals.trackedMinutes}
+              emptyNote="No tracked app activity in this range."
+            />
+            <p className="activity-provenance">Observed app and site usage, shown as neutral context. It is not a productivity score and never proves task completion.</p>
+          </div>
+          <div className="split-chart">
+            <p className="split-chart-title">Tracked minutes per day</p>
+            <TrackedBars points={series} rangeLabel={rangeLabel} />
           </div>
         </div>
-        <p className="activity-provenance">Observed app and site usage, shown as neutral context. It is not a productivity score and never proves task completion.</p>
       </section>}
 
-      <div className="insight-table-wrap">
+      <ScrollFadeRegion label="Exact personal insight values" maxHeight={360} scrollAxis="both" className="insight-table-wrap">
         <table>
           <caption>Exact personal insight values · {formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</caption>
           <thead>
@@ -3009,12 +3021,14 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
             </tr>)}
           </tbody>
         </table>
-      </div>
+      </ScrollFadeRegion>
 
       <section className="panel insight-drilldown">
         <div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>
         {latest?.references?.length
-          ? <div>{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div>
+          ? <ScrollFadeRegion label="Latest-day linked records" maxHeight={320}>
+              <div className="drilldown-list">{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div>
+            </ScrollFadeRegion>
           : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}
         <footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer>
       </section>

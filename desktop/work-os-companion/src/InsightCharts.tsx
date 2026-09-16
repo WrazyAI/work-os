@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
-import type { DeltaStat, FlowSlice, HeatmapCell, InsightSeriesPoint, UpdateKindSlice } from "./insights";
-import { durationLabel, minutesLabel } from "./insights";
+import type { DeltaStat, FlowKey, FlowSlice, HeatmapCell, InsightSeriesPoint, UpdateKindSlice } from "./insights";
+import { durationLabel, heatmapColumns, minutesLabel, sharePercent, trendAxis, trendLineSegments, trendSummary } from "./insights";
+import { edgeClasses, useScrollEdges } from "./ScrollFadeRegion";
 import { formatWorkOsDate } from "./dateFormat";
 
 /** Bespoke SVG/CSS chart primitives for the Insights page. Every chart keeps a
  * single evidence class per scale, exposes exact values for assistive tech, and
- * reserves its geometry while loading. */
+ * reserves its geometry while loading. Charts never scroll vertically; wide
+ * charts scroll horizontally with edge fades. */
 
 export function Sparkline({ values, label, className = "" }: { values: number[]; label: string; className?: string }) {
   const width = 104;
@@ -69,85 +71,100 @@ export function DeltaBadge({ stat }: { stat: DeltaStat }) {
   );
 }
 
-export interface TrendTooltipState {
-  index: number;
-}
-
-export function TrendChart({ points, rangeLabel, showTracked }: { points: InsightSeriesPoint[]; rangeLabel: string; showTracked?: boolean }) {
-  const [active, setActive] = useState<TrendTooltipState | null>(null);
-  const observedMax = Math.max(1, ...points.map((point) => point.observedMinutes));
-  const top = observedMax;
-  const completionPoints = points.map((point, index) => ({ index, value: point.completionPercent }));
-  const hasCompletion = completionPoints.some((point) => point.value !== null);
+export function TrendChart({ points, rangeLabel }: { points: InsightSeriesPoint[]; rangeLabel: string }) {
+  const [active, setActive] = useState<number | null>(null);
+  const axis = trendAxis(Math.max(...points.map((point) => point.observedMinutes), 0));
+  const segments = trendLineSegments(points);
+  const summary = trendSummary(points);
+  const hasCompletion = segments.length > 0;
   const slots = Math.max(1, points.length);
-  const linePath = hasCompletion
-    ? completionPoints
-      .filter((point): point is { index: number; value: number } => point.value !== null)
-      .map((point, position) => `${position ? "L" : "M"}${(((point.index + 0.5) / slots) * 100).toFixed(2)} ${(100 - point.value).toFixed(2)}`)
-      .join(" ")
-    : "";
-  const activePoint = active ? points[active.index] : null;
   const labelStride = points.length <= 12 ? 1 : Math.ceil(points.length / 10);
+  const position = (index: number) => ((index + 0.5) / slots) * 100;
+  const activePoint = active === null ? null : points[active];
   return (
-    <div className={`trend-chart-wrap${showTracked ? " with-tracked" : ""}`}>
-      <div className={`trend-plot${hasCompletion ? "" : " single-scale"}`}>
-        <div className="trend-axis" aria-hidden="true">
-          <span>{minutesLabel(top)}</span>
-          <span>{minutesLabel(top / 2)}</span>
-          <span>0m</span>
-        </div>
-        <div className="trend-canvas" onMouseLeave={() => setActive(null)}>
-          <div className="trend-grid" aria-hidden="true"><i /><i /><i /></div>
-          {hasCompletion ? (
-            <svg className="trend-line-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              <path className="trend-line" d={linePath} />
-            </svg>
-          ) : null}
-          <div className="trend-days" role="group" aria-label={`Observed work time and planned-commitment completion by day for ${rangeLabel}`}>
-            {points.map((point, index) => {
-              const observedPercent = top ? Math.min(100, (point.observedMinutes / top) * 100) : 0;
-              const label = `${formatWorkOsDate(point.date)}: ${minutesLabel(point.observedMinutes)} observed, ${point.completionPercent === null ? "no planned commitments" : `${point.completionPercent}% of planned commitments completed`}, ${point.outcomes} outcome${point.outcomes === 1 ? "" : "s"}, ${point.updates} update${point.updates === 1 ? "" : "s"}${point.blocked ? `, ${point.blocked} blocker${point.blocked === 1 ? "" : "s"}` : ""}`;
-              const showLabel = index % labelStride === 0 || index === points.length - 1;
-              return (
-                <div className="trend-day" key={point.date}>
-                  <button
-                    type="button"
-                    className={`trend-bar${active?.index === index ? " active" : ""}`}
-                    style={{ height: `${Math.max(observedPercent, point.observedMinutes > 0 ? 3 : 0)}%`, ["--bar-index" as string]: index } as React.CSSProperties}
-                    aria-label={label}
-                    onMouseEnter={() => setActive({ index })}
-                    onFocus={() => setActive({ index })}
-                    onBlur={() => setActive(null)}
-                  />
-                  <span className={`trend-day-label${showLabel ? "" : " sparse"}`}>{showLabel ? point.label : ""}</span>
-                </div>
-              );
-            })}
+    <div className="trend-chart-wrap">
+      <div className="trend-split">
+        <div className="trend-plot">
+          <div className="trend-axis trend-axis-left" aria-hidden="true">
+            {axis.ticks.map((tick, index) => (
+              <span key={tick} style={{ bottom: `${axis.percents[index]}%` }}>{axisTickLabel(tick)}</span>
+            ))}
           </div>
-          {activePoint ? (
-            <div
-              className="chart-tooltip"
-              style={{ left: `${((active!.index + 0.5) / slots) * 100}%` } as React.CSSProperties}
-              aria-hidden="true"
-            >
-              <strong>{formatWorkOsDate(activePoint.date)}</strong>
-              <span><i className="swatch observed" /> {minutesLabel(activePoint.observedMinutes)} observed</span>
-              <span><i className="swatch completion" /> {activePoint.completionPercent === null ? "No planned commitments" : `${activePoint.completionPercent}% of commitments completed`}</span>
-              <span>{activePoint.outcomes} outcome{activePoint.outcomes === 1 ? "" : "s"} · {activePoint.updates} update{activePoint.updates === 1 ? "" : "s"}{activePoint.blocked ? ` · ${activePoint.blocked} blocker` : ""}</span>
+          <div className="trend-canvas" onMouseLeave={() => setActive(null)}>
+            <div className="trend-grid" aria-hidden="true">
+              {axis.percents.map((percent) => <i key={percent} style={{ bottom: `${percent}%` }} />)}
             </div>
-          ) : null}
-        </div>
-        {hasCompletion ? (
-          <div className="trend-axis trend-axis-right" aria-hidden="true">
-            <span>100%</span>
-            <span>50%</span>
-            <span>0%</span>
+            {hasCompletion ? (
+              <svg className="trend-line-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                {segments.map((segment, index) => segment.points.length > 1 ? (
+                  <path
+                    key={`line-${index}`}
+                    className="trend-line"
+                    d={segment.points.map((point, order) => `${order ? "L" : "M"}${(((point.index + 0.5) / slots) * 100).toFixed(2)} ${(100 - point.percent).toFixed(2)}`).join(" ")}
+                  />
+                ) : null)}
+              </svg>
+            ) : null}
+            <div className="trend-days" role="group" aria-label={`Observed work time and planned-commitment completion by day for ${rangeLabel}`}>
+              {points.map((point, index) => {
+                const label = `${formatWorkOsDate(point.date)}: ${minutesLabel(point.observedMinutes)} observed, ${point.completionPercent === null ? "no planned commitments" : `${point.completionPercent}% of planned commitments completed`}, ${point.outcomes} outcome${point.outcomes === 1 ? "" : "s"}, ${point.updates} update${point.updates === 1 ? "" : "s"}${point.blocked ? `, ${point.blocked} blocker${point.blocked === 1 ? "" : "s"}` : ""}`;
+                const showLabel = index % labelStride === 0 || index === points.length - 1;
+                return (
+                  <div className="trend-day" key={point.date}>
+                    <button
+                      type="button"
+                      className={`trend-day-hit${active === index ? " active" : ""}`}
+                      aria-label={label}
+                      onMouseEnter={() => setActive(index)}
+                      onFocus={() => setActive(index)}
+                      onBlur={() => setActive(null)}
+                    >
+                      <span
+                        className={`trend-bar${point.observedMinutes > 0 ? "" : " empty"}`}
+                        style={point.observedMinutes > 0 ? { height: `${Math.min(100, (point.observedMinutes / axis.max) * 100)}%` } : undefined}
+                      />
+                    </button>
+                    <span className={`trend-day-label${showLabel ? "" : " sparse"}`}>{showLabel ? point.label : ""}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {hasCompletion ? segments.flatMap((segment) => segment.points.map((point) => (
+              <i key={`dot-${point.index}`} className="trend-dot" aria-hidden="true" style={{ left: `${position(point.index)}%`, bottom: `${Math.min(100, point.percent)}%` }} />
+            ))) : null}
+            {activePoint ? (
+              <div className="chart-tooltip" style={{ left: `${position(active!)}%` }} aria-hidden="true">
+                <strong>{formatWorkOsDate(activePoint.date)}</strong>
+                <span><i className="swatch observed" /> {minutesLabel(activePoint.observedMinutes)} observed</span>
+                <span><i className="swatch completion" /> {activePoint.completionPercent === null ? "No planned commitments" : `${activePoint.completionPercent}% of commitments completed`}</span>
+                <span>{activePoint.outcomes} outcome{activePoint.outcomes === 1 ? "" : "s"} · {activePoint.updates} update{activePoint.updates === 1 ? "" : "s"}{activePoint.blocked ? ` · ${activePoint.blocked} blocker` : ""}</span>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-      <div className="trend-legend">
-        <span><i /> Observed session time <small>minutes on the left scale</small></span>
-        <span><b /> Planned commitments completed <small>0–100% on the same plot height</small></span>
+          <div className="trend-axis trend-axis-right" aria-hidden="true">
+            {axis.percents.slice().reverse().map((percent) => (
+              <span key={percent} style={{ bottom: `${percent}%` }}>{percent}%</span>
+            ))}
+          </div>
+          <div className="trend-labels">
+            {points.map((point, index) => (
+              <span className="trend-day-label" key={point.date} aria-hidden="true">{index % labelStride === 0 || index === points.length - 1 ? point.label : ""}</span>
+            ))}
+          </div>
+        </div>
+        <aside className="trend-summary">
+          <p className="trend-summary-title">Range summary</p>
+          <dl>
+            <div><dt>Peak day</dt><dd>{summary.peak ? `${summary.peak.label} · ${minutesLabel(summary.peak.observedMinutes)}` : "—"}</dd></div>
+            <div><dt>Daily average</dt><dd>{minutesLabel(summary.averageMinutes)}</dd></div>
+            <div><dt>Days recorded</dt><dd>{summary.recordedDays} of {points.length}</dd></div>
+            <div><dt>Avg commitments</dt><dd>{summary.averageCompletionPercent === null ? "—" : `${summary.averageCompletionPercent}%`}</dd></div>
+          </dl>
+          <div className="trend-legend">
+            <span><i aria-hidden="true" /><span className="trend-legend-copy">Observed session time<small>minutes on the left scale</small></span></span>
+            <span><b aria-hidden="true" /><span className="trend-legend-copy">Planned commitments completed<small>0–100% on the right scale</small></span></span>
+          </div>
+        </aside>
       </div>
       <table className="trend-chart-table">
         <caption>Observed time and planned-commitment completion by day</caption>
@@ -168,7 +185,12 @@ export function TrendChart({ points, rangeLabel, showTracked }: { points: Insigh
   );
 }
 
-const FLOW_TONE: Record<FlowSlice["key"], string> = {
+/** Whole hours read as "2h"; part hours keep minutes ("2h 30m"). */
+function axisTickLabel(minutes: number) {
+  return minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60}h` : minutesLabel(minutes);
+}
+
+const FLOW_TONE: Record<FlowKey, string> = {
   completed: "slice-completed",
   progressed: "slice-progressed",
   deferred: "slice-deferred",
@@ -177,30 +199,36 @@ const FLOW_TONE: Record<FlowSlice["key"], string> = {
 };
 
 export function FlowDonut({ slices, ariaLabel }: { slices: FlowSlice[]; ariaLabel: string }) {
+  const [hover, setHover] = useState<FlowKey | null>(null);
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
-  const radius = 54;
+  const radius = 52;
   const circumference = 2 * Math.PI * radius;
+  const gap = slices.filter((slice) => slice.value > 0).length > 1 ? 3 : 0;
   let offset = 0;
   const segments = slices.filter((slice) => slice.value > 0).map((slice) => {
     const fraction = slice.value / total;
-    const segment = { slice, dash: fraction * circumference, offset: offset * circumference };
+    const dash = Math.max(0.5, fraction * circumference - gap);
+    const segment = { slice, dash, offset: offset * circumference + gap / 2 };
     offset += fraction;
     return segment;
   });
+  const active = hover === null ? null : slices.find((slice) => slice.key === hover) ?? null;
   return (
-    <div className="donut-wrap">
+    <div className="donut-split">
       <div className="donut-figure">
-        <svg viewBox="0 0 140 140" role="img" aria-label={ariaLabel}>
-          <circle className="donut-track" cx="70" cy="70" r={radius} />
-          <g transform="rotate(-90 70 70)">
+        <svg viewBox="0 0 132 132" role="img" aria-label={ariaLabel}>
+          <circle className="donut-track" cx="66" cy="66" r={radius} />
+          <g transform="rotate(-90 66 66)">
             {segments.map(({ slice, dash, offset: dashOffset }, index) => (
               <circle
                 key={slice.key}
-                className={`donut-slice ${FLOW_TONE[slice.key]}`}
-                cx="70" cy="70" r={radius}
+                className={`donut-slice ${FLOW_TONE[slice.key]}${hover !== null && hover !== slice.key ? " dimmed" : ""}`}
+                cx="66" cy="66" r={radius}
                 strokeDasharray={`${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}`}
                 strokeDashoffset={-dashOffset}
                 style={{ ["--slice-index" as string]: index } as React.CSSProperties}
+                onMouseEnter={() => setHover(slice.key)}
+                onMouseLeave={() => setHover(null)}
               >
                 <title>{`${slice.label}: ${slice.value}`}</title>
               </circle>
@@ -208,16 +236,21 @@ export function FlowDonut({ slices, ariaLabel }: { slices: FlowSlice[]; ariaLabe
           </g>
         </svg>
         <div className="donut-center" aria-hidden="true">
-          <strong>{total}</strong>
-          <small>records</small>
+          <strong>{active ? active.value : total}</strong>
+          <small>{active ? `${active.label} · ${sharePercent(active.value, total)}%` : "records"}</small>
         </div>
       </div>
       <ul className="donut-legend">
         {slices.map((slice) => (
-          <li key={slice.key} className={slice.value === 0 ? "empty" : ""}>
+          <li
+            key={slice.key}
+            className={`${slice.value === 0 ? "zero" : ""}${hover === slice.key ? " active" : ""}`.trim()}
+            onMouseEnter={() => setHover(slice.key)}
+            onMouseLeave={() => setHover(null)}
+          >
             <i className={FLOW_TONE[slice.key]} aria-hidden />
             <span>{slice.label}</span>
-            <b>{slice.value}</b>
+            <b>{slice.value}<small> · {sharePercent(slice.value, total)}%</small></b>
           </li>
         ))}
       </ul>
@@ -225,22 +258,33 @@ export function FlowDonut({ slices, ariaLabel }: { slices: FlowSlice[]; ariaLabe
   );
 }
 
-export function BarBreakdown({ rows, ariaLabel }: {
+export function BarBreakdown({ rows, ariaLabel, total, emptyNote }: {
   rows: Array<{ key: string; label: string; value: number; detail?: string; attention?: boolean }>;
   ariaLabel: string;
+  total?: number;
+  emptyNote?: string;
 }) {
-  const max = Math.max(1, ...rows.map((row) => row.value));
+  const sum = total ?? rows.reduce((accumulator, row) => accumulator + row.value, 0);
+  if (!sum) return <p className="insight-empty-note">{emptyNote ?? "Nothing recorded in this range."}</p>;
   return (
     <ul className="bar-breakdown" aria-label={ariaLabel}>
-      {rows.map((row, index) => (
-        <li key={row.key} className={row.attention ? "attention" : undefined}>
-          <span className="bar-label">{row.label}{row.attention ? <em>needs attention</em> : null}</span>
-          <span className="bar-track" aria-hidden="true">
-            <i style={{ width: `${(row.value / max) * 100}%`, ["--bar-index" as string]: index } as React.CSSProperties} />
-          </span>
-          <b>{row.value}{row.detail ? <small>{row.detail}</small> : null}</b>
-        </li>
-      ))}
+      {rows.map((row, index) => {
+        const share = sharePercent(row.value, sum);
+        return (
+          <li key={row.key} className={row.value > 0 && row.attention ? "attention" : undefined}>
+            <span className="bar-head">
+              <i className="bar-swatch" aria-hidden="true" />
+              <span className="bar-label">{row.label}{row.value > 0 && row.attention ? <em>needs attention</em> : null}</span>
+              <b>{row.value}<small>{row.detail ? ` ${row.detail}` : ""} · {share}%</small></b>
+            </span>
+            <span className="bar-track" aria-hidden="true">
+              <i
+                style={{ width: `${row.value > 0 ? Math.max(share, 2) : 0}%`, ["--bar-index" as string]: index } as React.CSSProperties}
+              />
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -268,41 +312,50 @@ export function OnTimeBar({ onTime, late, percent }: { onTime: number; late: num
 
 export function HeatmapGrid({ cells, rangeLabel }: { cells: HeatmapCell[]; rangeLabel: string }) {
   const [active, setActive] = useState<string | null>(null);
+  const { ref, edges } = useScrollEdges<HTMLDivElement>("x");
+  const columns = heatmapColumns(cells);
   if (!cells.length) return <p className="heatmap-empty">No days recorded in this range.</p>;
-  const weeks = Math.max(...cells.map((cell) => cell.weekIndex)) + 1;
-  const columns = Array.from({ length: weeks }, (_, week) => cells.filter((cell) => cell.weekIndex === week));
-  const activeCell = active ? cells.find((cell) => cell.date === active) : null;
+  const activeCell = active ? cells.find((cell) => cell.date === active) ?? null : null;
   return (
     <div className="heatmap-wrap" onMouseLeave={() => setActive(null)}>
-      <div className="heatmap" role="group" aria-label={`Completed outcomes per day for ${rangeLabel}`}>
-        <div className="heatmap-weekdays" aria-hidden="true">
-          <span>Mon</span><span /><span>Wed</span><span /><span>Fri</span><span /><span>Sun</span>
-        </div>
-        {columns.map((column, weekIndex) => (
-          <div className="heatmap-week" key={weekIndex}>
-            {Array.from({ length: 7 }, (_, weekday) => {
-              const cell = column.find((item) => item.weekday === weekday);
-              if (!cell) return <span className="heatmap-cell empty" key={weekday} aria-hidden="true" />;
-              return (
-                <button
-                  key={cell.date}
-                  type="button"
-                  className={`heatmap-cell bucket-${cell.bucket}${active === cell.date ? " active" : ""}`}
-                  aria-label={`${formatWorkOsDate(cell.date)}: ${cell.value} completed outcome${cell.value === 1 ? "" : "s"}`}
-                  onMouseEnter={() => setActive(cell.date)}
-                  onFocus={() => setActive(cell.date)}
-                  onBlur={() => setActive(null)}
-                />
-              );
-            })}
+      <div ref={ref} className={`heatmap-scroll${edgeClasses(edges, "fade-start", "fade-end")}`}>
+        <div
+          className="heatmap"
+          role="group"
+          aria-label={`Completed outcomes per day for ${rangeLabel}`}
+          style={{ ["--heatmap-weeks" as string]: columns.length } as React.CSSProperties}
+        >
+          <span className="heatmap-corner" aria-hidden="true" />
+          {columns.map((column) => (
+            <span className="heatmap-month" key={`month-${column.index}`} style={{ gridColumn: column.index + 2 }} aria-hidden="true">{column.monthLabel ?? ""}</span>
+          ))}
+          <div className="heatmap-weekdays" aria-hidden="true">
+            <span>Mon</span><span /><span>Wed</span><span /><span>Fri</span><span /><span>Sun</span>
           </div>
-        ))}
+          {columns.map((column) => column.days.map((cell, weekday) => cell ? (
+            <button
+              key={cell.date}
+              type="button"
+              className={`heatmap-cell bucket-${cell.bucket}${active === cell.date ? " active" : ""}`}
+              style={{ gridRow: weekday + 2, gridColumn: column.index + 2 }}
+              aria-label={`${formatWorkOsDate(cell.date)}: ${cell.value} completed outcome${cell.value === 1 ? "" : "s"}`}
+              onMouseEnter={() => setActive(cell.date)}
+              onFocus={() => setActive(cell.date)}
+              onBlur={() => setActive(null)}
+            />
+          ) : (
+            <span key={`${column.index}-${weekday}`} className="heatmap-cell blank" style={{ gridRow: weekday + 2, gridColumn: column.index + 2 }} aria-hidden="true" />
+          )))}
+        </div>
       </div>
-      {activeCell ? (
-        <p className="heatmap-readout" aria-hidden="true"><strong>{formatWorkOsDate(activeCell.date)}</strong> · {activeCell.value} completed outcome{activeCell.value === 1 ? "" : "s"}</p>
-      ) : (
-        <p className="heatmap-readout muted">Completed outcomes per day · darker means more completed work</p>
-      )}
+      <div className="heatmap-foot">
+        <p className="heatmap-readout">
+          {activeCell
+            ? <><strong>{formatWorkOsDate(activeCell.date)}</strong> · {activeCell.value} completed outcome{activeCell.value === 1 ? "" : "s"}</>
+            : "Completed outcomes per day · darker means more completed work"}
+        </p>
+        <span className="heatmap-scale" aria-hidden="true">Less <i className="bucket-1" /><i className="bucket-2" /><i className="bucket-3" /><i className="bucket-4" /> More</span>
+      </div>
     </div>
   );
 }
@@ -311,7 +364,8 @@ export function UpdateKindChart({ slices }: { slices: UpdateKindSlice[] }) {
   return (
     <BarBreakdown
       ariaLabel="Progress updates by kind, including blockers and priority changes"
-      rows={slices.map((slice) => ({ key: slice.key, label: slice.label, value: slice.value, attention: slice.attention && slice.value > 0 }))}
+      rows={slices.map((slice) => ({ key: slice.key, label: slice.label, value: slice.value, attention: slice.attention }))}
+      emptyNote="No updates recorded in this range."
     />
   );
 }
@@ -319,14 +373,32 @@ export function UpdateKindChart({ slices }: { slices: UpdateKindSlice[] }) {
 export function ConsistencyChips({ chips }: { chips: Array<{ key: string; label: string; value: string; detail: string }> }) {
   if (!chips.length) return null;
   return (
-    <ul className="consistency-chips">
+    <ul className="consistency-rows">
       {chips.map((chip) => (
         <li key={chip.key}>
-          <small>{chip.label}</small>
+          <span><small>{chip.label}</small><span className="consistency-detail">{chip.detail}</span></span>
           <strong>{chip.value}</strong>
-          <span>{chip.detail}</span>
         </li>
       ))}
     </ul>
+  );
+}
+
+export function TrackedBars({ points, rangeLabel }: { points: InsightSeriesPoint[]; rangeLabel: string }) {
+  const max = Math.max(1, ...points.map((point) => point.trackedMinutes));
+  const stride = points.length <= 14 ? 1 : Math.ceil(points.length / 8);
+  return (
+    <div className="tracked-bars" role="img" aria-label={`Tracked activity minutes per day for ${rangeLabel}`}>
+      <div className="tracked-bars-plot" aria-hidden="true">
+        {points.map((point) => (
+          <span className="tracked-bar-slot" key={point.date}>
+            {point.trackedMinutes > 0 ? <i className="tracked-bar" style={{ height: `${Math.max((point.trackedMinutes / max) * 100, 4)}%` }} /> : null}
+          </span>
+        ))}
+      </div>
+      <div className="tracked-bars-labels" aria-hidden="true">
+        {points.map((point, index) => <span key={point.date}>{index % stride === 0 || index === points.length - 1 ? point.label : ""}</span>)}
+      </div>
+    </div>
   );
 }
