@@ -70,4 +70,41 @@ describe("EodComposer review surface", () => {
     expect(markup).not.toContain("eod-screenshot-context");
     expect(markup).not.toContain("eod-shot-carousel");
   });
+
+  const submitButton = (markup: string) => markup.match(/<button class="primary"[^>]*>Submit EOD<\/button>/)?.[0] ?? "";
+
+  it("unlocks Submit when the reason was written in the report draft", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      allTasksCompleted: false,
+      initialMarkdown: "## Summary\n\nDid the work.\n\n## Bottleneck\nWaiting on the security review.",
+    }));
+    expect(markup).toContain("Found in the report draft");
+    expect(submitButton(markup)).toContain("Submit EOD");
+    expect(submitButton(markup)).not.toContain("disabled");
+    expect(markup).not.toContain("Add the reason above");
+  });
+
+  it("keeps Submit disabled and names the missing reason when only the placeholder exists", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      allTasksCompleted: false,
+      initialMarkdown: "## Summary\n\nDid the work.\n\n## Bottleneck\n(needs your input — what prevented you from completing your task list?)",
+    }));
+    expect(submitButton(markup)).toContain("disabled");
+    expect(markup).toContain("Add the reason above (Bottleneck) to submit.");
+    expect(markup).not.toContain("Found in the report draft");
+  });
+
+  it("explains a disabled Submit while the draft is still being written", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, allTasksCompleted: false, redrafting: true }));
+    expect(submitButton(markup)).toContain("disabled");
+    expect(markup).toContain("Waiting for the draft to finish before this can be submitted.");
+  });
+
+  it("puts the required reason before the optional refine block", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, allTasksCompleted: false }));
+    expect(markup.indexOf("Bottleneck — required")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Bottleneck — required")).toBeLessThan(markup.indexOf("Refine this draft"));
+  });
 });

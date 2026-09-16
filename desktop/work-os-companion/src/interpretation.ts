@@ -224,6 +224,25 @@ export function hasBottleneckAnswer(answer: string): boolean {
   return typeof answer === "string" && answer.trim().length >= 3;
 }
 
+/** The server's draft placeholder is not an answer. */
+const BOTTLENECK_PLACEHOLDER = /^\(needs your input[^)]*\)$/i;
+
+/** Reads a real answer out of the report draft. The AI draft appends a
+ * `## Bottleneck` section; when the employee edits that section instead of the
+ * dedicated field, the answer must still count — stripping it on submit would
+ * silently discard what they wrote. */
+export function extractBottleneckAnswer(markdown: string): string {
+  const match = typeof markdown === "string" ? markdown.match(/\n+##\s*Bottleneck\s*\n([\s\S]*)$/i) : null;
+  const body = match?.[1]?.trim() ?? "";
+  if (!body || BOTTLENECK_PLACEHOLDER.test(body)) return "";
+  return body;
+}
+
+/** The employee's answer, wherever they actually provided it. */
+export function resolvedBottleneck(fieldAnswer: string, markdown: string): string {
+  return hasBottleneckAnswer(fieldAnswer) ? fieldAnswer.trim() : extractBottleneckAnswer(markdown);
+}
+
 /** Final submitted markdown: the narrative (placeholder-free) plus the employee's bottleneck answer. */
 export function composeEodMarkdown(markdown: string, bottleneck: string, requiresBottleneck = true): string {
   const narrative = stripBottleneckSection(markdown);

@@ -152,6 +152,17 @@ assert.match(taskSurfaces, /Refresh from record/);
 assert.match(app, /eod-start-earlier/);
 assert.match(taskSurfaces, /Refine this draft/);
 assert.match(taskSurfaces, /Your bottleneck answer stays separate/);
+const interpretationHelpers = read("src/interpretation.ts");
+assert.match(interpretationHelpers, /export function extractBottleneckAnswer/);
+assert.match(interpretationHelpers, /export function resolvedBottleneck/);
+assert.match(interpretationHelpers, /BOTTLENECK_PLACEHOLDER/);
+assert.match(taskSurfaces, /resolvedBottleneck/);
+assert.doesNotMatch(taskSurfaces, /if \(allTasksCompleted\) setBottleneck\(""\)/);
+assert.match(taskSurfaces, /Add the reason above \(Bottleneck\) to submit\./);
+assert.ok(
+  taskSurfaces.indexOf('className="eod-bottleneck-label"') < taskSurfaces.indexOf('className="eod-refine"'),
+  "the required reason must render before the optional refine block",
+);
 const screenshotGallery = read("src/ScreenshotGallery.tsx");
 assert.match(screenshotGallery, /eod-shot-carousel/);
 assert.match(screenshotGallery, /eod-shot-grid/);

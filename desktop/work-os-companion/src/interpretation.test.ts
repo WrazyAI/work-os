@@ -86,7 +86,7 @@ describe("normalizeInterpretation", () => {
   });
 });
 
-import { composeEodMarkdown, hasBottleneckAnswer, stripBottleneckSection } from "./interpretation";
+import { composeEodMarkdown, extractBottleneckAnswer, hasBottleneckAnswer, resolvedBottleneck, stripBottleneckSection } from "./interpretation";
 
 describe("EOD composer helpers", () => {
   it("strips any existing bottleneck section before the employee answers", () => {
@@ -100,11 +100,33 @@ describe("EOD composer helpers", () => {
     expect(hasBottleneckAnswer("The signing certificate is still pending.")).toBe(true);
   });
 
+  it("reads a real answer out of the report draft and rejects the placeholder", () => {
+    expect(extractBottleneckAnswer("## Summary\nA day.")).toBe("");
+    expect(extractBottleneckAnswer("## Summary\nA day.\n\n## Bottleneck\n(needs your input — what prevented you from completing your task list?)")).toBe("");
+    expect(extractBottleneckAnswer("## Summary\nA day.\n\n## Bottleneck\n   ")).toBe("");
+    expect(extractBottleneckAnswer("## Summary\nA day.\n\n## Bottleneck\nThe signing certificate was still pending."))
+      .toBe("The signing certificate was still pending.");
+  });
+
+  it("resolves the answer from the field first, then the draft", () => {
+    expect(resolvedBottleneck("", "## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.")).toBe("Waiting on finance.");
+    expect(resolvedBottleneck("Database migration ran long.", "## Summary\nA day.\n\n## Bottleneck\nWaiting on finance."))
+      .toBe("Database migration ran long.");
+    expect(resolvedBottleneck("", "## Summary\nA day.")).toBe("");
+  });
+
   it("composes the final markdown with the employee's bottleneck answer", () => {
     const final = composeEodMarkdown("## Summary\nA day.\n## Bottleneck\n(placeholder)", "The certificate was pending.");
     expect(final).toContain("## Summary\nA day.");
     expect(final).toContain("## Bottleneck\nThe certificate was pending.");
     expect(final).not.toContain("(placeholder)");
+  });
+
+  it("composes a draft-body answer without losing it to the strip step", () => {
+    const draft = "## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.";
+    const final = composeEodMarkdown(draft, resolvedBottleneck("", draft));
+    expect(final).toContain("## Bottleneck\nWaiting on finance.");
+    expect(final.match(/##\s*Bottleneck/gi)).toHaveLength(1);
   });
 
   it("omits the bottleneck when every task is complete", () => {

@@ -3,7 +3,7 @@ import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
-import { BOTTLENECK_QUESTION, composeEodMarkdown, hasBottleneckAnswer } from "./interpretation";
+import { BOTTLENECK_QUESTION, composeEodMarkdown, extractBottleneckAnswer, hasBottleneckAnswer, resolvedBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
@@ -323,13 +323,27 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
   const flashTimer = useRef<number | null>(null);
   // A redraft replaces the buffer (and any in-progress edits) by design.
   useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
-  useEffect(() => { if (allTasksCompleted) setBottleneck(""); }, [allTasksCompleted]);
   useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
-  const canSubmit = (allTasksCompleted || hasBottleneckAnswer(bottleneck)) && markdown.trim() && !busy && !redrafting && !refining;
+  const draftBottleneck = extractBottleneckAnswer(markdown);
+  const reason = resolvedBottleneck(bottleneck, markdown);
+  const canSubmit = (allTasksCompleted || !!reason) && markdown.trim() && !busy && !redrafting && !refining;
   const refineReady = (Boolean(feedback.trim()) || annotations.length > 0) && !busy && !redrafting && !refining;
+  // A disabled Submit always names its blocker, so the employee is never left
+  // guessing why the reason they typed did not unlock the report.
+  const submitHint = busy
+    ? "Submitting…"
+    : redrafting
+      ? "Waiting for the draft to finish before this can be submitted."
+      : refining
+        ? "Refine is still running — submit unlocks when it finishes."
+        : !markdown.trim()
+          ? "The report is empty. Add content in Raw before submitting."
+          : !allTasksCompleted && !reason
+            ? "Add the reason above (Bottleneck) to submit."
+            : null;
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit(composeEodMarkdown(markdown, bottleneck, !allTasksCompleted), crypto.randomUUID());
+    onSubmit(composeEodMarkdown(markdown, reason, !allTasksCompleted), crypto.randomUUID());
   };
   /** Selecting text in the preview raises the floating annotation pill. */
   const captureSelection = () => {
@@ -425,17 +439,23 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
         <button type="button" className="eod-note-remove" aria-label="Remove this note" onClick={() => setAnnotations((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={12} /></button>
       </li>)}</ul>
     </section>}
+    <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
+      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? `Every task in ${dayReference} list is complete.` : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
+      <small>{allTasksCompleted
+        ? `Every task in ${dayReference} list is complete, so no reason is needed or sent with this report.`
+        : hasBottleneckAnswer(bottleneck)
+          ? "This goes to your manager with the report."
+          : draftBottleneck
+            ? "Found in the report draft. Submitting uses it, or type here to replace it."
+            : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
+    </label>
     <section className="eod-refine" aria-label="Draft feedback">
       <span>Refine this draft</span>
       <small>Select text in the preview to add a note, or describe the change. Your bottleneck answer stays separate.</small>
       <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
       <div className="eod-refine-actions"><button disabled={!refineReady} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
     </section>
-    <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
-      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? `Every task in ${dayReference} list is complete.` : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
-      <small>{allTasksCompleted ? `Every task in ${dayReference} list is complete, so no reason is needed or sent with this report.` : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
-    </label>
-    <footer><small>Nothing is filed until you submit.</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
+    <footer><small>{submitHint ?? "Nothing is filed until you submit."}</small><button className="primary" disabled={!canSubmit} onClick={submit}>{busy ? "Submitting…" : "Submit EOD"}</button></footer>
     {pending && <SelectionAnnotator quote={pending.quote} anchor={pending.rect} value={pendingComment} canSave={isAnnotationCommentValid(pendingComment)} disabled={busy || redrafting || refining} onChange={setPendingComment} onSave={addAnnotation} onCancel={() => { setPending(null); setPendingComment(""); }} />}
   </section>;
 }
