@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   UPDATE_AVAILABLE_KEY,
+  displayUpdateVersion,
   isManagedUpdateChannel,
   shouldAutoCheckUpdate,
   updateAuthHeaders,
@@ -52,6 +53,25 @@ describe("shouldAutoCheckUpdate", () => {
 
   it("never phones home from debug scenarios", () => {
     expect(shouldAutoCheckUpdate({ ...base, debugEnabled: true })).toBe(false);
+  });
+});
+
+describe("displayUpdateVersion", () => {
+  it("pads the patch segment to two digits for the display convention", () => {
+    expect(displayUpdateVersion("0.3.1")).toBe("0.3.01");
+    expect(displayUpdateVersion("0.3.9")).toBe("0.3.09");
+  });
+
+  it("leaves wider patches and non-semver strings untouched", () => {
+    expect(displayUpdateVersion("0.2.100")).toBe("0.2.100");
+    expect(displayUpdateVersion("1.0.0")).toBe("1.0.00");
+    expect(displayUpdateVersion("dev")).toBe("dev");
+  });
+
+  it("pads the copy without changing the canonical versions being compared", () => {
+    const copy = updateAvailableCopy("0.3.1");
+    expect(copy.title).toContain("0.3.01");
+    expect(copy.message).toContain("0.3.01");
   });
 });
 

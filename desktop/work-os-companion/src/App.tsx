@@ -6,7 +6,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { UPDATE_AVAILABLE_KEY, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
+import { UPDATE_AVAILABLE_KEY, displayUpdateVersion, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy } from "./updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
@@ -582,7 +582,7 @@ export default function App() {
       setInstalledVersion("Unavailable in browser preview");
       return;
     }
-    void getVersion().then(setInstalledVersion).catch(() => setInstalledVersion("Unavailable"));
+    void getVersion().then((value) => setInstalledVersion(displayUpdateVersion(value))).catch(() => setInstalledVersion("Unavailable"));
   }, []);
 
   useEffect(() => {
@@ -915,9 +915,9 @@ export default function App() {
     // watchdog is armed only after the download so the grace timer cannot
     // fire during a long download, and it is disarmed again when the install
     // rejects, keeping the still-running app alive.
-    setUpdateStatus(`Downloading ${update.version}…`);
+    setUpdateStatus(`Downloading ${displayUpdateVersion(update.version)}…`);
     await update.download(undefined, { headers });
-    setUpdateStatus(`Closing Work OS to install ${update.version}…`);
+    setUpdateStatus(`Closing Work OS to install ${displayUpdateVersion(update.version)}…`);
     await invoke("arm_update_exit_watchdog");
     try {
       await update.install();
@@ -956,7 +956,7 @@ export default function App() {
       }
       if (silent) {
         const copy = updateAvailableCopy(result.update.version);
-        setUpdateStatus(`Version ${result.update.version} is ready.`);
+        setUpdateStatus(`Version ${displayUpdateVersion(result.update.version)} is ready.`);
         notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
           label: copy.actionLabel,
           onClick: () => {
@@ -972,8 +972,8 @@ export default function App() {
         });
         return;
       }
-      setUpdateStatus(`Installing ${result.update.version}…`);
-      notifications.info(`Downloading and installing ${result.update.version}.`, "Update available");
+      setUpdateStatus(`Installing ${displayUpdateVersion(result.update.version)}…`);
+      notifications.info(`Downloading and installing ${displayUpdateVersion(result.update.version)}.`, "Update available");
       await installAvailableUpdate(result.update, result.headers);
     } catch (value) {
       const message = errorMessage(value, "The update catalog could not be checked.");
