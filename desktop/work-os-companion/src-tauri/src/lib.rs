@@ -200,6 +200,10 @@ fn toggle_companion(app: &tauri::AppHandle) {
     }
 }
 
+/// Counter-invalidated whenever a watchdog is armed again or disarmed: at
+/// most the latest armed watchdog can stay dangerous.
+static EXIT_WATCHDOG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Guarantees the process dies once an exit has been requested. A graceful
 /// shutdown can deadlock inside DLL detach (WebView2/COM teardown), leaving a
 /// half-dead "Not Responding" process that then holds the executable locked
@@ -209,8 +213,13 @@ fn toggle_companion(app: &tauri::AppHandle) {
 /// the watchdog simply dies with it.
 #[cfg(windows)]
 fn arm_exit_watchdog(grace_seconds: u64) {
+    use std::sync::atomic::Ordering;
+    let generation = EXIT_WATCHDOG_GENERATION.fetch_add(1, Ordering::SeqCst);
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(grace_seconds));
+        if EXIT_WATCHDOG_GENERATION.load(Ordering::SeqCst) != generation + 1 {
+            return;
+        }
         // SAFETY: terminating the current process; the handle is a static
         // pseudo-handle and the call only fails if the process is already
         // exiting, which is exactly the outcome we want.
@@ -225,10 +234,19 @@ fn arm_exit_watchdog(grace_seconds: u64) {
 
 /// Armed from the frontend a beat before the updater's Windows install step
 /// (which ends in `std::process::exit(0)`), so a hung detach during that exit
-/// cannot leave a zombie process holding the executable lock.
+/// cannot leave a zombie process holding the executable lock. Disarmed again
+/// by the frontend whenever the install step rejects, so the still-running
+/// application is never terminated after a failed launch.
 #[tauri::command]
 fn arm_update_exit_watchdog() {
     arm_exit_watchdog(4);
+}
+
+/// Cancels every currently armed exit watchdog.
+#[tauri::command]
+fn disarm_update_exit_watchdog() {
+    use std::sync::atomic::Ordering;
+    EXIT_WATCHDOG_GENERATION.fetch_add(1, Ordering::SeqCst);
 }
 
 #[cfg(not(windows))]
@@ -255,6 +273,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
             arm_update_exit_watchdog,
+            disarm_update_exit_watchdog,
             notify_focus,
             focus_main,
             hide_avatar,
