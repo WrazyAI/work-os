@@ -277,7 +277,12 @@ async function resolveProposalTask(input: {
   let task: Json;
   try {
     task = await getTaskByLocalOrProviderId(input.ownerId, input.taskId);
-  } catch {
+  } catch (error) {
+    // Only a genuine not-found means the task left the list; provider,
+    // authorization, and database failures keep their real message so the
+    // caller is not told to refresh when the backend is broken.
+    const message = error instanceof Error ? error.message : "";
+    if (!/not found|no rows|does not exist/i.test(message)) throw error;
     throw new Error("That task is no longer in your task list. Refresh and try again.");
   }
   if (["archived", "deleted"].includes(String(task.status ?? ""))) throw new Error("That task was removed from your task list.");

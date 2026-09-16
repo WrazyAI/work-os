@@ -707,18 +707,24 @@ export default function AvatarApp(): React.ReactElement {
         body: JSON.stringify({ input_text: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, operations }),
       });
       const byIndex = new Map(proposals.map((proposal) => [proposal.client_operation_index, proposal.id]));
-      const reviewed = operations.map((operation, index) => ({ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }));
+      // Only operations that actually filed a proposal become review cards;
+      // an operation without a proposal would render as an enabled card whose
+      // approval has nothing to file (App.tsx filters the same way).
+      const reviewed = operations.flatMap((operation, index) => byIndex.has(index)
+        ? [{ op: operation.op, statement: operation.statement, taskId: operation.task_id, taskTitle: operation.task_title, proposalId: byIndex.get(index), enabled: true }]
+        : []);
+      const filedTaskIds = tasks.filter((_task, index) => byIndex.has(index)).map((task) => task.id);
       const failed = (failures ?? []).map((failure) => ({ title: tasks[failure.client_operation_index]?.title, error: failure.error }));
       if (failed.length) {
-        const filed = reviewed.filter((operation) => !!operation.proposalId);
-        if (!filed.length) throw new Error(partialFilingMessage(0, failed));
-        setProposedTaskIds((current) => new Set([...current, ...tasks.filter((task, index) => byIndex.has(index)).map((task) => task.id)]));
+        if (!reviewed.length) throw new Error(partialFilingMessage(0, failed));
+        setProposedTaskIds((current) => new Set([...current, ...filedTaskIds]));
         const reviewId = crypto.randomUUID();
-        setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: filed }]);
-        void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: filed, results: [], taskOptions: [] });
-        throw new Error(partialFilingMessage(filed.length, failed));
+        setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+        void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
+        throw new Error(partialFilingMessage(reviewed.length, failed));
       }
-      setProposedTaskIds((current) => new Set([...current, ...tasks.map((task) => task.id)]));
+      if (!reviewed.length) return;
+      setProposedTaskIds((current) => new Set([...current, ...filedTaskIds]));
       const reviewId = crypto.randomUUID();
       setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
       void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });

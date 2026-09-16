@@ -150,7 +150,12 @@ async function recordLocalTaskCreationEvent(access: WorkOsAccess, task: Json, du
   }
 }
 
+// Task ids are opaque but never contain filter punctuation; reject anything
+// that could alter the PostgREST filter it is interpolated into below.
+const TASK_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
+
 async function loadTaskById(access: WorkOsAccess, taskId: string) {
+  if (!TASK_ID_RE.test(taskId)) throw new Error("plan item references an invalid task id");
   const result = await db().from("work_tasks").select("*")
     .eq("organization_id", access.organizationId)
     .or(`id.eq.${taskId},provider_task_id.eq.${taskId}`).maybeSingle();
