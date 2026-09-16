@@ -70,10 +70,3 @@ export async function openLogsDir() {
   return invoke<string>("open_logs_dir");
 }
 
-export async function openDebuggerWindow() {
-  if (!isTauri()) {
-    window.open("/debug.html", "work-os-debugger", "popup,width=1180,height=780");
-    return;
-  }
-  await invoke("open_debug_window");
-}

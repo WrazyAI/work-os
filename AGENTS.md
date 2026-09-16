@@ -183,6 +183,14 @@ source change before reporting the tool as live.
   `getSession()`, **never** network `getUser()` — `getUser()` blocks every request
   on a network round-trip and hangs the entire app. Authoritative `getUser()` lives
   only in `requireUser()` on protected routes.
+- **Companion Tauri commands need an ACL grant per window.** Registering a command
+  in `src-tauri/src/lib.rs` is not enough: the window that invokes it must be
+  granted the command through `src-tauri/permissions/*.toml` (the shared
+  `diagnostics.ts` module is imported by the main, avatar, and debug windows, so
+  window-specific commands belong in a window-specific module). Drift surfaces at
+  runtime as `Command <name> not allowed by ACL` — it silently broke the updater's
+  exit watchdog from 0.3.0 through 0.3.05. `test/work-os-companion-acl.test.mts`
+  fails the build on any new drift.
 - **Never `npm install` while the dev/prod server is running** — it corrupts the
   Turbopack cache (`adapterFn is not a function` / missing `@swc/helpers`). Fix:
   `rm -rf .next` then rebuild/restart.
