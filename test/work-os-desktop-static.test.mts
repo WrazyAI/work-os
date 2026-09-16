@@ -159,8 +159,11 @@ assert.match(interpretationHelpers, /BOTTLENECK_PLACEHOLDER/);
 assert.match(taskSurfaces, /resolvedBottleneck/);
 assert.doesNotMatch(taskSurfaces, /if \(allTasksCompleted\) setBottleneck\(""\)/);
 assert.match(taskSurfaces, /Add the reason above \(Bottleneck\) to submit\./);
+const bottleneckLabelAt = taskSurfaces.indexOf('className="eod-bottleneck-label"');
+const refineBlockAt = taskSurfaces.indexOf('className="eod-refine"');
+assert.ok(bottleneckLabelAt >= 0 && refineBlockAt >= 0, "both EOD reason blocks exist");
 assert.ok(
-  taskSurfaces.indexOf('className="eod-bottleneck-label"') < taskSurfaces.indexOf('className="eod-refine"'),
+  bottleneckLabelAt < refineBlockAt,
   "the required reason must render before the optional refine block",
 );
 const screenshotGallery = read("src/ScreenshotGallery.tsx");

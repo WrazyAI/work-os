@@ -125,10 +125,11 @@ function hasTimestamp(value: unknown): boolean {
 /** A definite rejection (HTTP 4xx) proves no task was created, so the intent is
  * cleared and a corrected retry may POST again. */
 async function clearProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<void> {
-  await db().from("work_task_proposals").update({
+  const { error } = await db().from("work_task_proposals").update({
     provider_create_issued_at: null,
     updated_at: new Date().toISOString(),
   }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt);
+  if (error) throw new Error(`clear provider create intent: ${error.message}`);
 }
 
 async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt: string, opts: { firstAttempt: boolean }) {
@@ -717,7 +718,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     return withOutcome(data);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Proposal application failed";
-    const needsReview = /required before|evidence is required|task_group_id is required|may have created/i.test(reason);
+    const needsReview = /required before|evidence is required|task_group_id is required|may have created|accepted the create/i.test(reason);
     await db().from("work_task_proposals").update({
       status: needsReview ? "needs_review" : "failed",
       failure_reason: reason,
