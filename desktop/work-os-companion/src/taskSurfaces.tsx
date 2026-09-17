@@ -11,7 +11,7 @@ import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
 import { EodScreenshotPanel, type PreviewResolver } from "./ScreenshotGallery";
-import type { EodScreenshotGallery } from "./types";
+import type { EodScreenshotGallery, EodScreenshotHour } from "./types";
 
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase());
 const formatLoomLength = (seconds: number | null | undefined) => {
@@ -310,6 +310,38 @@ export function CompletionRingInline({ completed, total }: { completed: number; 
 
 export { sentence, taskKind };
 
+/** Review-workspace loading state: composer-shaped so the draft lands without
+ * a layout jump (design §31). One status line, a skeleton body, and an
+ * optional quiet escape hatch. */
+export function EodLoadingState({ title, detail, progress = null, onDraftAnyway }: {
+  title: string;
+  detail: string;
+  progress?: string | null;
+  onDraftAnyway?: () => void;
+}) {
+  return <section className="panel eod-composer eod-loading" role="status" aria-live="polite">
+    <header className="eod-loading-status">
+      <FadeArc size={20} />
+      <div>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+        {progress ? <small className="eod-loading-progress">{progress}</small> : null}
+      </div>
+    </header>
+    <div className="eod-loading-skeleton" aria-hidden="true">
+      <Skeleton className="eod-loading-line is-heading" />
+      <Skeleton className="eod-loading-line" />
+      <Skeleton className="eod-loading-line is-short" />
+      <Skeleton className="eod-loading-line" />
+      <Skeleton className="eod-loading-line is-tiny" />
+    </div>
+    {onDraftAnyway ? <footer className="eod-loading-footer">
+      <small>Drafting starts when the analysis finishes; you can draft with the frames that are ready.</small>
+      <button type="button" className="quiet-action" onClick={onDraftAnyway}>Draft Anyway</button>
+    </footer> : null}
+  </section>;
+}
+
 export type LoomReadback = {
   title: string | null;
   durationSeconds: number | null;
@@ -329,7 +361,7 @@ export type LoomAttached = {
 
 export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "today", suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
   reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; suggestedBottleneck: string | null;
-  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
   const hasGalleryFrames = (screenshotGallery?.viewable.length ?? 0) > 0 || (screenshotGallery?.processed ?? 0) > 0;
@@ -499,7 +531,7 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
       <button type="button" className={`eod-loom-toggle ${loomOpen ? "active" : ""}`} aria-expanded={loomOpen} onClick={() => { setLoomOpen((current) => !current); setLoomError(null); }}>
         <Video size={14} /> {loomOpen ? "Cancel Loom analysis" : "Recorded a Loom instead?"}
       </button>
-      {loomAttached ? <p className="eod-loom-readback" role="status">In this draft: {loomAttached.title ?? "Loom recording"}{formatLoomLength(loomAttached.durationSeconds)} · recorded {loomAttached.createdLocalDate ?? "an unverified date"}{loomAttached.verdict === "unknown" ? " (unverified)" : ""}.</p> : null}
+      {loomAttached ? <p className="eod-loom-readback" role="status">In this draft: {loomAttached.title ?? "Loom recording"}{formatLoomLength(loomAttached.durationSeconds)} · recorded {loomAttached.createdLocalDate ? formatWorkOsDate(loomAttached.createdLocalDate) : "an unverified date"}{loomAttached.verdict === "unknown" ? " (unverified)" : ""}.</p> : null}
       {loomOpen ? <div className="eod-loom-panel" role="group" aria-label="Loom analysis">
         <p className="eod-loom-hint">Paste your Loom link and Work OS rebuilds the draft from what you said — the recording never has to be a second EOD, and no video is stored.</p>
         <div className="eod-loom-row">
@@ -507,7 +539,7 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
           <button type="button" disabled={!loomUrl.trim() || loomReading} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
         </div>
         {loomReadback?.metadataAvailable ? <p className={`eod-loom-readback ${loomReadback.usableForDay ? "" : "is-warning"}`} role="status">
-          {loomReadback.title ?? "Loom recording"}{formatLoomLength(loomReadback.durationSeconds)} · recorded {loomReadback.createdLocalDate ?? "an unverified date"}{loomReadback.usableForDay ? "" : ` — it can't be used for ${dayReference} report`}.
+          {loomReadback.title ?? "Loom recording"}{formatLoomLength(loomReadback.durationSeconds)} · recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "an unverified date"}{loomReadback.usableForDay ? "" : ` — it can't be used for ${dayReference} report`}.
         </p> : null}
         {loomReadback && !loomReadback.metadataAvailable ? <p className="eod-loom-readback is-warning" role="status">Loom returned no public metadata — the recording may be private. Paste the transcript so the draft can still use what you said.</p> : null}
         <details className="eod-loom-transcript">

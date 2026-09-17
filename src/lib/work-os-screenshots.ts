@@ -815,6 +815,11 @@ export async function deleteExpiredWorkOsScreenshots() {
       .in("id", ids);
     if (updateError) throw new Error(`mark expired screenshots deleted: ${updateError.message}`);
   }
+  // Derived hourly rollups follow the images out: text about frames we no
+  // longer keep must not outlive the retention window.
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const { error: hoursError } = await db().from("work_screenshot_hourly_summaries").delete().lt("local_date", cutoff);
+  if (hoursError) throw new Error(`delete expired hourly screenshot summaries: ${hoursError.message}`);
   return { deleted: ids.length };
 }
 

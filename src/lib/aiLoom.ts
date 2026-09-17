@@ -1,4 +1,5 @@
 import { INTERPRET_MODEL } from "@/lib/aiInterpret";
+import { formatReportDate } from "@/lib/work-os-eod-facts";
 import {
   LOOM_TRANSCRIPT_MAX_AI,
   LOOM_TRANSCRIPT_MAX_STORED,
@@ -178,8 +179,8 @@ export async function analyzeLoomForAgent(input: {
 /** Human-readable line describing the recording for prompts and receipts. */
 export function loomFeedLine(bundle: LoomBundle) {
   const length = formatLoomDuration(bundle.metadata?.durationSeconds);
-  const date = bundle.temporal.createdLocalDate ?? "unknown date";
-  return `${bundle.metadata?.title ?? "Loom recording"}${length ? ` (${length})` : ""} — ${bundle.reference.url} · recorded ${date} · ${bundle.temporal.verdict.replaceAll("_", " ")} for ${bundle.temporal.targetDate}`;
+  const recorded = bundle.temporal.createdLocalDate ? formatReportDate(bundle.temporal.createdLocalDate) : "an unverified date";
+  return `${bundle.metadata?.title ?? "Loom recording"}${length ? ` (${length})` : ""} — ${bundle.reference.url} · recorded ${recorded} · ${bundle.temporal.verdict.replaceAll("_", " ")} for ${formatReportDate(bundle.temporal.targetDate)}`;
 }
 
 /** Everything pasted alongside the link is treated as employee-supplied

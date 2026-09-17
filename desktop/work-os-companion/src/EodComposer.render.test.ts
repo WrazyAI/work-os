@@ -37,7 +37,7 @@ describe("EodComposer review surface", () => {
     expect(markup).not.toContain("Draft notes");
   });
 
-  it("renders the screenshot gallery with a carousel and honest breakdown", () => {
+  it("renders the screenshot gallery with carousel, hourly rows, and honest breakdown", () => {
     const frames = Array.from({ length: 9 }, (_, index) => ({
       summaryId: `frame-${index + 1}`,
       capturedAt: `2026-09-14T1${index}:00:00.000Z`,
@@ -48,7 +48,16 @@ describe("EodComposer review surface", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
       source: "ai" as const,
-      screenshotContext: { processed: 9, excluded: 69, failed: 0, pending: 0, observations: frames.slice(-4) },
+      screenshotContext: {
+        processed: 9,
+        excluded: 69,
+        failed: 0,
+        pending: 0,
+        hours: [
+          { hourStart: 12, label: "12–1 PM", summary: "Repository review in Chrome while tests ran in the terminal.", frameCount: 4, summaryId: "frame-1", visibleApp: "Google Chrome", synthesized: true },
+          { hourStart: 18, label: "6–7 PM", summary: "Deployment checks finished with a healthy dashboard.", frameCount: 5, summaryId: "frame-9", visibleApp: "Google Chrome", synthesized: true },
+        ],
+      },
       screenshotGallery: { processed: 9, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, pending: 0, total: 9, viewable: frames },
       screenshotResolveSrc: () => "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E",
     }));
@@ -59,6 +68,9 @@ describe("EodComposer review surface", () => {
     expect(markup).toContain("9 analyzed");
     expect(markup).toContain("69 flagged as sensitive (images deleted)");
     expect(markup).not.toContain("excluded by privacy policy");
+    expect(markup).toContain("12–1 PM");
+    expect(markup).toContain("Repository review in Chrome while tests ran in the terminal.");
+    expect(markup).toContain("· 4 frames");
     expect(markup).toContain("Screenshot captured at 18:00 in Google Chrome");
   });
 
@@ -152,7 +164,7 @@ describe("EodComposer review surface", () => {
       loomAttached: { title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
     }));
     expect(markup).toContain("In this draft: Settlement walkthrough · 5:26");
-    expect(markup).toContain("recorded 2026-09-14");
+    expect(markup).toContain("recorded September 14");
     // The analyze panel stays collapsed until the employee opens it.
     expect(markup).not.toContain('aria-label="Loom share link"');
     expect(markup).not.toContain("Analyze and rebuild draft");

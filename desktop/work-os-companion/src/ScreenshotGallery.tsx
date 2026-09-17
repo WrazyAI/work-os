@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequestBlob } from "./api";
-import type { EodScreenshotGallery, EodScreenshotItem } from "./types";
+import type { EodScreenshotGallery, EodScreenshotHour, EodScreenshotItem } from "./types";
 
 const clock = (value: string) => value.slice(11, 16) || "—";
 const altLabel = (item: EodScreenshotItem) => `Screenshot captured at ${clock(item.capturedAt)}${item.visibleApp ? ` in ${item.visibleApp}` : ""}`;
@@ -44,7 +44,7 @@ export function ScreenshotImage({ summaryId, size, alt, className, srcOverride }
 export type PreviewResolver = (summaryId: string, size: "thumb" | "preview" | "full") => string | null;
 
 export function EodScreenshotPanel({ context, gallery, limit = 7, resolveSrc }: {
-  context: { processed: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null }> } | null;
+  context: { processed: number; hours: EodScreenshotHour[] } | null;
   gallery: EodScreenshotGallery | null;
   limit?: number;
   resolveSrc?: PreviewResolver;
@@ -85,21 +85,23 @@ export function EodScreenshotPanel({ context, gallery, limit = 7, resolveSrc }: 
     return () => document.removeEventListener("keydown", onKey);
   }, [closeLightbox, gridOpen, lightbox, viewable]);
 
-  const observationRows = context?.observations ?? recent.slice(-6).map((item) => ({ ...item }));
+  const hours = (gallery?.hours?.length ? gallery.hours : context?.hours) ?? [];
   const bySummaryId = new Map(viewable.map((item) => [item.summaryId, item]));
   const lightboxIndex = lightbox ? viewable.findIndex((item) => item.summaryId === lightbox.summaryId) : -1;
   const hasCounts = !!gallery && (gallery.excludedSensitive > 0 || gallery.excludedPolicy > 0 || gallery.unavailable > 0);
 
   return <>
-    {observationRows.length > 0 && <ul className="eod-shot-rows">{observationRows.map((item, index) => {
-      const frame = bySummaryId.get(item.summaryId);
-      return <li key={`${item.capturedAt}:${index}`}>
+    {hours.length > 0 && <ul className="eod-shot-rows">{hours.map((hour) => {
+      const frame = hour.summaryId ? bySummaryId.get(hour.summaryId) : undefined;
+      const copy = <span className="eod-shot-row-copy">
+        <time>{hour.label}</time>
+        <span>{hour.summary || `${hour.frameCount} frame${hour.frameCount === 1 ? "" : "s"} analyzed.`}{hour.frameCount > 1 ? ` · ${hour.frameCount} frames` : ""}</span>
+      </span>;
+      const thumb = hour.summaryId ? <ScreenshotImage summaryId={hour.summaryId} size="thumb" srcOverride={resolveSrc?.(hour.summaryId, "thumb")} alt={`Activity from ${hour.label}`} className="eod-shot-thumb" /> : null;
+      return <li key={hour.hourStart}>
         {frame
-          ? <button type="button" className="eod-shot-row" onClick={(event) => openLightbox(frame, event.currentTarget)}>
-              <ScreenshotImage summaryId={frame.summaryId} size="thumb" srcOverride={resolveSrc?.(frame.summaryId, "thumb")} alt={altLabel(frame)} className="eod-shot-thumb" />
-              <span className="eod-shot-row-copy"><time>{clock(item.capturedAt)}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></span>
-            </button>
-          : <span className="eod-shot-row-copy"><time>{clock(item.capturedAt)}</time><span>{item.visibleApp ? `${item.visibleApp} · ` : ""}{item.summary}</span></span>}
+          ? <button type="button" className="eod-shot-row" onClick={(event) => openLightbox(frame, event.currentTarget)}>{thumb}{copy}</button>
+          : <span className="eod-shot-hour-row">{thumb}{copy}</span>}
       </li>;
     })}</ul>}
     {recent.length > 0 && <div className="eod-shot-carousel" role="group" aria-label="Recent screenshots">

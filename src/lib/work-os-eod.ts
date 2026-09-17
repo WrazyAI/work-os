@@ -6,6 +6,7 @@ import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type 
 import { recordWorkMemory } from "@/lib/work-memory";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
+import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
 import {
   clipText,
   collapseAutomation,
@@ -159,7 +160,15 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   const unplanned = unplannedFacts(events, planTaskIds, timezone);
   const progressed = progressedFacts(updates, timezone);
   const outputEvidence = evidence.filter((item) => item.source !== "worktivity");
-  const activityGroups = groupActivityFrames(gallery.viewable);
+  const activityHours = await ensureHourlyScreenshotSummaries({
+    organizationId: access.organizationId,
+    personId,
+    date: reportDate,
+    timezone,
+  });
+  // Fallback grouping only when no hourly rollup exists (for example the AI
+  // provider is unavailable and no cache was written yet).
+  const activityGroups = activityHours.length ? [] : groupActivityFrames(gallery.viewable);
   const activityCounts = [
     `${gallery.processed} analyzed`,
     gallery.excludedSensitive > 0 ? `${gallery.excludedSensitive} flagged as sensitive (images deleted)` : "",
@@ -209,16 +218,18 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     ...eodLineItems(outputEvidence, "No output artifacts (files, videos, or links) were linked to this day."),
     "",
     "## Activity Context",
-    ...(activityGroups.length
-      ? activityGroups.map((group) => {
-          const first = formatLocalTime(group.firstAt, timezone);
-          const last = formatLocalTime(group.lastAt, timezone);
-          const range = first && last ? (first === last ? first : `${first}–${last}`) : "time not recorded";
-          const highlights = group.highlights.map((summary) => `“${summary}”`).join("; ");
-          const more = group.count > group.highlights.length ? ` (+${group.count - group.highlights.length} more)` : "";
-          return `- ${group.app} — ${group.count} frame${group.count === 1 ? "" : "s"} (${range}): ${highlights}${more}`;
-        })
-      : ["- No retained activity context was recorded for this day."]),
+    ...(activityHours.length
+      ? activityHours.map((hour) => `- ${hour.label} — ${clipText(hour.summary, 240)}`)
+      : activityGroups.length
+        ? activityGroups.map((group) => {
+            const first = formatLocalTime(group.firstAt, timezone);
+            const last = formatLocalTime(group.lastAt, timezone);
+            const range = first && last ? (first === last ? first : `${first}–${last}`) : "time not recorded";
+            const highlights = group.highlights.map((summary) => `“${summary}”`).join("; ");
+            const more = group.count > group.highlights.length ? ` (+${group.count - group.highlights.length} more)` : "";
+            return `- ${group.app} — ${group.count} frame${group.count === 1 ? "" : "s"} (${range}): ${highlights}${more}`;
+          })
+        : ["- No retained activity context was recorded for this day."]),
     ...(gallery.viewable.length || gallery.pending || gallery.unavailable || gallery.excludedSensitive || gallery.excludedPolicy
       ? [`Activity context: ${activityCounts}.`]
       : []),

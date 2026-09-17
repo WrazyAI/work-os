@@ -5121,6 +5121,7 @@ button:not(:disabled):active {
 
 /* EOD annotations tray + motion */
 .eod-composer > * {
+  min-width: 0;
   animation: eod-rise 300ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
@@ -5132,10 +5133,13 @@ button:not(:disabled):active {
 
 .eod-preview,
 .eod-raw {
+  min-width: 0;
+  overflow-wrap: anywhere;
   animation: eod-fade 200ms ease both;
 }
 
 .eod-screenshot-body {
+  min-width: 0;
   animation: eod-reveal 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
@@ -5497,7 +5501,7 @@ button:not(:disabled):active {
   outline-offset: 2px;
 }
 
-.eod-screenshot-context { margin: 0 22px 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); color: var(--muted); }
+.eod-screenshot-context { min-width: 0; margin: 0 22px 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); color: var(--muted); }
 .eod-screenshot-context summary { cursor: pointer; color: var(--ink); font-size: 11px; font-weight: 700; }
 .eod-screenshot-context p, .eod-screenshot-context small { display: block; margin: 8px 0 0; font-size: 10px; line-height: 1.45; }
 .eod-screenshot-context time { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -5509,7 +5513,7 @@ button:not(:disabled):active {
 .eod-shot-row-copy { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; min-width: 0; font-size: 10px; line-height: 1.4; }
 .eod-shot-row-copy > span { min-width: 0; overflow-wrap: anywhere; }
 .eod-shot-thumb { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
-.eod-shot-carousel { display: flex; gap: 8px; max-width: 100%; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
+.eod-shot-carousel { display: flex; gap: 8px; min-width: 0; max-width: 100%; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
 .eod-shot-tile { display: grid; gap: 4px; flex: 0 0 auto; width: 92px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; text-align: left; cursor: zoom-in; }
 .eod-shot-tile-image { width: 92px; height: 56px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); }
 .eod-shot-tile:hover .eod-shot-tile-image, .eod-shot-tile:focus-visible .eod-shot-tile-image { border-color: var(--ink); }
@@ -5551,6 +5555,20 @@ button:not(:disabled):active {
 .eod-shot-lightbox button:disabled { opacity: 0.35; }
 .eod-shot-unavailable.eod-shot-lightbox-image { min-height: 220px; color: rgba(255, 255, 255, 0.7); }
 .eod-screenshot-unavailable { margin: 0 22px 18px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.eod-loading { gap: 14px; }
+.eod-loading-status { display: flex; align-items: flex-start; gap: 12px; color: var(--ink); }
+.eod-loading-status > div { display: grid; gap: 3px; min-width: 0; }
+.eod-loading-status strong { font-size: 15px; }
+.eod-loading-status small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.eod-loading-progress { font-variant-numeric: tabular-nums; }
+.eod-loading-skeleton { display: grid; gap: 10px; padding: 4px 0 2px; }
+.eod-loading-line { display: block; height: 11px; border-radius: 6px; }
+.eod-loading-line.is-heading { height: 15px; width: min(240px, 60%); }
+.eod-loading-line.is-short { width: min(420px, 78%); }
+.eod-loading-line.is-tiny { width: min(280px, 46%); }
+.eod-loading-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.eod-loading-footer small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.eod-shot-hour-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 9px; align-items: center; width: 100%; padding: 5px; border: 1px solid transparent; border-radius: 8px; color: inherit; font-size: 10px; line-height: 1.4; }
 .eod-loom { margin: 0 22px 14px; }
 .eod-loom-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px dashed var(--line); border-radius: 9px; background: transparent; color: var(--muted); padding: 7px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .eod-loom-toggle.active { border-style: solid; border-color: #94c86a; color: #42503e; background: #edf6e4; }

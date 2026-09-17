@@ -351,6 +351,20 @@ export interface EodScreenshotGallery {
   /** Frames recorded for the day so far. */
   total: number;
   viewable: EodScreenshotItem[];
+  /** One synthesized activity line per local hour. */
+  hours?: EodScreenshotHour[];
+}
+
+/** One synthesized activity line per local hour; `synthesized: false` marks a
+ * truthful counts-only fallback when the summarizer was unavailable. */
+export interface EodScreenshotHour {
+  hourStart: number;
+  label: string;
+  summary: string;
+  frameCount: number;
+  summaryId: string | null;
+  visibleApp: string | null;
+  synthesized: boolean;
 }
 
 /** One bounded on-demand Worktivity preparation batch for an EOD day. */

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
 
 export const EOD_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
@@ -17,8 +18,9 @@ export interface EodGrounding {
   carried: string[];
   blockers: string[];
   commitments?: Array<{ title: string; status: "selected" | "deferred" | "completed" }>;
-  /** Neutral, sampled activity observations (Worktivity screenshot summaries). */
-  observed?: Array<{ at: string; text: string; app: string | null }>;
+  /** Neutral, sampled activity observations. Hourly rows carry their own
+   * readable time range in `text`, so `at` stays null there. */
+  observed?: Array<{ at: string | null; text: string; app: string | null }>;
   /** Employee-attached Loom recordings for the day. The transcript stays in
    * the check-in claims; the digest is what the report may cite. */
   media?: Array<{ at: string; title: string; url: string; durationSeconds: number | null; digest: string | null; transcriptChars: number }>;
@@ -62,7 +64,7 @@ function eodFacts(grounding: EodGrounding) {
     blocker: grounding.blockers.map((text, index) => ({ id: `blocker:${index}`, text })),
     observed: (grounding.observed ?? []).map((observation, index) => ({
       id: `observed:${index}`,
-      text: `${observation.text}${observation.app ? ` (observed in ${observation.app})` : ""} at ${observation.at}`,
+      text: `${observation.text}${observation.app ? ` (observed in ${observation.app})` : ""}${observation.at ? ` at ${observation.at}` : ""}`,
     })),
     media: (grounding.media ?? []).map((item, index) => ({
       id: `media:${index}`,
@@ -378,13 +380,9 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
     .like("external_event_id", "screenshot:%")
     .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
   if (events.error) throw new Error(`load screenshot events: ${events.error.message}`);
-  const occurredBy = new Map((events.data ?? []).map((row: any) => {
-    const at = row.occurred_at instanceof Date ? row.occurred_at.toISOString() : String(row.occurred_at ?? "");
-    return [String(row.id), at];
-  }));
-  const ids = [...occurredBy.keys()];
-  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, pending: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
-  const rows = await supabase.from("work_screenshot_summaries").select("id,summary,visible_context,confidence,processing_status,evidence_event_id")
+  const ids = (events.data ?? []).map((row: any) => String(row.id));
+  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
+  const rows = await supabase.from("work_screenshot_summaries").select("id,processing_status,evidence_event_id")
     .in("evidence_event_id", ids);
   if (rows.error) throw new Error(`load screenshot summaries: ${rows.error.message}`);
   const summaries = (rows.data ?? []) as Array<Record<string, any>>;
@@ -395,23 +393,7 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
     .filter((row) => ["processed", "excluded"].includes(String(row.processing_status)))
     .map((row) => String(row.evidence_event_id)));
   const pending = ids.filter((id) => !terminal.has(id)).length;
-  const observations = summaries
-    .filter((row) => row.processing_status === "processed")
-    .sort((left, right) => {
-      const leftAt = Date.parse(occurredBy.get(String(left.evidence_event_id)) ?? "");
-      const rightAt = Date.parse(occurredBy.get(String(right.evidence_event_id)) ?? "");
-      return (Number.isFinite(leftAt) ? leftAt : 0) - (Number.isFinite(rightAt) ? rightAt : 0);
-    })
-    .slice(0, 6)
-    .map((row) => {
-      const visible = row.visible_context as { visibleApp?: unknown } | null;
-      return {
-        summaryId: String(row.id),
-        capturedAt: occurredBy.get(String(row.evidence_event_id)) ?? "",
-        summary: String(row.summary ?? ""),
-        visibleApp: visible && visible.visibleApp != null ? String(visible.visibleApp) : null,
-        confidence: Number(row.confidence ?? 0),
-      };
-    });
-  return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), pending, observations };
+  // Hours, not frames: the draft reports one synthesized line per local hour.
+  const hours = await ensureHourlyScreenshotSummaries({ organizationId, personId, date });
+  return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), pending, hours };
 }

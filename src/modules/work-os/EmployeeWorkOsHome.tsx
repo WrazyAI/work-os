@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
+import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { EmployeeEodOutstandingBell, calendarDateLabel, type OutstandingEodDay, type OutstandingEodsResponse } from "@/modules/work-os/EmployeeEodOutstanding";
 
@@ -291,7 +292,7 @@ export default function EmployeeWorkOsHome() {
     }),
     onSuccess: (result) => {
       if (result.blocked) {
-        setGoalLoomNote(`That recording is from ${result.temporal?.createdLocalDate ?? "another day"}, so it can't shape today's goal.`);
+        setGoalLoomNote(`That recording is from ${result.temporal?.createdLocalDate ? formatWorkOsDate(result.temporal.createdLocalDate) : "another day"}, so it can't shape today's goal.`);
         return;
       }
       if (!result.analysis) {

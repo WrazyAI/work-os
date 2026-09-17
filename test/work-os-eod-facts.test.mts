@@ -49,12 +49,13 @@ test("summaries clip at a word boundary with an explicit ellipsis", () => {
   assert.equal(clipText("word ".repeat(60), 20), "word word word word…");
 });
 
-test("times render in the employee timezone and report dates are human", () => {
-  assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "Europe/Amsterdam"), "16:05");
-  assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "UTC"), "14:05");
+test("times render in the employee timezone in plain 12-hour form", () => {
+  assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "Europe/Amsterdam"), "4:05 PM");
+  assert.equal(formatLocalTime("2026-09-17T14:05:00Z", "UTC"), "2:05 PM");
+  assert.equal(formatLocalTime("2026-09-17T00:07:00Z", "UTC"), "12:07 AM");
   assert.equal(formatLocalTime(null, "UTC"), null);
   assert.equal(formatReportDate("2026-09-17"), "September 17, 2026");
-  assert.equal(factLine({ title: "Confirm Acme emergency service claims", at: "2026-09-17T15:03:54Z" }, "UTC", "completed"), "- Confirm Acme emergency service claims — completed 15:03");
+  assert.equal(factLine({ title: "Confirm Acme emergency service claims", at: "2026-09-17T15:03:54Z" }, "UTC", "completed"), "- Confirm Acme emergency service claims — completed 3:03 PM");
   assert.equal(factLine({ title: "Refine the WorkOS design direction" }, "UTC"), "- Refine the WorkOS design direction");
 });
 

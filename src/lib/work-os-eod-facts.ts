@@ -46,15 +46,16 @@ export function clipText(value: unknown, max = 180): string {
   return `${(boundary > max * 0.6 ? cut.slice(0, boundary) : cut).trimEnd()}…`;
 }
 
-/** "09:12" in the employee's timezone, or null when the instant is unusable. */
+/** "3:04 PM" in the employee's timezone, or null when the instant is unusable.
+ * Never includes a timezone name or offset. */
 export function formatLocalTime(value: unknown, timezone: string): string | null {
   const at = value instanceof Date ? value : new Date(String(value ?? ""));
   if (Number.isNaN(at.getTime())) return null;
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone || "UTC",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   }).format(at);
 }
 

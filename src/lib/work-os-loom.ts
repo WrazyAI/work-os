@@ -13,6 +13,7 @@ export const LOOM_PAGE_MAX_BYTES = 400_000;
 
 const VIDEO_ID = /^[0-9a-f]{32}$/i;
 const LOOM_HOSTS = new Set(["loom.com", "www.loom.com"]);
+const LOOM_IN_TEXT = /(?:https?:\/\/)?(?:www\.)?loom\.com\/(?:share|embed)\/[0-9a-f]{32}/gi;
 const VTT_TIMESTAMP = /^\s*(?:\d{1,3}:)?\d{2}:\d{2}[.,]\d{3}\s*-->/;
 const VTT_HEADER = /^\s*(WEBVTT|NOTE|STYLE|REGION)\b.*$/i;
 const SRT_INDEX = /^\s*\d{1,6}\s*$/;
@@ -44,21 +45,25 @@ export interface LoomTemporal {
   timezone: string;
 }
 
-/** Accepts only https Loom share/embed URLs (or a bare 32-hex video id) and
- * returns the canonical reference. Deliberately strict: this value later
- * drives a server-side fetch, so userinfo, ports, lookalike hosts, and
- * non-https schemes are all rejected. */
+/** Accepts Loom share/embed references and returns the canonical https
+ * reference: a bare 32-hex video id, an `https` link, an `http` link (upgraded,
+ * since every fetch is https-only), or the same link pasted without a scheme.
+ * Deliberately strict everywhere else: this value later drives a server-side
+ * fetch, so userinfo, ports, lookalike hosts, and non-Loom paths are rejected. */
 export function parseLoomReference(value: string): LoomReference | null {
   const raw = nonEmptyString(value);
   if (!raw) return null;
   if (VIDEO_ID.test(raw)) return { videoId: raw.toLowerCase(), url: `https://www.loom.com/share/${raw.toLowerCase()}` };
+  // People paste "www.loom.com/share/..." or "loom.com/share/..." constantly.
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
   let parsed: URL;
   try {
-    parsed = new URL(raw);
+    parsed = new URL(withScheme);
   } catch {
     return null;
   }
-  if (parsed.protocol !== "https:") return null;
+  const scheme = parsed.protocol.toLowerCase();
+  if (scheme !== "https:" && scheme !== "http:") return null;
   if (parsed.username || parsed.password || parsed.port) return null;
   if (!LOOM_HOSTS.has(parsed.hostname.toLowerCase())) return null;
   const match = parsed.pathname.match(/^\/(?:share|embed)\/([0-9a-f]{32})(?:\/)?$/i);
@@ -67,10 +72,13 @@ export function parseLoomReference(value: string): LoomReference | null {
   return { videoId, url: `https://www.loom.com/share/${videoId}` };
 }
 
-/** Finds the first Loom link inside free text so a link pasted into an
- * ordinary update still reaches the analyze tool. Only full URLs count. */
+/** Finds the first Loom reference inside free text so a link pasted into an
+ * ordinary update still reaches the analyze tool, with or without a scheme. */
 export function findLoomReference(text: string): LoomReference | null {
-  const candidates = text.match(/https:\/\/[^\s<>"']+/gi) ?? [];
+  const candidates = [
+    ...(String(text ?? "").match(LOOM_IN_TEXT) ?? []),
+    ...(String(text ?? "").match(/https:\/\/[^\s<>"']+/gi) ?? []),
+  ];
   for (const candidate of candidates) {
     const reference = parseLoomReference(candidate.replace(/[),.;!?]+$/, ""));
     if (reference) return reference;
