@@ -154,14 +154,15 @@ export function useOutstandingEodsQuery(options: { enabled: boolean }) {
 }
 
 /** Viewable screenshot frames for one day, used by the EOD composer gallery.
- * While any recorded frame is still waiting on analysis the query refreshes
- * itself, so the panel converges without the employee reopening the day. */
-export function useEodScreenshotsQuery(options: { enabled: boolean; date: string | null }) {
+ * Polling is scoped to an active on-demand preparation: frames that keep
+ * failing stay `pending` by design, so an unconditional interval would poll
+ * forever. After preparation finishes the query is invalidated instead. */
+export function useEodScreenshotsQuery(options: { enabled: boolean; date: string | null; pollWhilePending?: boolean }) {
   return useQuery({
     queryKey: workOsKeys.eodScreenshots(options.date ?? "none"),
     enabled: options.enabled && !!options.date,
     staleTime: DAY_DETAILS_STALE_MS,
-    refetchInterval: (query) => ((query.state.data as EodScreenshotGallery | undefined)?.pending ?? 0) > 0 ? 5_000 : false,
+    refetchInterval: (query) => options.pollWhilePending && ((query.state.data as EodScreenshotGallery | undefined)?.pending ?? 0) > 0 ? 5_000 : false,
     queryFn: () => apiRequest<EodScreenshotGallery>(`/api/work-os/me/eod/screenshots?date=${encodeURIComponent(options.date!)}`),
   });
 }
@@ -170,9 +171,10 @@ export function useEodScreenshotsQuery(options: { enabled: boolean; date: string
  * composer runs this while the waiting state is visible and stops early when
  * the employee chooses to draft anyway. */
 export function prepareEodScreenshots(date: string, signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(45_000);
   return apiRequest<EodScreenshotPreparation>("/api/work-os/me/eod/screenshots/prepare", {
     method: "POST",
-    signal: signal ?? AbortSignal.timeout(45_000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     body: JSON.stringify({ date, max_frames: 6 }),
   });
 }

@@ -159,6 +159,7 @@ export default function App() {
    * batch is still being requested. */
   const [eodPreparing, setEodPreparing] = useState<{ date: string; analyzed: number; total: number; pending: number | null; failed: number } | null>(null);
   const eodPrepareCancelRef = useRef(false);
+  const eodPrepareAbandonRef = useRef(false);
   const eodPrepareAbortRef = useRef<AbortController | null>(null);
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
@@ -445,7 +446,11 @@ export default function App() {
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
   const outstandingQuery = useOutstandingEodsQuery({ enabled: signedIn && !syncBypass });
   const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
-  const screenshotGalleryQuery = useEodScreenshotsQuery({ enabled: signedIn && !syncBypass, date: eodDate ?? day?.shiftDate ?? null });
+  const screenshotGalleryQuery = useEodScreenshotsQuery({
+    enabled: signedIn && !syncBypass,
+    date: eodDate ?? day?.shiftDate ?? null,
+    pollWhilePending: eodPreparing != null && eodPreparing.date === (eodDate ?? day?.shiftDate ?? null),
+  });
 
   useEffect(() => {
     if (compactDayQuery.data) applyDayPayload(compactDayQuery.data);
@@ -486,8 +491,10 @@ export default function App() {
     }
   }, [historicalQuery.data]);
   useEffect(() => {
-    // Switching days abandons any preparation still running for the old one.
+    // Switching days abandons any preparation still running for the old one:
+    // the in-flight draft for the previous day must not continue against it.
     eodPrepareCancelRef.current = true;
+    eodPrepareAbandonRef.current = true;
     eodPrepareAbortRef.current?.abort();
     setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null);
   }, [eodDate]);
@@ -707,10 +714,11 @@ export default function App() {
    * honest frame counts while this runs; "Draft Anyway" cancels the remaining
    * rounds and drafts from whatever is already analyzed. A disabled feature or
    * an unavailable provider never blocks the draft. */
-  const prepareEodForDraft = async (target: DayData | null) => {
-    if (!target || syncBypassRef.current) return;
+  const prepareEodForDraft = async (target: DayData | null): Promise<{ abandoned: boolean }> => {
+    if (!target || syncBypassRef.current) return { abandoned: false };
     const date = target.shiftDate;
     eodPrepareCancelRef.current = false;
+    eodPrepareAbandonRef.current = false;
     setEodPreparing({ date, analyzed: 0, total: 0, pending: null, failed: 0 });
     try {
       for (let round = 0; round < EOD_PREPARE_ROUNDS; round += 1) {
@@ -725,7 +733,10 @@ export default function App() {
         } finally {
           eodPrepareAbortRef.current = null;
         }
-        setEodPreparing({ date, analyzed: preparation.analyzed, total: preparation.total, pending: preparation.pending, failed: preparation.failed });
+        // `analyzed` is cumulative for the day, not just this batch, so the
+        // waiting counts match the frames the gallery can already show.
+        const analyzed = Math.max(0, preparation.total - preparation.pending);
+        setEodPreparing({ date, analyzed, total: preparation.total, pending: preparation.pending, failed: preparation.failed });
         if (preparation.pending <= 0) break;
       }
     } finally {
@@ -733,9 +744,12 @@ export default function App() {
       setEodPreparing(null);
       void queryClient.invalidateQueries({ queryKey: workOsKeys.eodScreenshots(date) });
     }
+    return { abandoned: eodPrepareAbandonRef.current };
   };
 
   const draftEodAnyway = () => {
+    // Deliberate escape hatch: stop the remaining rounds and draft from the
+    // frames that are ready (this is not an abandonment).
     eodPrepareCancelRef.current = true;
     eodPrepareAbortRef.current?.abort();
   };
@@ -749,7 +763,8 @@ export default function App() {
     }
     setEodRedrafting(true);
     try {
-      await prepareEodForDraft(target);
+      const preparation = await prepareEodForDraft(target);
+      if (preparation.abandoned) return;
       const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
         method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
       });
@@ -801,7 +816,8 @@ export default function App() {
     }
     setEodRedrafting(true);
     try {
-      await prepareEodForDraft(target);
+      const preparation = await prepareEodForDraft(target);
+      if (preparation.abandoned) return;
       const result = await apiRequest<{ report: NonNullable<DayData["report"]> }>("/api/work-os/reports/eod", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
