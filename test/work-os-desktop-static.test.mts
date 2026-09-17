@@ -490,6 +490,32 @@ assert.match(whatsNewModal, /No changelog notes shipped with this build\./);
 const changelog = read("CHANGELOG.md");
 assert.match(changelog, /^## Unreleased$/m);
 assert.match(changelog, /^## \d+\.\d+\.\d+$/m);
+assert.match(changelog, /hard\s+release requirement/);
+// End-user brevity: one short bullet per change (wrapped lines joined).
+// Only entry sections count; the header guidance above them is exempt.
+const changelogBullets: string[] = [];
+let pendingBullet: string | null = null;
+let inEntries = false;
+for (const line of changelog.split("\n")) {
+  if (/^##\s/.test(line)) {
+    inEntries = true;
+    if (pendingBullet !== null) { changelogBullets.push(pendingBullet); pendingBullet = null; }
+    continue;
+  }
+  if (!inEntries) continue;
+  const start = line.match(/^\s*[-*]\s+(\S.*)$/);
+  if (start) {
+    if (pendingBullet !== null) changelogBullets.push(pendingBullet);
+    pendingBullet = start[1]!;
+    continue;
+  }
+  if (pendingBullet !== null && /^\s+\S/.test(line)) pendingBullet += ` ${line.trim()}`;
+}
+if (pendingBullet !== null) changelogBullets.push(pendingBullet);
+assert.ok(changelogBullets.length > 0, "CHANGELOG.md must carry entries");
+for (const bullet of changelogBullets) {
+  assert.ok(bullet.length <= 160, `CHANGELOG bullets stay one short line for end users (${bullet.length} chars): ${bullet.slice(0, 80)}…`);
+}
 const chatPreview = read("src/ChatPreview.tsx");
 assert.match(chatPreview, /isolate === "whatsnew"/);
 assert.match(chatPreview, /<WhatsNewSection \/>/);
