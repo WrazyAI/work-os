@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { SettingsSwitch } from "./App";
+import { SettingsSwitch } from "./SettingsSwitch";
 
 describe("SettingsSwitch", () => {
   it("reports its state to assistive tech and in words", () => {
