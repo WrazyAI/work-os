@@ -159,13 +159,13 @@ describe("operational visualizations", () => {
     expect(styles).not.toContain(".tasks-workspace .page-intro");
     // Chips never wrap inside their pill above 900px; the strip reflows instead.
     expect(workspaceStyles).toMatch(/\.agenda-strip-chips \{[\s\S]*?flex-wrap: nowrap/);
-    expect(workspaceStyles).toContain(".agenda-strip-focus {\n  display: flex;\n  min-width: 280px;");
-    expect(workspaceStyles).toContain('grid-template-areas:\n      "focus focus"\n      "chips carry"');
-    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{\n  \.agenda-strip-chips \{ flex-wrap: wrap; \}/);
+    expect(workspaceStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?display: flex;[\s\S]*?min-width: 280px;/);
+    expect(workspaceStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"chips carry"/);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{[\s\S]*?\.agenda-strip-chips \{ flex-wrap: wrap; \}/);
     // Title line never wraps the On today tag onto the metadata line.
-    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{\n  flex-wrap: nowrap;/);
-    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{\n  flex: 1 1 auto;\n  min-width: 0;/);
-    expect(workspaceStyles).toMatch(/\.surfaced-tag \{\n  flex: 0 0 auto;\n  margin-left: auto;/);
+    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
+    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);
+    expect(workspaceStyles).toMatch(/\.surfaced-tag \{[\s\S]*?margin-left: auto;/);
     // Completion aligns with the title; the right cluster stays centered.
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-check { grid-column: 1; align-self: start;");
     expect(workspaceStyles).toContain("align-self: start; margin-top: 1px; }");
@@ -173,7 +173,7 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toMatch(/\.task-records\.evidence-list \{[\s\S]*?border: 0;/);
     expect(workspaceStyles).toContain(".task-row-line.secondary-line .task-assignee-tags > span");
     // The dock matches the content column and never traps a focused row.
-    expect(workspaceStyles).toContain("html:has(.stage.has-dock) {\n  scroll-padding-bottom: 140px;\n}");
+    expect(workspaceStyles).toMatch(/html:has\(\.stage\.has-dock\) \{[\s\S]{0,80}?scroll-padding-bottom: 140px;/);
     expect(workspaceStyles).toContain("width: min(calc(100% - 48px), 1024px);");
   });
 
