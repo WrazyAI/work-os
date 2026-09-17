@@ -21,6 +21,11 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.18
+
+- The What changed window can now show every earlier release, newest first, through a Check older updates action.
+- The scenario debugger is tidier and says at a glance when a scenario is on, running offline, or writing to the real server.
+
 ## 0.3.17
 
 - Settings are back to two columns with thin dividers, so the page reads as one calm surface instead of a stack of white boxes.
