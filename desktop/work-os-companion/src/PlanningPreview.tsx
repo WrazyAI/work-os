@@ -18,13 +18,16 @@ const draft: PlanningInterpretation = {
 };
 
 export default function PlanningPreview() {
-  const slow = new URLSearchParams(window.location.search).has("slow");
+  const params = new URLSearchParams(window.location.search);
+  const slow = params.has("slow");
   const [open, setOpen] = useState(true);
   return <main className="planning-preview"><PlanningSession
     open={open}
     plan={{ id: "preview-plan", status: "draft", freeform_intent: draft.rawIntent, shift_date: "2026-09-08", revision: 1, items: [] }}
     active
     busy={false}
+    loomEnabled={params.has("loom")}
+    onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-08", verdict: "same_day", usableForDay: true, metadataAvailable: true })}
     onClose={() => setOpen(false)}
     onInterpret={async () => { if (slow) await new Promise((resolve) => setTimeout(resolve, 2600)); return draft; }}
     onRefine={async (input, current) => ({ ...current, buildId: "preview-refined-build", rawIntent: input })}
