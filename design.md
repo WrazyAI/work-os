@@ -970,6 +970,16 @@ install are one explicit, resumable flow rather than a launch-time surprise.
   from a `What's new` action in Settings. Every release ships its section:
   the release workflow fails when the released version has no changelog
   entry, and the GitHub release notes carry the same section.
+- **Changelog history.** The modal carries a `Check older updates` action
+  whenever the bundled changelog holds more than the installed release. It
+  swaps the body to one scrollable list of every logged release, newest first,
+  each under a version heading with its bullets and the installed build tagged
+  `This version`. The first page holds the ten newest releases with
+  `Show all N updates` revealing the rest (and `Show 10 newest` restoring it),
+  because the list only grows from here. `Back to <version>` returns to the
+  installed release's notes; Escape, the backdrop, and the close button behave
+  as they do on the notes view, and focus moves to the history heading when
+  the view swaps.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action
@@ -2444,6 +2454,40 @@ Specific collapse rules:
 
 Test zoom at 200% or an equivalent narrow content width. Layout must remain
 operable when system font metrics differ from the design machine.
+
+### 29.8 Debugger
+
+The scenario debugger is a separate window (`debug.html`) for reproducing and
+observing states. It is developer-facing, never overlays the employee UI, and
+uses the app's tokens, typography, and controls rather than browser defaults.
+
+- **Header.** The window title, the running state as chips, and the close
+  control. Chips name the effective mode (`Scenario off`, `Scenario on`) and
+  surface anything that reaches further: `Offline bypass` in amber and
+  `Live writes` in red. The chips always reflect the applied scenario, so the
+  dangerous state is visible without scrolling.
+- **Tabs.** `Scenarios`, `Live trace`, and `Export`, as one segmented control;
+  the trace tab carries its buffered event count.
+- **Scenarios.** Preset cards first (each with a one-line description of the
+  state it builds), then flat hairline groups: the master switch, session,
+  backend reach, missing details, My Day conditions, and the companion's forced
+  state. Single on/off overrides use the shared settings switch; the sets
+  (missing details, condition flags) keep checkboxes. Helper copy states the
+  consequence, the master switch resetting when the app exits, and `Reset all
+  overrides` sits last.
+- **Live trace.** Search plus level and source filters, a pause control, and a
+  clear-view action, with the shown/buffered counts and a note that clearing
+  the view leaves disk logs intact. Rows show time, level, source, category,
+  and message on one line, tint warn and error rows, expand to the redacted
+  event JSON, and offer a copy action. An empty result says so instead of
+  rendering a blank list.
+- **Export.** The bundle's contents list, the privacy note naming what is
+  excluded, and `Export diagnostics ZIP` beside `Open logs folder`.
+
+Sections may be reordered within a tab, but no scenario, override, filter,
+export, or bridge event (`work-os://debug-request`, `work-os://debug-current`,
+`work-os://debug-scenario`) may be removed; the debug window's capability stays
+limited to diagnostics commands and the logs folder.
 
 ## 31. Operational state matrix
 
