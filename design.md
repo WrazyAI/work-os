@@ -2286,12 +2286,17 @@ The companion groups its rows under those headings (`This device`, `Workday`,
 carries a quiet uppercase label and a one-line purpose; the reset group is
 separated by a rule and a red-led label, never mixed into routine preferences.
 
-Settings rows are a flat list, not a dashboard of cards: each group is one
-full-width column of transparent rows separated by hairlines, opened by a rule
-under its heading. A row never carries its own border, fill, radius, or shadow,
-and the group never draws a card behind them — settings live on the page
-surface the way task rows do. This is deliberate: white cards around every row
-read as a stack of boxes and bury the grouping.
+Settings rows are a flat table, not a dashboard of cards: each group is a
+two-up column of transparent rows separated by hairlines (one column at 850px
+and below). A row never carries its own border, fill, radius, or shadow, and
+the group never draws a card behind them — settings live on the page surface
+the way task rows do. This is deliberate: white cards around every row read as
+a stack of boxes and bury the grouping, and the two-up rhythm keeps the page
+compact.
+
+A row's controls sit together in one control column (`.setting-controls`), so
+rows with more than one action keep their buttons adjacent instead of letting
+the row's spacing push them apart.
 
 Each row uses a flexible label/description column and an intrinsic control
 column on the centerline. Rows are normally 72–104px high depending on helper
