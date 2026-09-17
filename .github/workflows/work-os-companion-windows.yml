@@ -129,7 +129,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $changelog = "CHANGELOG.md"
-          if (!(Test-Path $changelog)) { throw "Missing $changelog: every release must ship employee-facing notes" }
+          if (!(Test-Path $changelog)) { throw "Missing ${changelog}: every release must ship employee-facing notes" }
           $lines = Get-Content $changelog
           $header = "## $env:RELEASE_VERSION"
           $start = -1
