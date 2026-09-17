@@ -488,7 +488,7 @@ export function TaskSelectionCard({
       <header className="chat-task-head">
         <h2 id={titleId} title={title} className="chat-task-heading">
           <span className="chat-task-heading-text">{title}</span>
-          {!listVisible && headerSummary && <small className="chat-task-summary">{headerSummary}</small>}
+          {!listVisible && !submissionRows.length && headerSummary && <small className="chat-task-summary">{headerSummary}</small>}
         </h2>
         <div className="chat-task-head-actions">
           {proposedCount > 0 && (
