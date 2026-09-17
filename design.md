@@ -2521,19 +2521,45 @@ uses the app's tokens, typography, and controls rather than browser defaults.
   (missing details, condition flags) keep checkboxes. Helper copy states the
   consequence, the master switch resetting when the app exits, and `Reset all
   overrides` sits last.
+- **The loaded preset stays marked.** The card a scenario was loaded from
+  carries a `Current` tag and a green-tinted edge; the marker is derived by
+  comparing the live scenario with each preset, not stored, so touching any
+  override drops it and the heading gains `Custom — no preset matches` in amber.
+  Nothing is marked while scenarios are off.
+- **Live writes never flips silently.** Turning `Live writes in scenario` on
+  opens an inline confirm instead of applying it: the copy states that approvals
+  are filed against the real server with no simulation, and names the conflict
+  when `Offline sync bypass` is on. The confirm's go-ahead is a solid red action
+  and `Cancel` leaves writes simulated. Turning the switch off needs no
+  confirm. The go-ahead must not borrow the app's `.danger` text utility, whose
+  `!important` colour would land red on red.
+- **Copy the scenario.** `Copy scenario JSON` sits beside `Reset all overrides`
+  in the footer and copies the applied scenario verbatim, confirming in place as
+  `Scenario copied` for a moment rather than in a flyout.
 - **Live trace.** Search plus level and source filters, a pause control, and a
   clear-view action, with the shown/buffered counts and a note that clearing
   the view leaves disk logs intact. Rows show time, level, source, category,
   and message on one line, tint warn and error rows, expand to the redacted
-  event JSON, and offer a copy action. An empty result says so instead of
-  rendering a blank list.
+  event JSON, and offer a copy action that confirms in place. An empty result
+  says so instead of rendering a blank list. `Follow new events` keeps the tail
+  in view, pauses while a row is expanded so reading is never yanked, honours
+  reduced motion, and can be switched off to hold a position. `Copy shown (N)`
+  writes the filtered events as JSON lines, one per event, and is disabled when
+  the filters show nothing.
 - **Export.** The bundle's contents list, the privacy note naming what is
-  excluded, and `Export diagnostics ZIP` beside `Open logs folder`.
+  excluded, and `Export diagnostics ZIP` beside `Open logs folder`. The result
+  is reported in the panel, not only in a flyout: success shows the saved path
+  with `Copy path`, and failure shows a message written for a person (the
+  browser-preview case says the desktop app writes the ZIP) with `Try again`.
 
 Sections may be reordered within a tab, but no scenario, override, filter,
 export, or bridge event (`work-os://debug-request`, `work-os://debug-current`,
 `work-os://debug-scenario`) may be removed; the debug window's capability stays
 limited to diagnostics commands and the logs folder.
+
+`debug.html?preview-trace` seeds a synthetic event stream in development only,
+so the trace, its follow behaviour, and the copy actions can be exercised in a
+browser without a Tauri host; it is stripped from packaged builds.
 
 ## 31. Operational state matrix
 
