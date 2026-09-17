@@ -55,6 +55,78 @@ export default function ChatPreview() {
       </div>
     );
   }
+/** DEV-only: a persisted conversation that contains a stored double-save (the
+ * live turn and its persisted twin), used to verify that history renders one
+ * turn with its card and that the duplicate heals at render. */
+function HistorySection() {
+  const operation = { op: "display_pending_tasks" as const, statement: "Show pending.", limit: 5, enabled: false };
+  const toolResults = [{
+    op: operation,
+    status: "recorded" as const,
+    message: "Pending tasks loaded.",
+    data: { provider_result: { view: "pending" as const, tasks: [
+      { id: "t-overdue", title: "Repair provider sync", state: "overdue", due_date: "2026-09-06" },
+      { id: "t-today", title: "Ship the avatar review flow", state: "pending", due_date: "2026-09-07" },
+    ] } },
+  }];
+  const assistantTurn = {
+    id: "a-history-1",
+    role: "assistant" as const,
+    text: "Review the selected task completions before anything changes.",
+    meta: "tasks shown",
+    createdAt: "2026-09-17T18:20:00.000Z",
+    operations: [operation],
+    toolResults,
+  };
+  const composer = {
+    input: "", open: true, panel: "update" as const, receipt: null, pending: "", busy: false,
+    required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
+    onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
+    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+  };
+  return (
+    <section aria-label="Persisted history preview" style={{ display: "grid", gap: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 14 }}>Persisted history with a stored double-save</h2>
+      <ProgressComposer
+        {...composer}
+        history={[
+          { id: "u-history-1", role: "user", text: "Can u show me a list of incomplete tasks from my todos?", createdAt: "2026-09-17T18:19:00.000Z" },
+          assistantTurn,
+          { ...assistantTurn, id: "a-history-2" },
+        ]}
+      />
+    </section>
+  );
+}
+
+  if (isolate === "avatar") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <AvatarSection />
+      </div>
+    );
+  }
+  if (isolate === "history") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <HistorySection />
+      </div>
+    );
+  }
+  if (isolate === "composer") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <InAppSection />
+      </div>
+    );
+  }
+  if (isolate === "tools") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <InAppToolsSection />
+      </div>
+    );
+  }
   if (isolate === "orb") {
     return (
       <div style={{ minHeight: 300, padding: 28, background: "#dde3d8" }}>
