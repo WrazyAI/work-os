@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { ChatMarkdown } from "../ChatMarkdown";
+import { CopyMessageButton } from "./CopyMessageButton";
+import { MascotMark } from "./MascotMark";
 import { cx } from "./cx";
 import { StreamingText } from "./StreamingText";
+import { turnCopyText, type CopyableTurn } from "./turnCopy";
 
 export type ChatTurnRole = "user" | "assistant" | "system";
 
@@ -17,6 +20,7 @@ export function ChatTurn({
   onRetry,
   className,
   children,
+  copySource,
 }: {
   role: ChatTurnRole;
   text?: string;
@@ -27,11 +31,17 @@ export function ChatTurn({
   onRetry?: () => void;
   className?: string;
   children?: ReactNode;
+  /** Turn data for the copy payload when the visible content includes cards. */
+  copySource?: CopyableTurn;
 }) {
+  const copyText = turnCopyText(copySource ?? { role, text });
   if (role === "user") {
     return (
-      <div className={cx("chat-turn-user chat-enter", className)}>
-        {text ? <ChatMarkdown text={text} /> : children}
+      <div className={cx("chat-turn-shell is-user chat-enter", className)}>
+        <div className="chat-turn-user">
+          {text ? <ChatMarkdown text={text} /> : children}
+        </div>
+        {copyText ? <CopyMessageButton text={copyText} className="chat-copy-row" /> : null}
       </div>
     );
   }
@@ -45,21 +55,24 @@ export function ChatTurn({
   }
 
   return (
-    <div className={cx(receipt ? "chat-receipt" : "chat-turn assistant", "chat-enter", className)}>
-      <span className="chat-turn-mark" aria-hidden="true">
-        {receipt ? <CheckCircle2 size={14} /> : <Sparkles size={14} />}
-      </span>
-      <div className="chat-turn-body">
-        {meta ? <small className="chat-turn-note">{meta}</small> : null}
-        {text ? (
-          stream ? (
-            <StreamingText text={text} stream onSettled={onSettled} onRetry={onRetry} />
-          ) : (
-            <ChatMarkdown text={text} />
-          )
-        ) : null}
-        {children}
+    <div className={cx("chat-turn-shell", "chat-enter", className)}>
+      <div className={receipt ? "chat-receipt" : "chat-turn assistant"}>
+        <span className="chat-turn-mark" aria-hidden="true">
+          {receipt ? <CheckCircle2 size={14} /> : <MascotMark />}
+        </span>
+        <div className="chat-turn-body">
+          {meta ? <small className="chat-turn-note">{meta}</small> : null}
+          {text ? (
+            stream ? (
+              <StreamingText text={text} stream onSettled={onSettled} onRetry={onRetry} />
+            ) : (
+              <ChatMarkdown text={text} />
+            )
+          ) : null}
+          {children}
+        </div>
       </div>
+      {copyText ? <CopyMessageButton text={copyText} className="chat-copy-row" /> : null}
     </div>
   );
 }

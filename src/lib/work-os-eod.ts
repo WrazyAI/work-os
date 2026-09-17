@@ -106,10 +106,12 @@ export function eodLineItems(items: Json[], empty: string): string[] {
   });
 }
 
-/** Caps a fact list with an explicit pointer to the full record. */
+/** Caps a fact list with an explicit pointer to the full record; the pointer
+ * counts toward the limit so a section never renders more than `limit` lines. */
 export function capFactLines(lines: string[], limit = EOD_SECTION_LIMIT): string[] {
   if (lines.length <= limit) return lines;
-  return [...lines.slice(0, limit), `- …and ${lines.length - limit} more (see the full record)`];
+  const visible = lines.slice(0, Math.max(1, limit - 1));
+  return [...visible, `- …and ${lines.length - visible.length} more (see the full record)`];
 }
 
 async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
@@ -120,7 +122,7 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     listEvidence(ownerId, { personId, date: reportDate }),
     db().from("work_check_ins").select("id,input_text,update_kind,substantive,occurred_at").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("shift_date", reportDate).eq("substantive", true),
-    db().from("work_task_day_events").select("id,task_id,event_type,task_snapshot,exact_at,observed_at").eq("organization_id", access.organizationId)
+    db().from("work_task_day_events").select("id,task_id,event_type,provenance,task_snapshot,exact_at,observed_at").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("local_date", reportDate),
     db().from("work_employee_onboarding").select("timezone").eq("organization_id", access.organizationId)
       .eq("person_id", personId).maybeSingle(),
@@ -131,11 +133,14 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
   if (checkInsResult.error) throw new Error(`load EOD updates: ${checkInsResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
+  if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
+  if (planResult.error) throw new Error(`load EOD plan: ${planResult.error.message}`);
   const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
   const planId = planResult.data?.id ? String(planResult.data.id) : null;
   const planItems = planId
     ? await db().from("work_daily_plan_items").select("task_id").eq("plan_id", planId)
     : { data: [], error: null };
+  if (planItems.error) throw new Error(`load EOD plan items: ${planItems.error.message}`);
   const planTaskIds = new Set(((planItems.data ?? []) as Json[])
     .map((item) => String(item.task_id ?? ""))
     .filter((id) => id && id !== "null"));

@@ -20,6 +20,10 @@ test("only agent routine titles are treated as automation", () => {
   assert.equal(automationName("Run morning-signal routine (2026-09-17)"), "morning-signal");
   assert.equal(automationName("Review latest Work OS worktree changes"), null);
   assert.equal(automationName("Run the deployment checklist"), null);
+  // A person can write a routine task; without the generated date suffix it is
+  // never treated as automation.
+  assert.equal(automationName("Run the weekly routine"), null);
+  assert.equal(automationName("Run the deployment routine today"), null);
 });
 
 test("routine runs collapse into one automation line", () => {
@@ -106,7 +110,7 @@ test("activity frames group by app with a time range and two highlights", () => 
 
 test("fact lists cap with a pointer to the full record", () => {
   const capped = capFactLines(Array.from({ length: 27 }, (_, index) => `- line ${index + 1}`), 25);
-  assert.equal(capped.length, 26);
-  assert.equal(capped[25], "- …and 2 more (see the full record)");
+  assert.equal(capped.length, 25, "the pointer counts toward the limit");
+  assert.equal(capped[24], "- …and 3 more (see the full record)");
   assert.equal(capFactLines(["- one"], 25).length, 1);
 });

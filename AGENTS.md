@@ -195,6 +195,15 @@ modal (design §19.8).
   `getSession()`, **never** network `getUser()` — `getUser()` blocks every request
   on a network round-trip and hangs the entire app. Authoritative `getUser()` lives
   only in `requireUser()` on protected routes.
+- **The agent mascot is configured once.** Its identity and art live in
+  `desktop/work-os-companion/src/mascot.ts` (`MASCOT`: name, poses, `Mark`,
+  assets). Render it through `src/chat/MascotMark.tsx` wherever the agent is
+  speaking — chat turns, the composer welcome, the thinking trace — and never
+  hardcode mascot art, its name, or a `Sparkles` icon as the agent's identity
+  (feature icons such as Insights synthesis or onboarding suggestions are not
+  agent identity). A global mascot change must only touch `mascot.ts`; the
+  companion chat surfaces read the config.
+  `test/work-os-companion-mascot.test.mts` fails the build on drift.
 - **Companion Tauri commands need an ACL grant per window.** Registering a command
   in `src-tauri/src/lib.rs` is not enough: the window that invokes it must be
   granted the command through `src-tauri/permissions/*.toml` (the shared

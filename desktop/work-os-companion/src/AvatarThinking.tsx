@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Sparkles } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { MascotMark } from "./chat/MascotMark";
+import { MASCOT } from "./mascot";
 
 /** One assistant work stage. Stages are driven by the real request lifecycle —
  * only stages that actually started are rendered. */
@@ -59,7 +61,7 @@ export function AvatarThinking({
         onClick={() => setManualExpanded((current) => !(current ?? working))}
         className="avatar-thinking-head"
       >
-        <Sparkles size={13} aria-hidden="true" />
+        <MascotMark pose={MASCOT.thinkingPose} className="chat-thinking-mark" />
         <span role="status">
           {working ? (
             <span className="avatar-thinking-active">{activeLabel}</span>
