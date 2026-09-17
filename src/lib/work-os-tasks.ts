@@ -227,14 +227,24 @@ async function finalizeCreatedNiftyTask(userId: string, initial: NormalizedNifty
   return await mirrorExtendedTaskFields(task.id as string, body) ?? task;
 }
 
+/** Extracts the provider status from the live class or a structurally identical
+ * copy: tsx can instantiate one .ts module separately for ESM and CJS importers
+ * (Node without require(esm)), so a cross-module instanceof check alone would
+ * silently classify a real NiftyHttpError as uncertain. */
+function niftyHttpStatus(error: unknown): number | null {
+  if (error instanceof NiftyHttpError) return error.status;
+  const candidate = error as { name?: unknown; status?: unknown } | null | undefined;
+  return candidate?.name === "NiftyHttpError" && typeof candidate.status === "number" ? candidate.status : null;
+}
+
 /** True when a create failure is a definitive provider rejection: the request
  * was answered with HTTP 4xx, so Nifty cannot have created the task. Anything
  * else — timeout, network failure, 5xx, and 408 (the server gave up waiting but
  * may still have processed the request) — is uncertain and must never be
  * retried with another POST. */
 export function providerCreateFailureDefinite(error: unknown): boolean {
-  if (!(error instanceof NiftyHttpError)) return false;
-  return error.status >= 400 && error.status < 500 && error.status !== 408;
+  const status = niftyHttpStatus(error);
+  return status !== null && status >= 400 && status < 500 && status !== 408;
 }
 
 export async function createTask(

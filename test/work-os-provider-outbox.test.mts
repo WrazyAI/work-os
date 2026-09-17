@@ -112,6 +112,9 @@ test("create failures classify by HTTP status", () => {
   assert.equal(providerCreateFailureDefinite(http(404)), true);
   assert.equal(providerCreateFailureDefinite(http(500)), false);
   assert.equal(providerCreateFailureDefinite(http(408)), false, "a server timeout cannot prove nothing was created");
+  // A duplicated module instance (tsx ESM/CJS interop) must classify the same:
+  // the brand check is structural, not message text.
+  assert.equal(providerCreateFailureDefinite(Object.assign(new Error("Nifty /x -> HTTP 403 denied"), { name: "NiftyHttpError", status: 403 })), true);
   assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 422 bad request")), false, "message text is never classified");
   assert.equal(providerCreateFailureDefinite(new Error("The operation was aborted due to timeout")), false);
   assert.equal(providerCreateFailureDefinite(new TypeError("fetch failed")), false);
