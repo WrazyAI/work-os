@@ -1242,7 +1242,7 @@ body {
 .active-task-toolbar,
 .active-task-tabs,
 .active-day-footer,
-.progress-flyout header,
+.progress-flyout .workos-chat-head,
 .progress-input-shell,
 .task-search-toolbar {
   display: flex;
@@ -2022,7 +2022,7 @@ html:has(.stage.has-dock) {
   animation: composer-rise 190ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
-.progress-flyout header {
+.progress-flyout .workos-chat-head {
   justify-content: space-between;
   min-height: 48px;
   padding: 8px 12px 8px 14px;
@@ -2030,12 +2030,12 @@ html:has(.stage.has-dock) {
   background: #f4f6f1;
 }
 
-.progress-flyout header > div {
+.progress-flyout .workos-chat-head > div {
   display: grid;
   gap: 2px;
 }
 
-.progress-flyout header span {
+.progress-flyout .workos-chat-head span {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -2043,12 +2043,12 @@ html:has(.stage.has-dock) {
   font-weight: 700;
 }
 
-.progress-flyout header small {
+.progress-flyout .workos-chat-head small {
   color: var(--muted);
   font-size: 8px;
 }
 
-.progress-flyout header button {
+.progress-flyout .workos-chat-head button {
   display: grid;
   width: 30px;
   height: 30px;
@@ -2068,9 +2068,9 @@ html:has(.stage.has-dock) {
 
 .progress-history {
   display: grid;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
+  gap: var(--chat-space-3, 12px);
+  margin-bottom: var(--chat-space-3, 12px);
+  padding-bottom: var(--chat-space-3, 12px);
   border-bottom: 1px dashed #dfe5da;
 }
 
