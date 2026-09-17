@@ -207,7 +207,7 @@ export function formatEodAnnotations(annotations: EodAnnotation[]): string {
 export async function gatherEodGrounding(organizationId: string, personId: string, date: string, personName: string): Promise<EodGrounding> {
   const db = createAdminClient();
   const [updatesResult, eventsResult, sessionResult, planResult] = await Promise.all([
-    db.from("work_check_ins").select("input_text,update_kind,occurred_at,structured_claims").eq("organization_id", organizationId)
+    db.from("work_check_ins").select("input_text,update_kind,occurred_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
     db.from("work_task_day_events").select("event_type,task_snapshot").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("local_date", date).order("observed_at", { ascending: true }),
@@ -220,35 +220,9 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD commitments: ${planResult.error.message}`);
 
-  const checkInRows = (updatesResult.data ?? []) as Array<Record<string, unknown>>;
-  const updates = checkInRows
+  const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
     .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
     .filter((row) => row.text);
-  const media: NonNullable<EodGrounding["media"]> = [];
-  for (const row of checkInRows) {
-    const claims = (row.structured_claims ?? {}) as Record<string, unknown>;
-    const loom = claims.loom as Record<string, unknown> | null | undefined;
-    if (!loom || typeof loom !== "object") continue;
-    const videoId = typeof loom.videoId === "string" ? loom.videoId : null;
-    const url = typeof loom.url === "string" ? loom.url : null;
-    if (!videoId || !url || media.some((item) => item.url === url)) continue;
-    const digest = typeof loom.digest === "string" && loom.digest.trim() ? loom.digest.trim() : null;
-    const duration = Number(loom.durationSeconds);
-    const at = String(row.occurred_at ?? "");
-    media.push({
-      at,
-      title: typeof loom.title === "string" && loom.title.trim() ? loom.title.trim() : "Loom recording",
-      url,
-      durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
-      digest,
-      transcriptChars: Number.isFinite(Number(loom.transcriptChars)) ? Number(loom.transcriptChars) : 0,
-    });
-    // The recording's digest is the employee's own summary of the update, so
-    // it belongs in the report's update facts when they typed nothing else.
-    if (digest && !updates.some((update) => update.at === at && update.text === digest)) {
-      updates.push({ kind: "loom", text: digest, at });
-    }
-  }
   const completed: string[] = [];
   const carried: string[] = [];
   const blockers: string[] = [];
@@ -278,7 +252,6 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     carried,
     blockers,
     commitments,
-    ...(media.length ? { media } : {}),
   };
 }
 

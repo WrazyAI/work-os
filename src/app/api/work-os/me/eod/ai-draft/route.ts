@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
+import { analyzeLoomForAgent } from "@/lib/aiLoom";
+import { loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { loadShiftData } from "@/lib/work-os-internal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
@@ -17,7 +20,7 @@ export async function POST(req: Request) {
       feature: "employee_companion",
     });
     if (auth.response) return auth.response;
-    const body = (await req.json().catch(() => ({}))) as { date?: unknown; draft?: unknown; feedback?: unknown; annotations?: unknown };
+    const body = (await req.json().catch(() => ({}))) as { date?: unknown; draft?: unknown; feedback?: unknown; annotations?: unknown; loom?: unknown };
     const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
       ? body.date
       : new Date().toISOString().slice(0, 10);
@@ -26,6 +29,45 @@ export async function POST(req: Request) {
       .eq("organization_id", auth.access.organizationId).eq("id", personId).maybeSingle();
     if (personResult.error) throw new Error(`load person for EOD draft: ${personResult.error.message}`);
     const grounding = await gatherEodGrounding(auth.access.organizationId, personId, date, String(personResult.data?.display_name ?? "The employee"));
+    // An attached Loom is draft context only: it never files an update or an
+    // evidence row, and a recording from another day is refused outright.
+    const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
+    let loom: { verdict: string; createdAt: string | null; createdLocalDate: string | null; title: string | null; durationSeconds: number | null; url: string; summary: string | null; suggestedTasks: number } | null = null;
+    if (loomInput && loomMetadataEnabled(auth.access.featureFlags)) {
+      const { timezone } = await loadShiftData(auth.access, personId, new Date());
+      const feed = await analyzeLoomForAgent({
+        url: typeof loomInput.url === "string" ? loomInput.url : "",
+        transcript: typeof loomInput.transcript === "string" ? loomInput.transcript : null,
+        targetDate: date,
+        timezone,
+        existingTaskTitles: grounding.completed,
+      });
+      if (!feed.bundle) return NextResponse.json({ error: "The Loom link is not a valid Loom share link.", reason: "loom_invalid" }, { status: 400 });
+      if (feed.blocked) {
+        return NextResponse.json({
+          error: `That Loom was recorded ${feed.bundle.temporal.createdLocalDate ?? "on another day"}, so it cannot be used for the ${date} EOD.`,
+          reason: feed.reason === "future" ? "loom_future" : "loom_prior_day",
+        }, { status: 409 });
+      }
+      loom = {
+        verdict: feed.bundle.temporal.verdict,
+        createdAt: feed.bundle.temporal.createdAt,
+        createdLocalDate: feed.bundle.temporal.createdLocalDate,
+        title: feed.bundle.metadata?.title ?? null,
+        durationSeconds: feed.bundle.metadata?.durationSeconds ?? null,
+        url: feed.bundle.reference.url,
+        summary: feed.analysis?.summary ?? null,
+        suggestedTasks: feed.analysis?.suggestedTasks.length ?? 0,
+      };
+      grounding.media = [{
+        at: new Date().toISOString(),
+        title: feed.bundle.metadata?.title ?? "Loom recording",
+        url: feed.bundle.reference.url,
+        durationSeconds: feed.bundle.metadata?.durationSeconds ?? null,
+        digest: feed.analysis?.summary ?? null,
+        transcriptChars: feed.bundle.transcript.chars,
+      }];
+    }
     const annotations = sanitizeEodAnnotations(body.annotations);
     const feedback = typeof body.feedback === "string" ? body.feedback : "";
     const hasRefinement = typeof body.draft === "string" || typeof body.feedback === "string" || annotations.length > 0;
@@ -66,7 +108,7 @@ export async function POST(req: Request) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;
       return NextResponse.json({ error: result.detail ?? "AI EOD drafting unavailable", reason: result.reason }, { status });
     }
-    return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable });
+    return NextResponse.json({ markdown: result.markdown, model: result.model, screenshots, screenshotSyncUnavailable, loom });
   } catch (error) {
     return jsonError(error);
   }

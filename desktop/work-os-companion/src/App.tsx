@@ -11,7 +11,7 @@ import { changelogBulletsFor, readAnnouncedVersion, shouldAnnounceUpdate, update
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, Video, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
@@ -143,8 +143,6 @@ export default function App() {
   const [progressComposerOpen, setProgressComposerOpen] = useState(false);
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
   const [pendingProgressUpdate, setPendingProgressUpdate] = useState("");
-  const [pendingLoom, setPendingLoom] = useState<{ url: string; transcript?: string } | null>(null);
-  const [loomResetSignal, setLoomResetSignal] = useState(0);
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
   // Full composer conversation. Persists for the app session until the user
   // explicitly clears it (trash) or starts a new chat (plus) — closing the
@@ -157,7 +155,7 @@ export default function App() {
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [composerThinking, setComposerThinking] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
-  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean } | null>(null);
+  const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean; loom?: { title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; url: string } | null } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
   /** Live on-demand Worktivity preparation for the day being drafted: null when
    * idle, counts while the composer waits, `pending: null` while the first
@@ -826,40 +824,65 @@ export default function App() {
     } finally { setEodRedrafting(false); }
   };
 
-  /** Reads a pasted Loom link's public metadata for the EOD composer. */
+  /** Reads a pasted Loom link's public metadata and day verdict. */
   const previewLoomLink = async (url: string) => {
+    const targetDate = reviewDay?.shiftDate ?? visibleDay?.shiftDate ?? "";
     try {
-      return await apiRequest<{ title: string | null; durationSeconds: number | null; metadataAvailable: boolean }>("/api/work-os/me/loom/preview", {
+      const result = await apiRequest<{
+        title: string | null;
+        durationSeconds: number | null;
+        createdAt: string | null;
+        metadataAvailable: boolean;
+        usableForDay: boolean;
+        temporal?: { verdict?: string; createdLocalDate?: string | null };
+      }>("/api/work-os/me/loom/preview", {
         method: "POST",
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, targetDate }),
       });
+      return {
+        title: result.title,
+        durationSeconds: result.durationSeconds,
+        createdLocalDate: result.temporal?.createdLocalDate ?? null,
+        verdict: result.temporal?.verdict ?? "unknown",
+        usableForDay: result.usableForDay !== false,
+        metadataAvailable: result.metadataAvailable,
+      };
     } catch (value) {
-      showError(value, "The Loom link could not be read. Attach it and paste the transcript instead.", "Loom read failed");
+      showError(value, "The Loom link could not be read.", "Loom read failed");
       return null;
     }
   };
 
-  /** Files the Loom as today's EOD update, then rebuilds the draft from it. */
-  const attachLoomToDraft = async (loom: { url: string; transcript?: string }) => {
-    if (!reviewDay?.report) return false;
+  /** Rebuilds the draft from an analyzed recording. Draft context only —
+   * nothing is filed, and a recording from another day is refused. */
+  const draftEodWithLoom = async (loom: { url: string; transcript?: string }) => {
+    if (!reviewDay?.report) return { ok: false, message: "Load the report before analyzing a Loom." };
     try {
-      const result = await sendOrQueue("/api/work-os/check-ins", "POST", {
-        source: "desktop",
-        kind: "eod",
-        update_kind: "material_progress",
-        input_text: "",
-        loom,
-      }) as { queued?: boolean };
-      if (result?.queued) {
-        notifications.info("Your Loom update is queued and will sync when the connection recovers. Draft again after it syncs.", "Loom queued");
-        return true;
-      }
-      notifications.success("Loom update recorded. Drafting your EOD from it.", "Loom attached");
-      await redraftEod(reviewDay);
-      return true;
+      const result = await apiRequest<{
+        markdown: string;
+        model: string;
+        screenshots?: EodScreenshotContext;
+        screenshotSyncUnavailable?: boolean;
+        loom?: { title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; url: string } | null;
+      }>("/api/work-os/me/eod/ai-draft", {
+        method: "POST",
+        signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({ date: reviewDay.shiftDate, loom }),
+      });
+      setEodGate(null);
+      setEodDraft({
+        markdown: result.markdown,
+        source: "ai",
+        screenshots: result.screenshots ?? null,
+        screenshotSyncUnavailable: result.screenshotSyncUnavailable === true,
+        loom: result.loom ?? null,
+      });
+      notifications.success("Draft rebuilt from your Loom recording.", "Loom analyzed");
+      return { ok: true };
     } catch (value) {
-      showError(value, "The Loom update could not be recorded.", "Loom attach failed");
-      return false;
+      const message = value instanceof Error ? value.message : "The Loom could not be analyzed.";
+      showError(value, message, "Loom analysis failed");
+      return { ok: false, message };
     }
   };
 
@@ -1502,7 +1525,7 @@ export default function App() {
     setPlanDirty(true);
   }
 
-  async function interpretPlanning(input: string): Promise<PlanningInterpretation> {
+  async function interpretPlanning(input: string, loom?: { url: string; transcript?: string }): Promise<PlanningInterpretation> {
     if (!visibleDay) throw new Error("Your workday is still loading.");
     if (debugScenario.enabled && debugScenario.planningState === "ai_unavailable") throw new Error("Planning assistance is unavailable in this scenario.");
     if (syncBypassRef.current) {
@@ -1521,7 +1544,7 @@ export default function App() {
     const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
       method: "POST",
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })) }),
+      body: JSON.stringify({ input, date: visibleDay.shiftDate, conversation: composerHistory.slice(-8).map((turn) => ({ role: turn.role, text: turn.text })), ...(loom ? { loom } : {}) }),
     });
     return { ...result.interpretation, buildId: result.build_id };
   }
@@ -2223,12 +2246,8 @@ export default function App() {
 
   function classifyProgressUpdate(kind: ProgressUpdateKind) {
     const text = pendingProgressUpdate.trim();
-    const loom = pendingLoom;
-    if (!text && !loom) return;
-    const echo = text
-      ? `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.${loom ? " Loom update attached." : ""}`
-      : "Recorded your Loom update for today.";
-    setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: echo, meta: "recorded", createdAt: new Date().toISOString() }]);
+    if (!text) return;
+    setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: `Recorded “${text.slice(0, 140)}” as ${kind === "completion_claim" ? "completed work" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress"}.`, meta: "recorded", createdAt: new Date().toISOString() }]);
     if (queuedInterpretationId) {
       void discardReadyInterpretation(queuedInterpretationId);
       setQueuedInterpretationId(null);
@@ -2236,17 +2255,15 @@ export default function App() {
     if (syncBypassRef.current) {
       const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
       setProgressReceipt({
-        kind, text: text || "Loom update", queued: false,
-        message: text ? (kind === "new_task" ? `Added “${text}” to today’s tasks.` : `Recorded “${text}” as ${label} for today.`) : "Recorded your Loom update for today.",
+        kind, text, queued: false,
+        message: kind === "new_task" ? `Added “${text}” to today’s tasks.` : `Recorded “${text}” as ${label} for today.`,
       });
       setPendingProgressUpdate("");
-      setPendingLoom(null);
-      setLoomResetSignal((value) => value + 1);
       return;
     }
     void act("check_in.classify", async () => {
       if (kind === "new_task") {
-        const title = (text || "Loom update").replace(/\s+/g, " ").slice(0, 240);
+        const title = text.replace(/\s+/g, " ").slice(0, 240);
         const taskResult = await sendOrQueue("/api/work-os/me/tasks", "POST", {
           name: title,
           description: "Added from the Work OS daily composer.",
@@ -2258,17 +2275,16 @@ export default function App() {
           kind: visibleDay?.prompt?.kind || "optional",
           update_kind: "unplanned_work",
           input_text: text,
-          ...(loom ? { loom } : {}),
         }) as { queued?: boolean };
         const queued = taskResult.queued === true || updateResult.queued === true;
         setProgressReceipt({
           kind,
-          text: text || "Loom update",
+          text,
           queued,
           message: queued
             ? `“${title}” is queued as a task and workday update. It will be confirmed after reconnection.`
             : taskResult.providerStatus === "nifty_confirmed"
-              ? `Added “${title}” to today’s Nifty tasks and recorded the update.${loom ? " Loom update attached." : ""}`
+              ? `Added “${title}” to today’s Nifty tasks and recorded the update.`
               : `Recorded “${title}”; Nifty confirmation is still pending.`,
         });
       } else {
@@ -2277,23 +2293,16 @@ export default function App() {
           kind: visibleDay?.prompt?.kind || "optional",
           update_kind: kind,
           input_text: text,
-          ...(loom ? { loom } : {}),
         }) as { queued?: boolean };
         const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : "progress";
         setProgressReceipt({
           kind,
-          text: text || "Loom update",
+          text,
           queued: result.queued === true,
-          message: text
-            ? `${result.queued === true ? `“${text}” is queued as ${label} and will sync after reconnection.` : `Recorded “${text}” as ${label} for today.`}${loom ? " Loom update attached." : ""}`
-            : result.queued === true
-              ? "Your Loom update is queued and will sync after reconnection."
-              : "Recorded your Loom update for today.",
+          message: result.queued === true ? `“${text}” is queued as ${label} and will sync after reconnection.` : `Recorded “${text}” as ${label} for today.`,
         });
       }
       setPendingProgressUpdate("");
-      setPendingLoom(null);
-      setLoomResetSignal((value) => value + 1);
     });
   }
 
@@ -2412,8 +2421,9 @@ export default function App() {
                     preparing={eodPreparing}
                     onDraftAnyway={draftEodAnyway}
                     loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}
+                    loomAttached={eodDraft?.loom ?? null}
                     onLoomPreview={previewLoomLink}
-                    onLoomUpdate={attachLoomToDraft}
+                    onLoomDraft={draftEodWithLoom}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
                     onRefresh={reviewDay.report.status === "draft" || reviewDay.report.status === "rejected" ? () => void createEodDraft(reviewDay) : undefined}
@@ -2494,7 +2504,7 @@ export default function App() {
         onInput={setInput}
         onOpen={() => { setProgressPanel("update"); setProgressComposerOpen(true); }}
         onOpenGoal={openGoalComposer}
-        onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setPendingLoom(null); setProgressReceipt(null); setInterpretation(null); setComposerThinking(null); }}
+        onClose={() => { setProgressComposerOpen(false); setPendingProgressUpdate(""); setProgressReceipt(null); setInterpretation(null); setComposerThinking(null); }}
         onSubmit={startProgressUpdate}
         interpretation={interpretation}
         thinking={composerThinking}
@@ -2506,9 +2516,6 @@ export default function App() {
         onNavigateView={(page) => setView(page)}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
-        loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}
-        onLoomChange={setPendingLoom}
-        loomResetSignal={loomResetSignal}
         onGoal={(value) => editPlan(() => { setPlanIntent(value); setGoalProvenance(value.trim() ? "employee" : null); setSuggestionTaskIds([]); })}
         onAcceptSuggestion={() => { if (!goalSuggestion) return; editPlan(() => { setPlanIntent(goalSuggestion.text); setGoalProvenance("accepted_suggestion"); setSuggestionTaskIds(goalSuggestion.taskIds); }); }}
       />}
@@ -2518,7 +2525,7 @@ export default function App() {
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
-    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} />
+    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={previewLoomLink} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
@@ -2723,7 +2730,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, loomEnabled = false, onLoomChange, loomResetSignal = 0 }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -2733,10 +2740,6 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
-  /** Loom attachment is opt-in per organization; the parent owns the payload. */
-  loomEnabled?: boolean;
-  onLoomChange?: (loom: { url: string; transcript?: string } | null) => void;
-  loomResetSignal?: number;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -2746,20 +2749,6 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   }, [onClose, open]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const [sweepSignal, setSweepSignal] = useState(0);
-  const [loomOpen, setLoomOpen] = useState(false);
-  const [loomUrl, setLoomUrl] = useState("");
-  const [loomTranscript, setLoomTranscript] = useState("");
-  useEffect(() => {
-    onLoomChange?.(loomOpen && loomUrl.trim()
-      ? { url: loomUrl.trim(), ...(loomTranscript.trim() ? { transcript: loomTranscript.trim() } : {}) }
-      : null);
-  }, [loomOpen, loomUrl, loomTranscript, onLoomChange]);
-  useEffect(() => {
-    if (!loomResetSignal) return;
-    setLoomOpen(false);
-    setLoomUrl("");
-    setLoomTranscript("");
-  }, [loomResetSignal]);
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const wasOpenRef = useRef(open);
   const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
@@ -2810,14 +2799,8 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   : interpretation?.status === "ready" ? null
   : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
-    <div className={`progress-input-shell ${loomOpen ? "has-loom" : ""}`}>
-      {loomEnabled && loomOpen ? <div className="loom-attach" role="group" aria-label="Loom update attachment">
-        <header><span><Video size={13} /> Loom update</span><button type="button" aria-label="Remove Loom update" onClick={() => { setLoomOpen(false); setLoomUrl(""); setLoomTranscript(""); }}><X size={13} /></button></header>
-        <input value={loomUrl} onChange={(event) => setLoomUrl(event.target.value)} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
-        <textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={2} maxLength={50000} placeholder="Optional: paste the transcript (in Loom open Transcript, then Copy)." aria-label="Loom transcript" />
-        <small>The link and transcript become the update and an output artifact. No video is stored.</small>
-      </div> : null}
-      <WorkOsPromptBar sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim() || (loomEnabled && loomOpen && !!loomUrl.trim())} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<><button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>{loomEnabled ? <button className={`focus-dock-button ${loomOpen ? "active" : ""}`} aria-label="Attach a Loom update" aria-pressed={loomOpen} onClick={() => setLoomOpen((value) => !value)}><Video size={15} /><span>Loom</span></button> : null}</>} sendLabel="Review update type" /></div>
+    <div className="progress-input-shell">
+      <WorkOsPromptBar sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" /></div>
     </div>
   </div>;
 }

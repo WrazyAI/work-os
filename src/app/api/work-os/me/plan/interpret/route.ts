@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { interpretDailyPlan, type PlanMemoryContext } from "@/lib/aiPlan";
+import { interpretDailyPlan, type PlanLoomContext, type PlanMemoryContext } from "@/lib/aiPlan";
+import { buildLoomAttachment } from "@/lib/aiLoom";
+import { loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { buildPlanningContext } from "@/lib/work-os-planning-context";
 import { issueDailyPlanBuild } from "@/lib/work-os-plan-build";
+import { loadShiftData } from "@/lib/work-os-internal";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
 import { persistInterpretHistory } from "@/lib/work-conversations";
@@ -19,7 +22,7 @@ export async function POST(req: Request) {
       feature: "employee_companion",
     });
     if (auth.response) return auth.response;
-    const body = await req.json() as { input?: unknown; date?: unknown; conversation?: unknown };
+    const body = await req.json() as { input?: unknown; date?: unknown; conversation?: unknown; loom?: unknown };
     if (typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
       return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
     }
@@ -34,7 +37,21 @@ export async function POST(req: Request) {
       ]);
       memory = { todayBlock, memoryBlock };
     }
-    const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context, memory);
+    // A Loom link in the day's intent (or an explicit attachment) is analyzed
+    // as planning context; commitments still come from the normal review flow.
+    let loom: PlanLoomContext | undefined;
+    const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
+    if (loomMetadataEnabled(auth.access.featureFlags) && (typeof body.input === "string" || loomInput)) {
+      const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
+      const attachment = await buildLoomAttachment({
+        text: [typeof body.input === "string" ? body.input : "", typeof loomInput?.url === "string" ? loomInput.url : ""].filter(Boolean).join(" "),
+        targetDate: date,
+        timezone,
+        existingTaskTitles: [...context.todayTasks, ...context.carryOver].map((task) => task.title).slice(0, 60),
+      }).catch(() => null);
+      if (attachment) loom = { ...attachment.attachment };
+    }
+    const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context, memory, loom);
     if (!result.ok) {
       return NextResponse.json({ error: result.detail, reason: result.reason }, { status: result.reason === "ai_unconfigured" ? 501 : 503 });
     }
