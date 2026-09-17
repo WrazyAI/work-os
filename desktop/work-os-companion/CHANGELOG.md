@@ -21,6 +21,12 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## Unreleased
+
+- First launch after an update announces itself, with a View changelog action.
+- Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
+- Task lists name their order, sort from real column headers, and every count now matches the rows it describes.
+
 ## 0.3.18
 
 - The What changed window can now show every earlier release, newest first, through a Check older updates action.
@@ -69,12 +75,6 @@ they change what the employee sees or does.
 - The Tasks page shows its title once, and the day's focus, view chips, and unfinished-work link sit together on one tidy row.
 - Task rows keep their "On today" tag beside the title, and the checkbox lines up with the title where you expect it.
 - The task list reads as one clean panel, and narrow windows keep every row a single line tall.
-
-## Unreleased
-
-- First launch after an update announces itself, with a View changelog action.
-- Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
-- Task lists name their order, sort from real column headers, and every count now matches the rows it describes.
 
 ## 0.3.8
 
