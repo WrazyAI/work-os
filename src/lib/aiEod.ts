@@ -210,7 +210,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   const [updatesResult, eventsResult, sessionResult, planResult, timezoneResult] = await Promise.all([
     db.from("work_check_ins").select("input_text,update_kind,occurred_at,structured_claims").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
-    db.from("work_task_day_events").select("event_type,task_snapshot,exact_at,observed_at").eq("organization_id", organizationId)
+    db.from("work_task_day_events").select("event_type,task_id,task_snapshot,exact_at,observed_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("local_date", date).order("observed_at", { ascending: true }),
     db.from("work_sessions").select("clocked_in_at,clocked_out_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -222,6 +222,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   if (updatesResult.error) throw new Error(`load EOD updates: ${updatesResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD commitments: ${planResult.error.message}`);
+  if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
   const planId = planResult.data?.id ? String(planResult.data.id) : null;
   const planItemsResult = planId
     ? await db.from("work_daily_plan_items").select("title_snapshot,disposition,completion_state").eq("plan_id", planId)
@@ -267,7 +268,9 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   for (const event of (eventsResult.data ?? []) as Array<Record<string, unknown>>) {
     const snapshot = (event.task_snapshot ?? {}) as { title?: unknown };
     const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "a task";
-    const key = title.toLowerCase().replace(/\s+/g, " ");
+    // Distinct tasks can share a title (repeated routine runs); only repeat
+    // events for the same task are the same fact.
+    const key = String(event.task_id ?? "").trim() || title.toLowerCase().replace(/\s+/g, " ");
     const completedEvent = event.event_type === "completed";
     // Carried and deferred events both describe work that moves forward.
     const deferredEvent = ["deferred", "carried"].includes(String(event.event_type ?? ""));
