@@ -5485,6 +5485,29 @@ button:not(:disabled):active {
 .eod-shot-lightbox button:disabled { opacity: 0.35; }
 .eod-shot-unavailable.eod-shot-lightbox-image { min-height: 220px; color: rgba(255, 255, 255, 0.7); }
 .eod-screenshot-unavailable { margin: 0 22px 18px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.eod-loom { margin: 0 22px 14px; }
+.eod-loom-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px dashed var(--line); border-radius: 9px; background: transparent; color: var(--muted); padding: 7px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.eod-loom-toggle.active { border-style: solid; border-color: #94c86a; color: #42503e; background: #edf6e4; }
+.eod-loom-panel { display: grid; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-raised); }
+.eod-loom-hint { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.eod-loom-row { display: flex; gap: 8px; align-items: stretch; }
+.eod-loom-row input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); padding: 8px 10px; font: 400 12px Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+.eod-loom-row button { border: 1px solid #94c86a; border-radius: 9px; background: transparent; color: #42503e; padding: 0 12px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.eod-loom-row button:disabled { opacity: 0.45; cursor: not-allowed; }
+.eod-loom-panel textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); padding: 8px 10px; font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; resize: vertical; }
+.eod-loom-readback { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.eod-loom-readback.is-warning { color: #8a5a12; }
+.eod-loom-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.eod-loom-actions small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.eod-loom-error { margin: 0; color: #8a5a12; font-size: 10px; line-height: 1.45; }
+.progress-input-shell.has-loom { flex-direction: column; align-items: stretch; }
+.loom-attach { display: grid; gap: 6px; width: 100%; margin-bottom: 8px; padding: 10px 12px; border: 1px solid #d2dacd; border-radius: 11px; background: rgba(255, 255, 255, 0.92); }
+.loom-attach header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #42503e; font-size: 11px; font-weight: 700; }
+.loom-attach header span { display: inline-flex; align-items: center; gap: 6px; }
+.loom-attach header button { display: grid; place-items: center; border: none; background: transparent; color: var(--muted); cursor: pointer; }
+.loom-attach input, .loom-attach textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); padding: 8px 10px; font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; resize: vertical; }
+.loom-attach small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.focus-dock-button.active { border-color: #94c86a; background: #edf6e4; color: #42503e; }
 
 .eod-report {
   display: grid;

@@ -40,6 +40,7 @@ export async function GET(req: Request) {
         organizationId: auth.access.organizationId,
         role: auth.access.role,
         personId: auth.access.personId,
+        featureFlags: auth.access.featureFlags,
       },
     });
   } catch (error) {
