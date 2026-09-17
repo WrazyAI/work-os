@@ -5,6 +5,7 @@ import {
   MessageSquareText,
   Pencil,
   ShieldCheck,
+  Video,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────
@@ -34,11 +35,14 @@ export interface WorkOsChatSource {
   name: string;
   desc: string;
   icon: ReactNode;
+  /** Text inserted when picked (defaults to `@name `). */
+  insert?: string;
 }
 
 /** Work OS data the assistant can already see — mentioning it only
  *  names the context in plain text; nothing is fetched or attached. */
 export const WORK_OS_CHAT_SOURCES: WorkOsChatSource[] = [
+  { key: "loom", name: "Loom link", desc: "Paste a recording link to analyze it", insert: "Loom: ", icon: createElement(Video, { size: 15, "aria-hidden": true }) },
   { key: "tasks", name: "Today's tasks", desc: "Titles, status, and due dates", icon: createElement(ListChecks, { size: 15, "aria-hidden": true }) },
   { key: "focus", name: "Today's focus", desc: "The current goal note", icon: createElement(Pencil, { size: 15, "aria-hidden": true }) },
   { key: "eod", name: "EOD review", desc: "Draft and submission state", icon: createElement(MessageSquareText, { size: 15, "aria-hidden": true }) },

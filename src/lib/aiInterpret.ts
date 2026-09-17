@@ -124,6 +124,19 @@ export interface InterpretContext {
   todayBlock?: string;
   memoryBlock?: string;
   conversation?: Array<{ role: string; content: string }>;
+  /** Tool output from a Loom recording referenced in this update. */
+  loom?: {
+    verdict: string;
+    createdAt: string | null;
+    createdLocalDate: string | null;
+    targetDate: string;
+    line: string;
+    summary: string | null;
+    suggestedTasks: Array<{ title: string; description: string | null; subtasks: string[] }>;
+    cautions: string[];
+    transcriptChars: number;
+    blocked: boolean;
+  };
 }
 
 function buildPrompt(
@@ -139,6 +152,26 @@ function buildPrompt(
     .map((turn) => `${turn.role === "user" ? "Employee" : "Assistant"}: ${turn.content.replace(/\s+/g, " ").trim().slice(0, 1000)}`)
     .filter((line) => line.length > 10)
     .join("\n");
+  const loom = context?.loom;
+  const loomBlock = loom
+    ? loom.blocked
+      ? [
+          "Attached Loom tool output — USE IS FORBIDDEN:",
+          `- ${loom.line}`,
+          `- The recording was made ${loom.createdLocalDate ?? "on an unverified date"} and cannot be used for ${loom.targetDate}. Tell the employee plainly in reply and propose nothing from it.`,
+        ].join("\n")
+      : [
+          "Attached Loom analysis (tool output, not an employee claim):",
+          `- ${loom.line}`,
+          `- Day verdict: ${loom.verdict} for ${loom.targetDate}${loom.verdict === "unknown" ? " (recording date unverified — never present it as today's recording)" : ""}.`,
+          loom.summary ? `- What the recording says: ${loom.summary}` : null,
+          loom.suggestedTasks.length
+            ? `- Suggested follow-up work (candidate only; reconcile against the task list before proposing):\n${loom.suggestedTasks.map((task, index) => `  ${index + 1}. ${task.title}${task.subtasks.length ? ` — steps: ${task.subtasks.join("; ")}` : ""}`).join("\n")}`
+            : null,
+          loom.cautions.length ? `- Cautions: ${loom.cautions.join(" ")}` : null,
+          loom.transcriptChars ? `- The update text included ${loom.transcriptChars} characters the employee pasted from the recording.` : null,
+        ].filter(Boolean).join("\n")
+    : "";
   return [
     `Today is ${today}. The employee wrote this update:`,
     `"""${input}"""`,
@@ -146,6 +179,7 @@ function buildPrompt(
     context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
     conversation ? `Recent conversation:\n${conversation}` : "",
     context?.memoryBlock ? `Recalled memory (dated history only — never current facts or completion evidence):\n${context.memoryBlock}` : "",
+    loomBlock,
     "Their tasks:",
     taskList,
     "",
@@ -159,6 +193,8 @@ function buildPrompt(
     "- Use task-management operations only for an explicit employee request. A status change must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
     "- completion claims become complete_task operations; blockers become record_blocker; new work becomes create_task with a short clear taskTitle.",
     "- Use record_progress for work-in-progress notes on a specific task.",
+    "- When a Loom analysis is attached, reconcile its suggested work against the task list and live day state first: skip anything already recorded there, map mentions to existing tasks, and propose only genuinely new work. Use add_subtask for concrete steps that belong under an existing task.",
+    "- A Loom recording never proves completion or progress on its own; never create completion claims from it.",
     "- Statements must be plain, jargon-free sentences a manager can read.",
     "- If the update is empty of work information, return empty arrays.",
   ].filter(Boolean).join("\n");

@@ -21,6 +21,13 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.15
+
+- Paste a Loom link in an update and Otto can read the recording to suggest tasks — the recording never stands in for the update itself.
+- Recordings are checked against the day they were recorded, so an older Loom can't be used as today's work.
+- In the EOD composer, a Loom recording can shape the draft on its own without a second report.
+- The transcript box on Loom cards stays tucked away until you want it.
+
 ## 0.3.14
 
 - What Otto remembers is now three clear lists: what is waiting for your review, the facts you kept, and the recent activity behind them.

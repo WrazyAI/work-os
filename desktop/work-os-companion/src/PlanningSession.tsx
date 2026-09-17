@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X } from "lucide-react";
 import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
 import { FadeArc, Wave } from "./LoadingUi";
@@ -103,6 +103,8 @@ export function PlanningSession({
   onInterpret,
   onRefine,
   onConfirm,
+  loomEnabled = false,
+  onLoomPreview,
   lateReasonRequired = false,
   onSaveLateReason,
 }: {
@@ -111,15 +113,23 @@ export function PlanningSession({
   active: boolean;
   busy: boolean;
   onClose: () => void;
-  onInterpret: (input: string) => Promise<PlanningInterpretation>;
+  onInterpret: (input: string, loom?: { url: string; transcript?: string }) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
   onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
   /** True while this workday started 30+ minutes late with no recorded reason. */
   lateReasonRequired?: boolean;
   onSaveLateReason?: (reason: string) => Promise<void>;
+  /** Loom analysis for the day's plan, opt-in per organization. */
+  loomEnabled?: boolean;
+  onLoomPreview?: (url: string) => Promise<{ title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean } | null>;
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<PlanningSessionState>("idle");
+  const [loomOpen, setLoomOpen] = useState(false);
+  const [loomUrl, setLoomUrl] = useState("");
+  const [loomTranscript, setLoomTranscript] = useState("");
+  const [loomReading, setLoomReading] = useState(false);
+  const [loomReadback, setLoomReadback] = useState<{ title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean } | null>(null);
   const [interpretation, setInterpretation] = useState<PlanningInterpretation | null>(null);
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -140,6 +150,10 @@ export function PlanningSession({
   useEffect(() => {
     if (!open) return;
     setInput(plan?.focus_summary ?? plan?.freeform_intent ?? "");
+    setLoomOpen(false);
+    setLoomUrl("");
+    setLoomTranscript("");
+    setLoomReadback(null);
     setInterpretation(null);
     setClarificationAnswers(plan?.clarification_answers ?? {});
     setError("");
@@ -216,12 +230,24 @@ export function PlanningSession({
     setState("interpreting");
     setError("");
     try {
-      const result = await onInterpret(input.trim());
+      const loom = loomOpen && loomUrl.trim() ? { url: loomUrl.trim(), ...(loomTranscript.trim() ? { transcript: loomTranscript.trim() } : {}) } : undefined;
+      const result = await onInterpret(input.trim(), loom);
       setInterpretation(result);
       setState(result.clarifications.length ? "clarifying" : "reviewing");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Planning assistance is unavailable.");
       setState("ai_unavailable");
+    }
+  };
+
+  /** Reads a pasted Loom link's public metadata and day verdict. */
+  const readLoom = async () => {
+    if (!loomUrl.trim() || !onLoomPreview || loomReading) return;
+    setLoomReading(true);
+    try {
+      setLoomReadback(await onLoomPreview(loomUrl.trim()));
+    } finally {
+      setLoomReading(false);
     }
   };
 
@@ -388,6 +414,18 @@ export function PlanningSession({
         <label htmlFor="planning-intent">What do you want to get done today?</label>
         <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder="Fix the failing integration test, then get the migration ready for review." />
         <small className="planning-provenance">Your words stay attached to the plan. Work OS only suggests structure for your review.</small>
+        {loomEnabled && <div className="planning-loom">
+          <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={() => setLoomOpen((value) => !value)}><Video size={13} /> {loomOpen ? "Remove Loom link" : "Recorded a Loom for today?"}</button>
+          {loomOpen ? <div className="planning-loom-panel">
+            <div className="planning-loom-row">
+              <input value={loomUrl} onChange={(event) => { setLoomUrl(event.target.value); setLoomReadback(null); }} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
+              <button type="button" className="secondary" disabled={!loomUrl.trim() || loomReading} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
+            </div>
+            {loomReadback ? <small className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`}>{loomReadback.title ?? "Loom recording"} · recorded {loomReadback.createdLocalDate ?? "an unverified date"}{loomReadback.usableForDay ? "" : " — it can't be used for today's plan"}.</small> : null}
+            <details className="planning-loom-transcript"><summary>Paste transcript (optional)</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={2} maxLength={50000} placeholder="In Loom open Transcript, then Copy — paste it here so the plan can use what you said." aria-label="Loom transcript" /></details>
+            <small className="planning-loom-note">The recording only shapes the draft you review. Nothing is filed from it.</small>
+          </div> : null}
+        </div>}
         {lateReasonRequired && <div className="planning-notice planning-late-reason" role="status">
           <AlertTriangle size={16} />
           <span><strong>Late start.</strong> This workday began 30+ minutes after your scheduled start. Record the reason to clear Otto’s red signal.</span>

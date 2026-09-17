@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { interpretWorkUpdate, loadInterpretationTasks } from "@/lib/aiInterpret";
+import { interpretWorkUpdate, loadInterpretationTasks, type InterpretContext } from "@/lib/aiInterpret";
+import { buildLoomAttachment } from "@/lib/aiLoom";
+import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId } from "@/lib/work-os";
+import { loadShiftData } from "@/lib/work-os-internal";
 import { persistInterpretHistory, recentConversationTurns } from "@/lib/work-conversations";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
@@ -40,13 +43,33 @@ export async function POST(req: Request) {
       personId: auth.access.personId as string,
       localDate,
     };
-    const interpretContext = memoryEnabled(auth.access.featureFlags)
+    const memoryContext = memoryEnabled(auth.access.featureFlags)
       ? {
           todayBlock: await buildTodaySnapshot(conversationScope),
           memoryBlock: await buildMemoryPromptBlock(conversationScope, body.input, { limit: 8 }),
           conversation: await recentConversationTurns(conversationScope, 8),
         }
-      : undefined;
+      : {};
+    // A Loom link anywhere in the update reaches the analyze tool; its output
+    // is attached as tool context and never filed on its own. Enrichment is
+    // strictly optional: schedule/network/AI failures must never block the
+    // plain-text interpretation.
+    let loomContext: InterpretContext["loom"];
+    if (loomMetadataEnabled(auth.access.featureFlags) && findLoomReference(body.input)) {
+      try {
+        const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
+        const attachment = await buildLoomAttachment({
+          text: body.input,
+          targetDate: localDate,
+          timezone,
+          existingTaskTitles: tasks.map((task) => task.title).slice(0, 60),
+        });
+        loomContext = attachment?.attachment;
+      } catch {
+        loomContext = undefined;
+      }
+    }
+    const interpretContext: InterpretContext = { ...memoryContext, ...(loomContext ? { loom: loomContext } : {}) };
     const result = await interpretWorkUpdate(body, tasks, interpretContext);
     if (!result.ok) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;
