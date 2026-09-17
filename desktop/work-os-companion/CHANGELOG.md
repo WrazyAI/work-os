@@ -21,6 +21,13 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.16
+
+- The Update and Focus switches in the chat header sit side by side again, with the one you are on clearly highlighted.
+- The assistant's chat badge now shows Otto's face properly, filling its circle instead of spilling over your messages.
+- A reply keeps its task card when the app restarts, and the same reply no longer shows up twice.
+- Chat has more room to breathe: roomier message spacing, taller task rows, and slightly larger text.
+
 ## 0.3.15
 
 - Paste a Loom link in an update and Otto can read the recording to suggest tasks — the recording never stands in for the update itself.
