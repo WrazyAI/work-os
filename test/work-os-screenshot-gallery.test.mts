@@ -46,12 +46,14 @@ test("gallery list and preview routes keep person scope, gating, and audit", asy
   assert.match(lib, /sharp\(/);
 });
 
-test("EOD draft observations carry frame ids for inline thumbnails", async () => {
+test("EOD activity context is hourly, not per frame", async () => {
   const aiEod = await source("src/lib/aiEod.ts");
   const aiDraft = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
-  assert.match(aiEod, /summaryId: String\(row\.id\)/);
-  assert.match(aiEod, /"id,summary,visible_context,confidence,processing_status,evidence_event_id"/);
-  assert.match(aiDraft, /summaryId: string/);
+  assert.match(aiEod, /ensureHourlyScreenshotSummaries/);
+  assert.match(aiEod, /type EodScreenshotHour/);
+  assert.match(aiEod, /hours/);
+  assert.match(aiDraft, /screenshots\.hours\.map/);
+  assert.match(aiDraft, /hour\.label/);
 });
 
 test("the gallery reports pending and total frames honestly", async () => {
@@ -64,7 +66,7 @@ test("the gallery reports pending and total frames honestly", async () => {
   assert.match(galleryReturn, /processing_status === "failed"\) \{ gallery\.unavailable \+= 1; continue; \}/, "failed frames stay unavailable and pending");
   const aiEod = await source("src/lib/aiEod.ts");
   assert.match(aiEod, /const pending = ids\.filter\(\(id\) => !terminal\.has\(id\)\)\.length;/);
-  assert.match(aiEod, /failed: count\("failed"\), pending, observations/);
+  assert.match(aiEod, /failed: count\("failed"\), pending, hours/);
 });
 
 test("the prepare route is self-scoped, gated, and bounded", async () => {

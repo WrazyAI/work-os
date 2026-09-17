@@ -3,6 +3,7 @@ import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X 
 import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
 import { FadeArc, Wave } from "./LoadingUi";
+import { formatWorkOsDate } from "./dateFormat";
 import {
   annotationsForTarget,
   annotatedTextSegments,
@@ -421,7 +422,7 @@ export function PlanningSession({
               <input value={loomUrl} onChange={(event) => { setLoomUrl(event.target.value); setLoomReadback(null); }} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
               <button type="button" className="secondary" disabled={!loomUrl.trim() || loomReading} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
             </div>
-            {loomReadback ? <small className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`}>{loomReadback.title ?? "Loom recording"} · recorded {loomReadback.createdLocalDate ?? "an unverified date"}{loomReadback.usableForDay ? "" : " — it can't be used for today's plan"}.</small> : null}
+            {loomReadback ? <small className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`}>{loomReadback.title ?? "Loom recording"} · recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "an unverified date"}{loomReadback.usableForDay ? "" : " — it can't be used for today's plan"}.</small> : null}
             <details className="planning-loom-transcript"><summary>Paste transcript (optional)</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={2} maxLength={50000} placeholder="In Loom open Transcript, then Copy — paste it here so the plan can use what you said." aria-label="Loom transcript" /></details>
             <small className="planning-loom-note">The recording only shapes the draft you review. Nothing is filed from it.</small>
           </div> : null}

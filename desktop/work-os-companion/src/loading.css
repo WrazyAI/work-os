@@ -379,27 +379,6 @@
   gap: 8px;
 }
 
-.eod-drafting {
-  display: grid;
-  justify-items: start;
-  gap: 6px;
-  padding: 26px 28px;
-}
-
-.eod-drafting .loading-wave-large {
-  margin: 4px 0 10px;
-}
-
-.eod-drafting strong {
-  font-size: 18px;
-}
-
-.eod-drafting p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 /* Pre-app loading surface --------------------------------------------------- */
 
 .loading {

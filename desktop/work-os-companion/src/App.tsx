@@ -23,7 +23,7 @@ import Onboarding from "./Onboarding";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
-import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, TaskRemovalConfirmation } from "./taskSurfaces";
+import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -37,7 +37,7 @@ import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSection, type TaskSort } from "./taskWorkspace";
 import { SortHeaderRow } from "./SortHeaderRow";
-import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
+import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
@@ -62,7 +62,7 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "completed" | "all";
-type EodScreenshotContext = { processed: number; excluded: number; failed: number; pending: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+type EodScreenshotContext = { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] };
 
 /** Bounded interactive preparation before an EOD draft: four batches of a few
  * frames is enough to cover a day's sampled context without letting a single
@@ -2512,21 +2512,21 @@ export default function App() {
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
-        {eodDate && reportDayQuery.isLoading ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Loading that day…</strong><p>Fetching the recorded work for {formatWorkOsDate(eodDate)}.</p></section>
+        {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
           : eodDate && reportDayQuery.error ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={() => void reportDayQuery.refetch()}>Try again</button></div></section>
             : eodGate && !eodSubmitted ? <section className="panel"><Empty
                 title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
                 body={eodGate.detail}
               /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(reviewDay); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section>
-              : eodPreparing && !eodDraft ? <section className="panel eod-drafting" role="status">
-                <Wave className="loading-wave-large" />
-                <strong>Preparing Worktivity analysis…</strong>
-                <p>{eodPreparing.pending == null
-                  ? `Checking ${eodDate ? "that day’s" : "today’s"} screenshots.`
-                  : `${eodPreparing.analyzed} of ${eodPreparing.total} frames analyzed — ${eodPreparing.pending} still analyzing.`} Drafting starts when the analysis finishes; you can draft anyway with the frames that are ready.</p>
-                <div className="today-actions"><button type="button" className="quiet-action" onClick={draftEodAnyway}>Draft Anyway</button></div>
-              </section>
-                : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking {eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.</p></section>
+              : eodPreparing && !eodDraft ? <EodLoadingState
+                title="Preparing Worktivity analysis…"
+                detail={`Checking ${eodDate ? "that day’s" : "today’s"} screenshots.`}
+                progress={eodPreparing.pending == null
+                  ? null
+                  : `${eodPreparing.analyzed} of ${eodPreparing.total} frames analyzed${eodPreparing.pending > 0 ? ` — ${eodPreparing.pending} still analyzing` : ""}.`}
+                onDraftAnyway={draftEodAnyway}
+              />
+                : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <EodLoadingState title="Drafting your EOD…" detail={`Checking ${eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.`} />
                 : reviewDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) ? <EodComposer
                     reportId={String(reviewDay.report.id ?? "unknown")}
                     initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}

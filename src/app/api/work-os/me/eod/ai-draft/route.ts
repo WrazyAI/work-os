@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
+import { formatReportDate } from "@/lib/work-os-eod-facts";
+import type { EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { loadShiftData } from "@/lib/work-os-internal";
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
       if (!feed.bundle) return NextResponse.json({ error: "The Loom link is not a valid Loom share link.", reason: "loom_invalid" }, { status: 400 });
       if (feed.blocked) {
         return NextResponse.json({
-          error: `That Loom was recorded ${feed.bundle.temporal.createdLocalDate ?? "on another day"}, so it cannot be used for the ${date} EOD.`,
+          error: `That Loom was recorded ${feed.bundle.temporal.createdLocalDate ? formatReportDate(feed.bundle.temporal.createdLocalDate) : "on an unverified date"}, so it cannot be used for the ${formatReportDate(date)} EOD.`,
           reason: feed.reason === "future" ? "loom_future" : "loom_prior_day",
         }, { status: 409 });
       }
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
       ]);
       grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
     }
-    let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+    let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
     let screenshotSyncUnavailable = false;
     try {
       screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
     }
     const groundingWithObserved = {
       ...grounding,
-      observed: screenshots.observations.map((observation) => ({ at: observation.capturedAt, text: observation.summary, app: observation.visibleApp })),
+      observed: screenshots.hours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
     };
     const result = hasRefinement
       ? await refineEodNarrative(groundingWithObserved, body.draft as string, feedback, annotations)

@@ -752,7 +752,7 @@ Every asynchronous surface must define:
 
 Provider-sourced calendar dates, timestamps, and timezones must be validated before formatting or date arithmetic. Invalid values degrade to unavailable copy or an empty comparison key; they must never throw during render and replace the workspace with an application error.
 
-Loading should preserve approximate layout to reduce shift. Use skeletons for repeatable content and concise status text for one-off operations.
+Loading should preserve approximate layout to reduce shift. Use skeletons for repeatable content and concise status text for one-off operations. The EOD review's loading, preparing, and drafting states keep the composer's shape (status line, skeleton report body, footer) so the draft lands without a jump; the preparing state adds one progress line and the quiet `Draft Anyway` escape hatch, and nothing else competes with it.
 
 Empty states should be specific:
 
@@ -2140,7 +2140,6 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   assigned to the confirming employee.
 
 ### 29.1e Loom analysis
-
 Employees often record their SOD or EOD in Loom before opening Work OS. Loom has
 no public REST API for videos or transcripts, so a recording enters Work OS as a
 pasted link an agent analyzes — never as an automatic progress update. The tool
@@ -2150,9 +2149,10 @@ The analyze tool returns the recording's public metadata (title, duration,
 thumbnail), its public recording date read from the share page, a verdict for
 the target day, the normalized transcript, and a neutral analysis: a summary,
 candidate follow-up tasks with concrete subtask steps, and cautions. Only
-`https` Loom share or embed links (or a bare 32-hex video id) reach the fetch;
-anything else is rejected before any server call, and the fetch is allow-listed
-to Loom hosts with no redirects, a short timeout, and a hard response cap.
+A Loom link is accepted as a share or embed link with or without a scheme (and
+an `http` scheme is upgraded), or as a bare 32-hex video id; anything else is
+rejected before any server call, and the fetch is allow-listed to Loom hosts
+with no redirects, a short timeout, and a hard response cap.
 
 The verdict is always relative to the target day: a recording made on another
 day is refused for that day's synthesis — a prior-day EOD may still use a
@@ -2174,6 +2174,30 @@ evidence row, no task proposals — and report actions lock while it runs.
 
 Transcript entry is always optional and collapsed by default on every Loom card,
 and no video bytes are ever stored.
+
+### 29.1f Activity context by the hour
+
+Screenshot activity is reported as one synthesized line per local hour, never as
+one line per frame. The day's processed frames group by the employee's local
+hour; a single model call summarizes each hour from bounded frame summaries, and
+the result is cached per hour with a frame-set hash so only changed hours are
+re-summarized. When the summarizer is unavailable the line degrades to a
+truthful counts-and-apps fallback (`14 frames analyzed across Chrome, VS Code.`)
+and never invents activity. Hours a draft no longer needs are deleted, and the
+retention job removes rollups alongside the images they describe.
+
+The hourly rows feed the EOD draft (its Activity Context section and the AI
+draft's observed facts) and the review panel's rows, each with a representative
+thumbnail when a retained frame exists; the frame carousel, grid, and lightbox
+remain the way to inspect individual frames. Raw per-frame summaries do not
+appear in the draft or the panel.
+
+Times and dates in these surfaces are plain and timezone-free: times read
+`3:04 PM`, hour ranges read `3–4 PM` (both meridiem labels only when the range
+crosses noon or midnight), dates read `September 17, 2026` (or `September 14`
+within the current year), and no timezone name, abbreviation, or offset ever
+renders. A Loom link accepts share/embed links with or without a scheme and
+upgrades an `http` scheme to `https` before any fetch.
 
 ### 29.2 Insights
 

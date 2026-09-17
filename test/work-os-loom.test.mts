@@ -13,29 +13,35 @@ import {
 
 const ID = "912e89a68ccc42c5ab5096fec7cd63d6";
 
-test("accepts only canonical Loom share links and bare video ids", () => {
+test("accepts canonical, scheme-less, and http Loom links plus bare ids", () => {
   assert.deepEqual(parseLoomReference(`https://www.loom.com/share/${ID}`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
   assert.deepEqual(parseLoomReference(`https://loom.com/share/${ID}?sid=2e96ab06-46c4-4f14-b425-8944e89fb9e2`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
   assert.deepEqual(parseLoomReference(`https://www.loom.com/embed/${ID}/`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
   assert.deepEqual(parseLoomReference(ID.toUpperCase()), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
+  // People paste links without a scheme, or with the old http prefix.
+  assert.deepEqual(parseLoomReference(`www.loom.com/share/${ID}`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
+  assert.deepEqual(parseLoomReference(`loom.com/embed/${ID}`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
+  assert.deepEqual(parseLoomReference(`http://www.loom.com/share/${ID}`), { videoId: ID, url: `https://www.loom.com/share/${ID}` });
   assert.equal(parseLoomReference(""), null);
   assert.equal(parseLoomReference("not a url"), null);
 });
 
-test("rejects schemes, hosts, and paths that would widen the server-side fetch", () => {
-  assert.equal(parseLoomReference(`http://www.loom.com/share/${ID}`), null);
-  assert.equal(parseLoomReference(`https://loom.com.evil.example/share/${ID}`), null);
-  assert.equal(parseLoomReference(`https://evil.example/share/${ID}`), null);
-  assert.equal(parseLoomReference(`https://loom.com@evil.example/share/${ID}`), null);
-  assert.equal(parseLoomReference(`https://www.loom.com:8443/share/${ID}`), null);
-  assert.equal(parseLoomReference(`https://www.loom.com/watch/${ID}`), null);
-  assert.equal(parseLoomReference("https://www.loom.com/share/abc123"), null);
-  assert.equal(parseLoomReference("https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6/extra"), null);
+test("rejects hosts, schemes, and paths that would widen the server-side fetch", () => {
+  assert.equal(parseLoomReference(`ftp://www.loom.com/share/${ID}`), null);
+  assert.equal(parseLoomReference(`loom.com.evil.example/share/${ID}`), null);
+  assert.equal(parseLoomReference(`evil.example/share/${ID}`), null);
+  assert.equal(parseLoomReference(`loom.com@evil.example/share/${ID}`), null);
+  assert.equal(parseLoomReference(`www.loom.com:8443/share/${ID}`), null);
+  assert.equal(parseLoomReference(`www.loom.com/watch/${ID}`), null);
+  assert.equal(parseLoomReference("www.loom.com/share/abc123"), null);
+  assert.equal(parseLoomReference(`www.loom.com/share/${ID}/extra`), null);
 });
 
-test("detects a Loom link inside an ordinary update", () => {
+test("detects a Loom link inside an ordinary update, with or without a scheme", () => {
   const reference = findLoomReference(`Recorded my EOD here: https://www.loom.com/share/${ID}. Thanks!`);
   assert.equal(reference?.videoId, ID);
+  assert.equal(findLoomReference(`Recorded my EOD here: www.loom.com/share/${ID}`)?.videoId, ID);
+  assert.equal(findLoomReference(`loom.com/embed/${ID}`)?.videoId, ID);
   assert.equal(findLoomReference("No recording today, just text."), null);
   assert.equal(findLoomReference("See https://example.com/share/912e89a68ccc42c5ab5096fec7cd63d6"), null);
 });

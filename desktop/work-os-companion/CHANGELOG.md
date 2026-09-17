@@ -23,6 +23,13 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.22
+
+- Your end-of-day activity summary now reads one line per hour — “3–4 PM: …” — instead of listing every screenshot.
+- Times and dates read plainly (3:04 PM, September 17, 2026), with no timezone shorthand anywhere.
+- Loom links work when pasted without https://, and a recording from another day can’t stand in for today.
+- The screenshot section no longer stretches the report, and the waiting screen matches the composer while your day is prepared.
+
 ## 0.3.21
 
 - First launch after an update announces itself, with a View changelog action.
