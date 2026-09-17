@@ -149,6 +149,18 @@ bundle that advertises a newer MCP manifest while still running an older backend
 dispatcher. Confirm the active `.next/BUILD_ID` was produced after the relevant
 source change before reporting the tool as live.
 
+### Companion releases
+
+Cutting a companion release (bumping `package.json`,
+`src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`) has one more hard
+requirement: `desktop/work-os-companion/CHANGELOG.md` must gain a
+`## <version>` section for the release, moved out of `## Unreleased`. CI
+fails the release without it, and the GitHub release notes are built from
+that section. Write every entry for the employee who just installed the
+update — one short, plain bullet per change, details only for complex
+changes — because the first launch after an update shows it in a changelog
+modal (design §19.8).
+
 ## Public access (Tailscale Funnel)
 - Public URL: **https://srv1726015.tailbf7608.ts.net** → proxies to `127.0.0.1:3000`.
 - `tailscale funnel status` · turn **off**: `tailscale funnel --https=443 off` ·
