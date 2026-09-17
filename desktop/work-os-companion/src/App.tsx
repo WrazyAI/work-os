@@ -1243,6 +1243,7 @@ export default function App() {
   }
 
   async function logout() {
+    if (!window.confirm("Sign out of Work OS? You will need to sign in again to file updates and reach your workspace.")) return;
     setBusy(true); setError("");
     try {
       if (session && !debugRef.current.enabled) await apiRequest("/api/work-os/desktop/session", { method: "DELETE" });
