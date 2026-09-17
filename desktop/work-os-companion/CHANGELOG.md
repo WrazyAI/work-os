@@ -21,6 +21,13 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.12
+
+- Checking off tasks no longer hides the rest of the list — keep selecting as many tasks and subtasks as you need before you confirm.
+- Checking a task that has subtasks now opens them right away, so you can tick those off in the same pass.
+- Action results collapse to a short "N actions recorded" line you can open, and they open on their own when something failed so the error and Retry stay visible.
+- The same task list no longer appears twice when the assistant returns it twice.
+
 ## 0.3.11
 
 - The Tasks page shows its title once, and the day's focus, view chips, and unfinished-work link sit together on one tidy row.
