@@ -199,7 +199,8 @@ export function ChatComposer({
       applyText(text);
       return;
     }
-    applyText(`${row.name} `);
+    const source = sources.find((item) => item.key === row.key);
+    applyText(source?.insert ?? `${row.name} `);
   };
 
   const applyText = (text: string) => {

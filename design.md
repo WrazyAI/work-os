@@ -2083,37 +2083,41 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   claims a provider confirmation. Planner tasks are due the plan's day and are
   assigned to the confirming employee.
 
-### 29.1e Loom updates
+### 29.1e Loom analysis
 
-Employees often record their SOD or EOD in Loom before opening Work OS. A Loom
-link is therefore a first-class update source, not an attachment to a second
-report, and it is opt-in per organization behind the `loom_updates` flag.
+Employees often record their SOD or EOD in Loom before opening Work OS. Loom has
+no public REST API for videos or transcripts, so a recording enters Work OS as a
+pasted link an agent analyzes — never as an automatic progress update. The tool
+is opt-in per organization behind the `loom_updates` flag.
 
-The composer (web update panel, desktop Update composer, and the EOD composer)
-offers a `Loom` control that reveals a local panel: a link field, a `Read Loom`
-action, and an optional transcript paste. `Read Loom` resolves the link through
-Loom's official oEmbed endpoint and shows only the public title and duration it
-returns; a private or unavailable recording reads as `metadata unavailable` and
-never blocks the update. The panel states plainly that the link and transcript
-become the update and an output artifact and that no video is stored.
+The analyze tool returns the recording's public metadata (title, duration,
+thumbnail), its public recording date read from the share page, a verdict for
+the target day, the normalized transcript, and a neutral analysis: a summary,
+candidate follow-up tasks with concrete subtask steps, and cautions. Only
+`https` Loom share or embed links (or a bare 32-hex video id) reach the fetch;
+anything else is rejected before any server call, and the fetch is allow-listed
+to Loom hosts with no redirects, a short timeout, and a hard response cap.
 
-The link must be an `https` Loom share or embed URL (or a bare 32-hex video id);
-anything else is rejected before any server-side fetch, and the fetch is
-allow-listed to Loom hosts with no redirects, a short timeout, and a bounded
-response. Transcripts are stored with the check-in in `structured_claims.loom`,
-bounded and labeled with their source (`employee_paste`); the full transcript is
-never shown inline in history — the update stream shows a compact Loom chip with
-the recording's title and length instead.
+The verdict is always relative to the target day: a recording made on another
+day is refused for that day's synthesis — a prior-day EOD may still use a
+recording made that same day — and a recording whose date Loom does not expose
+stays usable only when labeled unverified. The calling agent reconciles the
+analysis against the current task list and live day state before proposing
+anything: it skips what is already recorded, links an existing task instead of
+repeating it, adds subtasks for concrete steps, and never treats a recording as
+proof of completion, progress, or provider state.
 
-A Loom update is a substantive update: it feeds proposal synthesis (tasks,
-subtasks, progress) and the AI EOD draft, where the recording appears as a
-`Recorded Loom updates` fact with the explicit note that recordings are
-employee-authored artifacts and do not by themselves prove task completion. It
-also records a `loom` output-evidence event (title, link, duration, thumbnail)
-idempotent per video id, which satisfies the task-completion artifact gate the
-same way a linked pull request does. Attaching a Loom in the EOD composer files
-the update and rebuilds the draft from it, so an employee who already recorded
-their EOD never writes a second one.
+Chat exposes the tool as an `@` mention that inserts `Loom: `; a bare Loom link
+inside an update reaches the tool server-side. Enrichment is strictly optional:
+a missing link, schedule failure, or analysis outage never blocks the ordinary
+interpretation. The SOD surfaces (desktop planning modal, avatar agenda, and the
+web goal note) call the same tool; the web goal note only prefills editable
+text for the employee to review and save. The EOD composer's Loom panel is
+draft-only: the analysis shapes the AI draft and files nothing — no check-in, no
+evidence row, no task proposals — and report actions lock while it runs.
+
+Transcript entry is always optional and collapsed by default on every Loom card,
+and no video bytes are ever stored.
 
 ### 29.2 Insights
 

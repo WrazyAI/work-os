@@ -5,6 +5,8 @@ import {
   findLoomReference,
   formatLoomDuration,
   loomMetadataEnabled,
+  loomTemporal,
+  loomUsableForDay,
   normalizeLoomTranscript,
   parseLoomReference,
 } from "../src/lib/work-os-loom";
@@ -74,6 +76,37 @@ test("the Loom flag is opt-in per organization", () => {
   assert.equal(loomMetadataEnabled({ loom_updates: false }), false);
   assert.equal(loomMetadataEnabled({}), false);
   assert.equal(loomMetadataEnabled(null), false);
+});
+
+test("the recording's own day decides whether it can be used for the day", () => {
+  const same = loomTemporal("2026-09-17T14:00:00.000Z", "2026-09-17", "UTC");
+  assert.equal(same.verdict, "same_day");
+  assert.equal(same.createdLocalDate, "2026-09-17");
+  assert.equal(loomUsableForDay(same), true);
+
+  const prior = loomTemporal("2026-09-16T14:00:00.000Z", "2026-09-17", "UTC");
+  assert.equal(prior.verdict, "prior_day");
+  assert.equal(prior.createdLocalDate, "2026-09-16");
+  assert.equal(loomUsableForDay(prior), false);
+
+  const future = loomTemporal("2026-09-18T14:00:00.000Z", "2026-09-17", "UTC");
+  assert.equal(future.verdict, "future");
+  assert.equal(loomUsableForDay(future), false);
+
+  const unknown = loomTemporal(null, "2026-09-17", "UTC");
+  assert.equal(unknown.verdict, "unknown");
+  assert.equal(unknown.createdAt, null);
+  assert.equal(loomUsableForDay(unknown), true);
+
+  // The employee's timezone decides which local day the recording belongs to.
+  const boundary = loomTemporal("2026-09-17T02:30:00.000Z", "2026-09-16", "America/New_York");
+  assert.equal(boundary.verdict, "same_day");
+  assert.equal(boundary.createdLocalDate, "2026-09-16");
+
+  // A prior-day EOD keeps working: the rule is relative to the target day.
+  const priorDayEod = loomTemporal("2026-09-04T18:00:00.000Z", "2026-09-04", "UTC");
+  assert.equal(priorDayEod.verdict, "same_day");
+  assert.equal(loomUsableForDay(priorDayEod), true);
 });
 
 console.log("Work OS Loom tests passed.");

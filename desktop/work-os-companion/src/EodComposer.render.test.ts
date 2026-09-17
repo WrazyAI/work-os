@@ -139,8 +139,22 @@ describe("EodComposer review surface", () => {
   it("offers the Loom update path only when the organization enables it", () => {
     const enabled = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, loomEnabled: true }));
     expect(enabled).toContain("Recorded a Loom instead?");
+    expect(enabled).toContain("eod-loom");
     const disabled = renderToStaticMarkup(createElement(EodComposer, baseProps));
     expect(disabled).not.toContain("Recorded a Loom instead?");
     expect(disabled).not.toContain("eod-loom");
+  });
+
+  it("shows an attached recording without reopening the panel", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      loomEnabled: true,
+      loomAttached: { title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6" },
+    }));
+    expect(markup).toContain("In this draft: Settlement walkthrough · 5:26");
+    expect(markup).toContain("recorded 2026-09-14");
+    // The analyze panel stays collapsed until the employee opens it.
+    expect(markup).not.toContain('aria-label="Loom share link"');
+    expect(markup).not.toContain("Analyze and rebuild draft");
   });
 });
