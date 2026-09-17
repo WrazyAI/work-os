@@ -2464,25 +2464,52 @@ export default function App() {
       {view === "settings" && (
         <main className="page">
           <PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
-          <section className="settings-panel">
-            <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting>
-            <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-dot">Avatar</span></Setting>
-            <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting>
-            <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
-            <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
-            <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
-              {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
-              {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
-              {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
-              {updateFlow.status === "checking" && <span className="status-dot">Checking</span>}
-              {updateFlow.status === "downloading" && <span className="status-dot">Downloading</span>}
-              {updateFlow.status === "installing" && <span className="status-dot">Installing</span>}
-              {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
-            </Setting>
-            <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready`}><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
-            <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting>
-            <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button type="button" className="quiet-action" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
-            <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
+          <section className="settings-group" aria-labelledby="settings-device-title">
+            <header className="settings-group-head"><h3 id="settings-device-title">This device</h3><small>How the companion starts and updates itself.</small></header>
+            <section className="settings-panel">
+              <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
+              <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
+              <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
+                {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
+                {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
+                {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
+                {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
+                {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
+                {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
+                {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+              </Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-workday-title">
+            <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3><small>Check-ins and what the workspace may surface.</small></header>
+            <section className="settings-panel">
+              <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-chip">Avatar</span></Setting>
+              <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-chip">Hidden</span></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-sync-title">
+            <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3><small>Local queue state and the account this companion is signed in to.</small></header>
+            <section className="settings-panel">
+              <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className={`status-chip${queueAttentionCount ? " attention" : ""}`}>{queueAttentionCount ? "Needs attention" : "Ready"}</span></Setting>
+              <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-diagnostics-title">
+            <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3><small>Prove what the companion did, or reproduce a state on purpose.</small></header>
+            <section className="settings-panel">
+              <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
+              <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group danger" aria-labelledby="settings-danger-title">
+            <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3><small>Changes your local setup. Manager-owned setup and consent history stay intact.</small></header>
+            <section className="settings-panel">
+              <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
+            </section>
           </section>
           <MemorySettings />
         </main>
@@ -3301,3 +3328,13 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   </main>;
 }
 export function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
+/** One switch control for settings: the track carries the state, the label
+ * states it in words, and the whole control is a single focusable switch. */
+export function SettingsSwitch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`settings-switch${checked ? " on" : ""}`} onClick={() => onChange(!checked)}>
+      <span className="settings-switch-track" aria-hidden="true"><span className="settings-switch-knob" /></span>
+      <span className="settings-switch-state" aria-hidden="true">{checked ? "On" : "Off"}</span>
+    </button>
+  );
+}

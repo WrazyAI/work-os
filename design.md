@@ -2253,15 +2253,68 @@ Settings is organized by user intent, in this order where applicable:
 6. Diagnostics.
 7. Destructive reset/account actions.
 
+The companion groups its rows under those headings (`This device`, `Workday`,
+`Sync & session`, `Diagnostics`, and a separated `Reset` group). Each group
+carries a quiet uppercase label and a one-line purpose; the reset group is
+separated by a rule and a red-led label, never mixed into routine preferences.
+
 Each setting row uses a flexible label/description column and intrinsic control
-column. Rows are normally 72–104px high depending on helper copy. At narrow widths,
-stack the control below the explanation and make it full width when appropriate.
+column. Rows are normally 72–104px high depending on helper copy: size to the
+copy (min-height 84px) rather than padding every card to a fixed tall height,
+and align the control with the title's first line. At narrow widths, stack the
+control below the explanation and make it full width when appropriate.
+
+Controls follow one vocabulary:
+
+- **On/off preferences use the settings switch** (`role="switch"`, 34x18 track,
+  tokens for the off/on colors) with the state written beside it (`On`/`Off`).
+  Never ship a bare native checkbox in a settings row.
+- **Statuses are chips, not controls.** A value the employee cannot press
+  (`Avatar`, `Hidden`, `Ready`, `Checking`) renders as a chip — no border or
+  button chrome. Amber tint belongs only to work that needs attention.
+- **Actions keep the quiet-action button style**; destructive actions
+  (`Reset`, `Sign out`) use the danger tone and keep their confirmation.
+
 Do not place unrelated settings in dashboard metric cards.
 
 Provider connections show provider name, mapped identity/workspace, last verified
 state, and a clear reconnect or inspect action. `Connected` requires a verified
 provider-scoped read, not the presence of stored credentials. Destructive settings
 live in a separated danger section and require explicit confirmation.
+
+### 29.4a Work memory panel
+
+Work memory is its own surface on the Settings page (`MemoryPanel`), and it is
+never a card inside the settings card grid: it owns a single-column layout whose
+sections span the full panel width. Reusing the settings grid interleaved the
+sections and put headings beside one another — that is the failure mode this
+contract forbids.
+
+The panel opens with the title `What Otto remembers`, one line stating the
+model (nothing is remembered until the employee keeps it, and anything can be
+forgotten), and a pending badge (`N waiting for review`) only when candidates
+exist. It then renders three classes in this fixed order, each as its own
+`<section>` with a label, a count, and a separator:
+
+1. **Waiting for your review.** Proposed facts waiting on a decision. The only
+   bordered cards in the panel, because they carry the two actions: `Keep`
+   (primary) and `Not true` (quiet). Sorted newest first; the two-up card grid
+   collapses to one column at 1024px and below.
+2. **Remembered facts.** Kept facts. Flat rows on hairline separators (the
+   repeated-row pattern — not cards), each with a verified glyph, `Kept
+   <month day>`, and a `Forget` action. Rows are full-width so long facts stay
+   readable.
+3. **Recent activity.** Dated episodes Otto drew on (check-in, plan, task event,
+   evidence, EOD, conversation), rendered as a muted feed with a kind label per
+   row, the summary, the date, and a `Forget` action. It closes with the
+   provenance line: context only, never proof that work was completed.
+
+Every class states its own empty value rather than disappearing, and the date in
+every row is a calendar day (`formatWorkOsDate`) — never a raw serialized
+instant, even when the API returns a SQL date as a timestamp. `Forget` deletes
+the underlying memory in both facts and activity; rejecting a candidate removes
+it from review without remembering it. Below 640px the action labels collapse to
+their icons, which keep accessible names.
 
 ### 29.5 Onboarding
 

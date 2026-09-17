@@ -884,10 +884,6 @@ button:disabled {
 .setting input {
   accent-color: #78ad33;
 }
-.status-dot {
-  font-size: 10px;
-  color: #567b27;
-}
 .danger {
   color: var(--danger) !important;
 }
@@ -1611,10 +1607,36 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .evidence-list h3 { font-size: 15px; }
 .evidence-list p,
 .evidence-list time { font-size: 11px; line-height: 1.55; }
+/* Settings are grouped by user intent (design.md 29.4). Each group owns a
+   heading and a two-up panel of rows; rows size to their copy. */
+.settings-group {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.settings-group-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.settings-group-head h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.settings-group-head small {
+  color: var(--muted);
+  font-size: 11px;
+}
 .settings-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  align-items: start;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1622,26 +1644,34 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .setting,
 .setting:first-child {
-  min-height: 118px;
+  min-height: 84px;
   align-items: flex-start;
-  padding: 20px;
+  gap: 14px;
+  padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--paper);
   box-shadow: var(--shadow-soft);
 }
-.setting > div { gap: 7px; }
+.setting > div {
+  min-width: 0;
+  gap: 5px;
+}
 .setting strong { font-size: 13px; }
 .setting small {
   display: block;
+  max-width: 420px;
   overflow: visible;
   font-size: 11px;
   line-height: 1.5;
   text-overflow: clip;
 }
 .setting > button,
-.settings-panel .status-dot {
+.setting > .settings-switch,
+.setting > .status-chip {
   flex: none;
+}
+.setting > button {
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1649,7 +1679,75 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   padding: 0 10px;
 }
 .setting > button:not(:disabled):hover { border-color: #b8b9af; background: #fffef8; transform: translateY(-1px); }
-.settings-panel .status-dot { display: inline-flex; align-items: center; }
+/* Status chips state a fact; they are never shaped like a control. */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #eef0e9;
+  color: #5c6456;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.status-chip.attention {
+  background: #fff3d6;
+  color: #7a5312;
+}
+/* Destructive settings live in their own separated group. */
+.settings-group.danger {
+  border-top: 1px solid #ecd4ce;
+  padding-top: 16px;
+}
+.settings-group.danger .settings-group-head h3 { color: #8e3a2f; }
+
+/* Settings switch: one control for every on/off preference. */
+.settings-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.settings-switch-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: #d8d8cf;
+  transition: background 160ms var(--ease-product);
+}
+.settings-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(18, 27, 17, 0.22);
+  transition: transform 160ms var(--ease-product);
+}
+.settings-switch.on .settings-switch-track { background: #6ea32c; }
+.settings-switch.on .settings-switch-knob { transform: translateX(16px); }
+.settings-switch-state {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.settings-switch.on .settings-switch-state { color: #436a1c; }
+.settings-switch:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch-track,
+  .settings-switch-knob { transition: none; }
+}
 .profile-board section { padding: 8px 14px 12px; box-shadow: 0 5px 18px rgba(23, 25, 20, 0.035); }
 .profile-board section > header strong { font-size: 11px; }
 .profile-item { min-height: 46px; grid-template-columns: minmax(0, 1fr) repeat(3, 30px); gap: 4px; }
@@ -1693,6 +1791,23 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 @media (max-width: 850px) {
   .nav-group { display: grid; }
   .settings-panel { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .setting,
+  .setting:first-child {
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+  }
+  .setting > button,
+  .setting > .settings-switch,
+  .setting > .status-chip {
+    align-self: flex-start;
+  }
+  .setting > .quiet-action {
+    width: 100%;
+    justify-content: center;
+  }
 }
 @media (max-width: 560px) {
   .rail nav { flex-direction: row; }

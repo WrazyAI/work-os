@@ -13,6 +13,8 @@ const insightChartStyles = readFileSync(resolve(root, "src/insight-charts.css"),
 const insightCharts = readFileSync(resolve(root, "src/InsightCharts.tsx"), "utf8");
 const insightMath = readFileSync(resolve(root, "src/insights.ts"), "utf8");
 const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
+const memoryPanel = readFileSync(resolve(root, "src/MemorySettings.tsx"), "utf8");
+const memoryStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -175,6 +177,39 @@ describe("operational visualizations", () => {
     // The dock matches the content column and never traps a focused row.
     expect(workspaceStyles).toMatch(/html:has\(\.stage\.has-dock\) \{[\s\S]{0,80}?scroll-padding-bottom: 140px;/);
     expect(workspaceStyles).toContain("width: min(calc(100% - 48px), 1024px);");
+  });
+
+  it("keeps the settings page grouped, sized, and control-consistent", () => {
+    expect(app).toContain('className="settings-group"');
+    expect(app).toContain('className="settings-group danger"');
+    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(2);
+    expect(app).toContain("export function SettingsSwitch");
+    expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
+    expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
+    expect(app).toContain('className="status-chip"');
+    expect(styles).toContain(".settings-group-head");
+    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 84px;/);
+    expect(styles).toContain(".settings-switch-track");
+    expect(styles).toContain(".status-chip.attention");
+    expect(styles).toContain(".settings-group.danger");
+    expect(styles).not.toContain(".settings-panel .status-dot");
+    expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.setting,[\s\S]*?flex-direction: column;/);
+  });
+
+  it("keeps the memory panel in its own column with three separated classes", () => {
+    // The root cause of the interleaved panel was reusing the settings grid.
+    expect(memoryPanel).not.toContain("settings-panel");
+    expect(memoryPanel).toContain('className="memory-section review"');
+    expect(memoryPanel).toContain('className="memory-section facts"');
+    expect(memoryPanel).toContain('className="memory-section activity"');
+    expect(memoryPanel).toContain("memory-section-head");
+    expect(memoryPanel).toContain("memoryDateLabel");
+    expect(memoryPanel).toContain("formatWorkOsDate");
+    expect(memoryStyles).toMatch(/\.memory-panel \{[\s\S]*?display: grid;/);
+    expect(memoryStyles).toContain(".memory-cards");
+    expect(memoryStyles).toContain(".memory-rows.feed");
+    expect(memoryStyles).toContain(".memory-provenance");
+    expect(memoryStyles).toMatch(/@media \(max-width: 1024px\) \{[\s\S]*?\.memory-cards \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   });
 
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
