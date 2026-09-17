@@ -21,6 +21,12 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.14
+
+- What Otto remembers is now three clear lists: what is waiting for your review, the facts you kept, and the recent activity behind them.
+- Every memory shows a plain date, and you can forget a fact or a memory right from its row.
+- Settings are grouped by what they affect, with a separate Reset section, and the on/off toggles show their state in words.
+
 ## 0.3.13
 
 - Every chat message now has a Copy button that appears when you hover over it, including the short receipt lines.
