@@ -27,6 +27,11 @@ they change what the employee sees or does.
 - Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
 - Task lists name their order, sort from real column headers, and every count now matches the rows it describes.
 
+## 0.3.20
+
+- The scenario debugger now marks the preset you loaded and says when you have changed it, and asks before live writes reach the real server.
+- You can copy the current scenario as JSON, follow the live trace and copy what is shown, and see the diagnostics export result in the panel.
+
 ## 0.3.19
 
 - The Update and Focus switches in the chat header sit side by side again, with the one you are on clearly highlighted.
