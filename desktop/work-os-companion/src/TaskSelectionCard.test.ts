@@ -59,13 +59,57 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("is-table");
   });
 
-  it("exposes a collapse toggle and starts expanded", () => {
+  it("keeps the disclosure on the far right of a compact header", () => {
     const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, onMarkSelectedDone: () => undefined }));
-    expect(markup).toContain("chat-task-toggle");
+    // Header carries the title plus the right-side disclosure; the old kicker
+    // and the duplicated count sentence are gone.
+    expect(markup).toContain("chat-task-heading");
+    expect(markup).toContain("chat-task-disclosure");
+    expect(markup).not.toContain("chat-task-toggle");
+    expect(markup).not.toContain("Task selection");
+    expect(markup).not.toContain("TASK SELECTION");
+    expect(markup).not.toContain("0 overdue");
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain("aria-controls=");
-    expect(markup).toContain("show or hide task list");
+    expect(markup).toContain('title="Collapse tasks"');
+    expect(markup).toContain("chat-task-chevron is-open");
     expect(markup).not.toContain("is-collapsed");
+  });
+
+  it("collapses to a one-line summary when it loses thread focus", () => {
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks, collapseWhenInactive: true, onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("is-collapsed");
+    expect(markup).toContain("1 pending · 1 overdue");
+    expect(markup).toContain('title="Expand tasks"');
+    expect(markup).toContain('aria-expanded="false"');
+    // The list and the confirmation action are hidden with the body.
+    expect(markup).toMatch(/id="[^"]*-content"[^>]*hidden/);
+  });
+
+  it("expands a parent into its subtasks with an accordion panel", () => {
+    const parent = {
+      id: "parent",
+      title: "Ship the companion shell",
+      state: "pending" as const,
+      subtaskTotal: 2,
+      subtaskCompleted: 1,
+      subtasks: [
+        { id: "child-open", title: "Trim the header", completed: false },
+        { id: "child-done", title: "Move the tabs", completed: true },
+      ],
+    };
+    const markup = renderToStaticMarkup(createElement(TaskSelectionCard, { tasks: [parent], onMarkSelectedDone: () => undefined }));
+    expect(markup).toContain("1/2 subtasks");
+    expect(markup).toContain("chat-task-row-head");
+    expect(markup).toContain('aria-controls="');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('role="region"');
+    expect(markup).toContain("Trim the header");
+    expect(markup).toContain("Move the tabs");
+    expect(markup).toContain("Select subtask Trim the header");
+    expect(markup).toContain("is already complete");
+    // No parent suggestion until every open subtask is checked.
+    expect(markup).not.toContain("Also mark");
   });
 
   it("marks tasks that already have pending proposals and disables their checkbox", () => {

@@ -338,6 +338,11 @@ select:focus-visible {
   --notification-surface: #fff1ef;
   --notification-border: #e8aaa4;
 }
+.notification-flyout.persistent.success {
+  --notification-accent: #2c7a45;
+  --notification-surface: #eef9f1;
+  --notification-border: #a9d8b7;
+}
 .notification-icon {
   width: 34px;
   height: 34px;
@@ -2441,6 +2446,19 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   overflow: auto;
   display: grid;
   gap: 19px;
+}
+.whats-new-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.whats-new-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #626a61;
 }
 .task-modal-body > label {
   display: grid;

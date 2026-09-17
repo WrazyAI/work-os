@@ -123,6 +123,25 @@ jobs:
           "tag=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publish=$publish" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Require changelog entry for the release
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $changelog = "CHANGELOG.md"
+          if (!(Test-Path $changelog)) { throw "Missing $changelog: every release must ship employee-facing notes" }
+          $lines = Get-Content $changelog
+          $header = "## $env:RELEASE_VERSION"
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $header) { $start = $i; break } }
+          if ($start -lt 0) { throw "No $header section in $changelog. Move the Unreleased entries under the release version before publishing." }
+          $bullets = 0
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^\s*##?\s+') { break }
+            if ($lines[$i] -match '^\s*[-*]\s+\S') { $bullets++ }
+          }
+          if ($bullets -eq 0) { throw "$header in $changelog has no entries." }
+
       - name: Require updater signing credentials
         env:
           SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -240,6 +259,25 @@ jobs:
 
           The attached Tauri updater artifacts are signed. Verify browser downloads against `SHA256SUMS.txt` before running them.
           "@ | Set-Content $notesPath -Encoding utf8
+
+          $changelogLines = Get-Content "CHANGELOG.md"
+          $sectionHeader = "## $env:RELEASE_VERSION"
+          $sectionStart = -1
+          for ($i = 0; $i -lt $changelogLines.Count; $i++) { if ($changelogLines[$i].Trim() -eq $sectionHeader) { $sectionStart = $i; break } }
+          if ($sectionStart -ge 0) {
+            $section = @()
+            for ($i = $sectionStart + 1; $i -lt $changelogLines.Count; $i++) {
+              if ($changelogLines[$i] -match '^\s*##?\s+') { break }
+              $section += $changelogLines[$i]
+            }
+            $sectionText = ($section -join "`n").Trim()
+            if ($sectionText) {
+              Add-Content $notesPath ""
+              Add-Content $notesPath "## What's new in $env:RELEASE_DISPLAY"
+              Add-Content $notesPath ""
+              Add-Content $notesPath $sectionText
+            }
+          }
 
           $existingJson = gh api "repos/${{ github.repository }}/releases/tags/$env:RELEASE_TAG" 2>$null
           if ($LASTEXITCODE -ne 0) {

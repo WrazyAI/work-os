@@ -7,6 +7,9 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
+import { changelogBulletsFor, readAnnouncedVersion, shouldAnnounceUpdate, updateInstalledCopy, WHATS_NEW_ANNOUNCE_KEY, writeAnnouncedVersion } from "./whatsNew";
+import { WhatsNewModal } from "./WhatsNewModal";
+import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, Video, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
@@ -211,6 +214,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
+  const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
+  const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskHistoryCursor, setTaskHistoryCursor] = useState<number | null>(null);
@@ -267,13 +272,20 @@ export default function App() {
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen;
+  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen || !!whatsNew;
 
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
     const message = errorMessage(value, fallback);
     setError(message);
     notifications.error(message, title);
     return message;
+  }, [notifications]);
+
+  /** Either announcement choice marks the running build seen: the success
+   * flyout is a one-time notice per version per device (design §19.8). */
+  const markUpdateAnnounced = useCallback((version: string) => {
+    writeAnnouncedVersion(version);
+    notifications.clearPersistent(WHATS_NEW_ANNOUNCE_KEY);
   }, [notifications]);
 
   const dismissTopLayer = useCallback(() => {
@@ -287,8 +299,9 @@ export default function App() {
     if (taskDetails) { setTaskDetails(null); return; }
     if (taskComposerOpen) { setTaskComposerOpen(false); return; }
     if (planningSessionOpen) { setPlanningSessionOpen(false); return; }
-    if (carryOverOpen) setCarryOverOpen(false);
-  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, subtaskMenuId, taskComposerOpen, taskDetails]);
+    if (carryOverOpen) { setCarryOverOpen(false); return; }
+    if (whatsNew) setWhatsNew(null);
+  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -629,8 +642,19 @@ export default function App() {
       setInstalledVersion("Unavailable in browser preview");
       return;
     }
-    void getVersion().then((value) => setInstalledVersion(displayUpdateVersion(value))).catch(() => setInstalledVersion("Unavailable"));
-  }, []);
+    void getVersion().then((value) => {
+      setInstalledVersionRaw(value);
+      setInstalledVersion(displayUpdateVersion(value));
+      if (!shouldAnnounceUpdate(value, readAnnouncedVersion())) return;
+      const copy = updateInstalledCopy(value);
+      notifications.persistent(WHATS_NEW_ANNOUNCE_KEY, copy.message, copy.title, "success", {
+        actions: [
+          { label: copy.changelogLabel, kind: "primary", onClick: () => { markUpdateAnnounced(value); setWhatsNew({ version: value }); } },
+          { label: copy.dismissLabel, kind: "quiet", onClick: () => markUpdateAnnounced(value) },
+        ],
+      });
+    }).catch(() => setInstalledVersion("Unavailable"));
+  }, [markUpdateAnnounced, notifications]);
 
   // The companion is a long-lived tray app, so releases dropped mid-session
   // would otherwise go unnoticed until a restart. Re-check silently on the
@@ -2139,6 +2163,15 @@ export default function App() {
       .finally(() => setBusy(false));
   }
 
+  const loadComposerSubtasks = async (taskId: string) => {
+    const details = await fetchTaskDetails(taskId);
+    return (details.subtasks ?? []).map((child) => ({
+      id: String(child.id),
+      title: typeof child.title === "string" ? child.title : "Untitled subtask",
+      completed: child.completed === true,
+    }));
+  };
+
   async function proposeSelectedTaskCompletions(tasks: Array<{ id: string; title: string }>) {
     if (!tasks.length || syncBypassRef.current) return;
     if (tasks.some((task) => !task.title.trim())) throw new Error("A selected task could not be resolved. Nothing was proposed.");
@@ -2426,6 +2459,7 @@ export default function App() {
               {updateFlow.status === "checking" && <span className="status-dot">Checking</span>}
               {updateFlow.status === "downloading" && <span className="status-dot">Downloading</span>}
               {updateFlow.status === "installing" && <span className="status-dot">Installing</span>}
+              {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
             </Setting>
             <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready`}><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
             <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting>
@@ -2461,6 +2495,7 @@ export default function App() {
         aiUnavailable={aiUnavailable}
         onReviewOperations={approveInterpretation}
         onMarkSelectedDone={proposeSelectedTaskCompletions}
+        onLoadSubtasks={loadComposerSubtasks}
         onNavigateView={(page) => setView(page)}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
@@ -2475,6 +2510,7 @@ export default function App() {
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
+    {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
     <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
@@ -2621,12 +2657,13 @@ export function DashboardTaskCard({ task, currentDate, onOpen, onRetryPendingTas
   </article>;
 }
 
-function AssistantOperations({ interpretation, busy, toolContext, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation }: {
+function AssistantOperations({ interpretation, busy, toolContext, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
   interpretation: { operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] };
   busy: boolean;
   toolContext: import("./interpretation").ApprovedOpContext;
   onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
   onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void;
+  onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void;
   onRetryOperation?: (result: ToolCallResult) => void;
 }) {
@@ -2661,8 +2698,10 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
             projectName: typeof task.project_name === "string" ? task.project_name : null,
             priority: typeof task.priority === "string" ? task.priority : null,
             state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
+            subtaskTotal: Number(task.subtask_total ?? 0) || 0,
+            subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
           })).filter((task) => !!task.id) : [];
-          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
         {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
@@ -2672,7 +2711,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation, loomEnabled = false, onLoomChange, loomResetSignal = 0 }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, loomEnabled = false, onLoomChange, loomResetSignal = 0 }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -2681,7 +2720,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onRetryOperation?: (result: ToolCallResult) => void;
+  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
   /** Loom attachment is opt-in per organization; the parent owns the payload. */
   loomEnabled?: boolean;
   onLoomChange?: (loom: { url: string; transcript?: string } | null) => void;
@@ -2754,7 +2793,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? "Drafted with Otto" : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" text={echoReply} stream onSettled={bumpSweep} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
+       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
   : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}

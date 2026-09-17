@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Minus, X } from "lucide-react";
+import { Minus, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { fetchDay } from "./workOsQueries";
+import { fetchDay, fetchTaskDetails } from "./workOsQueries";
 import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, partialFilingMessage, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
@@ -16,7 +16,7 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
-import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
+import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { lateReasonRequired } from "./lateStart";
@@ -49,7 +49,15 @@ interface DayFacts extends CompanionDayFacts {
   displayName: string | null;
   niftySyncing: boolean;
   niftySyncError: string | null;
-  taskOptions: Array<{ id: string; title: string; dueDate: string | null; completed: boolean }>;
+  taskOptions: Array<{
+    id: string;
+    title: string;
+    dueDate: string | null;
+    completed: boolean;
+    subtaskTotal?: number;
+    subtaskCompleted?: number;
+    subtasks?: Array<{ id: string; title: string; completed?: boolean }>;
+  }>;
   planStatus: string | null;
   planItems: Array<{ id: string; task_id: string | null; title_snapshot: string; disposition: string; item_kind: string; completion_state: string }>;
   lateReasonRequired: boolean;
@@ -81,7 +89,7 @@ interface AgendaReview {
 }
 
 const AVATAR_COLLAPSED = { width: 164, height: 188 };
-const AVATAR_EXPANDED = { width: 400, height: 560 };
+const AVATAR_EXPANDED = { width: 400, height: 620 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";
@@ -250,6 +258,13 @@ export default function AvatarApp(): React.ReactElement {
             title: typeof task.title === "string" ? task.title : "Untitled task",
             dueDate: typeof task.due_date === "string" ? task.due_date : null,
             completed: task.completed === true,
+            subtaskTotal: Number((task.subtaskProgress as { total?: number } | undefined)?.total ?? 0) || 0,
+            subtaskCompleted: Number((task.subtaskProgress as { completed?: number } | undefined)?.completed ?? 0) || 0,
+            subtasks: Array.isArray(task.subtasks) ? (task.subtasks as Array<Record<string, unknown>>).map((child) => ({
+              id: String(child.id),
+              title: typeof child.title === "string" ? child.title : "Untitled subtask",
+              completed: child.completed === true,
+            })) : undefined,
           }))
           .slice(0, 200) : [],
         planStatus: typeof day?.plan?.status === "string" ? day.plan.status : null,
@@ -560,6 +575,11 @@ export default function AvatarApp(): React.ReactElement {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
       }) : { proposals: [] };
+      // A filed check-in clears the recorded-update prompt immediately so the
+      // banner and the task-context card disappear without waiting for the poll.
+      if (review.operations.some((operation) => operation.op === "record_progress" || operation.op === "record_blocker")) {
+        setFacts((current) => clearRecordedUpdatePrompt(current));
+      }
       const proposalIdByOriginal = new Map(proposals.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
       const operations = review.operations.map((op, index) => ({ ...op, enabled: isMutatingToolOp(op), proposalId: proposalIdByOriginal.get(index) }));
       // Read-only display tools fetch immediately — viewing tasks mutates
@@ -687,6 +707,15 @@ export default function AvatarApp(): React.ReactElement {
       text: value instanceof Error ? value.message : "The retry could not be filed.",
     }])).finally(() => setFiling(false));
   }, [filing, loadDay, shareAvatarTools]);
+
+  const loadTaskSubtasks = useCallback(async (taskId: string) => {
+    const details = await fetchTaskDetails(taskId);
+    return (details.subtasks ?? []).map((child) => ({
+      id: String(child.id),
+      title: typeof child.title === "string" ? child.title : "Untitled subtask",
+      completed: child.completed === true,
+    }));
+  }, []);
 
   const proposeAvatarSelectedCompletions = useCallback(async (tasks: Array<{ id: string; title: string }>) => {
     if (!tasks.length || filing) return;
@@ -931,6 +960,10 @@ export default function AvatarApp(): React.ReactElement {
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
+  // The header dot reports shift state, so a due check-in never turns it red:
+  // the banner, the orb pulse, and the composer carry that instead.
+  const dotClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : "live";
+  const shiftLabel = onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift";
   const petPose = attentionDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : "focus";
   const petTone = facts.lateReasonRequired ? "late" : "signal";
   const lastEntry = chat[chat.length - 1];
@@ -1001,7 +1034,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="sleep" /></span><div><strong>Otto</strong><small>Connect Work OS to begin</small></div></div><span aria-hidden="true">Move</span></div><div className="avatar-head-actions"><button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button><button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button></div></header>
+            <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="sleep" /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">Otto</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </div>
         )}
@@ -1034,51 +1067,66 @@ export default function AvatarApp(): React.ReactElement {
       {expanded && (
         <div className="avatar-panel">
           <header className="avatar-head">
-            <div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} tone={petTone} /></span><div><strong>Otto <em className={`avatar-live-dot is-${ringClass}`} /> <span>{onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift"}</span></strong><small aria-live="polite">{statusText}</small></div></div><span aria-hidden="true">Move</span></div>
-            <div className="avatar-head-actions">
-              {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }}>Retry</button>}
-              {chat.length > 0 && <button className="avatar-clear" onClick={clearAvatarConversation} aria-label="Clear conversation" title="Clear conversation">New</button>}
-              <button className="avatar-close" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={16} aria-hidden="true" /></button>
-              <button className="avatar-close avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={16} aria-hidden="true" /></button>
+            <div className="avatar-head-row">
+              <div className="avatar-drag-zone" data-tauri-drag-region>
+                <div className="avatar-title">
+                  <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} tone={petTone} /></span>
+                  <div className="avatar-head-copy">
+                    <strong title={statusText}>
+                      <span className="avatar-head-name">Otto</span>
+                      <em className={`avatar-live-dot is-${dotClass}`} aria-hidden="true" />
+                      <span className="avatar-head-shift">{shiftLabel}</span>
+                    </strong>
+                    <span className="sr-only" aria-live="polite">{statusText}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="avatar-head-actions">
+                {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }} title="Refresh today's record" aria-label="Refresh today's record">Retry</button>}
+                {chat.length > 0 && <button className="avatar-icon" onClick={clearAvatarConversation} aria-label="New conversation" title="New conversation"><SquarePen size={15} aria-hidden="true" /></button>}
+                <button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button>
+                <button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button>
+              </div>
             </div>
-          </header>
-          <div className="avatar-tabs">
-            <ChatTabs
-              tabs={[
-                { id: "chat", label: "Chat" },
-                { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
-              ]}
-              active={avatarTab}
-              onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
-              ariaLabel="Companion view"
-            />
-          </div>
-          {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
-          {avatarTab === "tasks" ? (
-          <div className="avatar-chat workos-thread" ref={chatScroll}>
-              <TaskSelectionCard
-                title="Open tasks"
-                status={facts.loaded ? "ready" : "loading"}
-                tasks={facts.taskOptions
-                  .filter((task) => !task.completed)
-                  .map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: "pending" }))}
-                onMarkSelectedDone={proposeAvatarSelectedCompletions}
-                proposedTaskIds={[...proposedTaskIds]}
-                onReview={() => setAvatarTab("chat")}
-                degraded={daySyncState === "stale"}
-                emptyTitle="No open tasks"
-                emptyMessage="Tasks waiting to be completed will appear here."
+            <div className="avatar-nav">
+              <ChatTabs
+                tabs={[
+                  { id: "chat", label: "Chat" },
+                  { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
+                ]}
+                active={avatarTab}
+                onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
+                ariaLabel="Companion view"
               />
             </div>
+          </header>
+          <div className="avatar-chat" ref={chatScroll}>
+            {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
+          {avatarTab === "tasks" ? (
+            <TaskSelectionCard
+              title="Open tasks"
+              status={facts.loaded ? "ready" : "loading"}
+              tasks={facts.taskOptions
+                .filter((task) => !task.completed)
+                .map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: "pending", subtaskTotal: task.subtaskTotal, subtaskCompleted: task.subtaskCompleted, subtasks: task.subtasks }))}
+              onMarkSelectedDone={proposeAvatarSelectedCompletions}
+              onLoadSubtasks={loadTaskSubtasks}
+              proposedTaskIds={[...proposedTaskIds]}
+              onReview={() => setAvatarTab("chat")}
+              degraded={daySyncState === "stale"}
+              emptyTitle="No open tasks"
+              emptyMessage="Tasks waiting to be completed will appear here."
+            />
           ) : (<>
           {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
             <div className="avatar-task-context">
               <TaskSelectionCard
                 dense
-                maxHeight={220}
-                title={taskContextTitle(taskContext)}
-                tasks={taskContext.visible.map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending" }))}
+                maxHeight={240}
+                title="Today's tasks"
+                tasks={taskContext.visible.map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending", subtaskTotal: task.subtaskTotal, subtaskCompleted: task.subtaskCompleted, subtasks: task.subtasks }))}
                 onMarkSelectedDone={proposeAvatarSelectedCompletions}
+                onLoadSubtasks={loadTaskSubtasks}
                 proposedTaskIds={[...proposedTaskIds]}
                 onReview={() => setAvatarTab("chat")}
                 degraded={daySyncState === "stale"}
@@ -1087,11 +1135,8 @@ export default function AvatarApp(): React.ReactElement {
               />
             </div>
           )}
-          <div className="avatar-chat" ref={chatScroll}>
-            {!chat.length && (
-              <ChatTurn role="assistant" text={attentionDue
-                ? contextualPrompt.body
-                : "Share an update, or tell me to create, complete, or block tasks."} />
+            {!chat.length && !attentionDue && (
+              <ChatTurn role="assistant" text={contextualPrompt.kind === "agenda" ? contextualPrompt.body : "Share an update, or tell me to create, complete, or block tasks."} />
             )}
             {
               collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
@@ -1120,8 +1165,10 @@ export default function AvatarApp(): React.ReactElement {
                             dueDate: typeof task.due_date === "string" ? task.due_date : null,
                             priority: typeof task.priority === "string" ? task.priority : null,
                             state: selection.view === "overdue" ? "overdue" : "pending",
+                            subtaskTotal: Number(task.subtask_total ?? 0) || 0,
+                            subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
                           })).filter((task) => !!task.id) : [];
-                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} onLoadSubtasks={loadTaskSubtasks} collapseWhenInactive={entryIndex < allEntries.length - 1} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
                         {entry.operations?.length ? (
                           <div className="chat-operations">
@@ -1158,8 +1205,8 @@ export default function AvatarApp(): React.ReactElement {
                 busy={filing || thinking}
               />
             )}
-          </div>
           </>)}
+          </div>
           {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
             <WorkOsPromptBar
               sweepSignal={sweepSignal}
