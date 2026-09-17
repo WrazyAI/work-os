@@ -1955,6 +1955,8 @@ body {
   z-index: 30;
   bottom: 16px;
   width: min(calc(100% - 48px), 760px);
+  /* Wide windows: match the task-list column so rows are never covered
+     asymmetrically. Narrow windows keep the compact bar. */
   margin: -82px auto 0;
   filter: drop-shadow(0 18px 26px rgba(18, 27, 17, 0.12));
 }
@@ -1983,6 +1985,17 @@ body {
 
 .stage.has-dock > .progress-dock {
   margin-top: auto;
+}
+
+@media (min-width: 1200px) {
+  .progress-dock {
+    width: min(calc(100% - 48px), 1024px);
+  }
+}
+
+/* Focus and programmatic scrolls must clear the sticky composer. */
+html:has(.stage.has-dock) {
+  scroll-padding-bottom: 140px;
 }
 
 .agenda-dock .progress-input-shell {
@@ -2507,10 +2520,12 @@ body {
   margin-bottom: 10px;
 }
 
-.tasks-heading-row h1 {
-  margin: 0;
-  font-size: 22px;
-  letter-spacing: -0.02em;
+.tasks-heading-context {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .tasks-heading-row .date-navigator {
@@ -2533,7 +2548,7 @@ body {
 
 .agenda-strip-focus {
   display: flex;
-  min-width: 0;
+  min-width: 280px;
   flex: 1 1 320px;
   flex-direction: column;
   gap: 2px;
@@ -2583,10 +2598,10 @@ body {
 .agenda-strip-chips {
   display: inline-flex;
   flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   max-width: 100%;
-  gap: 4px;
+  gap: 3px;
   padding: 3px;
   border: 1px solid #dde3d7;
   border-radius: 11px;
@@ -2596,9 +2611,9 @@ body {
 .agenda-strip-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -2654,6 +2669,29 @@ body {
   background: #fff3d6;
 }
 
+/* Below the single-line budget the strip reflows deliberately: the focus
+   statement keeps the full first row, controls share the second. Chips only
+   wrap inside their own pill at 900px and under, where the blueprint allows it. */
+@media (max-width: 1120px) {
+  .task-agenda-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "focus focus"
+      "chips carry";
+    align-items: center;
+    gap: 8px 14px;
+  }
+
+  .agenda-strip-focus { grid-area: focus; }
+  .agenda-strip-chips { grid-area: chips; justify-content: flex-start; }
+  .agenda-strip-carry { grid-area: carry; }
+}
+
+@media (max-width: 900px) {
+  .agenda-strip-chips { flex-wrap: wrap; }
+}
+
 /* Compact task rows: dot | body | actions | chevron. Grid anatomy lives in
    styles.css so the !important responsive overrides stay in one place. */
 .task-state-dot {
@@ -2681,10 +2719,10 @@ body {
   gap: 8px;
 }
 
-/* Fixed-size inline furniture; the title takes the remaining width, and wraps
-   onto its own furniture line on narrow rows rather than collapsing. */
+/* Fixed-size inline furniture; the title owns the remaining width and
+   ellipsizes, so the On today tag always ends the title line. */
 .task-row-line.primary-line {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .task-row-line.primary-line > * {
@@ -2693,7 +2731,7 @@ body {
 
 .task-row-line.primary-line > h3 {
   flex: 1 1 auto;
-  min-width: 96px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4408,16 +4446,44 @@ button:not(:disabled):active {
 
 /* Explicit column pinning: conditional cells (ring, due, menu) must never
    shift the status pill or the menu. Historical rows keep the same tracks. */
-.task-records .workspace-task > .task-check { grid-column: 1; }
+.task-records .workspace-task > .task-check { grid-column: 1; align-self: start; margin-top: 1px; }
 .task-records .workspace-task > .task-row-body { grid-column: 2; }
-.task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; }
+.task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; align-self: start; margin-top: 1px; }
 .task-records .workspace-task > .task-due { grid-column: 4; justify-self: end; text-align: right; }
 .task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; }
 .task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; }
 
-@media (max-width: 700px) {
-  .task-records .workspace-task > .task-state { grid-column: 3; }
+/* Compact rows keep the four-column grid (completion | content | progress |
+   menu): the due column is hidden by the grid contract and the redundant status
+   pill steps aside before the title or completion ever do, so the right-hand
+   cluster never wraps onto extra rows. */
+@media (max-width: 780px) {
+  .task-records .workspace-task > .task-state { display: none; }
   .task-records .workspace-task > .workspace-task-menu { grid-column: 4; }
+}
+
+/* The task-list panel is the only card: the shared .evidence-list treatment
+   would otherwise draw a second frame inside it and inset the rows twice. */
+.task-records.evidence-list {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* Row-height rhythm: the metadata chip matches the quiet text line it sits on. */
+.task-row-line.secondary-line .task-assignee-tags > span {
+  min-height: 20px;
+  padding: 1px 7px 1px 2px;
+  font-size: 9.5px;
+}
+
+.task-row-line.secondary-line .task-assignee-tags i {
+  width: 16px;
+  height: 16px;
+  font-size: 6.5px;
 }
 
 .task-records .workspace-task:hover {
@@ -4452,6 +4518,7 @@ button:not(:disabled):active {
 /* Selection marker: a quiet tag, not a surface flood. */
 .surfaced-tag {
   flex: 0 0 auto;
+  margin-left: auto;
   padding: 2px 7px;
   border-radius: 999px;
   background: #e8f4da;

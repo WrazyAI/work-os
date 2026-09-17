@@ -3032,7 +3032,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
             : { title: "No tasks yet", body: "Add your first task to get started." };
   return <main className="page tasks-workspace">
     <div className="tasks-heading-row">
-      <h1>{historical ? "Workday history" : "Tasks"}</h1>
+      <span className="tasks-heading-context">{historical ? "Workday history" : "Today"}</span>
       <div className="date-navigator"><button aria-label="Previous day" onClick={() => void onDate(moveDate(selectedDate, -1))}><ChevronLeft size={16} /></button><label className="formatted-date-picker"><span>{formatWorkOsDate(selectedDate)}</span><input aria-label="Workspace date" type="date" max={currentDate} value={selectedDate} onChange={(event) => void onDate(event.target.value)} /></label><button aria-label="Next day" disabled={selectedDate >= currentDate} onClick={() => void onDate(moveDate(selectedDate, 1))}><ChevronRight size={16} /></button></div>
     </div>
     <section className={`panel task-agenda-strip ${historical ? "historical" : ""}`} aria-label="Agenda">

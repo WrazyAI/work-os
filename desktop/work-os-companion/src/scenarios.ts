@@ -104,8 +104,19 @@ function dayFixture(): DayData {
     prompt: { kind: "optional", nextPromptAt: new Date(now.getTime() + 45 * 60_000).toISOString(), required: false, reason: "Optional hourly check-in." },
     niftySync: { fresh: true, syncedAt: now.toISOString() },
     tasks: [
-      { id: "debug-task-1", title: "Complete the Work OS Phase 1 runtime", completed: false },
-      { id: "debug-task-2", title: "Review desktop recovery states", completed: false },
+      // Row-shape coverage for the Tasks workspace layout: a long surfaced row
+      // with assignee, subtasks, due date, and description; a plain row; and an
+      // overdue row. The surfaced rows come from the plan's selected items.
+      {
+        id: "debug-task-1",
+        title: "Complete the Work OS Phase 1 runtime and document the release checklist for the desktop companion",
+        completed: false,
+        due_date: new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10),
+        description: "Move Chat/Tasks into the shell so the expanded companion stops reading as bloated, and keep the composer clear of the last row.",
+        assignees: [{ personId: "debug-person-1", displayName: "David Z", email: "david@example.test" }],
+        subtaskProgress: { total: 3, completed: 1 },
+      },
+      { id: "debug-task-2", title: "Review desktop recovery states", completed: false, description: "Confirm the recovery copy matches the provider's actual state." },
       { id: "debug-task-overdue", title: "Fix the flaky screenshot upload", completed: false, due_date: "2026-08-26" },
     ],
     evidence: [{ id: "debug-evidence", source: "github", title: "Desktop build verified", summary: "Windows GUI artifact passed packaging checks.", occurred_at: now.toISOString() }],
