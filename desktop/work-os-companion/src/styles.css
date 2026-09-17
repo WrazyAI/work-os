@@ -1922,13 +1922,16 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 /* Functional sort row (design §27.3): real column headers with aria-sort, not
    an ornamental replica of the row grid. */
 .sort-header-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 6px;
   min-height: 30px;
   padding: 2px 2px 5px;
   border-bottom: 1px solid var(--line);
+}
+.sort-header-cell:nth-child(2) {
+  margin-left: auto;
 }
 .task-records > .sort-header-row {
   padding-left: 8px;
@@ -1936,13 +1939,16 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .active-task-list > .sort-header-row {
   padding-left: 37px;
 }
+.active-task-sort-note {
+  margin-left: auto;
+  margin-right: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
 .sort-header-cell {
   display: flex;
-  justify-content: flex-end;
   min-width: 0;
-}
-.sort-header-cell:first-child {
-  justify-content: flex-start;
 }
 .sort-header-cell button {
   display: inline-flex;
@@ -1973,12 +1979,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .sort-header-cell button:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 1px;
-}
-@media (max-width: 900px) {
-  .sort-header-cell[data-sort-key="priority"],
-  .sort-header-cell[data-sort-key="activity"] {
-    display: none;
-  }
 }
 .task-load-more {
   width: 100%;

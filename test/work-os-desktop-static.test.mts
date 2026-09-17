@@ -541,10 +541,14 @@ assert.match(taskWorkspace, /export function sortTaskList/);
 assert.match(taskWorkspace, /export const DEFAULT_TASK_SORT: TaskSort = \{ key: "status", direction: "asc" \};/);
 assert.match(taskWorkspace, /export function dayScopedTasks/);
 const sortHeader = read("src/SortHeaderRow.tsx");
-assert.match(sortHeader, /role="columnheader" aria-sort=\{ariaSort\}/);
-assert.match(sortHeader, /role="row"/);
+assert.match(sortHeader, /role="toolbar" aria-label=\{label\}/);
+assert.match(sortHeader, /aria-pressed=\{active\}/);
 assert.match(app, /<SortHeaderRow /);
-assert.match(app, /role: "table" as const/);
+// Card rows do not map onto the sort columns, so no fake table semantics.
+assert.doesNotMatch(app, /role: "table" as const/);
+assert.doesNotMatch(sortHeader, /aria-sort=/);
+assert.doesNotMatch(sortHeader, /role="columnheader"/);
+assert.match(app, /active-task-sort-note/);
 assert.match(app, /readTaskSort\(DAY_SORT_STORAGE_KEY\)/);
 assert.match(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
 // One day scope and one overdue predicate; the old split sources must not return.
@@ -554,8 +558,9 @@ assert.match(app, /isOverdueTask\(task, today\)/);
 assert.doesNotMatch(app, /otherTasks\.filter\(\(task\) => typeof task\.due_date === "string"/);
 assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
 // Counts keep describing their own lists.
-assert.match(app, /aria-label=\{`\$\{completed\} of \$\{countedTasks\.length\} tasks done today/);
+assert.match(app, /aria-label=\{`\$\{completed\} of \$\{tasks\.length\} tasks done today/);
 assert.match(app, /count: parentTasks\(uniqueTasks\(unfinishedTasks\)\)\.length/);
 assert.match(app, /count: parentTasks\(uniqueTasks\(taskHistory\)\)\.length/);
 assert.match(styles, /\.sort-header-row/);
-assert.match(styles, /\.sort-header-cell\[data-sort-key="priority"\]/);
+assert.match(styles, /\.sort-header-row \{\n  display: flex;\n  flex-wrap: wrap;/);
+assert.match(styles, /\.active-task-sort-note/);

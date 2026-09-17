@@ -115,6 +115,9 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(isOverdueTask({ id: "undated", completed: false }, today)).toBe(false);
     expect(isOverdueTask({ id: "done", due_date: "2026-09-16", completed: true }, today)).toBe(false);
     expect(isOverdueTask({ id: "malformed", due_date: "16/09/2026", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "impossible-day", due_date: "2026-02-31", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "impossible-month", due_date: "2026-13-05", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "leap-day", due_date: "2028-02-29", completed: false }, today)).toBe(false);
     expect(taskState({ id: "past", due_date: "2026-09-16", completed: false }, today)).toBe("overdue");
     expect(taskState({ id: "done", completed: true }, today)).toBe("complete");
   });
@@ -153,13 +156,22 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(taskSortNote({ key: "activity", direction: "desc" })).toBe("Latest activity first");
   });
 
-  it("cycles sort columns through ascending, descending, and the default", () => {
+  it("cycles ascending-first columns through ascending, descending, and the default", () => {
     const due = { key: "due" as const, label: "Due", initialDirection: "asc" as const };
     const first = nextSortState(DEFAULT_TASK_SORT, due, DEFAULT_TASK_SORT);
     expect(first).toEqual({ key: "due", direction: "asc" });
     const second = nextSortState(first, due, DEFAULT_TASK_SORT);
     expect(second).toEqual({ key: "due", direction: "desc" });
     expect(nextSortState(second, due, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+  });
+
+  it("cycles descending-first columns through descending, ascending, and the default", () => {
+    const activity = { key: "activity" as const, label: "Activity", initialDirection: "desc" as const };
+    const first = nextSortState(DEFAULT_TASK_SORT, activity, DEFAULT_TASK_SORT);
+    expect(first).toEqual({ key: "activity", direction: "desc" });
+    const second = nextSortState(first, activity, DEFAULT_TASK_SORT);
+    expect(second).toEqual({ key: "activity", direction: "asc" });
+    expect(nextSortState(second, activity, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
   });
 
   it("orders groups by the status direction and rows inside groups by the active column", () => {

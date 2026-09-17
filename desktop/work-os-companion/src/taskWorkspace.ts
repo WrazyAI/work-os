@@ -6,7 +6,19 @@ export type TaskDateReason = "due" | "created" | "surfaced" | "carried" | "unkno
 export type TaskSection = { id: "overdue" | "open" | "completed"; label: string; note: string; tasks: TaskRow[] };
 
 const taskId = (task: TaskRow) => String(task.id ?? task.provider_task_id ?? "");
-const dateOnly = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const leapYear = (year: number) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+/** A calendar-valid `YYYY-MM-DD` prefix, or null for malformed strings. */
+const dateOnly = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const limit = month === 2 && leapYear(year) ? 29 : DAYS_IN_MONTH[month - 1] ?? 0;
+  return day >= 1 && day <= limit ? match[0] : null;
+};
 
 const providerErrorText = /(?:failed to fetch|fetch failed|networkerror|unexpected token|<!doctype|<html|\[object object\]|internal server error)/i;
 

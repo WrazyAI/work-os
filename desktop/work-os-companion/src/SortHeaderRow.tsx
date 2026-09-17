@@ -6,23 +6,27 @@ export type SortColumn<Key extends string> = { key: Key; label: string; initialD
 
 /**
  * Three-state cycle: a new column starts at its natural direction, the active
- * column toggles asc/desc, and a third activation restores the default order so
- * every list always has a way back to its canonical sort (design §10.3, §27.3).
+ * column toggles to the opposite direction, and only then does a third
+ * activation restore the default order, so every list always has a way back to
+ * its canonical sort (design §10.3, §27.3).
  */
 export function nextSortState<Key extends string>(
   current: SortState<Key>,
   column: SortColumn<Key>,
   fallback: SortState<Key>,
 ): SortState<Key> {
-  if (current.key !== column.key) return { key: column.key, direction: column.initialDirection ?? "asc" };
-  if (current.direction === "asc") return { key: column.key, direction: "desc" };
+  const initial = column.initialDirection ?? "asc";
+  if (current.key !== column.key) return { key: column.key, direction: initial };
+  if (current.direction === initial) return { key: column.key, direction: initial === "asc" ? "desc" : "asc" };
   return { ...fallback };
 }
 
 /**
- * Real `columnheader` elements with `aria-sort` inside a `role="row"`, so the
- * sortable list keeps table semantics: the header states the active order and
- * each button names the order it will apply next.
+ * A sort control row, deliberately a toolbar rather than a table header: task
+ * rows are cards whose cells do not map onto these five columns, so claiming
+ * `columnheader`/`aria-sort` semantics would misannounce every row. Each button
+ * carries `aria-pressed` and names the order it will apply next; the visible
+ * section notes state the order that is currently applied (design §27.3).
  */
 export function SortHeaderRow<Key extends string>({ columns, sort, fallback, onChange, label, className = "" }: {
   columns: ReadonlyArray<SortColumn<Key>>;
@@ -33,19 +37,18 @@ export function SortHeaderRow<Key extends string>({ columns, sort, fallback, onC
   className?: string;
 }) {
   return (
-    <div className={`sort-header-row ${className}`.trim()} role="row" aria-label={label}>
+    <div className={`sort-header-row ${className}`.trim()} role="toolbar" aria-label={label}>
       {columns.map((column) => {
         const active = sort.key === column.key;
         const direction = active ? sort.direction : null;
         const next = nextSortState(sort, column, fallback);
-        const ariaSort = direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none";
         const resets = next.key === fallback.key && next.direction === fallback.direction;
         const accessible = active
           ? `${column.label}, sorted ${direction === "asc" ? "ascending" : "descending"}. Activate to ${resets ? "restore the default order" : `sort ${next.direction === "asc" ? "ascending" : "descending"}`}.`
           : `Sort by ${column.label.toLowerCase()}, ${next.direction === "asc" ? "ascending" : "descending"}.`;
         return (
-          <span key={column.key} role="columnheader" aria-sort={ariaSort} data-sort-key={column.key} className={`sort-header-cell ${active ? "is-active" : ""}`.trim()}>
-            <button type="button" aria-label={accessible} title={accessible} onClick={() => onChange(next)}>
+          <span key={column.key} data-sort-key={column.key} className={`sort-header-cell ${active ? "is-active" : ""}`.trim()}>
+            <button type="button" aria-pressed={active} aria-label={accessible} title={accessible} onClick={() => onChange(next)}>
               <span className="sort-header-label">{column.label}</span>
               {direction === "asc"
                 ? <ArrowUp size={12} aria-hidden="true" />

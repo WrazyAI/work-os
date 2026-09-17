@@ -175,9 +175,9 @@ describe("Tasks workspace ordering contract", () => {
   it("renders a real sort header row and applies the default status-then-due order", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, props));
 
-    expect(markup).toContain('role="table"');
-    expect(markup).toContain('role="columnheader"');
-    expect(markup).toContain('aria-sort="ascending"');
+    expect(markup).toContain('role="toolbar"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("Status, sorted ascending.");
     expect(markup).toContain("Sort by due, ascending.");
     expect(markup).toContain("Oldest due first");
 

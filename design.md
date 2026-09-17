@@ -595,7 +595,7 @@ Completed tasks use subdued text and a clear completed control. Do not make them
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
-Task lists state their order. A functional sort row may sit above a list (see 27.3); when it does, its columns are real `columnheader` elements with `aria-sort` and buttons, and the active order is named in text so no list is ever sorted silently.
+Task lists state their order. A functional sort row may sit above a list (see 27.3). It is a `toolbar` of sort buttons, not a table header: card rows do not map onto those columns, so claiming `columnheader`/`aria-sort` semantics would misannounce every row. Each button carries `aria-pressed`, names the order it applies next, and the active order is stated in visible text, so no list is ever sorted silently.
 
 ### 10.3 Tables
 
@@ -1832,7 +1832,7 @@ stacked two-panel hero.
 ### 27.3 Task views, ordering, and overdue meaning
 
 `My day` is strictly day-scoped: it contains only tasks surfaced by today's plan,
-due today, or carried into today. Open tasks without a today relationship belong
+due today, created today, or carried into today. Open tasks without a today relationship belong
 in `Unfinished`, even when that leaves `My day` nearly empty — an honest near-empty
 My day with a pull-from-Unfinished empty state beats a mislabeled dump of every
 open task.
@@ -1859,11 +1859,13 @@ can never disagree about membership or total.
 
 **Ordering is explicit and user-sortable.** The default order is Status, then due
 date: overdue (oldest due first), open work (soonest due first, undated last),
-completed (latest completion first). A functional sort row above the list holds
-real `columnheader` elements with `aria-sort` and buttons for `Task`, `Status`,
-`Due`, `Priority`, and `Activity`. The `Status` column orders the groups; every
-other column orders rows inside each group. Activating a column cycles ascending
-→ descending → the default order, each section note names the active order, and
+completed (latest completion first). A functional sort toolbar above the list
+holds buttons for `Task`, `Status`, `Due`, `Priority`, and `Activity`; each
+button carries `aria-pressed` and names the order it applies next. The `Status`
+control orders the groups; every other control orders rows inside each group.
+Activating a control starts at its natural direction (Activity starts latest
+first), then toggles, then restores the default order on the third activation.
+Each section note, and the dashboard toolbar note, names the active order, and
 the choice is remembered per surface. No list renders in an unstated order.
 
 Provider refresh timestamps must not masquerade as meaningful task activity when
