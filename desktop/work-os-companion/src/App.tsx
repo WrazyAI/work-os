@@ -1156,8 +1156,15 @@ export default function App() {
       const message = errorMessage(value, "The update could not be installed.");
       diagnostics.warn("updater.install_failed", message);
       setUpdateFlow({ status: "downloaded", update: flow.update });
-      const recoveryMessage = `${message} To recover, quit Work OS from the system tray and run the setup installer again.`;
-      showError(recoveryMessage, recoveryMessage, "Update failed");
+      // A failed install must stay visible and retryable: antivirus holds can
+      // reject the first attempt, and a transient toast would strand the user
+      // with no path back. The downloaded artifact is kept, so Retry resumes.
+      notifications.persistent(UPDATE_AVAILABLE_KEY, `${message} Retry the install, or quit Work OS from the system tray and run the setup installer again.`, "Update failed", "error", {
+        actions: [
+          { label: "Retry", kind: "primary", onClick: () => void installDownloadedUpdate() },
+          { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
+        ],
+      });
       return;
     }
     await relaunch();

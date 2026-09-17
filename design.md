@@ -950,8 +950,12 @@ install are one explicit, resumable flow rather than a launch-time surprise.
   installing) and offers the matching single action: Check, Download, Retry,
   or Install. The automatic-checks toggle states the real cadence.
 - **Install safety.** The exit watchdog is armed only at the install step and
-  disarmed if it rejects; install failures keep the downloaded artifact so
-  Install can be retried, and the error surface names the manual setup path.
+  disarmed if it rejects. Its grace is deliberately long (120s) so antivirus
+  holds on the installer spawn — observed past 50s — never kill the app
+  mid-install; the NSIS hooks already tolerate a lingering executable. An
+  install failure raises a persistent error card with `Retry` (primary) and
+  `Later` (quiet): the downloaded artifact is kept, so retrying resumes, and
+  the card names the manual setup path.
 - **Copy convention.** Release labels render the two-digit patch display form
   (0.3.3 shows as 0.3.03); canonical versions stay unpadded wherever tools
   compare them.

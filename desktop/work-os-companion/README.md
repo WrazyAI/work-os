@@ -98,3 +98,7 @@ https://github.com/zahemen9900/work-os/releases/download/<internal-tag>/latest-i
 The static manifest is only usable when both the manifest and its referenced installer URL are anonymously reachable. The updater public key in the shipped app must match the private key used by CI, and rotating that key requires a signed transition release or existing clients will reject future updates.
 
 Rollback should create a new, higher SemVer release containing the reverted code. Do not move a tag, replace published assets, or point the updater at a lower version.
+
+### Antivirus software
+
+The installer is unsigned, so antivirus products (Avast CyberCapture and equivalents) may hold it for scanning on first sight — observed past 50 seconds. The app stays open through the hold: the in-app install waits it out, and if the attempt is rejected the failure card offers Retry once the scan clears. A second attempt then succeeds because the file is already known. If an install ever reports failure, use the card's Retry action (or Settings → Desktop updates → Install) before falling back to the manual setup installer.

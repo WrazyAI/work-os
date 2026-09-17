@@ -37,6 +37,7 @@ they change what the employee sees or does.
 ## Unreleased
 
 - First launch after an update announces itself, with a View changelog action.
+- Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
 
 ## 0.3.8
 

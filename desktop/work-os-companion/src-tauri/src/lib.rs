@@ -237,9 +237,18 @@ fn arm_exit_watchdog(grace_seconds: u64) {
 /// cannot leave a zombie process holding the executable lock. Disarmed again
 /// by the frontend whenever the install step rejects, so the still-running
 /// application is never terminated after a failed launch.
+///
+/// The grace is deliberately generous: antivirus holds on the unsigned
+/// installer spawn have been observed past 50s, and the NSIS hooks tolerate
+/// a lingering executable (kill ladder, then rename-then-continue), so a
+/// slow exit costs nothing while a short fuse kills the app mid-spawn.
+#[cfg(windows)]
+const UPDATE_EXIT_WATCHDOG_GRACE_SECS: u64 = 120;
+
 #[tauri::command]
 fn arm_update_exit_watchdog() {
-    arm_exit_watchdog(4);
+    #[cfg(windows)]
+    arm_exit_watchdog(UPDATE_EXIT_WATCHDOG_GRACE_SECS);
 }
 
 /// Cancels every currently armed exit watchdog.

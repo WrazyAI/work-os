@@ -230,6 +230,14 @@ assert.match(app, /applyDownloadEvent\(progress, event\)/);
 assert.match(app, /arm_update_exit_watchdog/);
 assert.match(app, /disarm_update_exit_watchdog/);
 assert.match(app, /update\.install\(\)/);
+// Antivirus holds outlast a short fuse: the watchdog grace stays generous and
+// a rejected install raises a persistent Retry card, never a silent death.
+assert.match(rust, /const UPDATE_EXIT_WATCHDOG_GRACE_SECS: u64 = 120;/);
+assert.match(rust, /arm_exit_watchdog\(UPDATE_EXIT_WATCHDOG_GRACE_SECS\)/);
+assert.match(rust, /fn arm_update_exit_watchdog\(\) \{\n    #\[cfg\(windows\)\]\n    arm_exit_watchdog\(UPDATE_EXIT_WATCHDOG_GRACE_SECS\);\n\}/);
+assert.match(app, /Retry the install, or quit Work OS/);
+assert.match(app, /\{ label: "Retry", kind: "primary", onClick: \(\) => void installDownloadedUpdate\(\) \}/);
+assert.doesNotMatch(app, /To recover, quit Work OS/);
 assert.match(app, /UPDATE_CHECK_INTERVAL_MS/);
 assert.match(app, /setInterval\(\(\) => \{/);
 assert.match(app, /"Update now"/);
