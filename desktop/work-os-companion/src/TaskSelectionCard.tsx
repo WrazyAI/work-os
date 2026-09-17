@@ -202,6 +202,7 @@ export function TaskSelectionCard({
 
   const toggle = (taskId: string) => {
     if (proposedIds.has(taskId) || sending) return;
+    const checking = !selectedIds.has(taskId);
     setConfirming(false);
     setSubmitError(null);
     setParentChoice((current) => {
@@ -215,11 +216,17 @@ export function TaskSelectionCard({
       const next = new Set(current);
       if (next.has(taskId)) next.delete(taskId);
       else next.add(taskId);
-      // Checking anything collapses the row list into the compact confirmation
-      // state; clearing the selection brings the full list back.
-      setListOpen(next.size === 0);
       return next;
     });
+    // Checking a parent expands it so its subtasks are immediately selectable.
+    // Selecting never collapses the list: the confirmation step does that.
+    if (checking) {
+      const parent = listedTasks.find((task) => task.id === taskId);
+      if (parent && expandable(parent) && !expandedIds.has(taskId)) {
+        setExpandedIds((current) => new Set([...current, taskId]));
+        void loadChildren(parent);
+      }
+    }
   };
 
   const titleById = new Map<string, string>();

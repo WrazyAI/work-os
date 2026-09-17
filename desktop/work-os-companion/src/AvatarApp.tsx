@@ -1141,6 +1141,8 @@ export default function AvatarApp(): React.ReactElement {
             {
               collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
               const streams = entryIndex === allEntries.length - 1 && entry.role === "assistant" && !entry.operations && !entry.toolResults && !entry.receipt && !entry.id.startsWith("prompt:");
+              // The assistant sometimes returns the same view twice; render one card.
+              const seenCards = new Set<string>();
               return (
               <ChatSectionBoundary key={entry.id} label="avatar chat message">
                 {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
@@ -1159,6 +1161,9 @@ export default function AvatarApp(): React.ReactElement {
                         {entry.toolResults?.map((result, resultIndex) => {
                           const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
                           if (!selection) return null;
+                          const displayKey = `${result.op.op}:${selection.view}:${(selection.tasks ?? []).map((task) => String(task.id ?? "")).join(",")}`;
+                          if (seenCards.has(displayKey)) return null;
+                          seenCards.add(displayKey);
                           const tasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
                             id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
                             description: typeof task.description === "string" ? task.description : null,

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { cx } from "./chat/cx";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Loader, SkipForward } from "lucide-react";
 import {
   isMutatingToolOp,
@@ -53,11 +54,39 @@ function statusLabel(result: ToolCallResult): string {
 }
 
 export function ApprovalResults({ results, onRetry }: { results: readonly ToolCallResult[]; onRetry?: (result: ToolCallResult) => void }) {
+  // Accordion, not a full card (design §25.7): the summary line carries the
+  // count and anything actionable opens itself so a failure never hides.
+  const resultKey = results.map((result) => `${result.status}:${result.op.taskTitle ?? ""}`).join("|");
+  const [manual, setManual] = useState<boolean | null>(null);
+  const failed = results.filter((result) => result.status === "failed").length;
+  const processing = results.filter((result) => result.status === "processing").length;
+  const recorded = results.length - failed - processing;
+  useEffect(() => { setManual(null); }, [resultKey]);
   if (!results.length) return null;
+  const expanded = manual ?? (failed > 0 || processing > 0);
+  const panelId = `action-results-${useId()}`;
+  const summary = failed
+    ? `${recorded} recorded · ${failed} failed${processing ? ` · ${processing} processing` : ""}`
+    : processing
+      ? `${results.length} action${results.length === 1 ? "" : "s"} · ${processing} processing`
+      : `${results.length} action${results.length === 1 ? "" : "s"} recorded`;
   return (
     <section className="approval-results" aria-label="Action results">
-      <header><strong>Action results</strong><span>{results.length}</span></header>
-      <div>
+      <header className="approval-results-head">
+        <button
+          type="button"
+          className="approval-results-toggle"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          aria-label={`${summary}: show or hide action results`}
+          title={expanded ? "Collapse action results" : "Expand action results"}
+          onClick={() => setManual(!expanded)}
+        >
+          <strong>{summary}</strong>
+          <ChevronDown size={15} aria-hidden="true" className={cx("approval-results-chevron", expanded && "is-open")} />
+        </button>
+      </header>
+      <div id={panelId} className="approval-results-body" role="region" aria-label="Action results detail" hidden={!expanded}>
         {results.map((result, index) => (
           <article key={operationKey(result.op, index)} className={`is-${result.status}`}>
             <span aria-hidden="true">{result.status === "failed" ? <CircleAlert size={14} /> : result.status === "processing" ? <Loader size={14} /> : <Check size={14} />}</span>

@@ -59,6 +59,32 @@ describe("ApprovalFlow", () => {
     expect(markup).toContain("Still processing");
   });
 
+  it("collapses to an action-count summary and opens itself when something failed", () => {
+    const recorded: ToolCallResult[] = [
+      { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: operations[1]!, status: "recorded", message: "Recorded in Nifty." },
+    ];
+    const calm = renderToStaticMarkup(createElement(ApprovalResults, { results: recorded }));
+    expect(calm).toContain("2 actions recorded");
+    expect(calm).toContain('aria-expanded="false"');
+    expect(calm).toContain('aria-controls="');
+    expect(calm).toContain('title="Expand action results"');
+    expect(calm).toMatch(/class="approval-results-body"[^>]*hidden/);
+
+    const failing: ToolCallResult[] = [
+      { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },
+      { op: operations[1]!, status: "failed", message: "Provider unavailable." },
+    ];
+    const alert = renderToStaticMarkup(createElement(ApprovalResults, { results: failing }));
+    expect(alert).toContain("1 recorded · 1 failed");
+    expect(alert).toContain('aria-expanded="true"');
+    expect(alert).toContain('title="Collapse action results"');
+    expect(alert).not.toMatch(/class="approval-results-body"[^>]*hidden/);
+
+    const single = renderToStaticMarkup(createElement(ApprovalResults, { results: [recorded[0]!] }));
+    expect(single).toContain("1 action recorded");
+  });
+
   it("offers a retry for an unfiled proposal and keeps it actionable", () => {
     const results: ToolCallResult[] = [
       { op: operations[0]!, status: "failed", message: "Not filed. Safe to retry.", retryable: true },

@@ -2651,10 +2651,12 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
     .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
     .map((op) => op.taskId)
     .filter((id): id is string => !!id);
+  // The assistant sometimes returns the same view twice; render one card.
+  const seenDisplayCards = new Set<string>();
   return <>
-    <strong>{!actionable.length && unfiled.length ? "Updates not filed" : actionable.length ? (hasResults ? "Action results" : "Review proposed actions") : "Assistant shortcuts"}</strong>
+    {hasResults ? null : <strong>{!actionable.length && unfiled.length ? "Updates not filed" : actionable.length ? "Review proposed actions" : "Assistant shortcuts"}</strong>}
     {interpretation.reply ? <ChatMarkdown text={interpretation.reply} /> : null}
-    <p>{!actionable.length && unfiled.length ? "Nothing was recorded. The reasons are listed below." : actionable.length ? (hasResults ? "Each provider result is shown below." : "Choose what to record. Nothing changes until the final confirmation.") : "Loaded inline below. Viewing never needs approval."}</p>
+    {hasResults ? null : <p>{!actionable.length && unfiled.length ? "Nothing was recorded. The reasons are listed below." : actionable.length ? "Choose what to record. Nothing changes until the final confirmation." : "Loaded inline below. Viewing never needs approval."}</p>}
     <ChatSectionBoundary label="assistant actions">
       <div className="interpretation-list">
         {interpretation.operations.map((op, index) => {
@@ -2665,6 +2667,9 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
           if (result?.status === "failed") return <p key={`${op.op}-${index}`} className="tool-display-error">{result.message}</p>;
           const selection = (result?.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
           if (!selection) return null;
+          const displayKey = `${op.op}:${selection.view}:${(selection.tasks ?? []).map((task) => String(task.id ?? "")).join(",")}`;
+          if (seenDisplayCards.has(displayKey)) return null;
+          seenDisplayCards.add(displayKey);
           const selectionTasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
             id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
             description: typeof task.description === "string" ? task.description : null,
