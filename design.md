@@ -955,6 +955,17 @@ install are one explicit, resumable flow rather than a launch-time surprise.
 - **Copy convention.** Release labels render the two-digit patch display form
   (0.3.3 shows as 0.3.03); canonical versions stay unpadded wherever tools
   compare them.
+- **Post-install announcement.** The first launch running a build this device
+  has not announced yet raises one success flyout naming the installed
+  version, with `View changelog` (primary) and `Dismiss` (quiet); either
+  choice marks the version seen and it never reappears. The announcement keeps
+  the success tone (green, mirroring the persistent error rule) rather than the
+  default pinned-amber. The changelog action opens a read-only modal rendering that version's `CHANGELOG.md` section
+  (bundled with the build, so it works offline), with a deliberate fallback
+  when the build shipped without notes. The same modal is always reachable
+  from a `What's new` action in Settings. Every release ships its section:
+  the release workflow fails when the released version has no changelog
+  entry, and the GitHub release notes carry the same section.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action
@@ -1752,7 +1763,11 @@ title/body. Editing, archive, and permanent deletion use the ellipsis menu.
 
 The current-day Tasks page uses this exact order:
 
-1. Page intro and date navigator on a shared baseline. The intro is one line; do not stack an eyebrow, a large display title, and a companion cue above the agenda strip.
+1. Page intro and date navigator on a shared baseline. The shell masthead owns
+   the single page title and date eyebrow; this row carries only a quiet context
+   label (`Today`, or `Workday history` for a past date) and the date navigator.
+   Do not stack an eyebrow, a large display title, and a companion cue above the
+   agenda strip, and never repeat the masthead's title here.
 2. Agenda strip (see 27.2).
 3. View tabs with live counts: My day, Unfinished, Completed, All tasks.
 4. Search and compact filters toolbar.
@@ -1772,11 +1787,15 @@ Truthful removal, not a permanent dead row, is the required end state.
 
 One strip, approximately 56–72px tall, spanning the content width:
 
-- **Focus statement:** one line (truncated with an ellipsis when long), followed by provenance and save state in small quiet text. Activating the statement opens the same focus editor as the composer's `Focus` control.
-- **Count chips:** `My day`, `Unfinished`, `Completed` with live counts; each chip activates its view. When unfinished carry-over exists, a `Review unfinished work` link sits at the strip's right edge and opens the carry-over flyout.
+- **Focus statement:** one line (truncated with an ellipsis when long), followed by provenance and save state in small quiet text. Activating the statement opens the same focus editor as the composer's `Focus` control. It keeps a real minimum width (~280px) so controls never crowd it out of its own strip.
+- **Count chips:** `My day`, `Unfinished`, `Completed`, and `All tasks` with live counts; each chip activates its view. The chips stay on one line inside their pill (they never wrap internally above 900px) and are compact enough to sit beside the focus statement at the 1200px content width. When unfinished carry-over exists, a `Review unfinished work` link sits at the strip's right edge and opens the carry-over flyout.
 - Historical dates show a read-only agenda line (that day's focus, or a truthful "no focus recorded") and omit current-day mutation controls.
 
-At `≤900px` the chips may wrap to a second row; the strip never becomes a stacked two-panel hero.
+Between 900px and 1120px the strip reflows deliberately into two rows — the focus
+statement keeps the full first row, the chips (left) and carry link (right) share
+the second — so it never grows taller than the 72px budget by accident. At
+`≤900px` the chips may wrap inside their own pill; the strip never becomes a
+stacked two-panel hero.
 
 ### 27.3 Task views, ordering, and overdue meaning
 
@@ -1828,6 +1847,12 @@ depth:
   a record is not yet mirrored. Description is hidden when empty and otherwise
   truncated to one line; full text lives in the task-detail view. Never render
   the empty placeholder on the row.
+- The title line is a single row that never wraps: the title ellipsizes and the
+  `On today` tag always ends the line, so the tag can never fall onto the
+  metadata line and evict its content. In-row assignee chips match the metadata
+  text's height (~20px), so rows with and without an assignee keep one rhythm.
+- The completion checkbox and the subtask ring align with the title's first line
+  while the due date, status pill, and menu stay on the row centerline.
 - Tasks surfaced into today show a small `On today` tag beside the title. No
   decorative column-header row appears above the list. Aggregate provider
   freshness lives once in the strip or toolbar; per-row provenance chips are

@@ -148,6 +148,35 @@ describe("operational visualizations", () => {
     expect(insightChartStyles).toContain("Chart labels must remain readable at native Windows scaling");
   });
 
+  it("keeps the Tasks page layout flat, single-headed, and wrap-proof", () => {
+    // The shell masthead owns the page title; the workspace row must not repeat it.
+    expect(app).toContain('className="tasks-heading-context"');
+    expect(app).not.toContain('<h1>{historical ? "Workday history" : "Tasks"}</h1>');
+    expect(workspaceStyles).toContain(".tasks-heading-context");
+    expect(workspaceStyles).not.toContain(".tasks-heading-row h1");
+    expect(styles).not.toContain(".tasks-page");
+    expect(styles).not.toContain(".task-view-tabs");
+    expect(styles).not.toContain(".tasks-workspace .page-intro");
+    // Chips never wrap inside their pill above 900px; the strip reflows instead.
+    expect(workspaceStyles).toMatch(/\.agenda-strip-chips \{[\s\S]*?flex-wrap: nowrap/);
+    expect(workspaceStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?display: flex;[\s\S]*?min-width: 280px;/);
+    expect(workspaceStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"chips carry"/);
+    expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{[\s\S]*?\.agenda-strip-chips \{ flex-wrap: wrap; \}/);
+    // Title line never wraps the On today tag onto the metadata line.
+    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
+    expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);
+    expect(workspaceStyles).toMatch(/\.surfaced-tag \{[\s\S]*?margin-left: auto;/);
+    // Completion aligns with the title; the right cluster stays centered.
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .task-check { grid-column: 1; align-self: start;");
+    expect(workspaceStyles).toContain("align-self: start; margin-top: 1px; }");
+    // One frame: the panel is the card, and in-row chips match the meta line.
+    expect(workspaceStyles).toMatch(/\.task-records\.evidence-list \{[\s\S]*?border: 0;/);
+    expect(workspaceStyles).toContain(".task-row-line.secondary-line .task-assignee-tags > span");
+    // The dock matches the content column and never traps a focused row.
+    expect(workspaceStyles).toMatch(/html:has\(\.stage\.has-dock\) \{[\s\S]{0,80}?scroll-padding-bottom: 140px;/);
+    expect(workspaceStyles).toContain("width: min(calc(100% - 48px), 1024px);");
+  });
+
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
     expect(app).toContain("TrendChart");
     expect(app).toContain("FlowDonut");

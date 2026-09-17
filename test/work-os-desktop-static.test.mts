@@ -469,4 +469,59 @@ assert.match(vaultSource, /const CHAT_SCOPE_KEYS = "chat-scope-keys";/);
 assert.match(vaultSource, /for \(const key of scopes\) await remove\(key\);/);
 assert.match(vaultSource, /rememberChatScope\(scope\)/);
 
+// ── Post-install announcement and changelog convention ──
+const whatsNew = read("src/whatsNew.ts");
+assert.match(whatsNew, /WHATS_NEW_SEEN_KEY = "work-os\.update\.announcedVersion\.v1"/);
+assert.match(whatsNew, /WHATS_NEW_ANNOUNCE_KEY = "work-os-update-announced"/);
+assert.match(whatsNew, /export function shouldAnnounceUpdate/);
+assert.match(whatsNew, /export function parseChangelog/);
+assert.match(whatsNew, /export function changelogBulletsFor/);
+assert.match(whatsNew, /export function updateInstalledCopy/);
+assert.match(app, /WHATS_NEW_ANNOUNCE_KEY/);
+assert.match(app, /shouldAnnounceUpdate\(value, readAnnouncedVersion\(\)\)/);
+assert.match(app, /markUpdateAnnounced\(value\)/);
+assert.match(app, /<WhatsNewModal/);
+assert.match(app, /changelogBulletsFor\(CHANGELOG_RAW/);
+assert.match(app, /What's new/);
+assert.match(app, /setWhatsNew\(null\)/);
+const whatsNewModal = read("src/WhatsNewModal.tsx");
+assert.match(whatsNewModal, /role="dialog" aria-modal="true"/);
+assert.match(whatsNewModal, /No changelog notes shipped with this build\./);
+const changelog = read("CHANGELOG.md");
+assert.match(changelog, /^## Unreleased$/m);
+assert.match(changelog, /^## \d+\.\d+\.\d+$/m);
+assert.match(changelog, /hard\s+release requirement/);
+// End-user brevity: one short bullet per change (wrapped lines joined).
+// Only entry sections count; the header guidance above them is exempt.
+const changelogBullets: string[] = [];
+let pendingBullet: string | null = null;
+let inEntries = false;
+for (const line of changelog.split("\n")) {
+  if (/^##\s/.test(line)) {
+    inEntries = true;
+    if (pendingBullet !== null) { changelogBullets.push(pendingBullet); pendingBullet = null; }
+    continue;
+  }
+  if (!inEntries) continue;
+  const start = line.match(/^\s*[-*]\s+(\S.*)$/);
+  if (start) {
+    if (pendingBullet !== null) changelogBullets.push(pendingBullet);
+    pendingBullet = start[1]!;
+    continue;
+  }
+  if (pendingBullet !== null && /^\s+\S/.test(line)) pendingBullet += ` ${line.trim()}`;
+}
+if (pendingBullet !== null) changelogBullets.push(pendingBullet);
+assert.ok(changelogBullets.length > 0, "CHANGELOG.md must carry entries");
+for (const bullet of changelogBullets) {
+  assert.ok(bullet.length <= 160, `CHANGELOG bullets stay one short line for end users (${bullet.length} chars): ${bullet.slice(0, 80)}…`);
+}
+const chatPreview = read("src/ChatPreview.tsx");
+assert.match(chatPreview, /isolate === "whatsnew"/);
+assert.match(chatPreview, /<WhatsNewSection \/>/);
+const releaseWorkflow = readFileSync(resolve(import.meta.dirname, "../.github/workflows/work-os-companion-windows.yml"), "utf8");
+assert.match(releaseWorkflow, /Require changelog entry for the release/);
+assert.match(releaseWorkflow, /## What's new in/);
+assert.match(styles, /\.notification-flyout\.persistent\.success/);
+
 console.log("Work OS desktop static checks passed.");

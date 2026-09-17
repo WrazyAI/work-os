@@ -26,6 +26,10 @@ Set `VITE_WORK_OS_API_URL` to use a non-production API origin. The API URL can a
 
 The version must match `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`. The workflow fails before building if they differ. Do not reuse or move a published version tag.
 
+### Changelog
+
+`CHANGELOG.md` is the employee-facing release notes file, and keeping it current is a hard release requirement: CI fails the release when the released version has no matching `## ` section with at least one bullet, and the GitHub release notes are built from that section. Write every entry for the employee who just installed the update — one short, plain bullet per change, no jargon, details only for complex changes that cannot fit one line. Collect entries under `## Unreleased` while work is in flight; move them under the new `## <version>` heading when cutting the release.
+
 The release job produces fixed asset names so website and updater links do not change between versions:
 
 | Asset | Purpose |
