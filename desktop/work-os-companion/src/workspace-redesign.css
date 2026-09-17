@@ -6452,6 +6452,22 @@ button:not(:disabled):active {
   color: var(--ink);
 }
 
+.memory-show-all {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-show-all:hover {
+  border-color: #b8b9af;
+  color: var(--ink);
+}
+
 .memory-provenance {
   margin: 0;
   color: var(--muted);

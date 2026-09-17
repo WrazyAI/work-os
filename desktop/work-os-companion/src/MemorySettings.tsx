@@ -26,6 +26,9 @@ export interface MemoryView {
   recent: MemoryRecent[];
 }
 
+/** The activity feed shows this many rows before the Show all control. */
+const ACTIVITY_PAGE_SIZE = 8;
+
 const KIND_LABELS: Record<string, string> = {
   check_in: "Check-in",
   plan: "Plan",
@@ -56,9 +59,11 @@ export function MemoryPanel({ facts, recent, busy, error, onReview, onForget }: 
   onReview: (id: string, status: "confirmed" | "rejected") => void;
   onForget: (id: string) => void;
 }) {
-  const candidates = facts.filter((fact) => fact.review_status === "candidate");
-  const confirmed = facts.filter((fact) => fact.review_status === "confirmed");
-  const visibleRecent = recent.slice(0, 8);
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const newestFirst = (left: MemoryFact, right: MemoryFact) => String(right.occurred_at).localeCompare(String(left.occurred_at));
+  const candidates = [...facts].filter((fact) => fact.review_status === "candidate").sort(newestFirst);
+  const confirmed = [...facts].filter((fact) => fact.review_status === "confirmed").sort(newestFirst);
+  const visibleRecent = showAllActivity ? recent : recent.slice(0, ACTIVITY_PAGE_SIZE);
   return (
     <section className="memory-panel" aria-labelledby="memory-panel-title">
       <header className="memory-head">
@@ -133,6 +138,11 @@ export function MemoryPanel({ facts, recent, busy, error, onReview, onForget }: 
                 </li>
               ))}
             </ul>
+            {recent.length > ACTIVITY_PAGE_SIZE && (
+              <button type="button" className="memory-show-all" aria-expanded={showAllActivity} onClick={() => setShowAllActivity((value) => !value)}>
+                {showAllActivity ? "Show less" : `Show all ${recent.length}`}
+              </button>
+            )}
             <p className="memory-provenance">Context Otto drew on while working — dated history only, never proof that work was completed.</p>
           </>
         ) : <p className="memory-empty">No memories recorded yet. Activity appears here as Otto works with you.</p>}

@@ -93,8 +93,20 @@ describe("MemoryPanel sections", () => {
       createElement(MemoryPanel, { facts: [], recent: manyRecent, busy: false, error: null, onReview: noop, onForget: noop }),
     );
     expect((html.match(/class="memory-row"/g) ?? []).length).toBe(8);
+    expect(html).toContain("Show all 10");
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("never proof that work was completed");
     expect(html).toContain('class="memory-kind"');
+  });
+
+  it("orders review candidates newest first", () => {
+    const oldest: MemoryFact = { ...candidate, id: "old", content: "Oldest proposal.", occurred_at: "2026-09-01T09:00:00.000Z" };
+    const newest: MemoryFact = { ...candidate, id: "new", content: "Newest proposal.", occurred_at: "2026-09-20T09:00:00.000Z" };
+    const html = renderToStaticMarkup(
+      createElement(MemoryPanel, { facts: [oldest, candidate, newest], recent: [], busy: false, error: null, onReview: noop, onForget: noop }),
+    );
+    expect(html.indexOf("Newest proposal.")).toBeLessThan(html.indexOf("Prefers deep work before noon."));
+    expect(html.indexOf("Prefers deep work before noon.")).toBeLessThan(html.indexOf("Oldest proposal."));
   });
 });
 

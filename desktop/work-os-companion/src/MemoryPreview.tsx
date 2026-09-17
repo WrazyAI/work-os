@@ -21,6 +21,10 @@ const RECENT: MemoryRecent[] = [
   { id: "r4", kind: "evidence", content: "Desktop build verified.", summary: "Desktop build verified — packaging checks passed.", local_date: "2026-09-16", occurred_at: "2026-09-16T15:00:00.000Z" },
   { id: "r5", kind: "eod", content: "Submitted the EOD for September 16.", summary: "Submitted the EOD for September 16.", local_date: "2026-09-16", occurred_at: "2026-09-16T19:00:00.000Z" },
   { id: "r6", kind: "conversation", content: "Discussed the insights redesign.", summary: "Discussed chart density and the split layout in chat.", local_date: "2026-09-15", occurred_at: "2026-09-15T13:00:00.000Z" },
+  { id: "r7", kind: "check_in", content: "Closed out the morning block.", summary: "Closed out the morning block on the runner task.", local_date: "2026-09-15", occurred_at: "2026-09-15T11:00:00.000Z" },
+  { id: "r8", kind: "task_event", content: "Deferred the macOS port task.", summary: "Deferred the macOS port task to next week.", local_date: "2026-09-14", occurred_at: "2026-09-14T16:00:00.000Z" },
+  { id: "r9", kind: "plan", content: "Review the ACL fix release notes.", summary: "Review the ACL fix release notes with the team.", local_date: "2026-09-14", occurred_at: "2026-09-14T09:00:00.000Z" },
+  { id: "r10", kind: "evidence", content: "Installer checksum verified.", summary: "Installer checksum verified before delivery.", local_date: "2026-09-13", occurred_at: "2026-09-13T14:00:00.000Z" },
 ];
 
 /** Dev-only review surface for the memory panel: the three classes with local

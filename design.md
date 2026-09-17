@@ -2272,8 +2272,9 @@ Controls follow one vocabulary:
 - **Statuses are chips, not controls.** A value the employee cannot press
   (`Avatar`, `Hidden`, `Ready`, `Checking`) renders as a chip — no border or
   button chrome. Amber tint belongs only to work that needs attention.
-- **Actions keep the quiet-action button style**; destructive actions
-  (`Reset`, `Sign out`) use the danger tone and keep their confirmation.
+- **Actions keep the quiet-action button style**; destructive actions use the
+  danger tone and confirm first — `Reset` names what is cleared, and signing out
+  asks before ending the session.
 
 Do not place unrelated settings in dashboard metric cards.
 
@@ -2306,8 +2307,11 @@ exist. It then renders three classes in this fixed order, each as its own
    readable.
 3. **Recent activity.** Dated episodes Otto drew on (check-in, plan, task event,
    evidence, EOD, conversation), rendered as a muted feed with a kind label per
-   row, the summary, the date, and a `Forget` action. It closes with the
-   provenance line: context only, never proof that work was completed.
+   row, the summary, the date, and a `Forget` action. The feed shows the eight
+   most recent entries with a `Show all N` control that expands in place (and
+   `Show less` that restores it), so nothing returned to the panel is
+   unreachable. It closes with the provenance line: context only, never proof
+   that work was completed.
 
 Every class states its own empty value rather than disappearing, and the date in
 every row is a calendar day (`formatWorkOsDate`) — never a raw serialized

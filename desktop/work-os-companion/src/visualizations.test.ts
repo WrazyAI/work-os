@@ -187,6 +187,7 @@ describe("operational visualizations", () => {
     expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
     expect(app).toContain('className="status-chip"');
+    expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-group-head");
     expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 84px;/);
     expect(styles).toContain(".settings-switch-track");
