@@ -195,7 +195,15 @@ describe("operational visualizations", () => {
     expect(styles).toMatch(/\.setting,[\s\S]*?border-top: 1px solid var\(--line\);/);
     expect(styles).toMatch(/\.setting,[\s\S]*?background: transparent;/);
     expect(styles).toMatch(/\.setting,[\s\S]*?box-shadow: none;/);
+    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
     expect(styles).toMatch(/\.settings-panel \{[\s\S]*?border: 0;/);
+    expect(styles).toContain(".setting-controls");
+    // The update row's actions share one control column, so Check and
+    // What's new stay adjacent instead of being spread across the row.
+    const controlStart = app.indexOf('className="setting-controls"');
+    const updateRow = app.slice(controlStart, app.indexOf("</Setting>", controlStart));
+    expect(updateRow).toContain("checkForUpdates()");
+    expect(updateRow).toContain("setWhatsNew(");
     expect(styles).not.toMatch(/\.evidence-list,\n\.settings-panel \{/);
     expect(styles).toContain(".settings-switch-track");
     expect(styles).toContain(".status-chip.attention");

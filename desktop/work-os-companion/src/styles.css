@@ -1633,15 +1633,16 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .settings-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 36px;
   padding: 0;
   border: 0;
-  border-top: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
+/* Two-column table: transparent rows on hairlines. Never a card per row, and
+   no card behind the group either — settings live on the page surface. */
 .setting,
 .setting:first-child {
   display: flex;
@@ -1656,8 +1657,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: transparent;
   box-shadow: none;
 }
-.setting:first-child {
-  border-top: 0;
+/* Controls sit together in the row's control column. */
+.setting-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 .setting > div {
   min-width: 0;
@@ -1796,6 +1801,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 @media (max-width: 850px) {
   .nav-group { display: grid; }
+  .settings-panel { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .setting,
@@ -1807,7 +1813,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   }
   .setting > button,
   .setting > .settings-switch,
-  .setting > .status-chip {
+  .setting > .status-chip,
+  .setting > .setting-controls {
     align-self: flex-start;
   }
   .setting > .quiet-action {

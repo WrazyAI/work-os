@@ -2484,13 +2484,15 @@ export default function App() {
               <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
               <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
               <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
-                {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
-                {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
-                {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
-                {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
-                {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
-                {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
-                {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+                <span className="setting-controls">
+                  {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
+                  {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
+                  {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
+                  {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
+                  {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
+                  {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
+                  {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+                </span>
               </Setting>
             </section>
           </section>

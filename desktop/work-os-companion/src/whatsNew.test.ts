@@ -38,6 +38,15 @@ describe("post-install announcement", () => {
     expect(entries[1]?.bullets).toEqual(["Star bullets count too."]);
   });
 
+  it("parses a changelog checked out with Windows line endings", () => {
+    const crlf = SAMPLE.replace(/\n/g, "\r\n");
+    expect(changelogBulletsFor(crlf, "0.3.9")).toEqual([
+      "First launch announces itself.",
+      "View changelog opens this modal.",
+    ]);
+    expect(parseChangelog(crlf).map((entry) => entry.version)).toEqual(["0.3.9", "0.3.8"]);
+  });
+
   it("returns bullets per version and [] when the build shipped without notes", () => {
     expect(changelogBulletsFor(SAMPLE, "0.3.9")).toHaveLength(2);
     expect(changelogBulletsFor(SAMPLE, " 0.3.8 ")).toEqual(["Star bullets count too."]);

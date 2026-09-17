@@ -47,7 +47,9 @@ export type ChangelogEntry = { version: string; bullets: string[] };
 export function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let current: ChangelogEntry | null = null;
-  for (const line of markdown.split("\n")) {
+  // Windows checkouts deliver CRLF; `.` never matches \r, so an unnormalized
+  // split silently dropped every bullet while the headings still matched.
+  for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
     const heading = line.match(/^##\s+(\d+\.\d+\.\d+)\s*$/);
     if (heading) {
       current = { version: heading[1]!, bullets: [] };
