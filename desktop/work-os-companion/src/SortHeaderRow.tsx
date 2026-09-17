@@ -18,7 +18,10 @@ export function nextSortState<Key extends string>(
   const initial = column.initialDirection ?? "asc";
   if (current.key !== column.key) return { key: column.key, direction: initial };
   if (current.direction === initial) return { key: column.key, direction: initial === "asc" ? "desc" : "asc" };
-  return { ...fallback };
+  // A fallback on this same column must start where the cycle started, or the
+  // third activation would restore a stale state; otherwise restart the cycle.
+  const compatible = fallback.key !== column.key || fallback.direction === initial;
+  return compatible ? { ...fallback } : { key: column.key, direction: initial };
 }
 
 /**

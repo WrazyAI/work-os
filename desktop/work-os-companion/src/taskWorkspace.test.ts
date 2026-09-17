@@ -174,6 +174,15 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(nextSortState(second, activity, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
   });
 
+  it("restarts the cycle instead of restoring an incompatible fallback", () => {
+    const activity = { key: "activity" as const, label: "Activity", initialDirection: "desc" as const };
+    const compatible = { key: "status" as const, direction: "asc" as const };
+    const incompatible = { key: "activity" as const, direction: "asc" as const };
+    const ascending = { key: "activity" as const, direction: "asc" as const };
+    expect(nextSortState(ascending, activity, compatible)).toEqual({ key: "status", direction: "asc" });
+    expect(nextSortState(ascending, activity, incompatible)).toEqual({ key: "activity", direction: "desc" });
+  });
+
   it("orders groups by the status direction and rows inside groups by the active column", () => {
     const tasks = [
       { id: "done", title: "Done", completed: true, completed_at: "2026-09-16T10:00:00Z" },
