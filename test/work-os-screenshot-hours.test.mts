@@ -35,14 +35,41 @@ test("the hour boundary follows the employee's timezone", () => {
   assert.equal(utc[0]?.label, "11 PM–12 AM");
 });
 
-test("the source hash tracks content, not frame order", () => {
-  const one = [frame("a", "2026-09-17T15:05:00.000Z", "First.", "Chrome"), frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code")];
-  const reordered = [one[1]!, one[0]!];
-  assert.equal(screenshotHourHash(15, one), screenshotHourHash(15, reordered));
-  const edited = [frame("a", "2026-09-17T15:05:00.000Z", "First, edited.", "Chrome"), one[1]!];
-  assert.notEqual(screenshotHourHash(15, one), screenshotHourHash(15, edited));
-  const extra = [...one, frame("c", "2026-09-17T15:50:00.000Z", "Third.", "Chrome")];
-  assert.notEqual(screenshotHourHash(15, one), screenshotHourHash(15, extra));
+test("the source hash covers every prompt input, not frame order", () => {
+  const [group] = screenshotHourGroups([
+    frame("a", "2026-09-17T15:05:00.000Z", "First.", "Chrome"),
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+  ], "UTC");
+  const [reordered] = screenshotHourGroups([
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+    frame("a", "2026-09-17T15:05:00.000Z", "First.", "Chrome"),
+  ], "UTC");
+  assert.equal(screenshotHourHash(group!), screenshotHourHash(reordered!));
+
+  const [edited] = screenshotHourGroups([
+    frame("a", "2026-09-17T15:05:00.000Z", "First, edited.", "Chrome"),
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+  ], "UTC");
+  assert.notEqual(screenshotHourHash(group!), screenshotHourHash(edited!));
+
+  const [reapp] = screenshotHourGroups([
+    frame("a", "2026-09-17T15:05:00.000Z", "First.", "Terminal"),
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+  ], "UTC");
+  assert.notEqual(screenshotHourHash(group!), screenshotHourHash(reapp!), "an app correction must invalidate the cached line");
+
+  const [moved] = screenshotHourGroups([
+    frame("a", "2026-09-17T15:06:00.000Z", "First.", "Chrome"),
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+  ], "UTC");
+  assert.notEqual(screenshotHourHash(group!), screenshotHourHash(moved!), "a capture-time correction must invalidate the cached line");
+
+  const [extra] = screenshotHourGroups([
+    frame("a", "2026-09-17T15:05:00.000Z", "First.", "Chrome"),
+    frame("b", "2026-09-17T15:40:00.000Z", "Second.", "VS Code"),
+    frame("c", "2026-09-17T15:50:00.000Z", "Third.", "Chrome"),
+  ], "UTC");
+  assert.notEqual(screenshotHourHash(group!), screenshotHourHash(extra!));
 });
 
 console.log("Work OS screenshot hour tests passed.");

@@ -24,3 +24,12 @@ create table if not exists work_screenshot_hourly_summaries (
 
 create index if not exists work_screenshot_hourly_person_idx
   on work_screenshot_hourly_summaries (organization_id, person_id, local_date);
+
+alter table work_screenshot_hourly_summaries enable row level security;
+drop policy if exists "work screenshot hourly read" on work_screenshot_hourly_summaries;
+create policy "work screenshot hourly read" on work_screenshot_hourly_summaries
+  for select using(work_can_access_person(organization_id, person_id));
+drop policy if exists "work screenshot hourly admin manage" on work_screenshot_hourly_summaries;
+create policy "work screenshot hourly admin manage" on work_screenshot_hourly_summaries
+  for all using(work_has_org_role(organization_id, array['admin']))
+  with check(work_has_org_role(organization_id, array['admin']));

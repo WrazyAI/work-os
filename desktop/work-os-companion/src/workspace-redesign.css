@@ -5569,6 +5569,7 @@ button:not(:disabled):active {
 .eod-loading-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .eod-loading-footer small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .eod-shot-hour-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 9px; align-items: center; width: 100%; padding: 5px; border: 1px solid transparent; border-radius: 8px; color: inherit; font-size: 10px; line-height: 1.4; }
+.eod-shot-hour-row.no-thumb { grid-template-columns: minmax(0, 1fr); }
 .eod-loom { margin: 0 22px 14px; }
 .eod-loom-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px dashed var(--line); border-radius: 9px; background: transparent; color: var(--muted); padding: 7px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
 .eod-loom-toggle.active { border-style: solid; border-color: #94c86a; color: #42503e; background: #edf6e4; }

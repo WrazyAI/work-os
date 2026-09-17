@@ -13,7 +13,7 @@ export const LOOM_PAGE_MAX_BYTES = 400_000;
 
 const VIDEO_ID = /^[0-9a-f]{32}$/i;
 const LOOM_HOSTS = new Set(["loom.com", "www.loom.com"]);
-const LOOM_IN_TEXT = /(?:https?:\/\/)?(?:www\.)?loom\.com\/(?:share|embed)\/[0-9a-f]{32}/gi;
+const LOOM_IN_TEXT = /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?loom\.com\/[^\s<>"']+/gi;
 const VTT_TIMESTAMP = /^\s*(?:\d{1,3}:)?\d{2}:\d{2}[.,]\d{3}\s*-->/;
 const VTT_HEADER = /^\s*(WEBVTT|NOTE|STYLE|REGION)\b.*$/i;
 const SRT_INDEX = /^\s*\d{1,6}\s*$/;

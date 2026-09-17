@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { INTERPRET_MODEL } from "@/lib/aiInterpret";
 import { db } from "@/lib/work-os-internal";
+import { zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const HOUR_SUMMARY_TIMEOUT_MS = 45_000;
@@ -8,6 +9,19 @@ const PROMPT_VERSION = "work-os-screenshot-hours-v1";
 const MAX_HOURS = 16;
 const MAX_FRAMES_PER_HOUR = 12;
 const MAX_FRAME_SUMMARY = 180;
+
+/** The provider endpoint must never send the API key or activity text over
+ * cleartext transport; a loopback proxy is the only http exception. */
+function providerUrl(): string | null {
+  try {
+    const url = new URL(OPENROUTER_URL);
+    if (url.protocol === "https:") return url.toString();
+    if (url.protocol === "http:" && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname.toLowerCase())) return url.toString();
+  } catch {
+    // fall through to unavailable
+  }
+  return null;
+}
 
 export interface ScreenshotHourFrame {
   summaryId: string;
@@ -92,12 +106,24 @@ export function screenshotHourGroups(frames: ScreenshotHourFrame[], timezone: st
     });
 }
 
-export function screenshotHourHash(hourStart: number, frames: ScreenshotHourFrame[]): string {
-  const material = frames
-    .map((frame) => `${frame.summaryId}:${frame.summary}`)
-    .sort((left, right) => left.localeCompare(right))
-    .join("\n");
-  return createHash("sha256").update(`${hourStart}\n${material}`).digest("hex");
+/** The exact per-hour material sent to the model. The cache hash is built
+ * from this same string, so any prompt-affecting change (app, capture time,
+ * summary text, frame order, or the frame cap) invalidates the cached line. */
+function hourPromptMaterial(group: ScreenshotHourGroup) {
+  return JSON.stringify({
+    hourStart: group.hourStart,
+    label: group.label,
+    frames: group.frames.slice(0, MAX_FRAMES_PER_HOUR).map((frame) => ({
+      id: frame.summaryId,
+      app: frame.visibleApp ?? null,
+      at: frame.capturedAt,
+      summary: frame.summary.slice(0, MAX_FRAME_SUMMARY),
+    })),
+  });
+}
+
+export function screenshotHourHash(group: ScreenshotHourGroup): string {
+  return createHash("sha256").update(hourPromptMaterial(group)).digest("hex");
 }
 
 const HOUR_SUMMARY_SCHEMA = {
@@ -129,9 +155,10 @@ const HOUR_SUMMARY_SCHEMA = {
  * Returns null when the provider is unavailable so callers can fall back. */
 export async function summarizeScreenshotHours(groups: ScreenshotHourGroup[]): Promise<Map<number, string> | null> {
   const key = process.env.OPENROUTER_API_KEY;
-  if (!key || !groups.length) return null;
+  const url = providerUrl();
+  if (!key || !url || !groups.length) return null;
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -150,11 +177,7 @@ export async function summarizeScreenshotHours(groups: ScreenshotHourGroup[]): P
           {
             role: "user",
             content: JSON.stringify({
-              hours: groups.map((group) => ({
-                hourStart: group.hourStart,
-                label: group.label,
-                frames: group.frames.slice(0, MAX_FRAMES_PER_HOUR).map((frame) => `${frame.visibleApp ? `[${frame.visibleApp}] ` : ""}${frame.summary.slice(0, MAX_FRAME_SUMMARY)}`),
-              })),
+              hours: groups.map((group) => JSON.parse(hourPromptMaterial(group))),
             }),
           },
         ],
@@ -192,6 +215,20 @@ function fallbackSummary(group: ScreenshotHourGroup): string {
   return apps ? `${frames} analyzed across ${apps}.` : `${frames} analyzed.`;
 }
 
+/** The UTC instant range covering one local calendar day, so late-evening
+ * local frames stored on the next UTC date still belong to the report day. */
+function localDayUtcBounds(date: string, timezone: string) {
+  const nextDate = new Date(new Date(`${date}T12:00:00Z`).getTime() + 24 * 60 * 60_000).toISOString().slice(0, 10);
+  try {
+    const start = zonedDateTimeToUtc(date, "00:00:00", timezone || "UTC").toISOString();
+    const end = zonedDateTimeToUtc(nextDate, "00:00:00", timezone || "UTC").toISOString();
+    if (Date.parse(start) < Date.parse(end)) return { start, end };
+  } catch {
+    // fall through to the UTC day
+  }
+  return { start: `${date}T00:00:00.000Z`, end: `${nextDate}T00:00:00.000Z` };
+}
+
 async function personTimezone(organizationId: string, personId: string) {
   const { data, error } = await db().from("work_employee_onboarding").select("timezone")
     .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
@@ -216,16 +253,16 @@ export async function ensureHourlyScreenshotSummaries(input: {
   timezone?: string;
 }): Promise<EodScreenshotHour[]> {
   const timezone = input.timezone ?? await personTimezone(input.organizationId, input.personId);
+  const bounds = localDayUtcBounds(input.date, timezone);
   const events = await db().from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", input.organizationId).eq("person_id", input.personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
-    .gte("occurred_at", `${input.date}T00:00:00.000Z`).lte("occurred_at", `${input.date}T23:59:59.999Z`);
+    .gte("occurred_at", bounds.start).lt("occurred_at", bounds.end);
   if (events.error) throw new Error(`load screenshot hour events: ${events.error.message}`);
   const occurredBy = new Map((events.data ?? []).map((row: any) => [String(row.id), String(row.occurred_at ?? "")]));
   const eventIds = [...occurredBy.keys()];
   const now = Date.now();
   const frames: ScreenshotHourFrame[] = [];
-  const retained = new Set<string>();
   if (eventIds.length) {
     const rows = await db().from("work_screenshot_summaries")
       .select("id,summary,visible_context,processing_status,evidence_event_id,storage_path,deleted_at,expires_at")
@@ -233,6 +270,11 @@ export async function ensureHourlyScreenshotSummaries(input: {
     if (rows.error) throw new Error(`load screenshot hour frames: ${rows.error.message}`);
     for (const row of (rows.data ?? []) as Array<Record<string, any>>) {
       if (row.processing_status !== "processed") continue;
+      // Rollups follow their source images: once a frame is deleted or
+      // expired it stops feeding synthesis, and an hour whose frames are all
+      // gone disappears below.
+      const expiresAt = row.expires_at ? Date.parse(String(row.expires_at)) : Number.NaN;
+      if (!row.storage_path || row.deleted_at || !Number.isFinite(expiresAt) || expiresAt <= now) continue;
       const summary = String(row.summary ?? "").trim();
       if (!summary) continue;
       const context = (row.visible_context ?? {}) as Record<string, unknown>;
@@ -242,19 +284,24 @@ export async function ensureHourlyScreenshotSummaries(input: {
         summary,
         visibleApp: context.visibleApp != null ? String(context.visibleApp) : null,
       });
-      const expiresAt = row.expires_at ? Date.parse(String(row.expires_at)) : Number.NaN;
-      if (row.storage_path && !row.deleted_at && Number.isFinite(expiresAt) && expiresAt > now) retained.add(String(row.id));
     }
   }
 
   const groups = screenshotHourGroups(frames, timezone);
+  const hashes = new Map(groups.map((group) => [group.hourStart, screenshotHourHash(group)]));
   const cachedResult = await db().from("work_screenshot_hourly_summaries")
     .select("hour_start,summary,source_hash,model")
     .eq("organization_id", input.organizationId).eq("person_id", input.personId).eq("local_date", input.date);
   if (cachedResult.error) throw new Error(`load hourly screenshot summaries: ${cachedResult.error.message}`);
   const cached = new Map<number, HourCacheRow>(((cachedResult.data ?? []) as HourCacheRow[]).map((row) => [Number(row.hour_start), row]));
 
-  const changed = groups.filter((group) => cached.get(group.hourStart)?.source_hash !== screenshotHourHash(group.hourStart, group.frames));
+  // Synthesize hours whose frames changed, and retry counts-only fallbacks.
+  const changed = groups.filter((group) => {
+    const existing = cached.get(group.hourStart);
+    if (!existing) return true;
+    if (existing.model == null) return true;
+    return existing.source_hash !== hashes.get(group.hourStart);
+  });
   const synthesized = changed.length ? await summarizeScreenshotHours(changed) : new Map<number, string>();
   const wanted = new Set(groups.map((group) => group.hourStart));
   const staleHours = [...cached.keys()].filter((hour) => !wanted.has(hour));
@@ -267,47 +314,8 @@ export async function ensureHourlyScreenshotSummaries(input: {
 
   const upserts: Array<Record<string, unknown>> = [];
   const resolved = new Map<number, { summary: string; model: string | null }>();
-  for (const group of groups) {
-    const existing = cached.get(group.hourStart);
-    const fresh = synthesized?.get(group.hourStart);
-    if (fresh) {
-      resolved.set(group.hourStart, { summary: fresh, model: INTERPRET_MODEL });
-      if (existing?.summary !== fresh) {
-        upserts.push({
-          organization_id: input.organizationId,
-          person_id: input.personId,
-          local_date: input.date,
-          hour_start: group.hourStart,
-          summary: fresh,
-          frame_count: group.frameCount,
-          source_hash: screenshotHourHash(group.hourStart, group.frames),
-          model: INTERPRET_MODEL,
-          prompt_version: PROMPT_VERSION,
-          updated_at: new Date().toISOString(),
-        });
-      }
-      continue;
-    }
-    if (existing) {
-      resolved.set(group.hourStart, { summary: existing.summary, model: existing.model });
-      if (existing.source_hash !== screenshotHourHash(group.hourStart, group.frames)) {
-        upserts.push({
-          organization_id: input.organizationId,
-          person_id: input.personId,
-          local_date: input.date,
-          hour_start: group.hourStart,
-          summary: existing.summary,
-          frame_count: group.frameCount,
-          source_hash: screenshotHourHash(group.hourStart, group.frames),
-          model: existing.model,
-          prompt_version: PROMPT_VERSION,
-          updated_at: new Date().toISOString(),
-        });
-      }
-      continue;
-    }
-    const summary = fallbackSummary(group);
-    resolved.set(group.hourStart, { summary, model: null });
+  const persist = (group: ScreenshotHourGroup, summary: string, model: string | null) => {
+    resolved.set(group.hourStart, { summary, model });
     upserts.push({
       organization_id: input.organizationId,
       person_id: input.personId,
@@ -315,11 +323,33 @@ export async function ensureHourlyScreenshotSummaries(input: {
       hour_start: group.hourStart,
       summary,
       frame_count: group.frameCount,
-      source_hash: screenshotHourHash(group.hourStart, group.frames),
-      model: null,
+      source_hash: hashes.get(group.hourStart),
+      model,
       prompt_version: PROMPT_VERSION,
       updated_at: new Date().toISOString(),
     });
+  };
+  for (const group of groups) {
+    const existing = cached.get(group.hourStart);
+    const hash = hashes.get(group.hourStart);
+    const fresh = synthesized?.get(group.hourStart);
+    if (fresh) {
+      // A successful synthesis always records the hash for the frames it saw,
+      // even when the sentence happens to read the same.
+      if (existing?.source_hash !== hash || existing?.summary !== fresh || existing?.model == null) persist(group, fresh, INTERPRET_MODEL);
+      else resolved.set(group.hourStart, { summary: fresh, model: INTERPRET_MODEL });
+      continue;
+    }
+    if (existing && existing.model != null && existing.source_hash === hash) {
+      resolved.set(group.hourStart, { summary: existing.summary, model: existing.model });
+      continue;
+    }
+    // Synthesis is unavailable for changed or fallback frames: show a
+    // truthful counts-only line with the current hash (never stale text), and
+    // leave `model` null so the next call retries the model.
+    const summary = fallbackSummary(group);
+    if (existing?.summary !== summary || existing?.source_hash !== hash || existing?.model != null) persist(group, summary, null);
+    else resolved.set(group.hourStart, { summary, model: null });
   }
   if (upserts.length) {
     const { error } = await db().from("work_screenshot_hourly_summaries")
@@ -329,7 +359,7 @@ export async function ensureHourlyScreenshotSummaries(input: {
 
   return groups.map((group) => {
     const entry = resolved.get(group.hourStart);
-    const representative = group.frames.find((frame) => retained.has(frame.summaryId)) ?? null;
+    const representative = group.frames[0] ?? null;
     return {
       hourStart: group.hourStart,
       label: group.label,

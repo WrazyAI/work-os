@@ -2093,9 +2093,10 @@ The analyze tool returns the recording's public metadata (title, duration,
 thumbnail), its public recording date read from the share page, a verdict for
 the target day, the normalized transcript, and a neutral analysis: a summary,
 candidate follow-up tasks with concrete subtask steps, and cautions. Only
-`https` Loom share or embed links (or a bare 32-hex video id) reach the fetch;
-anything else is rejected before any server call, and the fetch is allow-listed
-to Loom hosts with no redirects, a short timeout, and a hard response cap.
+A Loom link is accepted as a share or embed link with or without a scheme (and
+an `http` scheme is upgraded), or as a bare 32-hex video id; anything else is
+rejected before any server call, and the fetch is allow-listed to Loom hosts
+with no redirects, a short timeout, and a hard response cap.
 
 The verdict is always relative to the target day: a recording made on another
 day is refused for that day's synthesis — a prior-day EOD may still use a
@@ -2139,8 +2140,8 @@ Times and dates in these surfaces are plain and timezone-free: times read
 `3:04 PM`, hour ranges read `3–4 PM` (both meridiem labels only when the range
 crosses noon or midnight), dates read `September 17, 2026` (or `September 14`
 within the current year), and no timezone name, abbreviation, or offset ever
-renders. A screenshot link accepts Loom share/embed links with or without a
-scheme and upgrades an `http` scheme to `https` before any fetch.
+renders. A Loom link accepts share/embed links with or without a scheme and
+upgrades an `http` scheme to `https` before any fetch.
 
 ### 29.2 Insights
 

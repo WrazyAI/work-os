@@ -101,7 +101,7 @@ export function EodScreenshotPanel({ context, gallery, limit = 7, resolveSrc }: 
       return <li key={hour.hourStart}>
         {frame
           ? <button type="button" className="eod-shot-row" onClick={(event) => openLightbox(frame, event.currentTarget)}>{thumb}{copy}</button>
-          : <span className="eod-shot-hour-row">{thumb}{copy}</span>}
+          : <span className={`eod-shot-hour-row${thumb ? "" : " no-thumb"}`}>{thumb}{copy}</span>}
       </li>;
     })}</ul>}
     {recent.length > 0 && <div className="eod-shot-carousel" role="group" aria-label="Recent screenshots">
