@@ -1493,7 +1493,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .page-intro { margin-top: 24px; margin-bottom: 34px; }
 .page-intro h2 { max-width: 760px; }
 .page-intro p { font-size: 13px; }
-.tasks-page { max-width: 1120px; }
 .tasks-heading { align-items: center; }
 .tasks-heading .page-intro { margin-bottom: 24px; }
 .daily-goal-card { padding: 22px 24px; }
@@ -1543,9 +1542,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .evidence-kind { font-size: 9px; font-weight: 600; }
 .carry-alert { box-shadow: 0 5px 16px rgba(151, 105, 29, 0.06); }
 .carry-alert:hover { border-color: #d2b875; transform: translateY(-1px); }
-.task-view-tabs { box-shadow: 0 4px 12px rgba(23, 25, 20, 0.035); }
-.task-view-tabs button { min-width: 72px; }
-.task-view-tabs button:not(.active):hover { background: #efeee7; }
 .subtask-menu,
 .move-target-menu {
   transform-origin: top right;
@@ -2371,9 +2367,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   color: #141611;
   padding: 0 12px;
 }
-.task-records article {
-  grid-template-columns: 90px minmax(0, 1fr) auto;
-}
 .task-record {
   cursor: pointer;
   transition:
@@ -2889,8 +2882,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 @media (max-width: 900px), (max-height: 720px) {
   .masthead { height: 78px; }
-  .tasks-workspace .page-intro { margin: 8px 0 18px; }
-  .tasks-workspace .page-intro h2 { font-size: clamp(32px, 5vw, 44px); }
   .tasks-workspace .date-navigator { margin-bottom: 18px; }
   .tasks-workspace .panel { padding: 18px 20px; }
   .daily-goal-card > textarea { min-height: 62px; }
@@ -3711,7 +3702,6 @@ body.modal-open { overflow: hidden; }
 .review-count span,
 .review-control-copy small,
 .proposal-card > footer small { font-size: 10.5px; line-height: 1.5; }
-.task-view-tabs button,
 .subtask-menu > button,
 .move-target-menu > button,
 .carry-flyout article button { font-size: 10.5px; }
@@ -3730,7 +3720,6 @@ body.modal-open { overflow: hidden; }
 .pulse-timeline p,
 .pulse-stats small { font-size: 9.5px; line-height: 1.45; }
 @media (max-width: 560px) {
-  .task-view-tabs button { min-width: 74px; min-height: 38px; }
   .workspace-task small { font-size: 10px; }
 }
 
