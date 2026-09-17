@@ -113,6 +113,33 @@ export async function fetchLoomMetadata(reference: LoomReference): Promise<LoomM
   return value;
 }
 
+/** Reads a response body with a hard byte cap so a hostile or oversized
+ * payload is never buffered. Returns null when the cap is exceeded. */
+async function readBounded(response: Response, limit: number): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > limit) return null;
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+}
+
 async function fetchLoomOembed(reference: LoomReference): Promise<{ title: string | null; durationSeconds: number | null; thumbnailUrl: string | null } | null> {
   try {
     const response = await fetch(`https://www.loom.com/v1/oembed?url=${encodeURIComponent(reference.url)}&format=json`, {
@@ -121,8 +148,8 @@ async function fetchLoomOembed(reference: LoomReference): Promise<{ title: strin
       headers: { Accept: "application/json" },
     });
     if (!response.ok) return null;
-    const body = await response.text();
-    if (body.length > LOOM_METADATA_MAX_BYTES) return null;
+    const body = await readBounded(response, LOOM_METADATA_MAX_BYTES);
+    if (!body) return null;
     const payload = JSON.parse(body) as { title?: unknown; duration?: unknown; thumbnail_url?: unknown };
     const duration = Number(payload.duration);
     const thumbnail = stringOrNull(payload.thumbnail_url);
@@ -148,8 +175,8 @@ async function fetchLoomCreatedAt(reference: LoomReference): Promise<string | nu
       headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36" },
     });
     if (!response.ok) return null;
-    const html = await response.text();
-    if (html.length > LOOM_PAGE_MAX_BYTES) return null;
+    const html = await readBounded(response, LOOM_PAGE_MAX_BYTES);
+    if (!html) return null;
     const match = html.match(UPLOAD_DATE) ?? html.match(CREATED_AT);
     if (!match) return null;
     const parsed = new Date(match[1]);

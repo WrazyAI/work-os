@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { interpretDailyPlan, type PlanLoomContext, type PlanMemoryContext } from "@/lib/aiPlan";
 import { buildLoomAttachment } from "@/lib/aiLoom";
-import { loomMetadataEnabled } from "@/lib/work-os-loom";
+import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { buildPlanningContext } from "@/lib/work-os-planning-context";
 import { issueDailyPlanBuild } from "@/lib/work-os-plan-build";
@@ -39,17 +39,24 @@ export async function POST(req: Request) {
     }
     // A Loom link in the day's intent (or an explicit attachment) is analyzed
     // as planning context; commitments still come from the normal review flow.
+    // Enrichment is optional: schedule/network/AI failures must never block
+    // planning, and the shift lookup only runs when a Loom link is present.
     let loom: PlanLoomContext | undefined;
     const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
-    if (loomMetadataEnabled(auth.access.featureFlags) && (typeof body.input === "string" || loomInput)) {
-      const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
-      const attachment = await buildLoomAttachment({
-        text: [typeof body.input === "string" ? body.input : "", typeof loomInput?.url === "string" ? loomInput.url : ""].filter(Boolean).join(" "),
-        targetDate: date,
-        timezone,
-        existingTaskTitles: [...context.todayTasks, ...context.carryOver].map((task) => task.title).slice(0, 60),
-      }).catch(() => null);
-      if (attachment) loom = { ...attachment.attachment };
+    const loomText = [typeof body.input === "string" ? body.input : "", typeof loomInput?.url === "string" ? loomInput.url : ""].filter(Boolean).join(" ");
+    if (loomMetadataEnabled(auth.access.featureFlags) && findLoomReference(loomText)) {
+      try {
+        const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
+        const attachment = await buildLoomAttachment({
+          text: loomText,
+          targetDate: date,
+          timezone,
+          existingTaskTitles: [...context.todayTasks, ...context.carryOver].map((task) => task.title).slice(0, 60),
+        });
+        if (attachment) loom = { ...attachment.attachment };
+      } catch {
+        loom = undefined;
+      }
     }
     const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context, memory, loom);
     if (!result.ok) {

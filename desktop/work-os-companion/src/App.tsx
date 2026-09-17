@@ -824,9 +824,10 @@ export default function App() {
     } finally { setEodRedrafting(false); }
   };
 
-  /** Reads a pasted Loom link's public metadata and day verdict. */
-  const previewLoomLink = async (url: string) => {
-    const targetDate = reviewDay?.shiftDate ?? visibleDay?.shiftDate ?? "";
+  /** Reads a pasted Loom link's public metadata and day verdict for the
+   * target day the caller is actually working with. */
+  const previewLoomLink = async (url: string, targetDate?: string) => {
+    const day = targetDate ?? reviewDay?.shiftDate ?? visibleDay?.shiftDate ?? "";
     try {
       const result = await apiRequest<{
         title: string | null;
@@ -837,7 +838,7 @@ export default function App() {
         temporal?: { verdict?: string; createdLocalDate?: string | null };
       }>("/api/work-os/me/loom/preview", {
         method: "POST",
-        body: JSON.stringify({ url, targetDate }),
+        body: JSON.stringify({ url, targetDate: day }),
       });
       return {
         title: result.title,
@@ -2422,7 +2423,7 @@ export default function App() {
                     onDraftAnyway={draftEodAnyway}
                     loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}
                     loomAttached={eodDraft?.loom ?? null}
-                    onLoomPreview={previewLoomLink}
+                    onLoomPreview={(url) => previewLoomLink(url, reviewDay?.shiftDate)}
                     onLoomDraft={draftEodWithLoom}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
@@ -2525,7 +2526,7 @@ export default function App() {
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
-    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={previewLoomLink} />
+    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}

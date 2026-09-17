@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { interpretWorkUpdate, loadInterpretationTasks, type InterpretContext } from "@/lib/aiInterpret";
 import { buildLoomAttachment } from "@/lib/aiLoom";
-import { loomMetadataEnabled } from "@/lib/work-os-loom";
+import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId } from "@/lib/work-os";
 import { loadShiftData } from "@/lib/work-os-internal";
@@ -51,17 +51,23 @@ export async function POST(req: Request) {
         }
       : {};
     // A Loom link anywhere in the update reaches the analyze tool; its output
-    // is attached as tool context and never filed on its own.
+    // is attached as tool context and never filed on its own. Enrichment is
+    // strictly optional: schedule/network/AI failures must never block the
+    // plain-text interpretation.
     let loomContext: InterpretContext["loom"];
-    if (loomMetadataEnabled(auth.access.featureFlags)) {
-      const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
-      const attachment = await buildLoomAttachment({
-        text: body.input,
-        targetDate: localDate,
-        timezone,
-        existingTaskTitles: tasks.map((task) => task.title).slice(0, 60),
-      }).catch(() => null);
-      loomContext = attachment?.attachment;
+    if (loomMetadataEnabled(auth.access.featureFlags) && findLoomReference(body.input)) {
+      try {
+        const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
+        const attachment = await buildLoomAttachment({
+          text: body.input,
+          targetDate: localDate,
+          timezone,
+          existingTaskTitles: tasks.map((task) => task.title).slice(0, 60),
+        });
+        loomContext = attachment?.attachment;
+      } catch {
+        loomContext = undefined;
+      }
     }
     const interpretContext: InterpretContext = { ...memoryContext, ...(loomContext ? { loom: loomContext } : {}) };
     const result = await interpretWorkUpdate(body, tasks, interpretContext);

@@ -295,7 +295,9 @@ export default function EmployeeWorkOsHome() {
         return;
       }
       if (!result.analysis) {
-        setGoalLoomNote("No transcript was supplied, so the recording could only be read for its title. Paste the transcript and analyze again.");
+        setGoalLoomNote(result.reason === "transcript_required"
+          ? "No transcript was supplied, so the recording could only be read for its title. Paste the transcript and analyze again."
+          : "The recording analysis is unavailable right now. Try again in a moment.");
         return;
       }
       if (!goal.trim()) setGoal(result.analysis.summary);

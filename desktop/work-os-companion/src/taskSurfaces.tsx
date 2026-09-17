@@ -356,21 +356,26 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
   useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
   const draftBottleneck = extractBottleneckAnswer(markdown);
   const reason = resolvedBottleneck(bottleneck, markdown);
-  const canSubmit = (allTasksCompleted || !!reason) && markdown.trim() && !busy && !redrafting && !refining;
-  const refineReady = (Boolean(feedback.trim()) || annotations.length > 0) && !busy && !redrafting && !refining;
+  // Report actions compete for the same draft, so a Loom analysis locks them
+  // exactly like a redraft or refine does.
+  const reportLocked = busy || redrafting || loomDrafting;
+  const canSubmit = (allTasksCompleted || !!reason) && markdown.trim() && !reportLocked && !refining;
+  const refineReady = (Boolean(feedback.trim()) || annotations.length > 0) && !reportLocked && !refining;
   // A disabled Submit always names its blocker, so the employee is never left
   // guessing why the reason they typed did not unlock the report.
   const submitHint = busy
     ? "Submitting…"
-    : redrafting
-      ? "Waiting for the draft to finish before this can be submitted."
-      : refining
-        ? "Refine is still running — submit unlocks when it finishes."
-        : !markdown.trim()
-          ? "The report is empty. Add content in Raw before submitting."
-          : !allTasksCompleted && !reason
-            ? "Add the reason above (Bottleneck) to submit."
-            : null;
+    : loomDrafting
+      ? "Analyzing your Loom — report actions unlock when it finishes."
+      : redrafting
+        ? "Waiting for the draft to finish before this can be submitted."
+        : refining
+          ? "Refine is still running — submit unlocks when it finishes."
+          : !markdown.trim()
+            ? "The report is empty. Add content in Raw before submitting."
+            : !allTasksCompleted && !reason
+              ? "Add the reason above (Bottleneck) to submit."
+              : null;
   const submit = () => {
     if (!canSubmit) return;
     onSubmit(composeEodMarkdown(markdown, reason, !allTasksCompleted), crypto.randomUUID());
@@ -476,7 +481,7 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
       <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
       {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
       <small>{source === "ai" ? `Drafted by the assistant from ${dayReference} record — review every line before submitting.` : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : `Standard draft from ${dayReference} record.`} Report id {reportId.slice(0, 8)}…</small></div></div>
-      <div className="eod-composer-actions">{onRefresh && <button disabled={busy || redrafting} onClick={onRefresh}>Refresh from record</button>}<button disabled={busy || redrafting} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button></div>
+      <div className="eod-composer-actions">{onRefresh && <button disabled={reportLocked} onClick={onRefresh}>Refresh from record</button>}<button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button></div>
     </header>
     {preparing && <div className="eod-screenshot-preparing" role="status">
       <FadeArc size={14} />

@@ -150,6 +150,10 @@ export function PlanningSession({
   useEffect(() => {
     if (!open) return;
     setInput(plan?.focus_summary ?? plan?.freeform_intent ?? "");
+    setLoomOpen(false);
+    setLoomUrl("");
+    setLoomTranscript("");
+    setLoomReadback(null);
     setInterpretation(null);
     setClarificationAnswers(plan?.clarification_answers ?? {});
     setError("");
