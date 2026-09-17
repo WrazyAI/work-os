@@ -147,11 +147,13 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
     return {
       kind: "check_in",
       heading: firstCheckIn ? "First check-in due" : "Check-in due",
-      body: [
-        firstCheckIn ? "Record what you started or moved forward." : lastUpdate ? `Your last recorded update was at ${lastUpdate}. What changed since then?` : "Record what changed since your last update.",
-        focusContext,
-        tasks ? `Current task state: ${tasks}.` : null,
-      ].filter(Boolean).join(" "),
+      // Keep the banner to the two sentences that matter; the focus and task
+      // state live in the task card and the composer, not in the nudge.
+      body: firstCheckIn
+        ? "Record what you started or moved forward."
+        : lastUpdate
+          ? `Your last recorded update was at ${lastUpdate}. What's changed since then?`
+          : "Record what changed since your last update.",
       compact: firstCheckIn ? "Tell Work OS what you started." : "Tell Work OS what changed.",
       action: null,
     };
