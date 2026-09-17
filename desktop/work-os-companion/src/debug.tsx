@@ -5,6 +5,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { NotificationProvider } from "./NotificationFlyouts";
 import "./styles.css";
+import "./debug.css";
 
 installDiagnosticErrorHandlers();
 diagnostics.info("app.webview.start", "Debugger WebView booting", { entry: "debug.html", userAgent: navigator.userAgent });

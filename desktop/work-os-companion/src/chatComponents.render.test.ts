@@ -5,6 +5,7 @@ import { ChatSection, StreamingText } from "./chat/StreamingText";
 import { GlideMenu } from "./chat/GlideMenu";
 import { ChatTabs } from "./chat/ChatTabs";
 import { ChatTurn } from "./chat/ChatTurn";
+import { HistoryTurn } from "./chat/HistoryTurn";
 
 const noop = () => undefined;
 
@@ -116,5 +117,31 @@ describe("ChatTurn copy and mascot", () => {
     const receipt = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", receipt: true, text: "Update recorded." }));
     expect(receipt).toContain("chat-receipt");
     expect(receipt).toContain("chat-copy-row");
+  });
+});
+
+describe("HistoryTurn", () => {
+  it("renders persisted cards, approvals, and a copy payload", () => {
+    const turn = {
+      id: "a-1",
+      role: "assistant" as const,
+      text: "Review these before anything changes.",
+      operations: [{ op: "complete_task" as const, statement: "Done.", taskTitle: "Repair provider sync", proposalId: "p-1", enabled: false }],
+      toolResults: [{
+        op: { op: "display_pending_tasks" as const, statement: "Show.", enabled: false },
+        status: "recorded" as const,
+        message: "Loaded.",
+        data: { provider_result: { view: "pending" as const, tasks: [{ id: "t-1", title: "Harden task fallback copy", state: "pending" }] } },
+      }],
+    };
+    const markup = renderToStaticMarkup(createElement(HistoryTurn, { turn }));
+    // The card survives in history (this is what vanished on reload before).
+    expect(markup).toContain("Pending tasks");
+    expect(markup).toContain("Harden task fallback copy");
+    // The approval action is reachable from the persisted turn.
+    expect(markup).toContain("Action 1 of 1");
+    // And the copy control carries prose plus the card summary.
+    expect(markup).toContain("chat-copy-row");
+    expect(markup).toContain("Review these before anything changes.");
   });
 });

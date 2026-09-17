@@ -105,10 +105,26 @@ export interface CollapsibleTurn {
   toolResults?: unknown;
 }
 
-/** Collapse consecutive identical assistant texts at render. Dupes reach
- * the thread through double-saves and history/live-echo overlap; hiding
- * later repeats heals them without rewriting persisted data. Turns
- * carrying proposals or results never collapse. */
+/** Stable identity of the cards a turn rendered: the operations and the tool
+ * results, in a form that ignores object identity and array order. */
+function cardSignature(turn: CollapsibleTurn): string {
+  const read = (value: unknown) => (Array.isArray(value) ? value : []);
+  const operations = read(turn.operations).map((op) => {
+    const item = (op ?? {}) as { op?: unknown; taskId?: unknown; taskTitle?: unknown; proposalId?: unknown };
+    return `${String(item.op ?? "")}:${String(item.taskId ?? item.taskTitle ?? "")}:${String(item.proposalId ?? "")}`;
+  }).sort();
+  const results = read(turn.toolResults).map((result) => {
+    const item = (result ?? {}) as { status?: unknown; message?: unknown; op?: { op?: unknown; taskId?: unknown; taskTitle?: unknown } };
+    return `${String(item.status ?? "")}:${String(item.op?.op ?? "")}:${String(item.op?.taskId ?? item.op?.taskTitle ?? "")}:${String(item.message ?? "")}`;
+  }).sort();
+  return `${operations.join("|")}::${results.join("|")}`;
+}
+
+/** Collapse consecutive duplicate assistant turns at render. Dupes reach the
+ * thread through double-saves and history/live-echo overlap; hiding later
+ * repeats heals them without rewriting persisted data. A repeat only collapses
+ * when its cards match too, so two genuinely different reviews that happen to
+ * share a reply sentence both stay visible. */
 export function collapseConsecutiveAssistantDuplicates<T extends CollapsibleTurn>(
   turns: readonly T[],
 ): T[] {
@@ -122,10 +138,7 @@ export function collapseConsecutiveAssistantDuplicates<T extends CollapsibleTurn
       turn.role === "assistant" &&
       text &&
       prev.text.trim() === text &&
-      !prev.operations &&
-      !turn.operations &&
-      !prev.toolResults &&
-      !turn.toolResults
+      cardSignature(prev) === cardSignature(turn)
     ) {
       continue;
     }

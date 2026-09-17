@@ -1,4 +1,4 @@
-import { Otto, type OttoPose } from "./Otto";
+import { Otto, type OttoCrop, type OttoPose } from "./Otto";
 
 /** The agent's identity and art, in one place.
  *
@@ -16,6 +16,8 @@ export const MASCOT = {
   role: "Work OS companion",
   /** Pose while answering in chat. */
   chatPose: "focus" as OttoPose,
+  /** Crop used for the chat identity mark (the head fills a small badge). */
+  chatCrop: "head" as OttoCrop,
   /** Pose while the agent is working (thinking trace). */
   thinkingPose: "think" as OttoPose,
   /** Pose for idle or welcome surfaces. */

@@ -90,6 +90,60 @@ describe("debug window contract", () => {
     expect(main).toContain('windows_subsystem = "windows"');
   });
 
+  it("keeps the debugger on the app's control vocabulary", () => {
+    const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
+    const debugStyles = readFileSync(resolve(root, "src/debug.css"), "utf8");
+    const debugEntry = readFileSync(resolve(root, "src/debug.tsx"), "utf8");
+    // One switch control for on/off overrides, status chips for the risky state.
+    expect(debugWindow).toContain('from "./SettingsSwitch"');
+    expect(debugWindow).toContain("SettingsSwitch");
+    expect(debugWindow).not.toContain('type="checkbox" checked={scenario.enabled}');
+    expect(debugWindow).toContain("debug-status");
+    expect(debugStyles).toContain(".debug-status.danger");
+    expect(debugStyles).toContain(".debug-status.warn");
+    // No vestigial in-app overlay, and the window owns its own sheet.
+    expect(debugWindow).not.toContain("debug-overlay");
+    expect(debugStyles).not.toContain(".debug-overlay");
+    expect(debugEntry).toContain('import "./debug.css"');
+    // Presets explain themselves and the trace names an empty result.
+    expect(debugWindow).toContain("preset.description");
+    expect(debugWindow).toContain("No events match these filters.");
+    expect(debugStyles).toContain(".trace-row.error");
+  });
+
+  it("keeps the debugger's destructive and repeat actions guarded", () => {
+    const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
+    const debugStyles = readFileSync(resolve(root, "src/debug.css"), "utf8");
+    const scenarios = readFileSync(resolve(root, "src/scenarios.ts"), "utf8");
+    // Live writes need a confirm step, never a silent switch flip.
+    expect(debugWindow).toContain('role="alertdialog"');
+    expect(debugWindow).toContain("Confirm live writes");
+    expect(debugWindow).toContain("setConfirmLiveWrites");
+    expect(debugWindow).not.toContain("update({ enabled: true, liveWrites: value })");
+    // The global `.danger` utility owns its colour with !important, so the solid
+    // go-ahead button must not borrow it (red text on red would fail contrast).
+    expect(debugWindow).not.toContain('className="danger"');
+    expect(debugStyles).toContain(".debug-confirm-actions button.debug-confirm-proceed");
+    // The active preset is derived from the scenario, not stored separately.
+    expect(debugWindow).toContain("activePresetId(scenario)");
+    expect(debugWindow).toContain("aria-pressed={currentPresetId === preset.id}");
+    expect(debugWindow).toContain("debug-preset-current");
+    expect(scenarios).toContain("export function activePresetId");
+    expect(scenarios).toContain("export function presetScenarioMatches");
+    expect(debugStyles).toContain(".debug-presets button.active");
+    // Operator conveniences: copy the scenario, follow the trace, copy what is shown.
+    expect(debugWindow).toContain("Copy scenario JSON");
+    expect(debugWindow).toContain("copyVisible");
+    expect(debugWindow).toContain("Follow new events");
+    expect(debugWindow).toContain("traceEndRef");
+    expect(debugWindow).toContain('window.matchMedia("(prefers-reduced-motion: reduce)")');
+    // The export reports its result in the panel, not only in a flyout.
+    expect(debugWindow).toContain("exportResult");
+    expect(debugWindow).toContain("Copy path");
+    expect(debugWindow).toContain("Try again");
+    expect(debugStyles).toContain(".export-result.error");
+  });
+
   it("splits debug capabilities away from Stronghold", () => {
     const debug = readFileSync(resolve(root, "src-tauri/capabilities/debug.json"), "utf8");
     const mainCap = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");

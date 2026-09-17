@@ -21,6 +21,38 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## Unreleased
+
+## 0.3.22
+
+- Your end-of-day activity summary now reads one line per hour — “3–4 PM: …” — instead of listing every screenshot.
+- Times and dates read plainly (3:04 PM, September 17, 2026), with no timezone shorthand anywhere.
+- Loom links work when pasted without https://, and a recording from another day can’t stand in for today.
+- The screenshot section no longer stretches the report, and the waiting screen matches the composer while your day is prepared.
+
+## 0.3.21
+
+- First launch after an update announces itself, with a View changelog action.
+- Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
+- Task lists name their order, sort from real column headers, and every count now matches the rows it describes.
+
+## 0.3.20
+
+- The scenario debugger now marks the preset you loaded and says when you have changed it, and asks before live writes reach the real server.
+- You can copy the current scenario as JSON, follow the live trace and copy what is shown, and see the diagnostics export result in the panel.
+
+## 0.3.19
+
+- The Update and Focus switches in the chat header sit side by side again, with the one you are on clearly highlighted.
+- The assistant's chat badge now shows Otto's face properly, filling its circle instead of spilling over your messages.
+- A reply keeps its task card when the app restarts, and the same reply no longer shows up twice.
+- Chat has more room to breathe: roomier message spacing, taller task rows, and slightly larger text.
+
+## 0.3.18
+
+- The What changed window can now show every earlier release, newest first, through a Check older updates action.
+- The scenario debugger is tidier and says at a glance when a scenario is on, running offline, or writing to the real server.
+
 ## 0.3.17
 
 - Settings are back to two columns with thin dividers, so the page reads as one calm surface instead of a stack of white boxes.
@@ -31,6 +63,7 @@ they change what the employee sees or does.
 
 - Settings are calmer to read: rows sit on the page with thin dividers instead of each one being its own white box.
 - What Otto remembers is a flat section too, so the whole page reads as one surface with only the facts awaiting your decision in cards.
+
 
 ## 0.3.15
 
@@ -64,11 +97,6 @@ they change what the employee sees or does.
 - The Tasks page shows its title once, and the day's focus, view chips, and unfinished-work link sit together on one tidy row.
 - Task rows keep their "On today" tag beside the title, and the checkbox lines up with the title where you expect it.
 - The task list reads as one clean panel, and narrow windows keep every row a single line tall.
-
-## Unreleased
-
-- First launch after an update announces itself, with a View changelog action.
-- Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
 
 ## 0.3.8
 

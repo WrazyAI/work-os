@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { filterWorkspaceTasks, organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
   it("suggests a deterministic goal without persisting authorship", () => {
@@ -102,5 +103,113 @@ describe("unified Tasks workspace", () => {
 
     expect(filterWorkspaceTasks(tasks, "2026-08-26", { from: "2026-08-20", to: "2026-08-22" }).map((task) => task.id)).toEqual(["from", "inside", "to"]);
     expect(filterWorkspaceTasks(tasks, "2026-08-26", { from: "2026-08-21", to: "2026-08-21" }).map((task) => task.id)).toEqual(["inside"]);
+  });
+});
+
+describe("canonical task ordering, overdue meaning, and shared day scope", () => {
+  const today = "2026-09-17";
+
+  it("treats only dated, unfinished work before today as overdue", () => {
+    expect(isOverdueTask({ id: "past", due_date: "2026-09-16", completed: false }, today)).toBe(true);
+    expect(isOverdueTask({ id: "today", due_date: "2026-09-17", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "undated", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "done", due_date: "2026-09-16", completed: true }, today)).toBe(false);
+    expect(isOverdueTask({ id: "malformed", due_date: "16/09/2026", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "impossible-day", due_date: "2026-02-31", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "impossible-month", due_date: "2026-13-05", completed: false }, today)).toBe(false);
+    expect(isOverdueTask({ id: "leap-day", due_date: "2028-02-29", completed: false }, today)).toBe(false);
+    expect(taskState({ id: "past", due_date: "2026-09-16", completed: false }, today)).toBe("overdue");
+    expect(taskState({ id: "done", completed: true }, today)).toBe("complete");
+  });
+
+  it("defaults to status then due date with completed work last", () => {
+    const ordered = sortTaskList([
+      { id: "done", title: "Done", completed: true, completed_at: "2026-09-16T10:00:00Z" },
+      { id: "open-undated", title: "Open undated", completed: false },
+      { id: "open-later", title: "Open later", due_date: "2026-09-20", completed: false },
+      { id: "overdue-newer", title: "Overdue newer", due_date: "2026-09-15", completed: false },
+      { id: "open-today", title: "Open today", due_date: "2026-09-17", completed: false },
+      { id: "overdue-older", title: "Overdue older", due_date: "2026-09-10", completed: false },
+    ], DEFAULT_TASK_SORT, today).map((task) => task.id);
+    expect(ordered).toEqual(["overdue-older", "overdue-newer", "open-today", "open-later", "open-undated", "done"]);
+  });
+
+  it("keeps undated work last in both due-date directions", () => {
+    const tasks = [
+      { id: "dated-early", title: "Early", due_date: "2026-09-10", completed: false },
+      { id: "dated-late", title: "Late", due_date: "2026-09-20", completed: false },
+      { id: "undated", title: "Undated", completed: false },
+    ];
+    expect(sortTaskList(tasks, { key: "due", direction: "asc" }, today).map((task) => task.id)).toEqual(["dated-early", "dated-late", "undated"]);
+    expect(sortTaskList(tasks, { key: "due", direction: "desc" }, today).map((task) => task.id)).toEqual(["dated-late", "dated-early", "undated"]);
+  });
+
+  it("sorts by priority and activity and names every order", () => {
+    const tasks = [
+      { id: "low", title: "Low", priority: "low", completed: false, provider_updated_at: "2026-09-16T09:00:00Z" },
+      { id: "high", title: "High", priority: "high", completed: false, provider_updated_at: "2026-09-15T09:00:00Z" },
+    ];
+    expect(sortTaskList(tasks, { key: "priority", direction: "asc" }, today).map((task) => task.id)).toEqual(["high", "low"]);
+    expect(sortTaskList(tasks, { key: "activity", direction: "desc" }, today).map((task) => task.id)).toEqual(["low", "high"]);
+    expect(taskSortNote({ key: "status", direction: "asc" })).toBe("Overdue first, then due date");
+    expect(taskSortNote({ key: "due", direction: "desc" })).toBe("Due date · latest first");
+    expect(taskSortNote({ key: "activity", direction: "desc" })).toBe("Latest activity first");
+  });
+
+  it("cycles ascending-first columns through ascending, descending, and the default", () => {
+    const due = { key: "due" as const, label: "Due", initialDirection: "asc" as const };
+    const first = nextSortState(DEFAULT_TASK_SORT, due, DEFAULT_TASK_SORT);
+    expect(first).toEqual({ key: "due", direction: "asc" });
+    const second = nextSortState(first, due, DEFAULT_TASK_SORT);
+    expect(second).toEqual({ key: "due", direction: "desc" });
+    expect(nextSortState(second, due, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+  });
+
+  it("cycles descending-first columns through descending, ascending, and the default", () => {
+    const activity = { key: "activity" as const, label: "Activity", initialDirection: "desc" as const };
+    const first = nextSortState(DEFAULT_TASK_SORT, activity, DEFAULT_TASK_SORT);
+    expect(first).toEqual({ key: "activity", direction: "desc" });
+    const second = nextSortState(first, activity, DEFAULT_TASK_SORT);
+    expect(second).toEqual({ key: "activity", direction: "asc" });
+    expect(nextSortState(second, activity, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+  });
+
+  it("restarts the cycle instead of restoring an incompatible fallback", () => {
+    const activity = { key: "activity" as const, label: "Activity", initialDirection: "desc" as const };
+    const compatible = { key: "status" as const, direction: "asc" as const };
+    const incompatible = { key: "activity" as const, direction: "asc" as const };
+    const ascending = { key: "activity" as const, direction: "asc" as const };
+    expect(nextSortState(ascending, activity, compatible)).toEqual({ key: "status", direction: "asc" });
+    expect(nextSortState(ascending, activity, incompatible)).toEqual({ key: "activity", direction: "desc" });
+  });
+
+  it("orders groups by the status direction and rows inside groups by the active column", () => {
+    const tasks = [
+      { id: "done", title: "Done", completed: true, completed_at: "2026-09-16T10:00:00Z" },
+      { id: "late-a", title: "Late A", due_date: "2026-09-10", completed: false },
+      { id: "late-b", title: "Late B", due_date: "2026-09-15", completed: false },
+      { id: "open", title: "Open", due_date: "2026-09-20", completed: false },
+    ];
+    const descending = organizeTaskSections(tasks, today, { key: "status", direction: "desc" });
+    expect(descending.map((section) => [section.id, section.tasks.map((task) => task.id)])).toEqual([
+      ["completed", ["done"]],
+      ["open", ["open"]],
+      ["overdue", ["late-a", "late-b"]],
+    ]);
+    const byDue = organizeTaskSections(tasks, today, { key: "due", direction: "desc" });
+    expect(byDue.map((section) => section.id)).toEqual(["overdue", "open", "completed"]);
+    expect(byDue[0].tasks.map((task) => task.id)).toEqual(["late-b", "late-a"]);
+    expect(byDue[0].note).toBe("Due date · latest first");
+  });
+
+  it("shares one day scope between the dashboard hero and the tasks workspace", () => {
+    const scope = dayScopedTasks(
+      [{ id: "bucket", title: "Bucket", dayAttribution: { date: "2026-09-17", reason: "subtask_activity" } }],
+      [{ id: "item-1", task_id: "surfaced", title_snapshot: "Surfaced snapshot", disposition: "selected", source: "carry_over", rank: 0, blocker: null, item_kind: "nifty_task", completion_state: "open" }],
+      today,
+      [{ id: "surfaced", title: "Surfaced real", due_date: "2026-09-01" }],
+    );
+    expect(scope.map((task) => task.id)).toEqual(["bucket", "surfaced"]);
+    expect(scope.map((task) => task.title)).toEqual(["Bucket", "Surfaced real"]);
   });
 });

@@ -183,7 +183,8 @@ describe("operational visualizations", () => {
     expect(app).toContain('className="settings-group"');
     expect(app).toContain('className="settings-group danger"');
     expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(2);
-    expect(app).toContain("export function SettingsSwitch");
+    expect(app).toContain('from "./SettingsSwitch"');
+    expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
     expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
     expect(app).toContain('className="status-chip"');

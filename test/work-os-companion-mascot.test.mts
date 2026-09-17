@@ -25,6 +25,15 @@ const mascotMark = read("chat/MascotMark.tsx");
 assert.match(mascotMark, /import \{ MASCOT \} from "\.\.\/mascot"/);
 assert.match(mascotMark, /const Mark = MASCOT\.Mark;/);
 assert.doesNotMatch(mascotMark, /work-os-companion\.png|work-os-mark\.svg/);
+// The chat mark uses the configured head crop, and the badge owns the art size.
+assert.match(mascotMark, /crop = MASCOT\.chatCrop/);
+assert.match(mascotMark, /crop=\{crop\}/);
+const otto = read("Otto.tsx");
+assert.match(otto, /export type OttoCrop = "full" \| "head"/);
+assert.match(otto, /head: "20 12 56 56"/);
+assert.match(mascot, /chatCrop: "head" as OttoCrop/);
+const chatStyles = read("chat/chat.css");
+assert.match(chatStyles, /\.chat-turn-mark \.chat-mascot-art \{/);
 
 // --- the agent surfaces use it ----------------------------------------------
 

@@ -88,16 +88,34 @@ describe("collapseConsecutiveAssistantDuplicates", () => {
     ]);
   });
 
-  it("keeps repeats separated by other turns and turns carrying proposals", () => {
-    const op = { op: "complete_task", statement: "Done." };
+  it("keeps repeats separated by other turns and repeats with different cards", () => {
+    const op = { op: "complete_task", statement: "Done.", taskId: "t-1" };
+    const other = { op: "complete_task", statement: "Done.", taskId: "t-2" };
     const turns = [
       { role: "assistant", text: "Same words" },
       { role: "user", text: "ok" },
       { role: "assistant", text: "Same words" },
       { role: "assistant", text: "Same words", operations: [op] },
     ];
-    // Separated by the user turn, then shielded by attached proposals.
+    // Separated by the user turn, then carrying cards the earlier copy lacks.
     expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(4);
+    // Same sentence but different work stays visible too.
+    expect(collapseConsecutiveAssistantDuplicates([
+      { role: "assistant", text: "Review these", operations: [op] },
+      { role: "assistant", text: "Review these", operations: [other] },
+    ])).toHaveLength(2);
+  });
+
+  it("heals stored double-saves that carry identical cards", () => {
+    const operations = [{ op: "display_pending_tasks", statement: "Show.", proposalId: "p-1" }];
+    const toolResults = [{ op: operations[0], status: "recorded", message: "Loaded.", data: { provider_result: { view: "pending", tasks: [{ id: "t-1" }] } } }];
+    const turns = [
+      { role: "assistant", text: "Review the selected task completions before anything changes.", operations, toolResults },
+      { role: "assistant", text: "Review the selected task completions before anything changes.", operations, toolResults },
+    ];
+    // The live turn and its persisted twin used to both render; the identical
+    // card signature now collapses the repeat.
+    expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(1);
   });
 });
 

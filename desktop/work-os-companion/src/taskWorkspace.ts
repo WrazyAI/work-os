@@ -6,7 +6,19 @@ export type TaskDateReason = "due" | "created" | "surfaced" | "carried" | "unkno
 export type TaskSection = { id: "overdue" | "open" | "completed"; label: string; note: string; tasks: TaskRow[] };
 
 const taskId = (task: TaskRow) => String(task.id ?? task.provider_task_id ?? "");
-const dateOnly = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const leapYear = (year: number) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+/** A calendar-valid `YYYY-MM-DD` prefix, or null for malformed strings. */
+const dateOnly = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const limit = month === 2 && leapYear(year) ? 29 : DAYS_IN_MONTH[month - 1] ?? 0;
+  return day >= 1 && day <= limit ? match[0] : null;
+};
 
 const providerErrorText = /(?:failed to fetch|fetch failed|networkerror|unexpected token|<!doctype|<html|\[object object\]|internal server error)/i;
 
@@ -34,17 +46,141 @@ export function orderTasksByRecency(tasks: TaskRow[]) {
     || safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task")));
 }
 
-export function organizeTaskSections(tasks: TaskRow[], currentDate: string): TaskSection[] {
-  const overdue = tasks.filter((task) => task.completed !== true && Boolean(dateOnly(task.due_date)) && String(dateOnly(task.due_date)) < currentDate)
-    .sort((left, right) => String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date))) || recency(right) - recency(left));
-  const overdueIds = new Set(overdue.map(taskId));
-  const open = orderTasksByRecency(tasks.filter((task) => task.completed !== true && !overdueIds.has(taskId(task))));
-  const completed = orderTasksByRecency(tasks.filter((task) => task.completed === true));
-  return [
-    { id: "overdue", label: "Overdue", note: "Oldest due first", tasks: overdue },
-    { id: "open", label: "Recent tasks", note: "Latest activity first", tasks: open },
-    { id: "completed", label: "Recently completed", note: "Latest completion first", tasks: completed },
-  ].filter((section) => section.tasks.length > 0) as TaskSection[];
+/**
+ * Single overdue definition for every surface (design §27.3): open work with a
+ * real due date before the current workday. Undated older work is unfinished
+ * carry-over, never overdue.
+ */
+export function isOverdueTask(task: TaskRow, currentDate: string) {
+  if (task.completed === true) return false;
+  const due = dateOnly(task.due_date);
+  return due !== null && due < currentDate;
+}
+
+export function taskState(task: TaskRow, currentDate: string) {
+  if (task.completed === true) return "complete" as const;
+  return isOverdueTask(task, currentDate) ? "overdue" as const : "open" as const;
+}
+
+export type TaskSortKey = "title" | "status" | "due" | "priority" | "activity";
+export type TaskSortDirection = "asc" | "desc";
+export type TaskSort = { key: TaskSortKey; direction: TaskSortDirection };
+
+export const DEFAULT_TASK_SORT: TaskSort = { key: "status", direction: "asc" };
+export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v1";
+export const DAY_SORT_STORAGE_KEY = "work-os.day-sort.v1";
+
+export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
+  { key: "title", label: "Task", initialDirection: "asc" },
+  { key: "status", label: "Status", initialDirection: "asc" },
+  { key: "due", label: "Due", initialDirection: "asc" },
+  { key: "priority", label: "Priority", initialDirection: "asc" },
+  { key: "activity", label: "Activity", initialDirection: "desc" },
+];
+
+const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
+
+export function readTaskSort(storageKey: string): TaskSort {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_TASK_SORT };
+    const raw = window.localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) as Partial<TaskSort> | null : null;
+    if (parsed && TASK_SORT_KEYS.includes(parsed.key as TaskSortKey) && (parsed.direction === "asc" || parsed.direction === "desc")) {
+      return { key: parsed.key as TaskSortKey, direction: parsed.direction };
+    }
+  } catch { /* best effort: a corrupt preference never blocks the list */ }
+  return { ...DEFAULT_TASK_SORT };
+}
+
+export function writeTaskSort(storageKey: string, sort: TaskSort) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(storageKey, JSON.stringify(sort));
+  } catch { /* best effort */ }
+}
+
+export function taskSortNote(sort: TaskSort): string {
+  switch (sort.key) {
+    case "status": return sort.direction === "asc" ? "Overdue first, then due date" : "Completed first, then due date";
+    case "due": return sort.direction === "asc" ? "Due date · soonest first" : "Due date · latest first";
+    case "priority": return sort.direction === "asc" ? "Priority · highest first" : "Priority · lowest first";
+    case "activity": return sort.direction === "asc" ? "Oldest activity first" : "Latest activity first";
+    case "title": return sort.direction === "asc" ? "Title A–Z" : "Title Z–A";
+  }
+}
+
+function compareDueDirectional(left: TaskRow, right: TaskRow, direction: TaskSortDirection) {
+  const leftDue = dateOnly(left.due_date);
+  const rightDue = dateOnly(right.due_date);
+  if (!leftDue && !rightDue) return 0;
+  // Undated work sorts last in both directions so it never buries dated work.
+  if (!leftDue) return 1;
+  if (!rightDue) return -1;
+  return direction === "asc" ? leftDue.localeCompare(rightDue) : rightDue.localeCompare(leftDue);
+}
+
+function statusRank(task: TaskRow, currentDate: string) {
+  if (task.completed === true) return 2;
+  return isOverdueTask(task, currentDate) ? 0 : 1;
+}
+
+export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, currentDate: string) {
+  const direction = sort.direction === "asc" ? 1 : -1;
+  // byRecency already reads newest-first, so ascending activity flips it.
+  const recencyDirection = sort.direction === "asc" ? -1 : 1;
+  const byTitle = () => safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task"));
+  const byRecency = () => recency(right) - recency(left);
+  const byStatus = () => (statusRank(left, currentDate) - statusRank(right, currentDate)) * direction;
+  switch (sort.key) {
+    case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
+    case "due": return compareDueDirectional(left, right, sort.direction) || (statusRank(left, currentDate) - statusRank(right, currentDate)) || byRecency() || byTitle();
+    case "priority": return (priorityRank(left.priority) - priorityRank(right.priority)) * direction || (statusRank(left, currentDate) - statusRank(right, currentDate)) || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
+    case "activity": return byRecency() * recencyDirection || byTitle();
+    case "title": return byTitle() * direction || byRecency();
+  }
+}
+
+export function sortTaskList(tasks: TaskRow[], sort: TaskSort = DEFAULT_TASK_SORT, currentDate = "") {
+  return [...tasks].sort((left, right) => compareTaskSort(left, right, sort, currentDate));
+}
+
+export function organizeTaskSections(tasks: TaskRow[], currentDate: string, sort: TaskSort = DEFAULT_TASK_SORT): TaskSection[] {
+  const overdueTasks = tasks.filter((task) => isOverdueTask(task, currentDate));
+  const overdueIds = new Set(overdueTasks.map(taskId));
+  const openTasks = tasks.filter((task) => task.completed !== true && !overdueIds.has(taskId(task)));
+  const completedTasks = tasks.filter((task) => task.completed === true);
+  // The Status column orders the sections themselves; every other column orders
+  // rows inside each section so the red-led overdue group never loses its place.
+  const canonicalOverdue = [...overdueTasks].sort((left, right) => String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date))) || recency(right) - recency(left));
+  const within = (group: TaskRow[], canonical: TaskRow[]) => sort.key === "status" ? canonical : sortTaskList(group, sort, currentDate);
+  const sections = ([
+    { id: "overdue", label: "Overdue", note: sort.key === "status" ? "Oldest due first" : taskSortNote(sort), tasks: within(overdueTasks, canonicalOverdue) },
+    { id: "open", label: "Recent tasks", note: sort.key === "status" ? "Latest activity first" : taskSortNote(sort), tasks: within(openTasks, orderTasksByRecency(openTasks)) },
+    { id: "completed", label: "Recently completed", note: sort.key === "status" ? "Latest completion first" : taskSortNote(sort), tasks: within(completedTasks, orderTasksByRecency(completedTasks)) },
+  ] satisfies TaskSection[]).filter((section) => section.tasks.length > 0);
+  return sort.key === "status" && sort.direction === "desc" ? [...sections].reverse() : sections;
+}
+
+/**
+ * The day-scoped set shared by the dashboard hero and the Tasks workspace
+ * (design §27.3): tasks surfaced by today's plan, due today, or attributed to
+ * today. Counts on every surface derive from this same list.
+ */
+export function dayScopedTasks(dayTasks: TaskRow[], planItems: DailyPlanItem[], currentDate: string, history: TaskRow[] = []) {
+  const historyById = new Map<string, TaskRow>();
+  for (const task of history) {
+    historyById.set(String(task.id), task);
+    if (task.provider_task_id) historyById.set(String(task.provider_task_id), task);
+  }
+  const items = planItems.filter((item) => item.task_id && item.disposition !== "removed");
+  const surfaced = items.map((item) => historyById.get(String(item.task_id)) ?? {
+    id: item.task_id,
+    title: item.title_snapshot,
+    completed: item.completion_state === "completed",
+    workspace_source: item.source,
+  });
+  const surfacedIds = items.map((item) => String(item.task_id));
+  return parentTasks(tasksForDate(uniqueTasks([...dayTasks, ...surfaced]), currentDate, surfacedIds));
 }
 
 function priorityRank(value: unknown) {

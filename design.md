@@ -595,6 +595,8 @@ Completed tasks use subdued text and a clear completed control. Do not make them
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
+Task lists state their order. A functional sort row may sit above a list (see 27.3). It is a `toolbar` of sort buttons, not a table header: card rows do not map onto those columns, so claiming `columnheader`/`aria-sort` semantics would misannounce every row. Each button carries `aria-pressed`, names the order it applies next, and the active order is stated in visible text, so no list is ever sorted silently.
+
 ### 10.3 Tables
 
 Use tables for comparison across repeated columns, not for arbitrary alignment. Tables require:
@@ -604,6 +606,7 @@ Use tables for comparison across repeated columns, not for arbitrary alignment. 
 - Horizontal scrolling at narrow widths rather than illegible compression.
 - Useful empty states.
 - Row actions that remain discoverable by keyboard.
+- Sortable columns when a stable order helps comparison; sortable headers are buttons inside `columnheader` cells and cycle ascending → descending → the default order.
 
 ## 11. Controls and forms
 
@@ -684,6 +687,7 @@ Current hero metrics:
 
 - `X of Y tasks done`: green progress ring; clicking selects Today.
 - `Z pending tasks from yesterday`: neutral at zero, red when positive; clicking selects Previous day.
+- `N overdue tasks`: strict due-dated open work before today (see 27.3), never a bucket of undated older work; red, and clicking opens `Unfinished`.
 
 ### 13.2 Badges
 
@@ -970,6 +974,16 @@ install are one explicit, resumable flow rather than a launch-time surprise.
   from a `What's new` action in Settings. Every release ships its section:
   the release workflow fails when the released version has no changelog
   entry, and the GitHub release notes carry the same section.
+- **Changelog history.** The modal carries a `Check older updates` action
+  whenever the bundled changelog holds more than the installed release. It
+  swaps the body to one scrollable list of every logged release, newest first,
+  each under a version heading with its bullets and the installed build tagged
+  `This version`. The first page holds the ten newest releases with
+  `Show all N updates` revealing the rest (and `Show 10 newest` restoring it),
+  because the list only grows from here. `Back to <version>` returns to the
+  installed release's notes; Escape, the backdrop, and the close button behave
+  as they do on the notes view, and focus moves to the history heading when
+  the view swaps.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action
@@ -1521,7 +1535,12 @@ Anatomy, top to bottom:
    draggable), while **close** hides the window entirely. Close is always
    recoverable from the tray. The two controls sit adjacent in one
    `.avatar-head-actions` group with equal 28px hit targets.
-2. **Thread:** a fixed scroll region. User turns render as right-aligned
+2. **Header tabs:** the Chat/Tasks and Update/Focus toggles are one horizontal
+   row. Selection is expressed with `aria-selected` and styled from that
+   attribute (paper fill plus an inset hairline ring) — no separate `.active`
+   class — and legacy composer-header rules must never reach the tablist or the
+   tab buttons (they stole the row's layout and shrank the tabs to 30px boxes).
+3. **Thread:** a fixed scroll region. User turns render as right-aligned
    `chat-turn-user` bubbles (max 84% width, 8×12px padding). Assistant turns
    render as `chat-turn`: a 24px **mascot** mark (never a generic sparkle — see
    the mascot rule below), then a body column, separated by an 8px gap. A meta
@@ -1541,13 +1560,22 @@ Anatomy, top to bottom:
    card-only turns copyable, and reports `Copied` in place for a beat. System
    notices carry no copy control.
    **Spacing:** the chat surfaces share one 4px-based scale declared as
-   `--chat-space-1..6` (4/8/12/16/20/24) with `--chat-row` (40px) and
-   `--chat-header` (44px) in `src/chat/chat.css`. The thread uses a 12px gap and
-   16px padding (13px horizontal in the floating companion's 400px window);
-   cards use a 40px header, 40px rows, a 44px footer, and 10–12px internals; the
-   action-results accordion uses a 44px header and 10×12px rows. No surface adds
-   its own ad-hoc spacing on top of the scale.
-3. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
+   `--chat-space-1..6` (4/8/12/16/20/24) with `--chat-row` (46px),
+   `--chat-header` (46px), and `--chat-footer` (48px) in `src/chat/chat.css`.
+   The thread uses a 16px gap and 16px padding (18px in the in-app flyout); a
+   turn separates its mark from the body by 10px; message text is 13px/1.55 in
+   both surfaces; cards use a 46px header, 46px rows, a 48px footer, and
+   10–14px internals; the action-results accordion uses a 46px header and 12×14
+   rows. No surface adds its own ad-hoc spacing on top of the scale.
+   **History is the record.** A turn is persisted once, and the persisted turn
+   renders its own cards, approval actions, and copy payload (the in-app dock
+   uses `src/chat/HistoryTurn.tsx`; the floating companion renders the same
+   shapes from its entries). The live interpretation is cleared the moment its
+   turn is persisted, so a reply can never render twice; approvals on a
+   persisted turn patch that turn by id. Consecutive duplicate assistant turns
+   collapse at render when their text **and** card signature match, which heals
+   stored double-saves without rewriting the vault.
+4. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
    context `+` button, an auto-growing field, an optional labeled footer action
    (the dock's `Focus` button), and a 36px square 11px-radius dark ink send on a
    raised white shell. Its interior carries an invisible-at-rest WebGL canvas
@@ -1565,7 +1593,12 @@ Anatomy, top to bottom:
 
 **Mascot.** The agent's identity and art live in one config,
 `desktop/work-os-companion/src/mascot.ts` (`MASCOT`: name, description, poses,
-`Mark`, assets), and chat surfaces render it through `src/chat/MascotMark.tsx`.
+`chatCrop`, `Mark`, assets), and chat surfaces render it through
+`src/chat/MascotMark.tsx`. In chat the mark is the **head crop**
+(`Otto crop="head"` in a 28px circular badge with a hairline ring): the art
+fills the badge exactly, `overflow: hidden` clips it, and the badge — never the
+legacy `.otto` sizing — owns the art's geometry, so the mascot can never spill
+over the message text. The orb and avatar window keep the full figure.
 A global mascot change edits that config only; no surface hardcodes mascot art,
 its name, or a generic sparkle where the agent is speaking. Feature icons (the
 Insights synthesis sparkle, onboarding suggestions, planning badges) are not
@@ -1828,7 +1861,7 @@ stacked two-panel hero.
 ### 27.3 Task views, ordering, and overdue meaning
 
 `My day` is strictly day-scoped: it contains only tasks surfaced by today's plan,
-due today, or carried into today. Open tasks without a today relationship belong
+due today, created today, or carried into today. Open tasks without a today relationship belong
 in `Unfinished`, even when that leaves `My day` nearly empty — an honest near-empty
 My day with a pull-from-Unfinished empty state beats a mislabeled dump of every
 open task.
@@ -1841,6 +1874,28 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 | Overdue | Open task with due date before current workday | Oldest due first | Red label/count, red status pill, and red due text |
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
+
+**Overdue has one definition everywhere:** open work with a valid due date before
+the current workday. Undated older work is unfinished carry-over, never overdue;
+the amber `Other days` count states that, and no surface may compute its own
+overdue predicate. The dashboard's overdue metric therefore always equals the
+overdue work the `Unfinished` view shows.
+
+**Counts describe their lists.** Every hero number, tab count, chip count, and
+section count derives from the same rendered array it heads. The dashboard hero
+and the Tasks workspace share one day-scoped selector, so `Today` and `My day`
+can never disagree about membership or total.
+
+**Ordering is explicit and user-sortable.** The default order is Status, then due
+date: overdue (oldest due first), open work (soonest due first, undated last),
+completed (latest completion first). A functional sort toolbar above the list
+holds buttons for `Task`, `Status`, `Due`, `Priority`, and `Activity`; each
+button carries `aria-pressed` and names the order it applies next. The `Status`
+control orders the groups; every other control orders rows inside each group.
+Activating a control starts at its natural direction (Activity starts latest
+first), then toggles, then restores the default order on the third activation.
+Each section note, and the dashboard toolbar note, names the active order, and
+the choice is remembered per surface. No list renders in an unstated order.
 
 Provider refresh timestamps must not masquerade as meaningful task activity when
 a provider-created, provider-updated, completed, or user-action timestamp is
@@ -1881,10 +1936,11 @@ depth:
   text's height (~20px), so rows with and without an assignee keep one rhythm.
 - The completion checkbox and the subtask ring align with the title's first line
   while the due date, status pill, and menu stay on the row centerline.
-- Tasks surfaced into today show a small `On today` tag beside the title. No
-  decorative column-header row appears above the list. Aggregate provider
-  freshness lives once in the strip or toolbar; per-row provenance chips are
-  noise.
+- Tasks surfaced into today show a small `On today` tag beside the title. The
+  only header row above a list is the functional sort row from 27.3 — a control
+  surface with real sort buttons, not an ornamental replica of the row grid.
+  Aggregate provider freshness lives once in the strip or toolbar; per-row
+  provenance chips are noise.
 - Completed rows keep the muted treatment, strike-through title, and the `Done`
   pill.
 
@@ -2468,6 +2524,66 @@ Specific collapse rules:
 
 Test zoom at 200% or an equivalent narrow content width. Layout must remain
 operable when system font metrics differ from the design machine.
+
+### 29.8 Debugger
+
+The scenario debugger is a separate window (`debug.html`) for reproducing and
+observing states. It is developer-facing, never overlays the employee UI, and
+uses the app's tokens, typography, and controls rather than browser defaults.
+
+- **Header.** The window title, the running state as chips, and the close
+  control. Chips name the effective mode (`Scenario off`, `Scenario on`) and
+  surface anything that reaches further: `Offline bypass` in amber and
+  `Live writes` in red. The chips always reflect the applied scenario, so the
+  dangerous state is visible without scrolling.
+- **Tabs.** `Scenarios`, `Live trace`, and `Export`, as one segmented control;
+  the trace tab carries its buffered event count.
+- **Scenarios.** Preset cards first (each with a one-line description of the
+  state it builds), then flat hairline groups: the master switch, session,
+  backend reach, missing details, My Day conditions, and the companion's forced
+  state. Single on/off overrides use the shared settings switch; the sets
+  (missing details, condition flags) keep checkboxes. Helper copy states the
+  consequence, the master switch resetting when the app exits, and `Reset all
+  overrides` sits last.
+- **The loaded preset stays marked.** The card a scenario was loaded from
+  carries a `Current` tag and a green-tinted edge; the marker is derived by
+  comparing the live scenario with each preset, not stored, so touching any
+  override drops it and the heading gains `Custom — no preset matches` in amber.
+  Nothing is marked while scenarios are off.
+- **Live writes never flips silently.** Turning `Live writes in scenario` on
+  opens an inline confirm instead of applying it: the copy states that approvals
+  are filed against the real server with no simulation, and names the conflict
+  when `Offline sync bypass` is on. The confirm's go-ahead is a solid red action
+  and `Cancel` leaves writes simulated. Turning the switch off needs no
+  confirm. The go-ahead must not borrow the app's `.danger` text utility, whose
+  `!important` colour would land red on red.
+- **Copy the scenario.** `Copy scenario JSON` sits beside `Reset all overrides`
+  in the footer and copies the applied scenario verbatim, confirming in place as
+  `Scenario copied` for a moment rather than in a flyout.
+- **Live trace.** Search plus level and source filters, a pause control, and a
+  clear-view action, with the shown/buffered counts and a note that clearing
+  the view leaves disk logs intact. Rows show time, level, source, category,
+  and message on one line, tint warn and error rows, expand to the redacted
+  event JSON, and offer a copy action that confirms in place. An empty result
+  says so instead of rendering a blank list. `Follow new events` keeps the tail
+  in view, pauses while a row is expanded so reading is never yanked, honours
+  reduced motion, and can be switched off to hold a position. `Copy shown (N)`
+  writes the filtered events as JSON lines, one per event, and is disabled when
+  the filters show nothing.
+- **Export.** The bundle's contents list, the privacy note naming what is
+  excluded, and `Export diagnostics ZIP` beside `Open logs folder`. The result
+  is reported in the panel, not only in a flyout: success shows the saved path
+  with `Copy path`, and failure shows a message written for a person (the
+  browser-preview case says the desktop app writes the ZIP) with `Try again`.
+
+Sections may be reordered within a tab, but no scenario, override, filter,
+export, or bridge event (`work-os://debug-request`, `work-os://debug-current`,
+`work-os://debug-scenario`) may be removed; the debug window's capability stays
+limited to diagnostics commands and the logs folder.
+
+`debug.html?preview-trace` seeds a synthetic event stream in development only,
+so the trace, its follow behaviour, and the copy actions can be exercised in a
+browser without a Tauri host; it is stripped from packaged builds.
 
 ## 31. Operational state matrix
 

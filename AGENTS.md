@@ -201,8 +201,10 @@ modal (design §19.8).
   speaking — chat turns, the composer welcome, the thinking trace — and never
   hardcode mascot art, its name, or a `Sparkles` icon as the agent's identity
   (feature icons such as Insights synthesis or onboarding suggestions are not
-  agent identity). A global mascot change must only touch `mascot.ts`; the
-  companion chat surfaces read the config.
+  agent identity). In chat, render the configured head crop (`MASCOT.chatCrop`)
+  in the 28px badge; the badge owns the art's geometry so legacy `.otto` sizing
+  can never spill it over the text. A global mascot change must only touch
+  `mascot.ts`; the companion chat surfaces read the config.
   `test/work-os-companion-mascot.test.mts` fails the build on drift.
 - **Companion Tauri commands need an ACL grant per window.** Registering a command
   in `src-tauri/src/lib.rs` is not enough: the window that invokes it must be
