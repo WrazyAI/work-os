@@ -81,15 +81,20 @@ export function factLine(item: { title: string; at?: string | null }, timezone: 
 }
 
 /** Creations that came from the day's own plan are commitments, not unplanned
- * work; everything else created that day is reported with its creation time. */
+ * work. Creations that were completed the same day are already reported under
+ * Completed Work, so this section carries the day's open emergent additions. */
 export function unplannedFacts(events: Json[], planTaskIds: Set<string>, timezone: string): EodFactLine[] {
+  const completedTaskIds = new Set<string>();
+  for (const event of events) {
+    if (String(event.event_type ?? "") === "completed") completedTaskIds.add(String(event.task_id ?? ""));
+  }
   const byTask = new Map<string, EodFactLine>();
   for (const event of events) {
     if (String(event.event_type ?? "") !== "creation_observed") continue;
     const title = String((event.task_snapshot as { title?: unknown } | null)?.title ?? "").trim();
     if (!title || isAutomationTitle(title)) continue;
     const taskId = String(event.task_id ?? event.id ?? "");
-    if (!taskId || planTaskIds.has(taskId)) continue;
+    if (!taskId || planTaskIds.has(taskId) || completedTaskIds.has(taskId)) continue;
     const at = event.exact_at instanceof Date ? event.exact_at.toISOString() : (typeof event.exact_at === "string" ? event.exact_at : null);
     const existing = byTask.get(taskId);
     if (!existing || (!existing.at && at)) byTask.set(taskId, { id: taskId, title, at, provenance: null });

@@ -68,6 +68,9 @@ test("unplanned work is creations outside the plan, never automation", () => {
     { id: "e3", task_id: "t3", event_type: "creation_observed", task_snapshot: { title: "Run morning-signal routine (2026-09-17)" }, exact_at: "2026-09-17T15:23:00Z" },
     { id: "e4", task_id: "t1", event_type: "creation_observed", task_snapshot: { title: "Fix Tasks page layout" }, exact_at: "2026-09-17T16:20:01Z" },
     { id: "e5", task_id: "t5", event_type: "completed", task_snapshot: { title: "Anything" }, exact_at: "2026-09-17T17:00:00Z" },
+    // Created and completed the same day: reported under Completed, not here.
+    { id: "e6", task_id: "t6", event_type: "creation_observed", task_snapshot: { title: "Confirm Acme emergency service claims" }, exact_at: "2026-09-17T15:00:00Z" },
+    { id: "e7", task_id: "t6", event_type: "completed", task_snapshot: { title: "Confirm Acme emergency service claims" }, exact_at: "2026-09-17T15:05:00Z" },
   ];
   const lines = unplannedFacts(events, new Set(["t2"]), "UTC");
   assert.deepEqual(lines.map((line) => line.title), ["Fix Tasks page layout"]);
