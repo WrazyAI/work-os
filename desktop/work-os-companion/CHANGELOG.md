@@ -21,6 +21,13 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.13
+
+- Every chat message now has a Copy button that appears when you hover over it, including the short receipt lines.
+- The assistant uses Otto's mark in chat instead of a generic sparkle, and its art now comes from one setting so a future mascot change lands everywhere at once.
+- Chat spacing is even throughout: the message list, task cards, and action results share one rhythm instead of three.
+- In the task list, the selected count and the collapse control sit together on one line again, and action results show their full "N actions recorded" line without being cut off.
+
 ## 0.3.12
 
 - Checking off tasks no longer hides the rest of the list — keep selecting as many tasks and subtasks as you need before you confirm.
