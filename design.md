@@ -940,6 +940,17 @@ install are one explicit, resumable flow rather than a launch-time surprise.
 - **Copy convention.** Release labels render the two-digit patch display form
   (0.3.3 shows as 0.3.03); canonical versions stay unpadded wherever tools
   compare them.
+- **Post-install announcement.** The first launch running a build this device
+  has not announced yet raises one success flyout naming the installed
+  version, with `View changelog` (primary) and `Dismiss` (quiet); either
+  choice marks the version seen and it never reappears. The announcement keeps
+  the success tone (green, mirroring the persistent error rule) rather than the
+  default pinned-amber. The changelog action opens a read-only modal rendering that version's `CHANGELOG.md` section
+  (bundled with the build, so it works offline), with a deliberate fallback
+  when the build shipped without notes. The same modal is always reachable
+  from a `What's new` action in Settings. Every release ships its section:
+  the release workflow fails when the released version has no changelog
+  entry, and the GitHub release notes carry the same section.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action

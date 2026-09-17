@@ -5,6 +5,10 @@ import { ChatTabs, ChatTurn, WorkOsPromptBar, workOsChatCommands } from "./WorkO
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
+import { NotificationFlyouts } from "./NotificationFlyouts";
+import { WhatsNewModal } from "./WhatsNewModal";
+import { displayUpdateVersion } from "./updater";
+import { updateInstalledCopy } from "./whatsNew";
 import { Otto } from "./Otto";
 import type { ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
@@ -41,6 +45,13 @@ export default function ChatPreview() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
         <CreateRecoverySection />
+      </div>
+    );
+  }
+  if (isolate === "whatsnew") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <WhatsNewSection />
       </div>
     );
   }
@@ -160,6 +171,41 @@ function CreateRecoverySection() {
         results={results}
         onRetry={(result) => setRequested(`${result.createResolution ? "Clear-and-retry" : "Retry"} requested for ${result.op.taskTitle ?? "update"}.`)}
       />
+      {requested ? <p role="status" style={{ margin: 0, fontSize: 13 }}>{requested}</p> : null}
+    </section>
+  );
+}
+
+/** DEV-only review surface for the post-install announcement (design §19.8):
+ * the success flyout plus the changelog modal it opens. */
+function WhatsNewSection() {
+  const [open, setOpen] = useState(false);
+  const [requested, setRequested] = useState<string | null>(null);
+  const version = "0.3.9";
+  const copy = updateInstalledCopy(version);
+  return (
+    <section aria-label="Post-update announcement preview" style={{ display: "grid", gap: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 14 }}>Post-update announcement</h2>
+      <NotificationFlyouts
+        notifications={[{
+          id: "whatsnew",
+          tone: "success",
+          title: copy.title,
+          message: copy.message,
+          persistence: "persistent",
+          persistenceKey: "preview-whatsnew",
+          actions: [
+            { label: copy.changelogLabel, kind: "primary", onClick: () => { setRequested(`Changelog opened for ${displayUpdateVersion(version)}.`); setOpen(true); } },
+            { label: copy.dismissLabel, kind: "quiet", onClick: () => setRequested("Announcement dismissed.") },
+          ],
+        }]}
+        onDismiss={() => undefined}
+      />
+      {open && <WhatsNewModal
+        displayVersion={displayUpdateVersion(version)}
+        bullets={["First launch after an update announces itself here.", "View changelog opens this modal from the flyout or Settings."]}
+        onClose={() => setOpen(false)}
+      />}
       {requested ? <p role="status" style={{ margin: 0, fontSize: 13 }}>{requested}</p> : null}
     </section>
   );
