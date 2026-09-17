@@ -33,6 +33,9 @@ export interface ToolCallResult {
   data?: unknown;
   /** The stored proposal can be filed again with the same id (nothing claimed it). */
   retryable?: boolean;
+  /** Set only when the server reports an unresolved Nifty create: the retry
+   * must first confirm nothing was created so the intent can be cleared. */
+  createResolution?: "no_task_created";
 }
 
 export interface CandidateReview {
@@ -279,7 +282,7 @@ export interface ApprovedOpContext {
 }
 
 export interface ApprovalTransport {
-  reviewProposal(proposalId: string): Promise<unknown>;
+  reviewProposal(proposalId: string, options?: { providerCreateResolution?: "no_task_created" }): Promise<unknown>;
   /** Owner-scoped readback for reconciling an interrupted approval. */
   readProposal?(proposalId: string): Promise<unknown>;
 }
@@ -299,17 +302,24 @@ function proposalRow(value: unknown): Record<string, unknown> | null {
   return proposal && typeof proposal === "object" ? proposal as Record<string, unknown> : null;
 }
 
+/** The server flag that unlocks the clear-and-retry recovery for an uncertain
+ * Nifty create. Never inferred from message text. */
+function createResolutionFor(row: Record<string, unknown> | null): "no_task_created" | undefined {
+  return row?.create_intent_unresolved === true ? "no_task_created" : undefined;
+}
+
 /** Accepts stored proposals one at a time. An assistant result cannot mutate a
  * task or Nifty until the exact persisted proposal receives this decision. */
 export async function fileApprovedOperations(
   operations: ProposedOperation[],
   transport: ApprovalTransport,
+  options?: { createResolution?: "no_task_created" },
 ): Promise<ApprovalOutcome> {
   const outcome: ApprovalOutcome = { recorded: 0, queued: 0, processing: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
       if (!op.proposalId) throw new Error("This update no longer has a server-side approval record. Interpret it again before filing.");
-      const result = await transport.reviewProposal(op.proposalId);
+      const result = await transport.reviewProposal(op.proposalId, options?.createResolution ? { providerCreateResolution: options.createResolution } : undefined);
       if ((result as { queued?: boolean } | undefined)?.queued === true) {
         outcome.queued += 1;
         outcome.results.push({ op, status: "queued", message: "Queued locally for a later sync." });
@@ -333,8 +343,9 @@ export async function fileApprovedOperations(
           outcome.results.push({ op, status: "failed", message });
         } else if (serverOutcome === "failed" || serverOutcome === "needs_review") {
           const message = serverReason ?? "Not filed. The server reported this action as failed.";
+          const createResolution = createResolutionFor(row);
           outcome.failed.push({ op, message });
-          outcome.results.push({ op, status: "failed", message, retryable: serverOutcome === "failed" });
+          outcome.results.push({ op, status: "failed", message, retryable: serverOutcome === "failed" || Boolean(createResolution), createResolution });
         } else {
           // `applied` (or a legacy server without an explicit outcome).
           outcome.recorded += 1;
@@ -357,8 +368,9 @@ export async function fileApprovedOperations(
           }
           if (status === "failed" || status === "needs_review" || status === "stale") {
             const message = failureReason ?? filingFailureMessage(error);
+            const createResolution = createResolutionFor(row);
             outcome.failed.push({ op, message });
-            outcome.results.push({ op, status: "failed", message });
+            outcome.results.push({ op, status: "failed", message, retryable: Boolean(createResolution), createResolution });
             continue;
           }
           // `applying` means the server claimed the proposal and is mid-write.

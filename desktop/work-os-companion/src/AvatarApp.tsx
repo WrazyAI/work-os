@@ -36,7 +36,7 @@ type DaySyncState = "loading" | "ready" | "stale" | "error";
  * owner-scoped readback used to reconcile an interrupted response. */
 function proposalFilingTransport() {
   return {
-    reviewProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+    reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
     readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
   };
 }
@@ -656,7 +656,7 @@ export default function AvatarApp(): React.ReactElement {
     const op = { ...result.op, enabled: true };
     if (!op.proposalId || filing) return;
     setFiling(true);
-    void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+    void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
       const entry = chatRef.current.find((candidate) => candidate.id === entryId);
       const mergedResults = mergeToolResults(entry?.toolResults ?? [], outcome.results);
       setChat((current) => current.map((candidate) => candidate.id === entryId

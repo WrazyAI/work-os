@@ -118,7 +118,7 @@ const actionSuccessMessages: Record<string, string> = {
  * owner-scoped readback used to reconcile an interrupted response. */
 function proposalFilingTransport() {
   return {
-    reviewProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept" }), signal: AbortSignal.timeout(60_000) }),
+    reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
     readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
   };
 }
@@ -2006,7 +2006,7 @@ export default function App() {
     if (!op.proposalId || busy) return;
     const review = interpretation;
     setBusy(true); setError("");
-    void fileApprovedOperations([op], proposalFilingTransport()).then((outcome) => {
+    void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
       const mergedResults = mergeToolResults(review?.results ?? [], outcome.results);
       setInterpretation((current) => current ? { ...current, results: mergeToolResults(current.results ?? [], outcome.results) } : current);
       // Mirror the normal approval path so the avatar window replaces the

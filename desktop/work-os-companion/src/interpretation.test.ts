@@ -206,6 +206,39 @@ describe("fileApprovedOperations", () => {
     expect(outcome.recorded).toBe(1);
   });
 
+  it("offers the clear-and-retry recovery for an unresolved Nifty create", async () => {
+    const seen: Array<{ id: string; options?: { providerCreateResolution?: "no_task_created" } }> = [];
+    const transport = {
+      reviewProposal: async (id: string, options?: { providerCreateResolution?: "no_task_created" }) => {
+        seen.push({ id, options });
+        return { id, status: "needs_review", outcome: "needs_review", failure_reason: "A previous attempt may have created this task in Nifty but it is not listed yet.", create_intent_unresolved: true };
+      },
+    };
+    const outcome = await fileApprovedOperations(ops([{ op: "create_task", taskTitle: "New work" }]), transport, { createResolution: "no_task_created" });
+    expect(seen[0]?.options).toEqual({ providerCreateResolution: "no_task_created" });
+    expect(outcome.recorded).toBe(0);
+    expect(outcome.results[0]?.retryable).toBe(true);
+    expect(outcome.results[0]?.createResolution).toBe("no_task_created");
+    expect(outcome.failed[0]?.message).toContain("may have created");
+  });
+
+  it("keeps a needs_review without an unresolved create non-retryable", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "record_progress" }]), {
+      reviewProposal: async () => ({ id: "proposal-1", status: "needs_review", outcome: "needs_review", failure_reason: "sufficient outcome or artifact evidence is required" }),
+    });
+    expect(outcome.results[0]?.retryable).toBeFalsy();
+    expect(outcome.results[0]?.createResolution).toBeUndefined();
+  });
+
+  it("offers the recovery from the timeout readback too", async () => {
+    const outcome = await fileApprovedOperations(ops([{ op: "create_task", taskTitle: "New work" }]), {
+      reviewProposal: async () => { throw new Error("signal timed out"); },
+      readProposal: async () => ({ proposal: { status: "needs_review", failure_reason: "A previous attempt may have created this task in Nifty but it is not listed yet.", create_intent_unresolved: true } }),
+    });
+    expect(outcome.results[0]?.retryable).toBe(true);
+    expect(outcome.results[0]?.createResolution).toBe("no_task_created");
+  });
+
   it("uses the persisted proposal as a tool-result payload", async () => {
     const outcome = await fileApprovedOperations(ops([{ op: "display_pending_tasks" }]), {
       reviewProposal: async () => ({ proposal: { provider_result: { view: "pending", tasks: [{ id: "task-1" }] } } }),

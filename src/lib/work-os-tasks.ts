@@ -7,6 +7,7 @@ import {
   ensureNiftyAccessToken,
   getNiftyTask,
   listNiftyTasks,
+  NiftyHttpError,
   normalizeNiftyTaskPayload,
   updateNiftyTask,
   updateNiftyTaskField,
@@ -228,14 +229,12 @@ async function finalizeCreatedNiftyTask(userId: string, initial: NormalizedNifty
 
 /** True when a create failure is a definitive provider rejection: the request
  * was answered with HTTP 4xx, so Nifty cannot have created the task. Anything
- * else — timeout, network failure, 5xx — is uncertain and must never be
+ * else — timeout, network failure, 5xx, and 408 (the server gave up waiting but
+ * may still have processed the request) — is uncertain and must never be
  * retried with another POST. */
 export function providerCreateFailureDefinite(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const match = message.match(/\bHTTP\s+(\d{3})\b/);
-  if (!match) return false;
-  const status = Number(match[1]);
-  return status >= 400 && status < 500;
+  if (!(error instanceof NiftyHttpError)) return false;
+  return error.status >= 400 && error.status < 500 && error.status !== 408;
 }
 
 export async function createTask(

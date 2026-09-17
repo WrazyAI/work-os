@@ -1424,6 +1424,17 @@ for provider confirmation. Destructive actions name the target and use the
 danger treatment. Keyboard focus and reduced-motion behavior follow the shared
 card rules.
 
+**Uncertain provider create recovery.** A create-task proposal whose provider
+POST may have landed is not a dead end. The server records the dispatched
+attempt, refuses to POST again while it is unresolved, and reports the result
+as `Failed` with the review reason plus one extra action: `Nothing was created
+— retry`. Choosing it confirms the provider holds no copy, clears the recorded
+attempt, and files the task exactly once; an ordinary `Retry` re-searches the
+provider first and adopts the task when it exists, so neither path can create a
+duplicate. The action renders only while the server reports the unresolved
+attempt in its payload — never from message text — and the failure copy names
+both choices so the employee never has to guess which one applies.
+
 **Shared review identity.** A review raised in either chat window is one turn
 in the shared conversation, keyed by its review id, with the operations and
 results attached. Both windows save conversation turns additively (merged by

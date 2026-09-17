@@ -255,6 +255,20 @@ function queryString(params?: NiftyListParams): string {
 
 const NIFTY_REQUEST_TIMEOUT_MS = Number(process.env.NIFTY_REQUEST_TIMEOUT_MS ?? 20_000);
 
+/** A Nifty response that was answered with an HTTP error. The status is kept on
+ * the error so callers can classify a rejection without parsing the message
+ * text — a 4xx proves the request was answered, while timeouts, network
+ * failures, and 5xx cannot prove anything about what the provider did. */
+export class NiftyHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, path: string, body: string) {
+    super(`Nifty ${path} -> HTTP ${status} ${body}`);
+    this.name = "NiftyHttpError";
+    this.status = status;
+  }
+}
+
 async function niftyRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const makeRequest = async (token: string) => fetch(`${niftyApiBase()}${path}`, {
     ...init,
@@ -277,7 +291,7 @@ async function niftyRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Nifty ${path} -> HTTP ${res.status} ${text.slice(0, 300)}`);
+    throw new NiftyHttpError(res.status, path, text.slice(0, 300));
   }
 
   if (res.status === 204) return undefined as T;
@@ -538,7 +552,7 @@ async function requestNiftyToken(body: Record<string, string>): Promise<NiftyTok
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Nifty /oauth/token -> HTTP ${res.status} ${text.slice(0, 300)}`);
+    throw new NiftyHttpError(res.status, "/oauth/token", text.slice(0, 300));
   }
 
   return (await res.json()) as NiftyTokenResponse;

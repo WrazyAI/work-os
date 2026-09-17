@@ -79,14 +79,14 @@ export async function listWorkOsProposals(access: WorkOsAccess, personId: string
  * a real failure reason, and "still processing" instead of guessing. */
 export async function getWorkOsProposal(access: WorkOsAccess, proposalId: string) {
   const { data, error } = await db().from("work_task_proposals")
-    .select("id,operation,status,failure_reason,updated_at,decided_at,provider_result")
+    .select("id,operation,status,failure_reason,updated_at,decided_at,provider_result,provider_create_issued_at")
     .eq("organization_id", access.organizationId)
     .eq("person_id", access.personId as string)
     .eq("id", proposalId)
     .maybeSingle();
   if (error) throw new Error(`load Work OS proposal: ${error.message}`);
   if (!data) throw new Error("Proposal not found");
-  return data;
+  return { ...data, create_intent_unresolved: proposalCreateIntentUnresolved(data as Json) };
 }
 
 /** Fenced write of the provider task id onto the applying proposal. Returns
@@ -122,6 +122,13 @@ function hasTimestamp(value: unknown): boolean {
     : typeof value === "string" && value.trim().length > 0;
 }
 
+/** True when a create_task proposal dispatched a provider create that was never
+ * resolved by a recorded provider id: the outcome is unknown, and the companion
+ * offers the employee the clear-and-retry recovery instead of a dead end. */
+export function proposalCreateIntentUnresolved(row: Json): boolean {
+  return row.operation === "create_task" && hasTimestamp(row.provider_create_issued_at);
+}
+
 /** A definite rejection (HTTP 4xx) proves no task was created, so the intent is
  * cleared and a corrected retry may POST again. */
 async function clearProviderCreateIssued(proposalId: string, applyAttempt: string): Promise<void> {
@@ -132,7 +139,12 @@ async function clearProviderCreateIssued(proposalId: string, applyAttempt: strin
   if (error) throw new Error(`clear provider create intent: ${error.message}`);
 }
 
-async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt: string, opts: { firstAttempt: boolean }) {
+async function applyProposal(
+  access: WorkOsAccess,
+  proposal: Json,
+  applyAttempt: string,
+  opts: { firstAttempt: boolean; confirmedNoTaskCreated?: boolean },
+) {
   const operation = proposal.operation as ProposalOperation;
   const change = proposal.proposed_change as Json;
   if (operation === "remove_from_plan") {
@@ -196,8 +208,14 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
       await rememberProviderTaskId(proposal.id as string, orphan.id, applyAttempt);
       return adoptProviderTask(ownerId, orphan.id, body);
     }
+    if (createIssued && !opts.confirmedNoTaskCreated) {
+      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet. Retry to adopt it if it exists, or confirm nothing was created to clear the recorded attempt and file it once.");
+    }
     if (createIssued) {
-      throw new Error("A previous attempt may have created this task in Nifty but it is not listed yet; checking Nifty is required before retrying. The retry adopts the existing task instead of creating a second one.");
+      // The employee confirmed Nifty holds no such task. Clear the recorded
+      // intent — fenced to this attempt — so the create below may POST again.
+      await clearProviderCreateIssued(proposal.id as string, applyAttempt);
+      await audit(access, "proposal.create_intent_cleared", "task_proposal", proposal.id as string, { operation });
     }
     try {
       return await createTask(ownerId, body, {
@@ -213,7 +231,16 @@ async function applyProposal(access: WorkOsAccess, proposal: Json, applyAttempt:
         },
       });
     } catch (error) {
-      if (providerCreateFailureDefinite(error)) await clearProviderCreateIssued(proposal.id as string, applyAttempt);
+      if (providerCreateFailureDefinite(error)) {
+        try {
+          await clearProviderCreateIssued(proposal.id as string, applyAttempt);
+        } catch (clearError) {
+          // Never let the clear failure hide the provider's real rejection: its
+          // message drives needs_review classification and what the employee sees.
+          const clearReason = clearError instanceof Error ? clearError.message : "the clear request failed";
+          throw new Error(`${error instanceof Error ? error.message : String(error)} (clearing the recorded create intent also failed: ${clearReason})`);
+        }
+      }
       throw error;
     }
   }
@@ -597,6 +624,15 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     if (recovered) Object.assign(proposal, recovered);
   }
   if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) return withOutcome(proposal);
+  // Employee recovery for an uncertain provider create: "nothing was created in
+  // Nifty" clears the recorded attempt so the accept files it exactly once.
+  const resolution = text(body.provider_create_resolution);
+  if (resolution && resolution !== "no_task_created") throw new Error("provider_create_resolution must be no_task_created");
+  if (resolution && decision !== "accept") throw new Error("provider_create_resolution only applies to an accept decision");
+  const confirmedNoTaskCreated = resolution === "no_task_created";
+  if (confirmedNoTaskCreated && !proposalCreateIntentUnresolved(proposal as Json)) {
+    throw new Error("This update has no unresolved Nifty create to clear.");
+  }
   if (decision === "reject" && ["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
     if (proposal.operation === "remove_from_plan") await restorePlanRemoval(access, proposal as Json);
     const { data, error } = await db().from("work_task_proposals").update({
@@ -689,7 +725,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       .then(() => undefined, () => undefined);
   }, 60_000);
   try {
-    const providerResult = await applyProposal(access, applying as Json, applyAttempt, { firstAttempt });
+    const providerResult = await applyProposal(access, applying as Json, applyAttempt, { firstAttempt, confirmedNoTaskCreated });
     const { data, error } = await db().from("work_task_proposals").update({
       status: "applied",
       provider_result: providerResult ?? {},
@@ -719,12 +755,27 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Proposal application failed";
     const needsReview = /required before|evidence is required|task_group_id is required|may have created|accepted the create/i.test(reason);
-    await db().from("work_task_proposals").update({
+    const { data: failed } = await db().from("work_task_proposals").update({
       status: needsReview ? "needs_review" : "failed",
       failure_reason: reason,
       updated_at: new Date().toISOString(),
-    }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt);
-    await audit(access, "proposal.failed", "task_proposal", proposalId, { operation: proposal.operation, reason, needsReview });
+    }).eq("id", proposalId).eq("status", "applying").eq("apply_attempt", applyAttempt).select("*").maybeSingle();
+    // An unresolved create intent is a review state even when the failure text
+    // is a bare timeout: the POST may have landed, so the employee gets the
+    // clear-and-retry recovery instead of a retry that cannot safely POST.
+    let failedRow = failed as Json | null;
+    const unresolved = Boolean(failedRow && proposalCreateIntentUnresolved(failedRow));
+    if (unresolved && !needsReview && failedRow) {
+      const { data: reviewRow } = await db().from("work_task_proposals").update({
+        status: "needs_review",
+        updated_at: new Date().toISOString(),
+      }).eq("id", proposalId).eq("status", "failed").select("*").maybeSingle();
+      failedRow = (reviewRow as Json | null) ?? failedRow;
+    }
+    await audit(access, "proposal.failed", "task_proposal", proposalId, { operation: proposal.operation, reason, needsReview, createIntentUnresolved: unresolved });
+    // Return the row (instead of throwing) when recovery is possible: the
+    // companion keys the clear-and-retry action off this machine-readable flag.
+    if (unresolved && failedRow) return withOutcome({ ...failedRow, create_intent_unresolved: true });
     throw error;
   } finally {
     clearInterval(heartbeat);

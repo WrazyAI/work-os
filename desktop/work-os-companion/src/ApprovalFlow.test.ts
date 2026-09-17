@@ -72,6 +72,17 @@ describe("ApprovalFlow", () => {
     expect(markup.match(/>Retry<\/button>/g)).toHaveLength(1);
   });
 
+  it("names the clear-and-retry recovery when the create outcome is unknown", () => {
+    const uncreated = { ...operations[1]!, op: "create_task" as const, taskTitle: "New work" };
+    const results: ToolCallResult[] = [
+      { op: uncreated, status: "failed", message: "A previous attempt may have created this task in Nifty but it is not listed yet.", retryable: true, createResolution: "no_task_created" },
+    ];
+    const markup = renderToStaticMarkup(createElement(ApprovalResults, { results, onRetry: () => undefined }));
+
+    expect(markup).toContain("Nothing was created — retry");
+    expect(markup).not.toContain(">Retry</button>");
+  });
+
   it("files nothing until every action is decided", () => {
     const pending = operations.map((op, index) => ({ op, index }));
     expect(settleDecisions(pending, {})).toBeNull();

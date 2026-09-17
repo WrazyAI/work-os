@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { NiftyHttpError } from "../src/lib/integrations/nifty";
 import { providerCreateFailureDefinite } from "../src/lib/work-os-tasks";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -64,28 +65,54 @@ test("an unresolved intent refuses to POST again and searches with retries", () 
   const branch = proposals.slice(branchAt, proposals.indexOf("if (!taskId)"));
   const issuedAt = branch.indexOf("const createIssued = hasTimestamp((proposal as Json).provider_create_issued_at);");
   const retriesAt = branch.indexOf("retries: 3, retryDelayMs: 1_500");
-  const refuseAt = branch.indexOf("if (createIssued) {");
+  const refuseAt = branch.indexOf("if (createIssued && !opts.confirmedNoTaskCreated) {");
+  const confirmAt = branch.indexOf("if (createIssued) {");
   const createAt = branch.indexOf("createTask(ownerId, body, {");
   assert.ok(issuedAt > 0, "prior intent is read");
   assert.ok(retriesAt > issuedAt, "uncertain attempts retry the provider listing");
   assert.ok(refuseAt > retriesAt, "the refusal is the last check before create");
-  assert.ok(createAt > refuseAt, "create stays the final fallback");
-  assert.match(branch.slice(refuseAt, createAt), /may have created this task in Nifty but it is not listed yet/);
+  assert.ok(confirmAt > refuseAt, "the confirmed-clear path stays separate from the refusal");
+  assert.ok(createAt > confirmAt, "create stays the final fallback");
+  assert.match(branch.slice(refuseAt, confirmAt), /may have created this task in Nifty but it is not listed yet/);
 });
 
 test("only a definite 4xx clears the intent", () => {
-  assert.match(proposals, /if \(providerCreateFailureDefinite\(error\)\) await clearProviderCreateIssued/);
+  assert.match(proposals, /if \(providerCreateFailureDefinite\(error\)\) \{[\s\S]{0,240}?clearProviderCreateIssued/);
   const helperAt = proposals.indexOf("async function clearProviderCreateIssued");
   assert.ok(helperAt > 0);
   assert.match(proposals.slice(helperAt, helperAt + 400), /provider_create_issued_at: null/);
-  assert.match(read("src/lib/work-os-proposals.ts"), /may have created/i, "uncertain failures land in needs_review");
+  assert.match(proposals, /may have created/i, "uncertain failures land in needs_review");
+  assert.match(proposals, /clearing the recorded create intent also failed/, "a clear failure never hides the provider reason");
   assert.match(proposals, /function hasTimestamp\(value: unknown\)[\s\S]{0,140}?value instanceof Date/, "timestamps are read as Date objects, not strings");
 });
 
+test("a confirmed clear-and-retry resolves the intent before the POST", () => {
+  assert.match(proposals, /provider_create_resolution must be no_task_created/);
+  assert.match(proposals, /const confirmedNoTaskCreated = resolution === "no_task_created"/);
+  assert.match(proposals, /if \(confirmedNoTaskCreated && !proposalCreateIntentUnresolved/, "the action requires a real unresolved intent");
+  assert.match(proposals, /opts\.confirmedNoTaskCreated/, "the decision reaches applyProposal");
+  const branchAt = proposals.indexOf('if (operation === "create_task")');
+  const branch = proposals.slice(branchAt, proposals.indexOf("if (!taskId)"));
+  const clearAt = branch.indexOf('// The employee confirmed Nifty holds no such task.');
+  const createAt = branch.indexOf("createTask(ownerId, body, {");
+  assert.ok(clearAt > 0, "the confirmed path clears the recorded attempt");
+  assert.match(branch.slice(clearAt, createAt), /proposal\.create_intent_cleared/, "the clear is audited");
+  assert.match(proposals, /create_intent_unresolved: true/, "the server returns the machine-readable flag");
+});
+
+test("an unresolved intent returns the review row instead of dead-ending", () => {
+  assert.match(proposals, /export function proposalCreateIntentUnresolved\(row: Json\)/);
+  assert.match(proposals, /if \(unresolved && failedRow\) return withOutcome/, "the companion can offer recovery");
+  assert.match(proposals, /createIntentUnresolved: unresolved/, "the audit records the uncertainty");
+});
+
 test("create failures classify by HTTP status", () => {
-  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 422 bad request")), true);
-  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 404 not found")), true);
-  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 500 boom")), false);
+  const http = (status: number) => new NiftyHttpError(status, "/api/v1.0/tasks", "body");
+  assert.equal(providerCreateFailureDefinite(http(422)), true);
+  assert.equal(providerCreateFailureDefinite(http(404)), true);
+  assert.equal(providerCreateFailureDefinite(http(500)), false);
+  assert.equal(providerCreateFailureDefinite(http(408)), false, "a server timeout cannot prove nothing was created");
+  assert.equal(providerCreateFailureDefinite(new Error("Nifty /api/v1.0/tasks -> HTTP 422 bad request")), false, "message text is never classified");
   assert.equal(providerCreateFailureDefinite(new Error("The operation was aborted due to timeout")), false);
   assert.equal(providerCreateFailureDefinite(new TypeError("fetch failed")), false);
   assert.equal(providerCreateFailureDefinite("plain failure"), false);
