@@ -346,5 +346,19 @@ export interface EodScreenshotGallery {
   excludedPolicy: number;
   excludedSensitive: number;
   unavailable: number;
+  /** Recorded frames still awaiting analysis (failed frames retry). */
+  pending: number;
+  /** Frames recorded for the day so far. */
+  total: number;
   viewable: EodScreenshotItem[];
+}
+
+/** One bounded on-demand Worktivity preparation batch for an EOD day. */
+export interface EodScreenshotPreparation {
+  date: string;
+  analyzed: number;
+  failed: number;
+  pending: number;
+  total: number;
+  sampled: number;
 }

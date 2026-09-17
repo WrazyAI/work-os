@@ -5452,6 +5452,16 @@ button:not(:disabled):active {
 .eod-shot-breakdown { margin-top: 10px; }
 .eod-shot-skeleton { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--surface) 25%, var(--line) 50%, var(--surface) 75%); background-size: 200% 100%; animation: eodShotShimmer 1.4s ease-in-out infinite; }
 @keyframes eodShotShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+/* The wait for on-demand Worktivity analysis keeps the composer's layout; the
+   counts stay truthful and the escape hatch is always visible. */
+.eod-screenshot-preparing { display: flex; align-items: center; gap: 10px; margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.eod-screenshot-preparing > span { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.eod-screenshot-preparing strong { font-size: 12px; }
+.eod-screenshot-preparing small { color: var(--muted); font-size: 11px; }
+.eod-screenshot-preparing button { flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .eod-shot-skeleton { animation: none; background: var(--surface); }
+}
 .eod-shot-unavailable { display: inline-grid; place-items: center; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: 9px; }
 .eod-shot-modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(18, 20, 16, 0.68); backdrop-filter: blur(9px); animation: modalFade 0.18s ease both; }
 .eod-shot-modal-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(760px, 100%); max-height: min(640px, calc(100vh - 48px)); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 18px; background: #f7f5ed; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38); overflow: hidden; animation: modalRise 0.24s ease both; }

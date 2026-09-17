@@ -11,7 +11,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { DailyPlan, DayData, EodScreenshotGallery, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -153,12 +153,26 @@ export function useOutstandingEodsQuery(options: { enabled: boolean }) {
   });
 }
 
-/** Viewable screenshot frames for one day, used by the EOD composer gallery. */
+/** Viewable screenshot frames for one day, used by the EOD composer gallery.
+ * While any recorded frame is still waiting on analysis the query refreshes
+ * itself, so the panel converges without the employee reopening the day. */
 export function useEodScreenshotsQuery(options: { enabled: boolean; date: string | null }) {
   return useQuery({
     queryKey: workOsKeys.eodScreenshots(options.date ?? "none"),
     enabled: options.enabled && !!options.date,
     staleTime: DAY_DETAILS_STALE_MS,
+    refetchInterval: (query) => ((query.state.data as EodScreenshotGallery | undefined)?.pending ?? 0) > 0 ? 5_000 : false,
     queryFn: () => apiRequest<EodScreenshotGallery>(`/api/work-os/me/eod/screenshots?date=${encodeURIComponent(options.date!)}`),
+  });
+}
+
+/** One bounded, interactive Worktivity analysis batch for the EOD day. The
+ * composer runs this while the waiting state is visible and stops early when
+ * the employee chooses to draft anyway. */
+export function prepareEodScreenshots(date: string, signal?: AbortSignal) {
+  return apiRequest<EodScreenshotPreparation>("/api/work-os/me/eod/screenshots/prepare", {
+    method: "POST",
+    signal: signal ?? AbortSignal.timeout(45_000),
+    body: JSON.stringify({ date, max_frames: 6 }),
   });
 }

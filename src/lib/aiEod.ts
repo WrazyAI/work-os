@@ -319,12 +319,18 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
     return [String(row.id), at];
   }));
   const ids = [...occurredBy.keys()];
-  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+  if (!ids.length) return { processed: 0, excluded: 0, failed: 0, pending: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
   const rows = await supabase.from("work_screenshot_summaries").select("id,summary,visible_context,confidence,processing_status,evidence_event_id")
     .in("evidence_event_id", ids);
   if (rows.error) throw new Error(`load screenshot summaries: ${rows.error.message}`);
   const summaries = (rows.data ?? []) as Array<Record<string, any>>;
   const count = (status: string) => summaries.filter((row) => row.processing_status === status).length;
+  // Frames with no terminal summary are still being analyzed or will be
+  // retried; the draft states this honestly instead of implying zero frames.
+  const terminal = new Set(summaries
+    .filter((row) => ["processed", "excluded"].includes(String(row.processing_status)))
+    .map((row) => String(row.evidence_event_id)));
+  const pending = ids.filter((id) => !terminal.has(id)).length;
   const observations = summaries
     .filter((row) => row.processing_status === "processed")
     .sort((left, right) => {
@@ -343,5 +349,5 @@ export async function gatherEodScreenshotContext(organizationId: string, personI
         confidence: Number(row.confidence ?? 0),
       };
     });
-  return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), observations };
+  return { processed: count("processed"), excluded: count("excluded"), failed: count("failed"), pending, observations };
 }

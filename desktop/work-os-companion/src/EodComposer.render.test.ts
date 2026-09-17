@@ -48,8 +48,8 @@ describe("EodComposer review surface", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
       source: "ai" as const,
-      screenshotContext: { processed: 9, excluded: 69, failed: 0, observations: frames.slice(-4) },
-      screenshotGallery: { processed: 9, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, viewable: frames },
+      screenshotContext: { processed: 9, excluded: 69, failed: 0, pending: 0, observations: frames.slice(-4) },
+      screenshotGallery: { processed: 9, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, pending: 0, total: 9, viewable: frames },
       screenshotResolveSrc: () => "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E",
     }));
     expect(markup).toContain("9 screenshot samples analyzed for this day");
@@ -65,10 +65,38 @@ describe("EodComposer review surface", () => {
   it("hides the gallery panel when the day has no frames", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
-      screenshotGallery: { processed: 0, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, viewable: [] },
+      screenshotGallery: { processed: 0, excludedPolicy: 0, excludedSensitive: 69, unavailable: 0, pending: 0, total: 0, viewable: [] },
     }));
     expect(markup).not.toContain("eod-screenshot-context");
     expect(markup).not.toContain("eod-shot-carousel");
+  });
+
+  it("waits for on-demand analysis with honest counts and a Draft Anyway escape", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      source: "ai" as const,
+      screenshotGallery: { processed: 2, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 4, total: 6, viewable: [] },
+      preparing: { analyzed: 2, total: 6, pending: 4 },
+      onDraftAnyway: () => undefined,
+    }));
+    expect(markup).toContain("Preparing Worktivity analysis…");
+    expect(markup).toContain("2 of 6 frames analyzed — 4 still analyzing");
+    expect(markup).toContain("Draft Anyway");
+    // The panel states the pending frames instead of implying zero analyzed.
+    expect(markup).toContain("2 screenshot samples analyzed for this day · 4 still analyzing");
+  });
+
+  it("shows the pending frames even before the first batch lands", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      source: "ai" as const,
+      screenshotGallery: { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 6, total: 6, viewable: [] },
+      preparing: { analyzed: 0, total: 0, pending: null },
+      onDraftAnyway: () => undefined,
+    }));
+    expect(markup).toContain("Preparing Worktivity analysis…");
+    expect(markup).toContain("Checking today&#x27;s screenshots.");
+    expect(markup).toContain("0 screenshot samples analyzed for this day · 6 still analyzing");
   });
 
   const submitButton = (markup: string) => markup.match(/<button class="primary"[^>]*>Submit EOD<\/button>/)?.[0] ?? "";

@@ -24,6 +24,8 @@ const SCREENSHOT_GALLERY: EodScreenshotGallery = {
   excludedPolicy: 0,
   excludedSensitive: 69,
   unavailable: 0,
+  pending: 0,
+  total: 9,
   viewable: FRAMES,
 };
 
@@ -31,7 +33,26 @@ const SCREENSHOT_CONTEXT = {
   processed: 9,
   excluded: 69,
   failed: 0,
+  pending: 0,
   observations: FRAMES.slice(-4).map(({ summaryId, capturedAt, summary, visibleApp, confidence }) => ({ summaryId, capturedAt, summary, visibleApp, confidence })),
+};
+
+const PENDING_GALLERY: EodScreenshotGallery = {
+  processed: 3,
+  excludedPolicy: 0,
+  excludedSensitive: 0,
+  unavailable: 0,
+  pending: 6,
+  total: 9,
+  viewable: FRAMES.slice(0, 3),
+};
+
+const PENDING_CONTEXT = {
+  processed: 3,
+  excluded: 0,
+  failed: 0,
+  pending: 6,
+  observations: FRAMES.slice(0, 3).map(({ summaryId, capturedAt, summary, visibleApp, confidence }) => ({ summaryId, capturedAt, summary, visibleApp, confidence })),
 };
 
 const RESOLVE_SRC = (summaryId: string, size: "thumb" | "preview" | "full") => {
@@ -44,10 +65,11 @@ export default function EodPreview() {
   const allTasksCompleted = params.has("all-complete");
   const refiningPreview = params.has("refining");
   const shotsPreview = params.has("shots");
+  const pendingPreview = params.has("shots-pending");
   const draftBottleneckPreview = params.has("draft-bottleneck");
   const [markdown, setMarkdown] = useState(draftBottleneckPreview ? `${draft}\n\n## Bottleneck\nWaiting on the security review before the release can ship.` : draft);
   const [submitted, setSubmitted] = useState(false);
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
-    {submitted ? <section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck={draftBottleneckPreview ? null : "A pending approval delayed the final handoff."} allTasksCompleted={allTasksCompleted} redrafting={refiningPreview} busy={false} screenshotContext={shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
+    {submitted ? <section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck={draftBottleneckPreview ? null : "A pending approval delayed the final handoff."} allTasksCompleted={allTasksCompleted} redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={shotsPreview || pendingPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} preparing={pendingPreview ? { analyzed: 3, total: 9, pending: 6 } : null} onDraftAnyway={pendingPreview ? () => undefined : undefined} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
   </main></section></div>;
 }

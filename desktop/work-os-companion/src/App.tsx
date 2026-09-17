@@ -33,7 +33,7 @@ import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parent
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { Otto } from "./Otto";
 import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
@@ -54,7 +54,12 @@ const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : ass
 
 type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 type TaskView = "today" | "unfinished" | "completed" | "all";
-type EodScreenshotContext = { processed: number; excluded: number; failed: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+type EodScreenshotContext = { processed: number; excluded: number; failed: number; pending: number; observations: Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+
+/** Bounded interactive preparation before an EOD draft: four batches of a few
+ * frames is enough to cover a day's sampled context without letting a single
+ * press run away with vision cost. */
+const EOD_PREPARE_ROUNDS = 4;
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
@@ -149,6 +154,12 @@ export default function App() {
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
   const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
+  /** Live on-demand Worktivity preparation for the day being drafted: null when
+   * idle, counts while the composer waits, `pending: null` while the first
+   * batch is still being requested. */
+  const [eodPreparing, setEodPreparing] = useState<{ date: string; analyzed: number; total: number; pending: number | null; failed: number } | null>(null);
+  const eodPrepareCancelRef = useRef(false);
+  const eodPrepareAbortRef = useRef<AbortController | null>(null);
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
@@ -475,7 +486,10 @@ export default function App() {
     }
   }, [historicalQuery.data]);
   useEffect(() => {
-    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false);
+    // Switching days abandons any preparation still running for the old one.
+    eodPrepareCancelRef.current = true;
+    eodPrepareAbortRef.current?.abort();
+    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null);
   }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
@@ -689,6 +703,43 @@ export default function App() {
     setDay((current) => current ?? (applyDayScenario(null, debugScenario) as DayData));
   }, [day, debugScenario, syncBypass]);
 
+  /** Bounded on-demand Worktivity analysis before drafting. The composer shows
+   * honest frame counts while this runs; "Draft Anyway" cancels the remaining
+   * rounds and drafts from whatever is already analyzed. A disabled feature or
+   * an unavailable provider never blocks the draft. */
+  const prepareEodForDraft = async (target: DayData | null) => {
+    if (!target || syncBypassRef.current) return;
+    const date = target.shiftDate;
+    eodPrepareCancelRef.current = false;
+    setEodPreparing({ date, analyzed: 0, total: 0, pending: null, failed: 0 });
+    try {
+      for (let round = 0; round < EOD_PREPARE_ROUNDS; round += 1) {
+        if (eodPrepareCancelRef.current) break;
+        const controller = new AbortController();
+        eodPrepareAbortRef.current = controller;
+        let preparation: Awaited<ReturnType<typeof prepareEodScreenshots>>;
+        try {
+          preparation = await prepareEodScreenshots(date, controller.signal);
+        } catch {
+          break;
+        } finally {
+          eodPrepareAbortRef.current = null;
+        }
+        setEodPreparing({ date, analyzed: preparation.analyzed, total: preparation.total, pending: preparation.pending, failed: preparation.failed });
+        if (preparation.pending <= 0) break;
+      }
+    } finally {
+      eodPrepareAbortRef.current = null;
+      setEodPreparing(null);
+      void queryClient.invalidateQueries({ queryKey: workOsKeys.eodScreenshots(date) });
+    }
+  };
+
+  const draftEodAnyway = () => {
+    eodPrepareCancelRef.current = true;
+    eodPrepareAbortRef.current?.abort();
+  };
+
   const redraftEod = async (target: DayData | null) => {
     if (!target?.report) return;
     if (syncBypassRef.current) {
@@ -698,6 +749,7 @@ export default function App() {
     }
     setEodRedrafting(true);
     try {
+      await prepareEodForDraft(target);
       const result = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
         method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
       });
@@ -749,6 +801,7 @@ export default function App() {
     }
     setEodRedrafting(true);
     try {
+      await prepareEodForDraft(target);
       const result = await apiRequest<{ report: NonNullable<DayData["report"]> }>("/api/work-os/reports/eod", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -2226,7 +2279,15 @@ export default function App() {
                 title={eodGate.gate === "no_tasks" ? "No tasks submitted for this day" : "No work activity recorded"}
                 body={eodGate.detail}
               /><div className="today-actions"><button onClick={() => setView("tasks")}>Open Tasks <ChevronRight size={14} /></button><button onClick={() => { setEodGate(null); void redraftEod(reviewDay); }}>{eodRedrafting ? "Checking…" : "Try again"}</button></div></section>
-              : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking {eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.</p></section>
+              : eodPreparing && !eodDraft ? <section className="panel eod-drafting" role="status">
+                <Wave className="loading-wave-large" />
+                <strong>Preparing Worktivity analysis…</strong>
+                <p>{eodPreparing.pending == null
+                  ? `Checking ${eodDate ? "that day’s" : "today’s"} screenshots.`
+                  : `${eodPreparing.analyzed} of ${eodPreparing.total} frames analyzed — ${eodPreparing.pending} still analyzing.`} Drafting starts when the analysis finishes; you can draft anyway with the frames that are ready.</p>
+                <div className="today-actions"><button type="button" className="quiet-action" onClick={draftEodAnyway}>Draft Anyway</button></div>
+              </section>
+                : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Drafting your EOD…</strong><p>Checking {eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.</p></section>
                 : reviewDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) ? <EodComposer
                     reportId={String(reviewDay.report.id ?? "unknown")}
                     initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
@@ -2239,6 +2300,8 @@ export default function App() {
                     screenshotContext={eodDraft?.screenshots ?? null}
                     screenshotGallery={screenshotGalleryQuery.data ?? null}
                     screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
+                    preparing={eodPreparing}
+                    onDraftAnyway={draftEodAnyway}
                     busy={busy}
                     onRedraft={() => void redraftEod(reviewDay)}
                     onRefresh={reviewDay.report.status === "draft" || reviewDay.report.status === "rejected" ? () => void createEodDraft(reviewDay) : undefined}

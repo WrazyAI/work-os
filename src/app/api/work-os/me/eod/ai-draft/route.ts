@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       ]);
       grounding.contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
     }
-    let screenshots = { processed: 0, excluded: 0, failed: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
+    let screenshots = { processed: 0, excluded: 0, failed: 0, pending: 0, observations: [] as Array<{ summaryId: string; capturedAt: string; summary: string; visibleApp: string | null; confidence: number }> };
     let screenshotSyncUnavailable = false;
     try {
       screenshots = await gatherEodScreenshotContext(auth.access.organizationId, personId, date);

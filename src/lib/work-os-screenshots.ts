@@ -27,6 +27,13 @@ const DEFAULT_SCREENSHOTS_PER_RUN = 12;
 const MAX_SCREENSHOTS_PER_RUN = 48;
 const SCHEDULED_HOURLY_CAP = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Number(process.env.WORK_OS_SCREENSHOT_HOURLY_CAP ?? 24) || 24));
 const SCHEDULED_EOD_CAP = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Number(process.env.WORK_OS_SCREENSHOT_EOD_CAP ?? 24) || 24));
+/** An interactive EOD preparation call must answer well inside the companion's
+ * request budget, so each call analyzes only a small bounded batch and the
+ * caller keeps asking while frames remain. */
+const PREPARE_SCREENSHOTS_PER_REQUEST = 6;
+/** A hung provider call must never hold an interactive preparation open. */
+const SCREENSHOT_DOWNLOAD_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_DOWNLOAD_TIMEOUT_MS ?? 15_000) || 15_000);
+const SCREENSHOT_VISION_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_VISION_TIMEOUT_MS ?? 20_000) || 20_000);
 
 function db() {
   return createAdminClient();
@@ -228,6 +235,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
   };
   const response = await fetch(OPENROUTER_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(SCREENSHOT_VISION_TIMEOUT_MS),
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
@@ -317,6 +325,7 @@ export async function summarizeWorktivityScreenshots(
     screenshotConfig(access.organizationId, personId),
     terminallyAnalyzedFrames(access.organizationId, personId, date),
   ]);
+  const terminalAfter = new Set(analyzed);
   const pending = shots.filter((shot) => !analyzed.has(`screenshot:${shot.ID}`));
   await ensureBucket();
   const results = [];
@@ -337,13 +346,14 @@ export async function summarizeWorktivityScreenshots(
         updated_at: new Date().toISOString(),
       }, { onConflict: "evidence_event_id" }).select("*").single();
       if (error) throw new Error(`record excluded screenshot: ${error.message}`);
+      terminalAfter.add(`screenshot:${log.ID}`);
       results.push(data);
       continue;
     }
     let storagePath: string | null = null;
     let storageRetained = false;
     try {
-      const imageResponse = await fetch(log.Screenshot as string);
+      const imageResponse = await fetch(log.Screenshot as string, { signal: AbortSignal.timeout(SCREENSHOT_DOWNLOAD_TIMEOUT_MS) });
       if (!imageResponse.ok) throw new Error(`download Worktivity screenshot ${log.ID}: ${imageResponse.status}`);
       const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
       const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
@@ -376,6 +386,7 @@ export async function summarizeWorktivityScreenshots(
           updated_at: new Date().toISOString(),
         }, { onConflict: "evidence_event_id" }).select("*").single();
         if (error) throw new Error(`record sensitive screenshot exclusion: ${error.message}`);
+        terminalAfter.add(`screenshot:${log.ID}`);
         await db().from("work_evidence_events").update({
           summary: "Screenshot excluded after sensitive-content detection.",
           metadata: { worktivityLogId: log.ID, needsReview: false, excludedSensitive: true, sensitiveReason: observation.sensitiveReason },
@@ -406,6 +417,7 @@ export async function summarizeWorktivityScreenshots(
         updated_at: new Date().toISOString(),
       }, { onConflict: "evidence_event_id" }).select("*").single();
       if (error) throw new Error(`save screenshot summary: ${error.message}`);
+      terminalAfter.add(`screenshot:${log.ID}`);
       await db().from("work_evidence_events").update({
         summary: observation.summary,
         metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
@@ -434,7 +446,70 @@ export async function summarizeWorktivityScreenshots(
       results.push(data);
     }
   }
-  return { date, logs: shots.length, sampled: results.length, summaries: results };
+  // Frames still lacking a terminal summary after this batch (failed frames are
+  // retried, so they stay pending). Callers use this to keep an interactive
+  // preparation going or to tell the user honestly what remains.
+  const remaining = shots.filter((shot) => !terminalAfter.has(`screenshot:${shot.ID}`)).length;
+  const failed = results.filter((row: any) => String(row?.processing_status ?? "") === "failed").length;
+  return { date, logs: shots.length, sampled: results.length, summaries: results, pending: remaining, failed };
+}
+
+export type EodPreparation = {
+  date: string;
+  /** Frames analyzed by this batch (processed or excluded). */
+  analyzed: number;
+  /** Frames whose analysis failed in this batch and will be retried. */
+  failed: number;
+  /** Frames that still have no terminal summary after this batch. */
+  pending: number;
+  /** Total frames Worktivity captured for the day. */
+  total: number;
+  /** Frames this batch attempted. */
+  sampled: number;
+};
+
+const prepareInFlight = new Map<string, Promise<EodPreparation>>();
+
+/** Interactive, bounded preparation for one employee-day. Runs a small batch
+ * inline (the EOD composer polls while frames remain), never writes the
+ * scheduled hourly/EOD ledger markers, and dedupes concurrent calls for the
+ * same person-day so two open composers cannot double-spend vision calls. */
+export async function prepareEodScreenshots(
+  access: ScreenshotScope,
+  personId: string,
+  date: string,
+  options: { maxScreenshots?: number; execution?: ScreenshotExecution } = {},
+): Promise<EodPreparation> {
+  const key = `${access.organizationId}:${personId}:${date}`;
+  const existing = prepareInFlight.get(key);
+  if (existing) return existing;
+  const run = (async (): Promise<EodPreparation> => {
+    const batch = Math.max(1, Math.min(DEFAULT_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? PREPARE_SCREENSHOTS_PER_REQUEST)));
+    const result = await summarizeWorktivityScreenshots(access, personId, date, {
+      execution: options.execution ?? "feature",
+      maxScreenshots: batch,
+    });
+    const analyzed = result.summaries.filter((row: any) => ["processed", "excluded"].includes(String(row?.processing_status ?? ""))).length;
+    const preparation: EodPreparation = {
+      date,
+      analyzed,
+      failed: result.failed,
+      pending: result.pending,
+      total: result.logs,
+      sampled: result.sampled,
+    };
+    await db().from("work_audit_log").insert({
+      organization_id: access.organizationId,
+      actor_user_id: null,
+      action: "screenshot.on_demand_prepared",
+      target_type: "workday",
+      target_id: key,
+      metadata: { source: "eod_prepare", shiftDate: date, personId, batch, ...preparation },
+    }).then(() => undefined, () => undefined);
+    return preparation;
+  })().finally(() => prepareInFlight.delete(key));
+  prepareInFlight.set(key, run);
+  return run;
 }
 
 /**
@@ -766,6 +841,11 @@ export type EodScreenshotGallery = {
   excludedPolicy: number;
   excludedSensitive: number;
   unavailable: number;
+  /** Recorded frames still awaiting a terminal analysis (failed frames retry,
+   * so they count as pending until they succeed or are excluded). */
+  pending: number;
+  /** Frames recorded for the day so far. */
+  total: number;
   viewable: EodScreenshotItem[];
 };
 
@@ -773,7 +853,7 @@ export type EodScreenshotGallery = {
  * retained, unexpired images are listed; sensitive and policy exclusions have
  * no image left to show. */
 export async function listEodScreenshots(organizationId: string, personId: string, date: string): Promise<EodScreenshotGallery> {
-  const gallery: EodScreenshotGallery = { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, viewable: [] };
+  const gallery: EodScreenshotGallery = { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, total: 0, viewable: [] };
   const events = await db().from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
@@ -784,19 +864,23 @@ export async function listEodScreenshots(organizationId: string, personId: strin
     return [String(row.id), at];
   }));
   const ids = [...occurredBy.keys()];
+  gallery.total = ids.length;
   if (!ids.length) return gallery;
   const rows = await db().from("work_screenshot_summaries")
     .select("id,processing_status,failure_reason,storage_path,expires_at,deleted_at,summary,visible_context,confidence,evidence_event_id")
     .in("evidence_event_id", ids);
   if (rows.error) throw new Error(`load screenshot gallery: ${rows.error.message}`);
+  const terminal = new Set<string>();
   for (const row of (rows.data ?? []) as Array<Record<string, any>>) {
     const context = (row.visible_context ?? {}) as Record<string, unknown>;
     if (row.processing_status === "excluded") {
+      terminal.add(String(row.evidence_event_id));
       if (screenshotExclusionKind(context, row.failure_reason) === "policy") gallery.excludedPolicy += 1;
       else gallery.excludedSensitive += 1;
       continue;
     }
     if (row.processing_status === "failed") { gallery.unavailable += 1; continue; }
+    terminal.add(String(row.evidence_event_id));
     if (!isRetainedScreenshotAvailable(row)) { gallery.unavailable += 1; continue; }
     gallery.processed += 1;
     gallery.viewable.push({
@@ -808,6 +892,7 @@ export async function listEodScreenshots(organizationId: string, personId: strin
     });
   }
   gallery.viewable.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+  gallery.pending = ids.filter((id) => !terminal.has(id)).length;
   return gallery;
 }
 

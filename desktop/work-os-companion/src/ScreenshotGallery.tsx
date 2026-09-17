@@ -113,6 +113,7 @@ export function EodScreenshotPanel({ context, gallery, limit = 7, resolveSrc }: 
     </div>}
     <small className="eod-shot-breakdown">
       {processed} analyzed
+      {gallery && gallery.pending > 0 ? ` · ${gallery.pending} still analyzing` : ""}
       {gallery && gallery.excludedSensitive > 0 ? ` · ${gallery.excludedSensitive} flagged as sensitive (images deleted)` : ""}
       {gallery && gallery.excludedPolicy > 0 ? ` · ${gallery.excludedPolicy} excluded by your exclusions` : ""}
       {gallery && gallery.unavailable > 0 ? ` · ${gallery.unavailable} unavailable` : ""}

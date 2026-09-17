@@ -54,4 +54,42 @@ test("EOD draft observations carry frame ids for inline thumbnails", async () =>
   assert.match(aiDraft, /summaryId: string/);
 });
 
+test("the gallery reports pending and total frames honestly", async () => {
+  const lib = await source("src/lib/work-os-screenshots.ts");
+  assert.match(lib, /pending: number;/);
+  assert.match(lib, /total: number;/);
+  assert.match(lib, /gallery\.total = ids\.length;/);
+  assert.match(lib, /gallery\.pending = ids\.filter\(\(id\) => !terminal\.has\(id\)\)\.length;/);
+  const galleryReturn = lib.slice(lib.indexOf("export async function listEodScreenshots"), lib.indexOf("export type ScreenshotPreviewSize"));
+  assert.match(galleryReturn, /processing_status === "failed"\) \{ gallery\.unavailable \+= 1; continue; \}/, "failed frames stay unavailable and pending");
+  const aiEod = await source("src/lib/aiEod.ts");
+  assert.match(aiEod, /const pending = ids\.filter\(\(id\) => !terminal\.has\(id\)\)\.length;/);
+  assert.match(aiEod, /failed: count\("failed"\), pending, observations/);
+});
+
+test("the prepare route is self-scoped, gated, and bounded", async () => {
+  const prepare = await source("src/app/api/work-os/me/eod/screenshots/prepare/route.ts");
+  assert.match(prepare, /prepareEodScreenshots/);
+  assert.match(prepare, /requireWorkOsAccess/);
+  assert.match(prepare, /requirePerson: true/);
+  assert.match(prepare, /feature: "screenshot_summaries"/);
+  assert.match(prepare, /date must be YYYY-MM-DD/);
+  assert.match(prepare, /max_frames/);
+  const lib = await source("src/lib/work-os-screenshots.ts");
+  assert.match(lib, /export async function prepareEodScreenshots/);
+  assert.match(lib, /PREPARE_SCREENSHOTS_PER_REQUEST = 6/);
+  assert.match(lib, /const prepareInFlight = new Map<string, Promise<EodPreparation>>\(\)/);
+  assert.match(lib, /if \(existing\) return existing;/, "concurrent calls share one batch");
+  assert.match(lib, /action: "screenshot\.on_demand_prepared"/);
+  assert.doesNotMatch(lib.slice(lib.indexOf("export async function prepareEodScreenshots"), lib.indexOf("export async function runScheduledScreenshotAnalysis")), /screenshot\.eod_completed/, "interactive preparation never settles the scheduled day ledger");
+});
+
+test("interactive runs bound their provider calls", async () => {
+  const lib = await source("src/lib/work-os-screenshots.ts");
+  assert.match(lib, /SCREENSHOT_DOWNLOAD_TIMEOUT_MS/);
+  assert.match(lib, /SCREENSHOT_VISION_TIMEOUT_MS/);
+  assert.match(lib, /AbortSignal\.timeout\(SCREENSHOT_DOWNLOAD_TIMEOUT_MS\)/);
+  assert.match(lib, /AbortSignal\.timeout\(SCREENSHOT_VISION_TIMEOUT_MS\)/);
+});
+
 console.log("Work OS screenshot gallery tests passed.");
