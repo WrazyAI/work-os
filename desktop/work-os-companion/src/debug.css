@@ -174,6 +174,85 @@
 .debug-presets strong { font-size: 12px; }
 .debug-presets small { color: var(--muted); font-size: 10.5px; line-height: 1.4; }
 
+.debug-preset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.debug-presets button.active {
+  border-color: #97b872;
+  background: #f4f9ec;
+  box-shadow: inset 0 0 0 1px #dbe9c8;
+}
+
+.debug-preset-current {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ddf6bf;
+  color: #34591a;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.debug-preset-custom {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f6e3b5;
+  color: #6d4d0c;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.debug-confirm {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 2px;
+  padding: 11px 13px;
+  border: 1px solid #e6c7bd;
+  border-radius: 11px;
+  background: #fdf3ef;
+}
+
+.debug-confirm p {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #5f342c;
+}
+
+.debug-confirm p svg { flex: none; margin-top: 1px; }
+
+.debug-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.debug-confirm-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f2f1ea;
+  font-size: 11.5px;
+}
+
+/* Solid danger action. Deliberately not the app's `.danger` utility: that one
+   owns the text colour with !important and would leave red on red here. */
+.debug-confirm-actions button.debug-confirm-proceed {
+  border-color: #8f3627;
+  background: #b04434;
+  color: #fdf6f4;
+  font-weight: 650;
+}
+
+.debug-confirm-actions button.debug-confirm-proceed:hover { background: #9c3a2b; }
+
 .debug-switch-row {
   display: flex;
   align-items: center;
@@ -265,10 +344,13 @@
 .debug-footer-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
+.debug-copy,
 .debug-reset {
   display: inline-flex;
   align-items: center;
@@ -287,6 +369,8 @@
 .debug-field select:focus-visible,
 .debug-field input:focus-visible,
 .debug-invalidate:focus-visible,
+.debug-copy:focus-visible,
+.debug-confirm-actions button:focus-visible,
 .debug-reset:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
@@ -320,6 +404,39 @@
 }
 
 .trace-toolbar select { background: #fff; }
+
+.trace-toolbar button:disabled,
+.trace-options button:disabled {
+  opacity: 0.5;
+}
+
+.trace-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.trace-follow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+}
+
+.trace-follow > span { color: var(--muted); }
+
+.trace-options button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f0efe7;
+  font-size: 11.5px;
+}
 
 .trace-list {
   margin: 0;
@@ -399,6 +516,38 @@
 .export-list small { color: var(--muted); font-size: 10.5px; }
 
 .export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.export-result {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.export-result > span { display: grid; gap: 2px; min-width: 0; }
+.export-result strong { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #55604f; }
+.export-result small { font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.export-result small:first-of-type { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
+.export-result.ok { border-color: #bcd9a0; background: #f6fbf0; }
+.export-result.ok strong { color: #34591a; }
+.export-result.error { border-color: #e6c7bd; background: #fdf3ef; }
+.export-result.error strong { color: #8e3a2f; }
+
+.export-result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.export-result-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f2f1ea;
+  font-size: 11.5px;
+}
 
 @media (max-width: 620px) {
   .debug-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }

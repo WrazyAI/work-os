@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Bug, Download, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Bug, Check, Copy, Download, RotateCcw, X } from "lucide-react";
 import { diagnosticsSnapshot, exportDiagnostics, openLogsDir, type DiagnosticEvent, type DiagnosticLevel, type DiagnosticSource } from "./diagnostics";
+import { startTraceFixtureStream, traceFixtureEvents } from "./debugTraceFixture";
 import { useNotifications } from "./NotificationFlyouts";
 import { SettingsSwitch } from "./SettingsSwitch";
-import { ALL_ONBOARDING_DETAILS, DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO } from "./scenarios";
+import { ALL_ONBOARDING_DETAILS, DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO, activePresetId } from "./scenarios";
 import type { DebugDayState, DebugScenario } from "./types";
 
 type Tab = "scenarios" | "trace" | "export";
@@ -25,6 +26,12 @@ export default function DebugWindow() {
   const [level, setLevel] = useState<DiagnosticLevel | "all">("all");
   const [source, setSource] = useState<DiagnosticSource | "all">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirmLiveWrites, setConfirmLiveWrites] = useState(false);
+  const [autoscroll, setAutoscroll] = useState(true);
+  const [flash, setFlash] = useState<"scenario" | "event" | "path" | null>(null);
+  const [exportResult, setExportResult] = useState<null | { tone: "ok" | "error"; title: string; detail: string; path?: string }>(null);
+  const traceEndRef = useRef<HTMLDivElement | null>(null);
+  const previewTrace = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-trace");
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -48,6 +55,31 @@ export default function DebugWindow() {
     return haystack.includes(query.trim().toLowerCase());
   }), [events, level, query, source]);
 
+  // Dev-only fixture stream so the trace tail can be developed and exercised in a browser.
+  useEffect(() => {
+    if (!previewTrace) return;
+    setEvents(traceFixtureEvents());
+    return startTraceFixtureStream((event) => {
+      if (pausedRef.current) return;
+      setEvents((current) => [...current.slice(-1999), event]);
+    });
+  }, [previewTrace]);
+
+  const currentPresetId = useMemo(() => activePresetId(scenario), [scenario]);
+
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+
+  // Follow the newest event while the operator is watching the tail of the trace.
+  useEffect(() => {
+    if (tab !== "trace" || !autoscroll || expanded) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    traceEndRef.current?.scrollIntoView({ block: "end", behavior: reduced ? "auto" : "smooth" });
+  }, [autoscroll, expanded, tab, visible.length]);
+
   function closeWindow() {
     if (!isTauri()) { window.close(); return; }
     void getCurrentWindow().hide().catch(() => undefined);
@@ -61,6 +93,23 @@ export default function DebugWindow() {
 
   async function copyEvent(event: DiagnosticEvent) {
     await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
+    setFlash("event");
+  }
+
+  async function copyScenario() {
+    await navigator.clipboard.writeText(JSON.stringify(scenario, null, 2));
+    setFlash("scenario");
+  }
+
+  async function copyVisible() {
+    await navigator.clipboard.writeText(visible.map((event) => JSON.stringify(event)).join("\n"));
+    notifications.info(`${visible.length} event${visible.length === 1 ? "" : "s"} copied as JSON lines.`, "Trace copied");
+  }
+
+  async function copyExportPath() {
+    if (!exportResult?.path) return;
+    await navigator.clipboard.writeText(exportResult.path);
+    setFlash("path");
   }
 
   async function runExport() {
@@ -71,9 +120,14 @@ export default function DebugWindow() {
         queueSummary: { note: "Queue bodies are never exported." },
         sanitizedConfig: { window: "debug" },
       });
+      setExportResult({ tone: "ok", title: path, detail: "Redacted bundle saved. Nothing secret leaves this machine.", path });
       notifications.success(`Saved to ${path}`, "Diagnostics exported");
     } catch (error) {
-      notifications.error(error instanceof Error ? error.message : "Export failed", "Diagnostics export failed", { label: "Open logs folder", onClick: () => void openLogsDir() });
+      const detail = isTauri()
+        ? (error instanceof Error ? error.message : "Export failed")
+        : "The diagnostics ZIP is written by the desktop app; a browser preview cannot save it.";
+      setExportResult({ tone: "error", title: "The bundle could not be written.", detail });
+      notifications.error(detail, "Diagnostics export failed", { label: "Open logs folder", onClick: () => void openLogsDir() });
     }
   }
 
@@ -107,12 +161,16 @@ export default function DebugWindow() {
     {tab === "scenarios" && <div className="debug-content">
       <div className="debug-warning">Scenarios do not change authentication, consent, tasks, evidence, or reports on the server.</div>
       <section className="debug-group">
-        <header className="debug-group-head"><h2>Presets</h2><small>Load a whole scenario in one click</small></header>
-        <div className="debug-presets">{DEBUG_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => update({ ...DEFAULT_DEBUG_SCENARIO, ...preset.scenario })}><strong>{preset.label}</strong><small>{preset.description}</small></button>)}</div>
+        <header className="debug-group-head">
+          <h2>Presets</h2>
+          <small>Load a whole scenario in one click</small>
+          {scenario.enabled && !currentPresetId && <span className="debug-preset-custom">Custom — no preset matches</span>}
+        </header>
+        <div className="debug-presets">{DEBUG_PRESETS.map((preset) => <button key={preset.id} type="button" aria-pressed={currentPresetId === preset.id} className={currentPresetId === preset.id ? "active" : ""} onClick={() => update({ ...DEFAULT_DEBUG_SCENARIO, ...preset.scenario })}><span className="debug-preset-head"><strong>{preset.label}</strong>{currentPresetId === preset.id && <span className="debug-preset-current">Current</span>}</span><small>{preset.description}</small></button>)}</div>
       </section>
       <section className="debug-group">
         <header className="debug-group-head"><h2>Master switch</h2><small>Scenarios reset themselves when the app exits</small></header>
-        <label className="debug-switch-row"><span><strong>Enable debug scenario</strong><small>Applies the overrides below to this device</small></span><SettingsSwitch label="Enable debug scenario" checked={scenario.enabled} onChange={(value) => update({ enabled: value })} /></label>
+        <label className="debug-switch-row"><span><strong>Enable debug scenario</strong><small>Applies the overrides below to this device</small></span><SettingsSwitch label="Enable debug scenario" checked={scenario.enabled} onChange={(value) => { setConfirmLiveWrites(false); update({ enabled: value }); }} /></label>
       </section>
       <section className="debug-group">
         <header className="debug-group-head"><h2>Session</h2><small>What the app believes about sign-in and setup</small></header>
@@ -126,7 +184,14 @@ export default function DebugWindow() {
       <section className="debug-group">
         <header className="debug-group-head"><h2>Backend</h2><small>How far this scenario may reach</small></header>
         <label className="debug-switch-row"><span><strong>Offline sync bypass</strong><small>Never contact the backend; writes stay on this device</small></span><SettingsSwitch label="Offline sync bypass" checked={scenario.syncBypass} onChange={(value) => update({ enabled: true, syncBypass: value })} /></label>
-        <label className="debug-switch-row"><span><strong>Live writes in scenario</strong><small>Approval actions file against the real server</small></span><SettingsSwitch label="Live writes in scenario" checked={!!scenario.liveWrites} onChange={(value) => update({ enabled: true, liveWrites: value })} /></label>
+        <label className="debug-switch-row"><span><strong>Live writes in scenario</strong><small>Approval actions file against the real server</small></span><SettingsSwitch label="Live writes in scenario" checked={!!scenario.liveWrites && !confirmLiveWrites} onChange={(value) => { if (value) { setConfirmLiveWrites(true); return; } setConfirmLiveWrites(false); update({ liveWrites: false }); }} /></label>
+        {confirmLiveWrites && <div className="debug-confirm" role="alertdialog" aria-label="Confirm live writes">
+          <p><AlertTriangle size={14} /><span><strong>Confirm live writes.</strong> Approvals are filed against the real server with no local simulation from here on. Only continue against a server you intend to change{scenario.syncBypass ? ", and switch off Offline sync bypass first — it currently keeps every write on this device" : ""}.</span></p>
+          <div className="debug-confirm-actions">
+            <button type="button" className="debug-confirm-proceed" onClick={() => { setConfirmLiveWrites(false); update({ enabled: true, liveWrites: true }); }}>Confirm live writes</button>
+            <button type="button" onClick={() => setConfirmLiveWrites(false)}>Cancel</button>
+          </div>
+        </div>}
         <p className="debug-help">Launches the workspace from local fixtures even when the server is unreachable (quota-restricted, offline, or not yet signed in). Task, composer, and shift actions are simulated locally, so full workflows — including the update classification flow — can be exercised end to end. No server data is changed. With live writes enabled, approvals are actually sent; use only against a server you intend to change.</p>
       </section>
       <section className="debug-group">
@@ -164,7 +229,8 @@ export default function DebugWindow() {
         <p className="debug-help">Forces the companion machine into a state with its synthetic prompt. Offline beats every force; quiet mode in Settings suppresses notifications for real.</p>
       </section>
       <div className="debug-footer-actions">
-        <button type="button" className="debug-reset" onClick={() => update(DEFAULT_DEBUG_SCENARIO)}><RotateCcw size={15} /> Reset all overrides</button>
+        <button type="button" className="debug-copy" onClick={() => void copyScenario()}>{flash === "scenario" ? <Check size={15} /> : <Copy size={15} />} {flash === "scenario" ? "Scenario copied" : "Copy scenario JSON"}</button>
+        <button type="button" className="debug-reset" onClick={() => { setConfirmLiveWrites(false); update(DEFAULT_DEBUG_SCENARIO); }}><RotateCcw size={15} /> Reset all overrides</button>
       </div>
     </div>}
 
@@ -176,6 +242,10 @@ export default function DebugWindow() {
         <button type="button" onClick={() => setPaused((value) => !value)}>{paused ? "Resume" : "Pause"}</button>
         <button type="button" onClick={() => setEvents([])}>Clear view</button>
       </div>
+      <div className="trace-options">
+        <label className="trace-follow"><span>Follow new events</span><SettingsSwitch label="Follow new events" checked={autoscroll} onChange={setAutoscroll} /></label>
+        <button type="button" disabled={visible.length === 0} onClick={() => void copyVisible()}>Copy shown ({visible.length})</button>
+      </div>
       <p className="debug-help">Clearing the view does not delete disk logs. {visible.length} shown / {events.length} buffered.</p>
       {visible.length > 0 ? <ol className="trace-list">
         {visible.map((event) => <li key={event.id}>
@@ -186,9 +256,10 @@ export default function DebugWindow() {
             <strong>{event.category}</strong>
             <em>{event.message}</em>
           </button>
-          {expanded === event.id && <pre>{JSON.stringify(event, null, 2)}<button type="button" onClick={() => void copyEvent(event)}>Copy event</button></pre>}
+          {expanded === event.id && <pre>{JSON.stringify(event, null, 2)}<button type="button" onClick={() => void copyEvent(event)}>{flash === "event" ? "Copied" : "Copy event"}</button></pre>}
         </li>)}
       </ol> : <p className="debug-empty">No events match these filters. Widen the level or source filter, or clear the search.</p>}
+      <div ref={traceEndRef} />
     </div>}
 
     {tab === "export" && <div className="debug-content">
@@ -207,6 +278,14 @@ export default function DebugWindow() {
         <button className="primary" onClick={() => void runExport()}><Download size={15} /> Export diagnostics ZIP</button>
         <button onClick={() => void openLogsDir()}>Open logs folder</button>
       </div>
+      {exportResult && <div className={`export-result ${exportResult.tone}`} role="status">
+        <span><strong>{exportResult.tone === "ok" ? "Exported" : "Export failed"}</strong><small>{exportResult.title}</small><small>{exportResult.detail}</small></span>
+        <div className="export-result-actions">
+          {exportResult.tone === "ok" && <button type="button" onClick={() => void copyExportPath()}>{flash === "path" ? "Copied" : "Copy path"}</button>}
+          {exportResult.tone === "error" && <button type="button" onClick={() => void runExport()}>Try again</button>}
+          <button type="button" onClick={() => void openLogsDir()}>Open logs folder</button>
+        </div>
+      </div>}
     </div>}
   </main>;
 }

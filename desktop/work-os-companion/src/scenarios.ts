@@ -31,6 +31,25 @@ export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   queuedUpdates: 0,
 };
 
+/** Canonical shape for comparing two scenarios: keys sorted, array order ignored. */
+function canonicalScenario(scenario: DebugScenario): string {
+  const entries = Object.entries(scenario)
+    .filter(([, value]) => value !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => [key, Array.isArray(value) ? [...value].sort() : value] as const);
+  return JSON.stringify(entries);
+}
+
+export function presetScenarioMatches(preset: { scenario: Partial<DebugScenario> }, scenario: DebugScenario): boolean {
+  return canonicalScenario({ ...DEFAULT_DEBUG_SCENARIO, ...preset.scenario }) === canonicalScenario(scenario);
+}
+
+/** The preset a scenario was loaded from, or null once any override was touched. */
+export function activePresetId(scenario: DebugScenario): string | null {
+  if (!scenario.enabled) return null;
+  return DEBUG_PRESETS.find((preset) => presetScenarioMatches(preset, scenario))?.id ?? null;
+}
+
 export const DEBUG_PRESETS: Array<{ id: string; label: string; description: string; scenario: Partial<DebugScenario> }> = [
   { id: "first_launch", label: "First launch", description: "Signed out with no profile: onboarding from the very start.", scenario: { enabled: true, authState: "unauthenticated", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ALL_ONBOARDING_DETAILS.map((item) => item.key), dayState: "no_shift" } },
   { id: "profile_missing", label: "Incomplete onboarding", description: "Signed in, but onboarding re-asks the employee-owned details.", scenario: { enabled: true, authState: "real", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ["consentProvided", "profileConfirmed", "timezoneProvided", "scheduleProvided", "notificationsConfigured", "privacyAcknowledged", "roleAssigned", "teamAssigned", "managerAssigned", "officialScheduleConfigured"] } },
