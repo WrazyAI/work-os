@@ -38,6 +38,35 @@ describe("ProgressComposer post-approve state", () => {
     expect(markup).toContain("Work on the Work OS Review Page");
     expect(markup).toContain("Some random task");
   });
+
+  it("renders one card when the assistant returns the same task view twice", () => {
+    const firstDisplay: ProposedOperation = { op: "display_pending_tasks", statement: "Show.", enabled: false };
+    const secondDisplay: ProposedOperation = { op: "display_pending_tasks", statement: "Show again.", enabled: false };
+    const duplicated: ToolCallResult[] = [
+      {
+        op: firstDisplay,
+        status: "recorded",
+        message: "Loaded.",
+        data: { provider_result: { view: "pending", tasks: [{ id: "t-9", title: "Work on the Work OS Review Page" }] } },
+      },
+      {
+        op: secondDisplay,
+        status: "recorded",
+        message: "Loaded.",
+        data: { provider_result: { view: "pending", tasks: [{ id: "t-9", title: "Work on the Work OS Review Page" }] } },
+      },
+    ];
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, {
+      input: "", open: true, panel: "update", pending: "tool calls reviewed", receipt: null, history: [],
+      busy: false, required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved",
+      interpretation: { status: "ready", operations: [firstDisplay, secondDisplay], taskOptions: [], reply: "Here you go.", results: duplicated },
+      toolContext: { shiftDate: null, personId: null, promptKind: "optional" },
+      aiUnavailable: null,
+      onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
+      onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+    }));
+    expect((markup.match(/chat-task-card/g) ?? []).length).toBe(1);
+  });
 });
 
 describe("ProgressComposer simplified chrome", () => {
