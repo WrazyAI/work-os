@@ -1452,7 +1452,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .panel,
 .proposal-card,
 .evidence-list,
-.settings-panel,
 .daily-goal-card,
 .task-records {
   box-shadow: var(--shadow-soft);
@@ -1797,7 +1796,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 @media (max-width: 850px) {
   .nav-group { display: grid; }
-  .settings-panel { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .setting,
