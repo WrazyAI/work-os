@@ -161,3 +161,43 @@ The first pass had real gaps; they were closed and one more bug was found:
 
 **Residual:** `seo_clients` has duplicate rows (2 per client, 20 total) — cleanup candidate.
 `deploy-system` materializes as folder `deploy-monitor` and resolves via scored identity.
+
+## 9. Provider-create recovery for uncertain Nifty creates (2026-09-17)
+
+**Scope:** a `create_task` proposal whose Nifty POST may have landed used to
+dead-end in `needs_review` — retries refused to POST again and nothing could
+clear the recorded attempt. Employees now get an explicit clear-and-retry action.
+
+**Fix (work-os `5b3a5b71`, `0e8e818e`, `dd0f5602`, `77709026`; agent-os
+`0e2872b1d`, `b1cbe33f9`):**
+- `NiftyHttpError` carries the HTTP status; 4xx (except 408) is a definitive
+  rejection, everything else stays uncertain. The brand check is structural, so
+  a duplicated tsx ESM/CJS module instance cannot silently misclassify.
+- `provider_create_resolution: "no_task_created"` re-searches Nifty, adopts an
+  existing task, or clears the recorded intent (fenced + audited) and files once.
+- An unresolved intent returns a review row with `create_intent_unresolved: true`
+  instead of a bare error; the companion renders "Nothing was created — retry";
+  `design.md` §25.10.1 records the contract.
+- The agent-os port also adds the missing
+  `0047_work_task_provider_create_intent.sql` (the live column already existed).
+
+**Verified:**
+- work-os typecheck clean; `work-os:test` 176/176; companion `tsc` clean and
+  vitest 359/359 (including new resolution-passthrough and render cases).
+- agent-os provider-outbox suite 15/15 on the VPS (Node 22, where the module
+  duplication surfaced).
+- The deployed VPS build (BUILD_ID 02:17Z) contains the new contract; a live
+  read-only probe passed: validation errors, review-row return,
+  `create_intent_unresolved`, and the refusal ran the real bounded Nifty marker
+  search — no provider writes.
+- TestSprite `05610bff` "Unresolved Nifty create offers a clear-and-retry
+  recovery action" **passed 5/5**: the failure row shows the recovery action and
+  clicking it recorded the request.
+
+**Residual / not exercised:**
+- The clear + provider-POST happy path is covered by tests only; the live probe
+  deliberately avoided creating a real Nifty task.
+- The web employee proposals list shows the failure reason but not the recovery
+  action (companion-only surface); follow-up candidate.
+- agent-os `codex/provider-create-recovery` is pushed but not merged into
+  `agentos/main`; the VPS checkout remains the deployment source.
