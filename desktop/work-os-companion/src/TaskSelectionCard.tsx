@@ -261,6 +261,13 @@ export function TaskSelectionCard({
   ];
 
   const summary = taskSelectionSummaryText({ selected: submissionRows.length, proposed: proposedCount, sentCount, approvalLocation });
+  const pendingCount = listedTasks.filter((task) => task.state !== "overdue").length;
+  const overdueCount = listedTasks.filter((task) => task.state === "overdue").length;
+  // Collapsed cards keep a one-line account of the work instead of a bare title
+  // (design §25.7): the selection when there is one, otherwise the open counts.
+  const headerSummary = submissionRows.length || proposedCount
+    ? taskSelectionSummaryText({ selected: submissionRows.length, proposed: proposedCount, sentCount: 0, approvalLocation })
+    : [pendingCount ? `${pendingCount} pending` : null, overdueCount ? `${overdueCount} overdue` : null].filter(Boolean).join(" · ");
   const listVisible = !collapsed && listOpen;
 
   const toggleList = () => {
@@ -479,7 +486,10 @@ export function TaskSelectionCard({
       aria-busy={loading || sending}
     >
       <header className="chat-task-head">
-        <h2 id={titleId} title={title} className="chat-task-heading">{title}</h2>
+        <h2 id={titleId} title={title} className="chat-task-heading">
+          <span className="chat-task-heading-text">{title}</span>
+          {!listVisible && headerSummary && <small className="chat-task-summary">{headerSummary}</small>}
+        </h2>
         <div className="chat-task-head-actions">
           {proposedCount > 0 && (
             <span className="chat-task-pill is-proposed">{proposedCount} proposed</span>

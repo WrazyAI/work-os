@@ -183,7 +183,31 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
       ? String(dateOnly(typeof left.due_date === "string" ? left.due_date : null)).localeCompare(String(dateOnly(typeof right.due_date === "string" ? right.due_date : null)))
       : String(right.provider_updated_at ?? right.updated_at ?? right.created_at ?? "").localeCompare(String(left.provider_updated_at ?? left.updated_at ?? left.created_at ?? "")))
     .slice(0, limit);
-  return { view, currentDate, tasks: selected };
+  // Attach child progress for the same page so a parent row can show `2/5` and
+  // offer its subtasks without a per-row round trip (design §25.7).
+  const parentProviderIds = selected
+    .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
+    .map((task) => String(task.provider_task_id));
+  const childrenResult = parentProviderIds.length
+    ? await db().from("work_tasks").select("parent_provider_task_id,completed")
+      .eq("organization_id", access.organizationId)
+      .not("status", "in", "(archived,deleted)")
+      .in("parent_provider_task_id", parentProviderIds)
+    : { data: [], error: null };
+  if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
+  const progress = new Map<string, { total: number; completed: number }>();
+  for (const child of childrenResult.data ?? []) {
+    const parentId = String(child.parent_provider_task_id);
+    const current = progress.get(parentId) ?? { total: 0, completed: 0 };
+    current.total += 1;
+    if (child.completed === true) current.completed += 1;
+    progress.set(parentId, current);
+  }
+  const withProgress = selected.map((task) => {
+    const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
+    return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
+  });
+  return { view, currentDate, tasks: withProgress };
 }
 
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {

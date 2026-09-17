@@ -1165,8 +1165,10 @@ export default function AvatarApp(): React.ReactElement {
                             dueDate: typeof task.due_date === "string" ? task.due_date : null,
                             priority: typeof task.priority === "string" ? task.priority : null,
                             state: selection.view === "overdue" ? "overdue" : "pending",
+                            subtaskTotal: Number(task.subtask_total ?? 0) || 0,
+                            subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
                           })).filter((task) => !!task.id) : [];
-                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+                          return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} onLoadSubtasks={loadTaskSubtasks} collapseWhenInactive={entryIndex < allEntries.length - 1} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
                         {entry.operations?.length ? (
                           <div className="chat-operations">

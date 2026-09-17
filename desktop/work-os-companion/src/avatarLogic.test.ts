@@ -38,7 +38,7 @@ describe("hourly nudge", () => {
     const seen = new Set([nudge!.key]);
     expect(hourlyNudge(facts, NOW + 1000, seen)).toBeNull();
   });
-  it("uses the recorded update and focus in the due prompt", () => {
+  it("keeps the due prompt to the last update and the question", () => {
     const facts = {
       ...base,
       promptRequired: true,
@@ -53,8 +53,12 @@ describe("hourly nudge", () => {
     const nudge = hourlyNudge(facts, NOW, new Set());
     expect(nudge?.title).toBe("Check-in due");
     expect(nudge?.body).toContain("9:20 AM");
-    expect(nudge?.body).toContain("Finish the companion approval flow");
-    expect(nudge?.body).toContain("1 completed and 2 open tasks");
+    expect(nudge?.body).toContain("What's changed since then?");
+    // The banner no longer repeats the focus and the task counts.
+    expect(nudge?.body).not.toContain("Finish the companion approval flow");
+    expect(nudge?.body).not.toContain("Today's focus");
+    expect(nudge?.body).not.toContain("Current task state");
+    expect(nudge?.body).not.toContain("1 completed and 2 open tasks");
   });
   it("never fires off shift", () => {
     const facts = { ...base, promptRequired: true, clockedInAt: null };

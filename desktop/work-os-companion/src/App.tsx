@@ -2100,6 +2100,15 @@ export default function App() {
       .finally(() => setBusy(false));
   }
 
+  const loadComposerSubtasks = async (taskId: string) => {
+    const details = await fetchTaskDetails(taskId);
+    return (details.subtasks ?? []).map((child) => ({
+      id: String(child.id),
+      title: typeof child.title === "string" ? child.title : "Untitled subtask",
+      completed: child.completed === true,
+    }));
+  };
+
   async function proposeSelectedTaskCompletions(tasks: Array<{ id: string; title: string }>) {
     if (!tasks.length || syncBypassRef.current) return;
     if (tasks.some((task) => !task.title.trim())) throw new Error("A selected task could not be resolved. Nothing was proposed.");
@@ -2405,6 +2414,7 @@ export default function App() {
         aiUnavailable={aiUnavailable}
         onReviewOperations={approveInterpretation}
         onMarkSelectedDone={proposeSelectedTaskCompletions}
+        onLoadSubtasks={loadComposerSubtasks}
         onNavigateView={(page) => setView(page)}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
@@ -2562,12 +2572,13 @@ export function DashboardTaskCard({ task, currentDate, onOpen, onRetryPendingTas
   </article>;
 }
 
-function AssistantOperations({ interpretation, busy, toolContext, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation }: {
+function AssistantOperations({ interpretation, busy, toolContext, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
   interpretation: { operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] };
   busy: boolean;
   toolContext: import("./interpretation").ApprovedOpContext;
   onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void;
   onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void;
+  onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void;
   onRetryOperation?: (result: ToolCallResult) => void;
 }) {
@@ -2602,8 +2613,10 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
             projectName: typeof task.project_name === "string" ? task.project_name : null,
             priority: typeof task.priority === "string" ? task.priority : null,
             state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
+            subtaskTotal: Number(task.subtask_total ?? 0) || 0,
+            subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
           })).filter((task) => !!task.id) : [];
-          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
+          return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
         {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
@@ -2613,7 +2626,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onNavigateView, onRetryOperation }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -2622,7 +2635,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onRetryOperation?: (result: ToolCallResult) => void;
+  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -2677,7 +2690,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? "Drafted with Otto" : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" text={echoReply} stream onSettled={bumpSweep} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
+       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
   : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
