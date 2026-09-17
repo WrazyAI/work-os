@@ -31,8 +31,9 @@
     --chat-radius-sm: 8px;
     --chat-radius-md: 12px;
     --chat-radius-lg: 16px;
-    --chat-row: 40px;
-    --chat-header: 44px;
+    --chat-row: 46px;
+    --chat-header: 46px;
+    --chat-footer: 48px;
   }
 
   /* Scoped preflight substitute. The companion never resets legacy stylesheets,
@@ -160,17 +161,17 @@
 
   /* ── Thread ─────────────────────────────────────────────────────────── */
   .chat-turn-user {
-    @apply ml-auto w-fit max-w-[84%] rounded-[13px_13px_4px_13px] bg-field px-3 py-2 text-[13px] leading-[1.45] text-ink;
+    @apply ml-auto w-fit max-w-[84%] rounded-[13px_13px_4px_13px] bg-field px-3.5 py-2.5 text-[13px] leading-[1.5] text-ink;
   }
   .chat-turn {
-    @apply flex w-full min-w-0 gap-2;
+    @apply flex w-full min-w-0 gap-2.5;
   }
   .chat-turn > svg,
   .chat-welcome > svg {
     @apply mt-0.5 size-6 shrink-0 rounded-[7px] bg-accent-tint p-1 text-accent-ink;
   }
   .chat-turn-mark {
-    @apply mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-accent-tint text-accent-ink;
+    @apply mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full;
   }
   .chat-turn > div,
   .chat-welcome > div {
@@ -233,7 +234,7 @@
     outline-offset: 1px;
   }
   .chat-copy.is-copied { opacity: 1; color: #456d18; }
-  .chat-mascot-mark { display: grid; place-items: center; width: 100%; height: 100%; }
+    .chat-mascot-mark { display: grid; place-items: center; width: 100%; height: 100%; }
   .chat-mascot-art { width: 100%; height: 100%; }
   .chat-thinking-mark { width: 16px; height: 16px; }
 
@@ -285,8 +286,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: var(--chat-row, 40px);
-  padding: var(--chat-space-1, 4px) var(--chat-space-2, 8px) var(--chat-space-1, 4px) 10px;
+  min-height: var(--chat-row, 46px);
+  padding: var(--chat-space-2, 8px) 12px;
   border-bottom: 1px solid var(--line, #e2e6df);
 }
 .chat-task-heading {
@@ -389,7 +390,7 @@
 }
 .chat-task-retry:hover { border-color: var(--signal-strong, #7cc936) !important; color: var(--ink, #182018); }
 
-.chat-task-list-rows { margin: 0; padding: 2px 0; list-style: none; }
+.chat-task-list-rows { margin: 0; padding: var(--chat-space-1, 4px) 0; list-style: none; }
 .chat-task-row {
   padding: 0 10px;
   transition: background-color 140ms ease;
@@ -451,9 +452,9 @@
 }
 
 .chat-task-subtasks {
-  margin: 0 0 8px 25px;
+  margin: 0 0 10px 27px;
   border-radius: 10px;
-  padding: 6px 8px 4px;
+  padding: 8px 10px 6px;
   background: rgba(24, 32, 24, .032);
 }
 .chat-task-subtask-list { margin: 0; padding: 0; list-style: none; }
@@ -492,9 +493,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--chat-space-2, 8px);
-  min-height: var(--chat-header, 44px);
+  min-height: var(--chat-footer, 48px);
   border-top: 1px solid var(--line, #e2e6df);
-  padding: var(--chat-space-1, 4px) 10px;
+  padding: var(--chat-space-2, 8px) 12px;
 }
 .chat-task-hint { min-width: 0; flex: 1 1 auto; color: var(--ink-2, #626a61); font-size: 10.5px; line-height: 1.35; }
 .chat-task-hint.is-error { color: var(--danger, #b94b40); }
@@ -770,8 +771,8 @@
   min-height: 154px;
   max-height: min(56vh, 560px);
   flex-direction: column;
-  gap: var(--chat-space-3);
-  padding: var(--chat-space-4);
+  gap: var(--chat-space-4);
+  padding: 18px;
   background: linear-gradient(180deg, rgba(243, 245, 241, 0.42), transparent 44px);
 }
 
@@ -807,6 +808,48 @@
   outline: none;
   box-shadow: none;
 }
+
+/* The badge owns the mascot's geometry: the art fills the mark exactly, with
+   the head crop from mascot.ts. Unlayered so legacy `.otto` sizing (48px, built
+   for the avatar window) can never spill the art over the message text. */
+.chat-turn-mark {
+  background: var(--color-surface, #fbfcf8);
+  box-shadow: inset 0 0 0 1px var(--color-line, #d9ded5);
+}
+.chat-turn-mark .chat-mascot-mark,
+.chat-turn-mark .chat-mascot-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.chat-thinking-mark { width: 18px; height: 18px; }
+.chat-thinking-mark .chat-mascot-art { width: 100%; height: 100%; margin: 0; }
+
+/* Tab selection is semantic: ChatTabs marks it with aria-selected, so the
+   active pill is styled from that in both surfaces (the old .active class never
+   matched, which left the tabs looking like plain text). Unlayered on purpose:
+   the Tailwind opacity/background utilities would otherwise win. */
+.workos-chat-head .chat-tab,
+.avatar-nav .chat-tab {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 9px;
+  opacity: 1;
+  color: var(--color-ink-2, #626a61);
+  font-size: 12.5px;
+  font-weight: 650;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.workos-chat-head .chat-tab:hover,
+.avatar-nav .chat-tab:hover { background: var(--color-hover, rgba(24, 32, 24, 0.055)); color: var(--color-ink, #182018); }
+.workos-chat-head .chat-tab[aria-selected="true"],
+.avatar-nav .chat-tab[aria-selected="true"] {
+  background: var(--color-surface, #fbfcf8);
+  color: var(--color-ink, #182018);
+  box-shadow: inset 0 0 0 1px var(--color-line, #d9ded5);
+}
+.workos-chat-head .chat-tabs,
+.avatar-nav .chat-tabs { display: flex; flex-direction: row; align-items: center; gap: 4px; width: auto; }
 
 /* ── No horizontal scrolling anywhere in the companion ───────────────────── */
 

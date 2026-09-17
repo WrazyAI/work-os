@@ -2,24 +2,29 @@ import type { CSSProperties } from "react";
 
 export type OttoPose = "idle" | "sleep" | "focus" | "alert" | "rest" | "think" | "celebrate" | "recover";
 export type OttoTone = "signal" | "late";
+/** `head` crops to the face for small identity marks (chat turns, badges);
+ * `full` keeps the whole figure for the orb and the avatar window. */
+export type OttoCrop = "full" | "head";
+const OTTO_VIEWBOX: Record<OttoCrop, string> = { full: "0 0 96 96", head: "20 12 56 56" };
 
 /** Otto — the Work OS focus robot. One rounded body, one signal-green visor,
  * a lamp antenna, hover hands, and a pose per real workday state.
  * The SVG is intentionally small so the silhouette survives favicon sizes.
  * `tone="late"` is the one documented palette exception: the signal accents
  * render danger red until a late-start reason is recorded (design.md §8). */
-export function Otto({ pose = "idle", tone = "signal", className = "", style }: { pose?: OttoPose; tone?: OttoTone; className?: string; style?: CSSProperties }) {
-  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} data-tone={tone} style={style} viewBox="0 0 96 96" role="img" aria-label={`Otto, the Work OS companion, ${tone === "late" ? "late start needs a reason" : pose}`}>
-    <ellipse className="otto-shadow" cx="48" cy="87" rx="23" ry="4.5" />
+export function Otto({ pose = "idle", tone = "signal", crop = "full", className = "", style }: { pose?: OttoPose; tone?: OttoTone; crop?: OttoCrop; className?: string; style?: CSSProperties }) {
+  const full = crop === "full";
+  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} data-tone={tone} data-crop={crop} style={style} viewBox={OTTO_VIEWBOX[crop]} role="img" aria-label={`Otto, the Work OS companion, ${tone === "late" ? "late start needs a reason" : pose}`}>
+    {full && <ellipse className="otto-shadow" cx="48" cy="87" rx="23" ry="4.5" />}
     <g className="otto-figure">
       <path className="otto-antenna" d="M48 31V20" />
       <circle className="otto-bulb" cx="48" cy="16" r="4.5" />
-      <circle className="otto-hand hand-left" cx="15" cy="62" r="4" />
-      <circle className="otto-hand hand-right" cx="81" cy="62" r="4" />
+      {full && <><circle className="otto-hand hand-left" cx="15" cy="62" r="4" />
+      <circle className="otto-hand hand-right" cx="81" cy="62" r="4" /></>}
       <path className="otto-shell" d="M21 57c0-16.5 12-28 27-28s27 11.5 27 28-12 26-27 26-27-9.5-27-26Z" />
-      <path className="otto-foot foot-left" d="M33 83h9" />
+      {full && <><path className="otto-foot foot-left" d="M33 83h9" />
       <path className="otto-foot foot-right" d="M54 83h9" />
-      <path className="otto-badge" d="M41 74h14" />
+      <path className="otto-badge" d="M41 74h14" /></>}
       <rect className="otto-visor" x="30" y="43" width="36" height="22" rx="11" />
       <g className="otto-face">
         {pose === "idle" && <circle className="otto-eye" cx="48" cy="54" r="5.5" />}

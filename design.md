@@ -1521,7 +1521,12 @@ Anatomy, top to bottom:
    draggable), while **close** hides the window entirely. Close is always
    recoverable from the tray. The two controls sit adjacent in one
    `.avatar-head-actions` group with equal 28px hit targets.
-2. **Thread:** a fixed scroll region. User turns render as right-aligned
+2. **Header tabs:** the Chat/Tasks and Update/Focus toggles are one horizontal
+   row. Selection is expressed with `aria-selected` and styled from that
+   attribute (paper fill plus an inset hairline ring) — no separate `.active`
+   class — and legacy composer-header rules must never reach the tablist or the
+   tab buttons (they stole the row's layout and shrank the tabs to 30px boxes).
+3. **Thread:** a fixed scroll region. User turns render as right-aligned
    `chat-turn-user` bubbles (max 84% width, 8×12px padding). Assistant turns
    render as `chat-turn`: a 24px **mascot** mark (never a generic sparkle — see
    the mascot rule below), then a body column, separated by an 8px gap. A meta
@@ -1541,13 +1546,22 @@ Anatomy, top to bottom:
    card-only turns copyable, and reports `Copied` in place for a beat. System
    notices carry no copy control.
    **Spacing:** the chat surfaces share one 4px-based scale declared as
-   `--chat-space-1..6` (4/8/12/16/20/24) with `--chat-row` (40px) and
-   `--chat-header` (44px) in `src/chat/chat.css`. The thread uses a 12px gap and
-   16px padding (13px horizontal in the floating companion's 400px window);
-   cards use a 40px header, 40px rows, a 44px footer, and 10–12px internals; the
-   action-results accordion uses a 44px header and 10×12px rows. No surface adds
-   its own ad-hoc spacing on top of the scale.
-3. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
+   `--chat-space-1..6` (4/8/12/16/20/24) with `--chat-row` (46px),
+   `--chat-header` (46px), and `--chat-footer` (48px) in `src/chat/chat.css`.
+   The thread uses a 16px gap and 16px padding (18px in the in-app flyout); a
+   turn separates its mark from the body by 10px; message text is 13px/1.55 in
+   both surfaces; cards use a 46px header, 46px rows, a 48px footer, and
+   10–14px internals; the action-results accordion uses a 46px header and 12×14
+   rows. No surface adds its own ad-hoc spacing on top of the scale.
+   **History is the record.** A turn is persisted once, and the persisted turn
+   renders its own cards, approval actions, and copy payload (the in-app dock
+   uses `src/chat/HistoryTurn.tsx`; the floating companion renders the same
+   shapes from its entries). The live interpretation is cleared the moment its
+   turn is persisted, so a reply can never render twice; approvals on a
+   persisted turn patch that turn by id. Consecutive duplicate assistant turns
+   collapse at render when their text **and** card signature match, which heals
+   stored double-saves without rewriting the vault.
+4. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
    context `+` button, an auto-growing field, an optional labeled footer action
    (the dock's `Focus` button), and a 36px square 11px-radius dark ink send on a
    raised white shell. Its interior carries an invisible-at-rest WebGL canvas
@@ -1565,7 +1579,12 @@ Anatomy, top to bottom:
 
 **Mascot.** The agent's identity and art live in one config,
 `desktop/work-os-companion/src/mascot.ts` (`MASCOT`: name, description, poses,
-`Mark`, assets), and chat surfaces render it through `src/chat/MascotMark.tsx`.
+`chatCrop`, `Mark`, assets), and chat surfaces render it through
+`src/chat/MascotMark.tsx`. In chat the mark is the **head crop**
+(`Otto crop="head"` in a 28px circular badge with a hairline ring): the art
+fills the badge exactly, `overflow: hidden` clips it, and the badge — never the
+legacy `.otto` sizing — owns the art's geometry, so the mascot can never spill
+over the message text. The orb and avatar window keep the full figure.
 A global mascot change edits that config only; no surface hardcodes mascot art,
 its name, or a generic sparkle where the agent is speaking. Feature icons (the
 Insights synthesis sparkle, onboarding suggestions, planning badges) are not

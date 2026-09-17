@@ -28,6 +28,7 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
+import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import { MASCOT } from "./mascot";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
@@ -2080,6 +2081,10 @@ export default function App() {
       setInterpretation({ status: "ready", operations, taskOptions, reply: review.reply, results: displayResults.length ? displayResults : undefined, reviewId });
       setComposerThinking(null);
       setComposerHistory((current) => [...current, { id: reviewId, role: "assistant", text: review.reply || "Here's what I understood.", meta: filing.proposals.length ? `${filing.proposals.length} proposed update${filing.proposals.length === 1 ? "" : "s"}` : displayResults.length ? "tasks shown" : undefined, createdAt: new Date().toISOString(), operations, toolResults: displayResults.length ? displayResults : undefined }]);
+      // The turn above is the record now: keeping the live interpretation too
+      // would render the same reply (and cards) twice, and the persisted turn
+      // is what survives a reload (design §25.11).
+      setInterpretation(null);
       void sharePendingTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions });
     }).catch((value) => {
       setInterpretation(null);
@@ -2198,6 +2203,94 @@ export default function App() {
           taskOptions: review.taskOptions,
         });
       }
+      if (outcome.recorded > 0) {
+        notifications.success("Recorded the retried update.", "Retry succeeded");
+        void refresh();
+        return;
+      }
+      notifications.error(outcome.failed[0]?.message ?? outcome.results[0]?.message ?? "The retry did not record.", "Retry failed");
+    }).catch((value) => showError(value, "The retry could not be filed.", "Retry failed"))
+      .finally(() => setBusy(false));
+  }
+
+  function turnText(turnId: string): string {
+    const index = composerHistory.findIndex((turn) => turn.id === turnId);
+    const before = index < 0 ? composerHistory : composerHistory.slice(0, index);
+    return [...before].reverse().find((turn) => turn.role === "user")?.text ?? "tool calls reviewed";
+  }
+
+  /** Approvals for a persisted turn patch that turn in history (the avatar's
+   * approveOperations does the same), so cards keep their outcome after a
+   * reload without a second live copy of the turn. */
+  function approveHistoryOperations(turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[] = []) {
+    const enabled = approved.map((op) => ({ ...op, enabled: true }));
+    if (!enabled.length && !rejected.length) return;
+    if (syncBypassRef.current || (debugRef.current.enabled && !debugScenario.liveWrites)) {
+      const denied = rejected.map((op): ToolCallResult => ({ op, status: "denied", message: "Skipped. This action did not run." }));
+      patchHistoryTurn(turnId, denied);
+      notifications.success(enabled.length ? `${enabled.length} update${enabled.length === 1 ? "" : "s"} saved on this device.` : "No actions were recorded.", "Offline playground");
+      return;
+    }
+    setBusy(true); setError("");
+    diagnostics.info("composer.approve", `filing ${enabled.length} operation(s)`, { activeView: view });
+    (async () => {
+      const [outcome, denialResults] = await Promise.all([
+        enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
+        Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
+          try {
+            if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
+            const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
+            if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
+            if (row.outcome === "applying") return { op, status: "processing", message: "The server is still applying this action — it cannot be skipped right now." };
+            return { op, status: "failed", message: row.failure_reason?.trim() || (row.outcome === "applied" ? "This action was already applied and cannot be skipped." : "This action could not be skipped.") };
+          } catch (value) {
+            return { op, status: "failed", message: errorMessage(value, "This action could not be skipped.") };
+          }
+        })),
+      ]);
+      patchHistoryTurn(turnId, [...outcome.results, ...denialResults]);
+      const parts: string[] = [];
+      if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
+      if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
+      if (outcome.processing) parts.push(`${outcome.processing} still processing`);
+      if (outcome.failed.length) parts.push(`${outcome.failed.length} failed`);
+      if (denialResults.length) parts.push(`skipped ${denialResults.length}`);
+      const message = parts.length ? `${parts.join(" · ")}.` : "Nothing was recorded.";
+      if (outcome.recorded > 0) {
+        notifications.success(message, "Update recorded");
+        void refresh();
+      } else if (outcome.failed.length || denialResults.some((result) => result.status === "failed")) {
+        notifications.error(message, "Some actions failed");
+      }
+    })().catch((value) => showError(value, "The review could not be filed.", "Review failed"))
+      .finally(() => setBusy(false));
+  }
+
+  function patchHistoryTurn(turnId: string, results: ToolCallResult[]) {
+    setComposerHistory((current) => current.map((turn) => turn.id === turnId
+      ? { ...turn, operations: turn.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(turn.toolResults ?? [], results) }
+      : turn));
+    // Mirror the decision into the shared record so the companion window shows
+    // the same outcome instead of a stale pending review.
+    const turn = composerHistory.find((entry) => entry.id === turnId);
+    if (turn?.operations?.length) {
+      void sharePendingTools({
+        reviewId: turnId,
+        input: turnText(turnId),
+        reply: turn.text,
+        operations: turn.operations.map((op) => ({ ...op, enabled: false })),
+        results: mergeToolResults(turn.toolResults ?? [], results),
+        taskOptions: [],
+      });
+    }
+  }
+
+  function retryHistoryOperation(turnId: string, result: ToolCallResult) {
+    const op = { ...result.op, enabled: true };
+    if (!op.proposalId || busy) return;
+    setBusy(true); setError("");
+    void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
+      patchHistoryTurn(turnId, outcome.results);
       if (outcome.recorded > 0) {
         notifications.success("Recorded the retried update.", "Retry succeeded");
         void refresh();
@@ -2555,6 +2648,8 @@ export default function App() {
         onReviewOperations={approveInterpretation}
         onMarkSelectedDone={proposeSelectedTaskCompletions}
         onLoadSubtasks={loadComposerSubtasks}
+        onReviewHistoryOperations={approveHistoryOperations}
+        onRetryHistoryOperation={retryHistoryOperation}
         onNavigateView={(page) => setView(page)}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
@@ -2772,7 +2867,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation }: {
+export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
   mode?: ComposerMode;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -2782,6 +2877,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
+  onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -2834,7 +2930,23 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Agenda" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? "Drafted with Otto" : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
-      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
+      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
+  key={turn.id ?? index}
+  turn={{
+    ...turn,
+    meta: turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null,
+    operations: turn.operations as HistoryTurnData["operations"],
+    toolResults: turn.toolResults as HistoryTurnData["toolResults"],
+  }}
+  busy={busy}
+  toolContext={toolContext}
+  collapseCards={index < visibleHistory.length - 1}
+  onReviewOperations={(approved, rejected) => onReviewHistoryOperations?.(turn.id, approved, rejected)}
+  onMarkSelectedDone={onMarkSelectedDone}
+  onLoadSubtasks={onLoadSubtasks}
+  onNavigateView={onNavigateView}
+  onRetryOperation={(result) => onRetryHistoryOperation?.(turn.id, result)}
+/>)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" text={echoReply} stream onSettled={bumpSweep} />
        : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
