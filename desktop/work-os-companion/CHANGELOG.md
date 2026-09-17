@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.21
+
 - First launch after an update announces itself, with a View changelog action.
 - Updates wait out antivirus scans instead of closing, and a failed install offers Retry.
 - Task lists name their order, sort from real column headers, and every count now matches the rows it describes.
