@@ -88,7 +88,7 @@
 
 .approval-flow > header {
   display: flex;
-  min-height: 52px;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -104,11 +104,11 @@
 .approval-results-toggle {
   display: flex;
   width: 100%;
-  min-height: 42px;
+  min-height: var(--chat-header, 44px);
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: var(--chat-space-2, 8px);
+  padding: var(--chat-space-2, 8px) var(--chat-space-3, 12px);
   border: 0;
   background: transparent;
   color: #182018;
@@ -159,7 +159,7 @@
 .approval-results-body { display: grid; }
 /* The class display must not defeat the collapsed panel's hidden attribute. */
 .approval-results [hidden] { display: none !important; }
-.approval-results article { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 9px 11px; border-bottom: 1px solid #e2e6df; }
+.approval-results article { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: var(--chat-space-2, 8px); padding: 10px var(--chat-space-3, 12px); border-bottom: 1px solid #e2e6df; }
 .approval-results article:last-child { border-bottom: 0; }
 .approval-results article > span { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 6px; background: #e8f4da; color: #3f7d20; }
 .approval-results article.is-failed > span { background: #f8ded8; color: #af4138; }
@@ -174,6 +174,8 @@
 .approval-results article .approval-retry {
   flex: 0 0 auto;
   min-height: 28px;
+  min-width: max-content;
+  white-space: nowrap;
   padding: 0 10px;
   border: 1px solid #9cc384;
   border-radius: 8px;

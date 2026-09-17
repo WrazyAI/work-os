@@ -5,6 +5,19 @@ import { addDaysIso } from "@/lib/work-os-dates";
 import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { localDateForTimezone } from "@/modules/work-os/companion";
+import { listEodScreenshots } from "@/lib/work-os-screenshots";
+import {
+  clipText,
+  collapseAutomation,
+  factLine,
+  formatLocalTime,
+  formatReportDate,
+  groupActivityFrames,
+  humanizeGoalSource,
+  isAutomationTitle,
+  progressedFacts,
+  unplannedFacts,
+} from "@/lib/work-os-eod-facts";
 
 async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draft" | "employee_submission" | "manager_edit", markdown: string, idempotencyKey?: string | null) {
   const payload = {
@@ -24,7 +37,7 @@ async function saveReportVersion(access: WorkOsAccess, report: Json, kind: "draf
   if (error) throw new Error(`save ${kind} EOD version: ${error.message}`);
 }
 
-export type EodSectionItem = { id: string; title: string; provenance: string | null };
+export type EodSectionItem = { id: string; title: string; provenance: string | null; at: string | null };
 
 /** Day-scoped EOD facts. Completed and deferred work comes from the day's own
  * events; carried work is only what the day itself surfaced, deferred, or left
@@ -34,6 +47,10 @@ export function selectDayEodWork(input: { events: Json[]; tasks: Json[] }): { co
     const title = String((value as Json | null)?.title ?? "").trim();
     return title || null;
   };
+  const atOf = (event: Json) => {
+    const value = event.exact_at ?? event.observed_at;
+    return value instanceof Date ? value.toISOString() : (typeof value === "string" ? value : null);
+  };
   const collect = (eventType: "completed" | "deferred") => {
     const byTask = new Map<string, EodSectionItem>();
     for (const event of input.events) {
@@ -42,8 +59,9 @@ export function selectDayEodWork(input: { events: Json[]; tasks: Json[] }): { co
       if (!title) continue;
       const id = String(event.task_id ?? `${title}:${event.id ?? ""}`);
       const provenance = typeof event.provenance === "string" ? event.provenance : null;
+      const at = atOf(event);
       const existing = byTask.get(id);
-      if (!existing || (provenance === "nifty_exact" && existing.provenance !== "nifty_exact")) byTask.set(id, { id, title, provenance });
+      if (!existing || (provenance === "nifty_exact" && existing.provenance !== "nifty_exact")) byTask.set(id, { id, title, provenance, at });
     }
     return [...byTask.values()];
   };
@@ -53,7 +71,7 @@ export function selectDayEodWork(input: { events: Json[]; tasks: Json[] }): { co
     const title = titleOf(event.task_snapshot);
     if (!title) continue;
     const id = String(event.task_id ?? `${title}:${event.id ?? ""}`);
-    carriedByTask.set(id, { id, title, provenance: typeof event.provenance === "string" ? event.provenance : null });
+    carriedByTask.set(id, { id, title, provenance: typeof event.provenance === "string" ? event.provenance : null, at: atOf(event) });
   }
   for (const task of input.tasks) {
     if (task.completed === true) continue;
@@ -64,7 +82,7 @@ export function selectDayEodWork(input: { events: Json[]; tasks: Json[] }): { co
     const dueDate = dateOnly(task.due_date);
     const carriedForward = reason === "carried" || task.dayDisposition === "deferred" || (reason === "due_date" && !!dueDate);
     if (!carriedForward) continue;
-    carriedByTask.set(id, { id, title: titleOf(task) ?? "Untitled task", provenance: null });
+    carriedByTask.set(id, { id, title: titleOf(task) ?? "Untitled task", provenance: null, at: null });
   }
   return { completed: collect("completed"), deferred: collect("deferred"), carried: [...carriedByTask.values()] };
 }
@@ -84,73 +102,140 @@ export function eodLineItems(items: Json[], empty: string): string[] {
   return items.map((item) => {
     const title = text(item.title) ?? text((item.task_snapshot as Json | undefined)?.title) ?? text(item.input_text) ?? "Recorded item";
     const summary = text(item.summary);
-    return summary && summary !== title ? `- ${title} — ${summary.slice(0, 240)}` : `- ${title}`;
+    return summary && summary !== title ? `- ${title} — ${clipText(summary, 240)}` : `- ${title}`;
   });
 }
 
+/** Caps a fact list with an explicit pointer to the full record; the pointer
+ * counts toward the limit so a section never renders more than `limit` lines. */
+export function capFactLines(lines: string[], limit = EOD_SECTION_LIMIT): string[] {
+  if (lines.length <= limit) return lines;
+  const visible = lines.slice(0, Math.max(1, limit - 1));
+  return [...visible, `- …and ${lines.length - visible.length} more (see the full record)`];
+}
+
 async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
-  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult] = await Promise.all([
+  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult, timezoneResult, planResult, gallery] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
     db().from("work_people").select("display_name,role_profile:work_role_profiles(name)")
       .eq("organization_id", access.organizationId).eq("id", personId).single(),
     listEvidence(ownerId, { personId, date: reportDate }),
-    db().from("work_check_ins").select("id,input_text,update_kind,substantive").eq("organization_id", access.organizationId)
+    db().from("work_check_ins").select("id,input_text,update_kind,substantive,occurred_at").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("shift_date", reportDate).eq("substantive", true),
-    db().from("work_task_day_events").select("id,task_id,event_type,task_snapshot").eq("organization_id", access.organizationId)
+    db().from("work_task_day_events").select("id,task_id,event_type,provenance,task_snapshot,exact_at,observed_at").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("local_date", reportDate),
+    db().from("work_employee_onboarding").select("timezone").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).maybeSingle(),
+    db().from("work_daily_plans").select("id").eq("organization_id", access.organizationId)
+      .eq("person_id", personId).eq("shift_date", reportDate).maybeSingle(),
+    listEodScreenshots(access.organizationId, personId, reportDate),
   ]);
   if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
   if (checkInsResult.error) throw new Error(`load EOD updates: ${checkInsResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
+  if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
+  if (planResult.error) throw new Error(`load EOD plan: ${planResult.error.message}`);
+  const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
+  const planId = planResult.data?.id ? String(planResult.data.id) : null;
+  const planItems = planId
+    ? await db().from("work_daily_plan_items").select("task_id").eq("plan_id", planId)
+    : { data: [], error: null };
+  if (planItems.error) throw new Error(`load EOD plan items: ${planItems.error.message}`);
+  const planTaskIds = new Set(((planItems.data ?? []) as Json[])
+    .map((item) => String(item.task_id ?? ""))
+    .filter((id) => id && id !== "null"));
+
   const evidence = (evidenceRows ?? []) as Json[];
   const updates = (checkInsResult.data ?? []) as Json[];
   const events = (eventsResult.data ?? []) as Json[];
   const dayWork = selectDayEodWork({ events, tasks: workspace.tasks });
-  const completed = dayWork.completed;
-  const progressed = updates.filter((item) => ["continuing", "material_progress"].includes(String(item.update_kind)));
-  const deferred = dayWork.deferred;
-  const carried = dayWork.carried;
-  const unplanned = workspace.tasks.filter((task) => task.dayAttribution.reason === "creation_observed" && !task.due_date);
+
+  // Routine runs are automation, not deliverables: they collapse into one
+  // line, and they never appear as carried or unplanned work.
+  const completedHuman = dayWork.completed.filter((item) => !isAutomationTitle(item.title));
+  const automation = collapseAutomation(dayWork.completed);
+  const deferred = dayWork.deferred.filter((item) => !isAutomationTitle(item.title));
+  const carried = dayWork.carried.filter((item) => !isAutomationTitle(item.title));
+  const unplanned = unplannedFacts(events, planTaskIds, timezone);
+  const progressed = progressedFacts(updates, timezone);
   const outputEvidence = evidence.filter((item) => item.source !== "worktivity");
-  const activityEvidence = evidence.filter((item) => item.source === "worktivity");
+  const activityGroups = groupActivityFrames(gallery.viewable);
+  const activityCounts = [
+    `${gallery.processed} analyzed`,
+    gallery.excludedSensitive > 0 ? `${gallery.excludedSensitive} flagged as sensitive (images deleted)` : "",
+    gallery.excludedPolicy > 0 ? `${gallery.excludedPolicy} excluded by your exclusions` : "",
+    gallery.unavailable > 0 ? `${gallery.unavailable} unavailable` : "",
+    gallery.pending > 0 ? `${gallery.pending} still analyzing` : "",
+  ].filter(Boolean).join(" · ");
+
   const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
   const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
-  const title = `EOD Report: ${personResult.data.display_name} - ${reportDate}`;
+  const title = `EOD Report: ${personResult.data.display_name} — ${formatReportDate(reportDate)}`;
+  const completedLines = capFactLines(completedHuman.map((item) => factLine(item, timezone, "completed")));
   const markdown = [
     `# ${title}`,
     "",
-    `Role profile: ${roleName ?? "Unmapped"}`,
+    `Role profile: ${roleName ?? "Not set"}`,
     `Goal: ${workspace.goal.text ?? "No goal was recorded."}`,
-    `Goal provenance: ${workspace.goal.provenance ?? "none"}`,
-    workspace.sessionQuality.status === "needs_correction" ? `Session quality: ${workspace.sessionQuality.message}` : "Session quality: valid or not applicable",
+    `Goal source: ${humanizeGoalSource(workspace.goal.provenance)}`,
+    ...(workspace.sessionQuality.status === "needs_correction" && workspace.sessionQuality.message
+      ? [`Session quality: ${workspace.sessionQuality.message}`]
+      : []),
     "",
     "## Completed Work",
-    ...eodLineItems(limitedSection(completed), "No tasks were completed on this date."),
+    ...(completedLines.length ? completedLines : []),
+    ...(automation.line ? [automation.line] : []),
+    ...(!completedLines.length && !automation.line ? ["- No tasks were completed on this date."] : []),
     "",
     "## Progressed Work",
-    ...eodLineItems(progressed, "No substantive progress updates were recorded."),
+    ...(progressed.length
+      ? capFactLines(progressed.map((item) => factLine(item, timezone)))
+      : ["- No progress updates were recorded for this day."]),
     "",
     "## Deferred Work",
-    ...eodLineItems(limitedSection(deferred), "No work was explicitly deferred."),
+    ...capFactLines(deferred.map((item) => factLine(item, timezone))),
+    ...(!deferred.length ? ["- No work was explicitly deferred."] : []),
     "",
     "## Carried Work",
-    ...eodLineItems(limitedSection(carried), "Nothing carries over from this day."),
+    ...capFactLines(carried.map((item) => factLine(item, timezone))),
+    ...(!carried.length ? ["- Nothing carries over from this day."] : []),
     "",
     "## Unplanned Work",
-    ...eodLineItems(limitedSection(unplanned), "No unplanned task creation was observed."),
+    ...(unplanned.length
+      ? capFactLines(unplanned.map((item) => factLine(item, timezone, "created")))
+      : ["- No tasks were created outside the day's plan."]),
     "",
     "## Output Evidence",
-    ...eodLineItems(outputEvidence, "No output evidence was recorded."),
+    ...eodLineItems(outputEvidence, "No output artifacts (files, videos, or links) were linked to this day."),
     "",
     "## Activity Context",
-    ...eodLineItems(activityEvidence, "No Worktivity activity context was recorded."),
+    ...(activityGroups.length
+      ? activityGroups.map((group) => {
+          const first = formatLocalTime(group.firstAt, timezone);
+          const last = formatLocalTime(group.lastAt, timezone);
+          const range = first && last ? (first === last ? first : `${first}–${last}`) : "time not recorded";
+          const highlights = group.highlights.map((summary) => `“${summary}”`).join("; ");
+          const more = group.count > group.highlights.length ? ` (+${group.count - group.highlights.length} more)` : "";
+          return `- ${group.app} — ${group.count} frame${group.count === 1 ? "" : "s"} (${range}): ${highlights}${more}`;
+        })
+      : ["- No retained activity context was recorded for this day."]),
+    ...(gallery.viewable.length || gallery.pending || gallery.unavailable || gallery.excludedSensitive || gallery.excludedPolicy
+      ? [`Activity context: ${activityCounts}.`]
+      : []),
     "",
     "Activity context is descriptive and does not prove attendance, productivity, or task completion.",
   ].join("\n");
   return {
     title,
     markdown,
-    metrics: { completed: completed.length, progressed: progressed.length, deferred: deferred.length, carried: carried.length, unplanned: unplanned.length },
+    metrics: {
+      completed: completedHuman.length,
+      automation: automation.count,
+      progressed: progressed.length,
+      deferred: deferred.length,
+      carried: carried.length,
+      unplanned: unplanned.length,
+    },
   };
 }
 

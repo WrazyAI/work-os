@@ -21,6 +21,26 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.15
+
+- Paste a Loom link in an update and Otto can read the recording to suggest tasks — the recording never stands in for the update itself.
+- Recordings are checked against the day they were recorded, so an older Loom can't be used as today's work.
+- In the EOD composer, a Loom recording can shape the draft on its own without a second report.
+- The transcript box on Loom cards stays tucked away until you want it.
+
+## 0.3.14
+
+- What Otto remembers is now three clear lists: what is waiting for your review, the facts you kept, and the recent activity behind them.
+- Every memory shows a plain date, and you can forget a fact or a memory right from its row.
+- Settings are grouped by what they affect, with a separate Reset section, and the on/off toggles show their state in words.
+
+## 0.3.13
+
+- Every chat message now has a Copy button that appears when you hover over it, including the short receipt lines.
+- The assistant now shows Otto's mark in chat instead of a generic sparkle, and its art comes from one setting so a mascot change lands everywhere at once.
+- Chat spacing is even throughout: the message list, task cards, and action results share one rhythm instead of three.
+- The selected count and the collapse control sit together on one line again, and action results show their full label without being cut off.
+
 ## 0.3.12
 
 - Checking off tasks no longer hides the rest of the list — keep selecting as many tasks and subtasks as you need before you confirm.

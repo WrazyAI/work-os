@@ -1242,7 +1242,7 @@ body {
 .active-task-toolbar,
 .active-task-tabs,
 .active-day-footer,
-.progress-flyout header,
+.progress-flyout .workos-chat-head,
 .progress-input-shell,
 .task-search-toolbar {
   display: flex;
@@ -2022,7 +2022,7 @@ html:has(.stage.has-dock) {
   animation: composer-rise 190ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
-.progress-flyout header {
+.progress-flyout .workos-chat-head {
   justify-content: space-between;
   min-height: 48px;
   padding: 8px 12px 8px 14px;
@@ -2030,12 +2030,12 @@ html:has(.stage.has-dock) {
   background: #f4f6f1;
 }
 
-.progress-flyout header > div {
+.progress-flyout .workos-chat-head > div {
   display: grid;
   gap: 2px;
 }
 
-.progress-flyout header span {
+.progress-flyout .workos-chat-head span {
   display: flex;
   gap: 6px;
   align-items: center;
@@ -2043,12 +2043,12 @@ html:has(.stage.has-dock) {
   font-weight: 700;
 }
 
-.progress-flyout header small {
+.progress-flyout .workos-chat-head small {
   color: var(--muted);
   font-size: 8px;
 }
 
-.progress-flyout header button {
+.progress-flyout .workos-chat-head button {
   display: grid;
   width: 30px;
   height: 30px;
@@ -2068,9 +2068,9 @@ html:has(.stage.has-dock) {
 
 .progress-history {
   display: grid;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
+  gap: var(--chat-space-3, 12px);
+  margin-bottom: var(--chat-space-3, 12px);
+  padding-bottom: var(--chat-space-3, 12px);
   border-bottom: 1px dashed #dfe5da;
 }
 
@@ -6227,12 +6227,25 @@ button:not(:disabled):active {
   }
 }
 
-/* Memory (profile facts) settings panel */
+/* Work memory panel: three classes, three treatments. The panel owns its
+   layout — it must never reuse .settings-panel, whose two-column card grid
+   interleaved the sections. */
 .memory-panel {
   display: grid;
-  gap: 8px;
+  gap: 18px;
   margin-top: 16px;
-  padding: 18px 20px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.memory-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .memory-head h3 {
@@ -6243,28 +6256,76 @@ button:not(:disabled):active {
 
 .memory-head p {
   margin: 4px 0 0;
+  max-width: 620px;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
-.memory-group {
-  margin: 10px 0 2px;
-  font-size: 11px;
+.memory-pending {
+  flex: none;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #eaf3dc;
+  color: #40661d;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.memory-section {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.memory-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-section-head h4 {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
 }
 
-.memory-item {
+.memory-count {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ecebe4;
+  color: #5f6358;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Review candidates are the only bordered surface: they carry a decision. */
+.memory-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.memory-card {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 12px;
+  border: 1px solid #dde7cf;
+  border-radius: 11px;
+  background: #f7faf1;
 }
 
 .memory-copy {
@@ -6294,21 +6355,124 @@ button:not(:disabled):active {
   font-size: 11px;
 }
 
+.memory-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.memory-actions button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.memory-keep {
+  border: 1px solid #29421e;
+  background: #29421e;
+  color: #f2f7ec;
+}
+
+.memory-keep:hover:not(:disabled) {
+  background: #33512a;
+}
+
+.memory-reject {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.memory-reject:hover:not(:disabled) {
+  border-color: #b8b9af;
+}
+
+/* Verified facts and activity are flat rows on hairline separators. */
+.memory-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.memory-row:first-child {
+  border-top: 0;
+}
+
+.memory-check {
+  margin-top: 2px;
+  color: #6ea32c;
+}
+
+.memory-rows.feed .memory-row {
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .memory-kind {
+  align-self: start;
+  margin-top: 1px;
   font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
 }
 
-.memory-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
+.memory-forget {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
 }
 
-.memory-actions button {
-  min-height: 28px;
+.memory-forget:hover:not(:disabled) {
+  border-color: var(--line);
+  background: #f6f6f1;
+  color: var(--ink);
+}
+
+.memory-show-all {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-show-all:hover {
+  border-color: #b8b9af;
+  color: var(--ink);
+}
+
+.memory-provenance {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .memory-empty {
@@ -6321,6 +6485,31 @@ button:not(:disabled):active {
   margin: 0;
   color: var(--danger);
   font-size: 12.5px;
+}
+
+@media (max-width: 1024px) {
+  .memory-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .memory-panel {
+    padding: 16px;
+  }
+
+  .memory-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .memory-rows.feed .memory-row {
+    grid-template-columns: 76px minmax(0, 1fr) auto;
+  }
+
+  .memory-forget span {
+    display: none;
+  }
 }
 
 /* ── EOD start: review empty state with earlier-days list ───────────── */

@@ -673,7 +673,7 @@ body.avatar-window {
 .avatar-tabs .workos-chat-tabs button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 18, .1), inset 0 0 0 1px rgba(24, 32, 24, .06); }
 .avatar-tabs .workos-tab-count { background: #edf0ea; font-size: 9px; }
 
-.avatar-chat { min-height: 0; gap: 12px; padding: 13px 12px 16px; }
+.avatar-chat { min-height: 0; gap: var(--chat-space-3, 12px); padding: var(--chat-space-3, 12px) var(--chat-space-3, 12px) var(--chat-space-4, 16px); }
 .avatar-chat .avatar-context,
 .avatar-chat .avatar-task-context { margin: 0; }
 .avatar-chat.workos-thread { padding-top: 10px; }

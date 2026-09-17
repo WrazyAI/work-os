@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
 
 export const EOD_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
@@ -206,37 +207,75 @@ export function formatEodAnnotations(annotations: EodAnnotation[]): string {
 
 export async function gatherEodGrounding(organizationId: string, personId: string, date: string, personName: string): Promise<EodGrounding> {
   const db = createAdminClient();
-  const [updatesResult, eventsResult, sessionResult, planResult] = await Promise.all([
+  const [updatesResult, eventsResult, sessionResult, planResult, timezoneResult] = await Promise.all([
     db.from("work_check_ins").select("input_text,update_kind,occurred_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
-    db.from("work_task_day_events").select("event_type,task_snapshot").eq("organization_id", organizationId)
+    db.from("work_task_day_events").select("event_type,task_id,task_snapshot,exact_at,observed_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("local_date", date).order("observed_at", { ascending: true }),
     db.from("work_sessions").select("clocked_in_at,clocked_out_at").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    db.from("work_daily_plans").select("items:work_daily_plan_items(title_snapshot,disposition,completion_state)")
-      .eq("organization_id", organizationId).eq("person_id", personId).eq("shift_date", date).maybeSingle(),
+    db.from("work_daily_plans").select("id").eq("organization_id", organizationId)
+      .eq("person_id", personId).eq("shift_date", date).maybeSingle(),
+    db.from("work_employee_onboarding").select("timezone").eq("organization_id", organizationId)
+      .eq("person_id", personId).maybeSingle(),
   ]);
   if (updatesResult.error) throw new Error(`load EOD updates: ${updatesResult.error.message}`);
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD commitments: ${planResult.error.message}`);
+  if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
+  const planId = planResult.data?.id ? String(planResult.data.id) : null;
+  const planItemsResult = planId
+    ? await db.from("work_daily_plan_items").select("title_snapshot,disposition,completion_state").eq("plan_id", planId)
+    : { data: [], error: null };
+  if (planItemsResult.error) throw new Error(`load EOD commitment items: ${planItemsResult.error.message}`);
 
   const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
     .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
     .filter((row) => row.text);
+  const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
   const completed: string[] = [];
   const carried: string[] = [];
   const blockers: string[] = [];
+  const automationTitles: string[] = [];
+  const seenCompleted = new Set<string>();
+  const seenCarried = new Set<string>();
   for (const event of (eventsResult.data ?? []) as Array<Record<string, unknown>>) {
     const snapshot = (event.task_snapshot ?? {}) as { title?: unknown };
     const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "a task";
-    if (event.event_type === "completed") completed.push(title);
-    if (event.event_type === "deferred") carried.push(title);
+    // Distinct tasks can share a title (repeated routine runs); only repeat
+    // events for the same task are the same fact.
+    const key = String(event.task_id ?? "").trim() || title.toLowerCase().replace(/\s+/g, " ");
+    const completedEvent = event.event_type === "completed";
+    // Carried and deferred events both describe work that moves forward.
+    const deferredEvent = ["deferred", "carried"].includes(String(event.event_type ?? ""));
+    if (!completedEvent && !deferredEvent) continue;
+    // Repeated events for the same task are one fact; routine runs collapse
+    // into a single automation line instead of one entry per execution.
+    if (completedEvent) {
+      if (seenCompleted.has(key)) continue;
+      seenCompleted.add(key);
+      if (automationName(title)) {
+        automationTitles.push(title);
+        continue;
+      }
+    } else {
+      if (seenCarried.has(key)) continue;
+      seenCarried.add(key);
+      if (automationName(title)) continue;
+    }
+    const rawAt = event.exact_at ?? event.observed_at;
+    const time = formatLocalTime(rawAt, timezone);
+    const stamped = time ? `${title} (${time})` : title;
+    if (completedEvent) completed.push(stamped);
+    else carried.push(stamped);
   }
+  const automation = collapseAutomation(automationTitles);
+  if (automation.line) completed.push(automation.line.replace(/^-\s*/, ""));
   for (const update of updates) {
     if (update.kind === "blocked" && !blockers.includes(update.text)) blockers.push(update.text);
   }
   const session = (sessionResult.data ?? {}) as { clocked_in_at?: unknown; clocked_out_at?: unknown };
-  const commitments = ((Array.isArray(planResult.data?.items) ? planResult.data.items : []) as Array<Record<string, unknown>>).flatMap((item) => {
+  const commitments = ((Array.isArray(planItemsResult.data) ? planItemsResult.data : []) as Array<Record<string, unknown>>).flatMap((item) => {
     const title = typeof item.title_snapshot === "string" && item.title_snapshot.trim() ? item.title_snapshot.trim() : null;
     if (!title || !["selected", "deferred"].includes(String(item.disposition))) return [];
     const status = item.completion_state === "completed" ? "completed" : item.disposition === "deferred" ? "deferred" : "selected";

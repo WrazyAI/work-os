@@ -1522,16 +1522,31 @@ Anatomy, top to bottom:
    recoverable from the tray. The two controls sit adjacent in one
    `.avatar-head-actions` group with equal 28px hit targets.
 2. **Thread:** a fixed scroll region. User turns render as right-aligned
-   `chat-turn-user` bubbles. Assistant turns render as `chat-turn`: a small
-   accent mark, then a body column. A meta line above the body is shown
-   **only when real data exists** (a recorded/`review` note, or a real elapsed
-   trace time) — labels and durations are never invented. Newly arrived live
-   replies reveal word-by-word out of a soft blur and finish with real Copy and
-   (when the parent can resend) Resend actions; the full text is exposed to
-   assistive technology in one `aria-live` node on first render. Older/history
-   turns render statically. Provenance, receipts, the staged approval flow,
-   selection cards, and navigation buttons use the same container language in
-   both delivery surfaces.
+   `chat-turn-user` bubbles (max 84% width, 8×12px padding). Assistant turns
+   render as `chat-turn`: a 24px **mascot** mark (never a generic sparkle — see
+   the mascot rule below), then a body column, separated by an 8px gap. A meta
+   line above the body is shown **only when real data exists** (a
+   recorded/`review` note, or a real elapsed trace time) — labels and durations
+   are never invented. Newly arrived live replies reveal word-by-word out of a
+   soft blur and finish with real Copy and (when the parent can resend) Resend
+   actions; the full text is exposed to assistive technology in one `aria-live`
+   node on first render. Older/history turns render statically. Provenance,
+   receipts, the staged approval flow, selection cards, and navigation buttons
+   use the same container language in both delivery surfaces.
+   **Copy:** every user bubble, assistant turn, and receipt carries a hover-and
+   focus-revealed copy control in an 18px strip reserved below the bubble, so
+   revealing it never shifts the thread. It copies the message prose plus a
+   plain-text summary of the cards the turn rendered (task titles with state and
+   due date, action lines with their status and failure detail), which keeps
+   card-only turns copyable, and reports `Copied` in place for a beat. System
+   notices carry no copy control.
+   **Spacing:** the chat surfaces share one 4px-based scale declared as
+   `--chat-space-1..6` (4/8/12/16/20/24) with `--chat-row` (40px) and
+   `--chat-header` (44px) in `src/chat/chat.css`. The thread uses a 12px gap and
+   16px padding (13px horizontal in the floating companion's 400px window);
+   cards use a 40px header, 40px rows, a 44px footer, and 10–12px internals; the
+   action-results accordion uses a 44px header and 10×12px rows. No surface adds
+   its own ad-hoc spacing on top of the scale.
 3. **Composer:** the shared `ChatComposer` (exported as `WorkOsPromptBar`): a
    context `+` button, an auto-growing field, an optional labeled footer action
    (the dock's `Focus` button), and a 36px square 11px-radius dark ink send on a
@@ -1547,6 +1562,15 @@ Anatomy, top to bottom:
    the user asked for. One highlight glides between menu rows; menus close
    on outside click and Escape, support arrow/Enter/Tab, and show a
    specific `No matches` state.
+
+**Mascot.** The agent's identity and art live in one config,
+`desktop/work-os-companion/src/mascot.ts` (`MASCOT`: name, description, poses,
+`Mark`, assets), and chat surfaces render it through `src/chat/MascotMark.tsx`.
+A global mascot change edits that config only; no surface hardcodes mascot art,
+its name, or a generic sparkle where the agent is speaking. Feature icons (the
+Insights synthesis sparkle, onboarding suggestions, planning badges) are not
+agent identity and keep their own iconography.
+`test/work-os-companion-mascot.test.mts` fails the build on drift.
 
 Tokens and motion: the chat surfaces are built on Tailwind v4 scoped to
 `src/chat` (§20.1) with the `@theme` foundation mapping; shells keep their
@@ -2257,15 +2281,72 @@ Settings is organized by user intent, in this order where applicable:
 6. Diagnostics.
 7. Destructive reset/account actions.
 
+The companion groups its rows under those headings (`This device`, `Workday`,
+`Sync & session`, `Diagnostics`, and a separated `Reset` group). Each group
+carries a quiet uppercase label and a one-line purpose; the reset group is
+separated by a rule and a red-led label, never mixed into routine preferences.
+
 Each setting row uses a flexible label/description column and intrinsic control
-column. Rows are normally 72–104px high depending on helper copy. At narrow widths,
-stack the control below the explanation and make it full width when appropriate.
+column. Rows are normally 72–104px high depending on helper copy: size to the
+copy (min-height 84px) rather than padding every card to a fixed tall height,
+and align the control with the title's first line. At narrow widths, stack the
+control below the explanation and make it full width when appropriate.
+
+Controls follow one vocabulary:
+
+- **On/off preferences use the settings switch** (`role="switch"`, 34x18 track,
+  tokens for the off/on colors) with the state written beside it (`On`/`Off`).
+  Never ship a bare native checkbox in a settings row.
+- **Statuses are chips, not controls.** A value the employee cannot press
+  (`Avatar`, `Hidden`, `Ready`, `Checking`) renders as a chip — no border or
+  button chrome. Amber tint belongs only to work that needs attention.
+- **Actions keep the quiet-action button style**; destructive actions use the
+  danger tone and confirm first — `Reset` names what is cleared, and signing out
+  asks before ending the session.
+
 Do not place unrelated settings in dashboard metric cards.
 
 Provider connections show provider name, mapped identity/workspace, last verified
 state, and a clear reconnect or inspect action. `Connected` requires a verified
 provider-scoped read, not the presence of stored credentials. Destructive settings
 live in a separated danger section and require explicit confirmation.
+
+### 29.4a Work memory panel
+
+Work memory is its own surface on the Settings page (`MemoryPanel`), and it is
+never a card inside the settings card grid: it owns a single-column layout whose
+sections span the full panel width. Reusing the settings grid interleaved the
+sections and put headings beside one another — that is the failure mode this
+contract forbids.
+
+The panel opens with the title `What Otto remembers`, one line stating the
+model (nothing is remembered until the employee keeps it, and anything can be
+forgotten), and a pending badge (`N waiting for review`) only when candidates
+exist. It then renders three classes in this fixed order, each as its own
+`<section>` with a label, a count, and a separator:
+
+1. **Waiting for your review.** Proposed facts waiting on a decision. The only
+   bordered cards in the panel, because they carry the two actions: `Keep`
+   (primary) and `Not true` (quiet). Sorted newest first; the two-up card grid
+   collapses to one column at 1024px and below.
+2. **Remembered facts.** Kept facts. Flat rows on hairline separators (the
+   repeated-row pattern — not cards), each with a verified glyph, `Kept
+   <month day>`, and a `Forget` action. Rows are full-width so long facts stay
+   readable.
+3. **Recent activity.** Dated episodes Otto drew on (check-in, plan, task event,
+   evidence, EOD, conversation), rendered as a muted feed with a kind label per
+   row, the summary, the date, and a `Forget` action. The feed shows the eight
+   most recent entries with a `Show all N` control that expands in place (and
+   `Show less` that restores it), so nothing returned to the panel is
+   unreachable. It closes with the provenance line: context only, never proof
+   that work was completed.
+
+Every class states its own empty value rather than disappearing, and the date in
+every row is a calendar day (`formatWorkOsDate`) — never a raw serialized
+instant, even when the API returns a SQL date as a timestamp. `Forget` deletes
+the underlying memory in both facts and activity; rejecting a candidate removes
+it from review without remembering it. Below 640px the action labels collapse to
+their icons, which keep accessible names.
 
 ### 29.5 Onboarding
 

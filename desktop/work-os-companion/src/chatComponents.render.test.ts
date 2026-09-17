@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ChatSection, StreamingText } from "./chat/StreamingText";
 import { GlideMenu } from "./chat/GlideMenu";
 import { ChatTabs } from "./chat/ChatTabs";
+import { ChatTurn } from "./chat/ChatTurn";
 
 const noop = () => undefined;
 
@@ -77,5 +78,43 @@ describe("ChatTabs", () => {
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain(">2<");
+  });
+});
+
+describe("ChatTurn copy and mascot", () => {
+  it("reveals a labelled copy control on text bubbles", () => {
+    const user = renderToStaticMarkup(createElement(ChatTurn, { role: "user", text: "Show my tasks" }));
+    expect(user).toContain("chat-turn-shell is-user");
+    expect(user).toContain("chat-copy-row");
+    expect(user).toContain('aria-label="Copy message"');
+    expect(user).toContain(">Copy<");
+
+    const assistant = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", text: "Here you go." }));
+    expect(assistant).toContain("chat-copy-row");
+    expect(assistant).toContain("chat-mascot-mark");
+    expect(assistant).not.toContain("lucide-sparkles");
+  });
+
+  it("copies card summaries for card-only turns and skips system notices", () => {
+    const cardOnly = renderToStaticMarkup(createElement(ChatTurn, {
+      role: "assistant",
+      copySource: {
+        role: "assistant",
+        toolResults: [{ op: { op: "complete_task", taskTitle: "Ship the composer" }, status: "recorded", message: "Recorded." }],
+      },
+    }));
+    expect(cardOnly).toContain("chat-copy-row");
+
+    const empty = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant" }));
+    expect(empty).not.toContain("chat-copy-row");
+
+    const system = renderToStaticMarkup(createElement(ChatTurn, { role: "system", text: "Offline" }));
+    expect(system).not.toContain("chat-copy-row");
+  });
+
+  it("keeps a receipt copyable", () => {
+    const receipt = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", receipt: true, text: "Update recorded." }));
+    expect(receipt).toContain("chat-receipt");
+    expect(receipt).toContain("chat-copy-row");
   });
 });

@@ -1147,8 +1147,8 @@ export default function AvatarApp(): React.ReactElement {
               <ChatSectionBoundary key={entry.id} label="avatar chat message">
                 {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
                   : entry.role === "system" ? <ChatTurn role="system" text={entry.text} />
-                    : entry.receipt ? <ChatTurn role="assistant" receipt text={entry.receipt} />
-                      : <ChatTurn role="assistant" text={entry.text} stream={streams} onSettled={bumpSweep}>
+                    : entry.receipt ? <ChatTurn role="assistant" receipt text={entry.receipt} copySource={entry} />
+                      : <ChatTurn role="assistant" text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}>
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}

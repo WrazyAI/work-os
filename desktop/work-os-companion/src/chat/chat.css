@@ -19,6 +19,22 @@
 @source "../";
 
 @layer base {
+  /* One 4px-based scale for every chat surface, in-app and floating, so the
+     thread, bubbles, cards, and results agree on spacing (design §25.11). */
+  :root {
+    --chat-space-1: 4px;
+    --chat-space-2: 8px;
+    --chat-space-3: 12px;
+    --chat-space-4: 16px;
+    --chat-space-5: 20px;
+    --chat-space-6: 24px;
+    --chat-radius-sm: 8px;
+    --chat-radius-md: 12px;
+    --chat-radius-lg: 16px;
+    --chat-row: 40px;
+    --chat-header: 44px;
+  }
+
   /* Scoped preflight substitute. The companion never resets legacy stylesheets,
      so chat-owned controls would otherwise show UA button chrome (1px border,
      ButtonFace background) wherever their utilities don't set the same
@@ -144,10 +160,10 @@
 
   /* ── Thread ─────────────────────────────────────────────────────────── */
   .chat-turn-user {
-    @apply ml-auto w-fit max-w-[86%] rounded-[13px_13px_4px_13px] bg-field px-3 py-2 text-[13px] leading-[1.45] text-ink;
+    @apply ml-auto w-fit max-w-[84%] rounded-[13px_13px_4px_13px] bg-field px-3 py-2 text-[13px] leading-[1.45] text-ink;
   }
   .chat-turn {
-    @apply flex w-full min-w-0 gap-2.5;
+    @apply flex w-full min-w-0 gap-2;
   }
   .chat-turn > svg,
   .chat-welcome > svg {
@@ -179,6 +195,47 @@
   .chat-turn > div > p { @apply mt-1 text-[12px] leading-[1.5] text-ink-2; }
   .chat-turn > p { @apply text-[13px] leading-[1.55] text-ink-2; }
   .chat-turn-note { @apply mt-1 block text-[11px] text-ink-2; }
+
+  /* Every turn reserves an 18px strip for its hover copy control, so revealing
+     it never shifts the thread (design §25.11). */
+  .chat-turn-shell {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    padding-bottom: 18px;
+    margin-bottom: -18px;
+  }
+  .chat-turn-shell.is-user { display: flex; flex-direction: column; }
+  .chat-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    border: 0;
+    border-radius: 6px;
+    padding: 0 6px;
+    background: transparent;
+    color: var(--color-ink-3);
+    font-size: 10px;
+    font-weight: 650;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 140ms ease, background-color 140ms ease, color 140ms ease;
+  }
+  .chat-copy-row { position: absolute; bottom: 1px; left: 0; }
+  .chat-turn-shell.is-user .chat-copy-row { left: auto; right: 0; }
+  .chat-turn-shell:hover .chat-copy-row,
+  .chat-turn-shell:focus-within .chat-copy-row { opacity: 1; }
+  .chat-copy:hover { background: var(--color-hover); color: var(--color-ink); }
+  .chat-copy:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--color-signal-strong);
+    outline-offset: 1px;
+  }
+  .chat-copy.is-copied { opacity: 1; color: #456d18; }
+  .chat-mascot-mark { display: grid; place-items: center; width: 100%; height: 100%; }
+  .chat-mascot-art { width: 100%; height: 100%; }
+  .chat-thinking-mark { width: 16px; height: 16px; }
 
   .chat-receipt {
     @apply flex items-start gap-2 rounded-[12px] border border-line bg-surface px-3 py-2.5 text-ink;
@@ -228,8 +285,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 6px 8px 6px 10px;
+  min-height: var(--chat-row, 40px);
+  padding: var(--chat-space-1, 4px) var(--chat-space-2, 8px) var(--chat-space-1, 4px) 10px;
   border-bottom: 1px solid var(--line, #e2e6df);
 }
 .chat-task-heading {
@@ -341,7 +398,7 @@
 .chat-task-row:hover { background: var(--hover, rgba(24, 32, 24, .04)); }
 .chat-task-row.is-selected { background: rgba(168, 241, 91, .11); }
 .chat-task-row.is-proposed { opacity: .72; }
-.chat-task-row-main { display: flex; min-height: 40px; align-items: center; gap: 8px; }
+.chat-task-row-main { display: flex; min-height: var(--chat-row, 40px); align-items: center; gap: var(--chat-space-2, 8px); }
 .chat-task-check {
   display: grid;
   flex: 0 0 auto;
@@ -434,10 +491,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  min-height: 44px;
+  gap: var(--chat-space-2, 8px);
+  min-height: var(--chat-header, 44px);
   border-top: 1px solid var(--line, #e2e6df);
-  padding: 6px 10px;
+  padding: var(--chat-space-1, 4px) 10px;
 }
 .chat-task-hint { min-width: 0; flex: 1 1 auto; color: var(--ink-2, #626a61); font-size: 10.5px; line-height: 1.35; }
 .chat-task-hint.is-error { color: var(--danger, #b94b40); }
@@ -476,7 +533,7 @@
 .chat-task-table-head { min-height: 29px; border-bottom: 1px solid var(--line, #e2e6df); background: #f8f9f6; color: var(--ink-3, #7b8278); font-size: 9.5px; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
 .chat-task-table-head > span,
 .chat-task-table-row > span { min-width: 0; padding: 6px 9px; }
-.chat-task-table-row { min-height: 41px; color: var(--ink-2, #626a61); font-size: 10.5px; transition: background-color 140ms ease; }
+.chat-task-table-row { min-height: var(--chat-row, 40px); color: var(--ink-2, #626a61); font-size: 10.5px; transition: background-color 140ms ease; }
 .chat-task-table-row:hover { background: var(--hover, rgba(24, 32, 24, .045)); }
 .chat-task-table-row.is-selected { background: rgba(168, 241, 91, .11); }
 .chat-task-table-row.is-proposed { opacity: .72; }
@@ -570,7 +627,7 @@
 }
 
 /* Shared tabs inside the legacy dock flyout header. */
-.progress-flyout header > .chat-tabs,
+.workos-chat-head > .chat-tabs,
 .avatar-tabs .chat-tabs {
   display: flex;
   align-items: center;
@@ -578,7 +635,7 @@
   min-width: 0;
 }
 
-.progress-flyout header .chat-tab {
+.workos-chat-head .chat-tab {
   width: auto;
   height: auto;
   padding: 4px 9px;
@@ -591,8 +648,8 @@
   opacity: 0.5;
 }
 
-.progress-flyout header .chat-tab:hover { opacity: 0.75; }
-.progress-flyout header .chat-tab[aria-selected="true"] {
+.workos-chat-head .chat-tab:hover { opacity: 0.75; }
+.workos-chat-head .chat-tab[aria-selected="true"] {
   background: var(--color-field);
   opacity: 1;
 }
@@ -713,8 +770,8 @@
   min-height: 154px;
   max-height: min(56vh, 560px);
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px 18px;
+  gap: var(--chat-space-3);
+  padding: var(--chat-space-4);
   background: linear-gradient(180deg, rgba(243, 245, 241, 0.42), transparent 44px);
 }
 
@@ -729,7 +786,7 @@
 
 .chat-surface .chat-turn,
 .chat-surface .chat-receipt {
-  max-width: min(92%, 660px);
+  max-width: min(88%, 640px);
 }
 
 .chat-surface .chat-turn-user { margin-left: auto; }

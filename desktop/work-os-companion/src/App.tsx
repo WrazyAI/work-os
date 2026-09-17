@@ -27,6 +27,8 @@ import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal,
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { MascotMark } from "./chat/MascotMark";
+import { MASCOT } from "./mascot";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -914,7 +916,18 @@ export default function App() {
       setEodDraft({ markdown: String(result.report.markdown ?? ""), source: "deterministic" });
       setEodGate(null);
       invalidateOutstandingEods();
-      notifications.success("Your EOD draft is ready for review. Nothing has been submitted.", "EOD draft ready");
+      // The assistant draft is the default: the standard draft above is the
+      // fallback when the assistant is unavailable or the day is gated.
+      try {
+        const ai = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
+          method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
+        });
+        setEodClockedOut(ai.clockedOut === true);
+        setEodDraft({ markdown: ai.markdown, source: "ai", screenshots: ai.screenshots ?? null, screenshotSyncUnavailable: ai.screenshotSyncUnavailable === true });
+        notifications.success("The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
+      } catch {
+        notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
+      }
     } catch (value) {
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
     } finally { setEodRedrafting(false); }
@@ -1256,6 +1269,7 @@ export default function App() {
   }
 
   async function logout() {
+    if (!window.confirm("Sign out of Work OS? You will need to sign in again to file updates and reach your workspace.")) return;
     setBusy(true); setError("");
     try {
       if (session && !debugRef.current.enabled) await apiRequest("/api/work-os/desktop/session", { method: "DELETE" });
@@ -2464,25 +2478,52 @@ export default function App() {
       {view === "settings" && (
         <main className="page">
           <PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
-          <section className="settings-panel">
-            <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><input type="checkbox" checked={autoStart} onChange={(event) => void toggleAutoStart(event.target.checked)} /></Setting>
-            <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-dot">Avatar</span></Setting>
-            <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className="status-dot">{queueAttentionCount ? "Needs Attention" : "Ready"}</span></Setting>
-            <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
-            <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
-            <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
-              {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
-              {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
-              {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
-              {updateFlow.status === "checking" && <span className="status-dot">Checking</span>}
-              {updateFlow.status === "downloading" && <span className="status-dot">Downloading</span>}
-              {updateFlow.status === "installing" && <span className="status-dot">Installing</span>}
-              {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
-            </Setting>
-            <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready`}><input type="checkbox" checked={autoCheckUpdates} onChange={(event) => void toggleAutoCheckUpdates(event.target.checked)} /></Setting>
-            <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-dot">Hidden</span></Setting>
-            <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding. Manager-owned setup and consent history stay intact."><button type="button" className="quiet-action" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
-            <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
+          <section className="settings-group" aria-labelledby="settings-device-title">
+            <header className="settings-group-head"><h3 id="settings-device-title">This device</h3><small>How the companion starts and updates itself.</small></header>
+            <section className="settings-panel">
+              <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
+              <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
+              <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
+                {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
+                {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
+                {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
+                {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
+                {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
+                {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
+                {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+              </Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-workday-title">
+            <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3><small>Check-ins and what the workspace may surface.</small></header>
+            <section className="settings-panel">
+              <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-chip">Avatar</span></Setting>
+              <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-chip">Hidden</span></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-sync-title">
+            <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3><small>Local queue state and the account this companion is signed in to.</small></header>
+            <section className="settings-panel">
+              <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className={`status-chip${queueAttentionCount ? " attention" : ""}`}>{queueAttentionCount ? "Needs attention" : "Ready"}</span></Setting>
+              <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group" aria-labelledby="settings-diagnostics-title">
+            <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3><small>Prove what the companion did, or reproduce a state on purpose.</small></header>
+            <section className="settings-panel">
+              <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
+              <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
+            </section>
+          </section>
+
+          <section className="settings-group danger" aria-labelledby="settings-danger-title">
+            <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3><small>Changes your local setup. Manager-owned setup and consent history stay intact.</small></header>
+            <section className="settings-panel">
+              <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
+            </section>
           </section>
           <MemorySettings />
         </main>
@@ -2793,12 +2834,12 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Agenda" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? "Drafted with Otto" : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
-      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
+      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <ChatTurn key={turn.id ?? index} role={turn.role} text={turn.text} meta={turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null} />)}</div>}{receipt ? <ChatTurn role="assistant" receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant">{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" text={echoReply} stream onSettled={bumpSweep} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant"><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
+       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
-  : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><Sparkles size={17} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
+  : <ChatTurn role="assistant"><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><MascotMark pose={MASCOT.idlePose} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
     </section>}
     <div className="progress-input-shell">
       <WorkOsPromptBar sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" /></div>
@@ -3274,3 +3315,13 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   </main>;
 }
 export function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
+/** One switch control for settings: the track carries the state, the label
+ * states it in words, and the whole control is a single focusable switch. */
+export function SettingsSwitch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`settings-switch${checked ? " on" : ""}`} onClick={() => onChange(!checked)}>
+      <span className="settings-switch-track" aria-hidden="true"><span className="settings-switch-knob" /></span>
+      <span className="settings-switch-state" aria-hidden="true">{checked ? "On" : "Off"}</span>
+    </button>
+  );
+}
