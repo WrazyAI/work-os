@@ -208,13 +208,18 @@ body.avatar-window {
 
 .avatar-head {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 58px;
-  padding: 11px 12px;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  padding: 0;
   border-bottom: 1px solid rgba(23, 25, 20, 0.08);
 }
-.avatar-head-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.avatar-head-row { display: flex; min-height: 46px; align-items: center; gap: 8px; padding: 7px 8px 6px 10px; }
+.avatar-head-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.avatar-head-copy { display: grid; gap: 1px; min-width: 0; }
+.avatar-head-name { color: var(--avatar-ink); font-size: 12.5px; font-weight: 700; }
+.avatar-head-shift { overflow: hidden; color: #626a61; font-size: 10.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.avatar-nav { padding: 0 8px 6px; }
 .avatar-drag-zone { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; cursor: grab; user-select: none; }
 .avatar-drag-zone:active { cursor: grabbing; }
 .avatar-drag-zone > span:last-child { color: var(--avatar-console-edge); font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .08em; }
@@ -232,7 +237,7 @@ body.avatar-window {
   font: 700 8px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
   letter-spacing: 0.08em;
 }
-.avatar-head strong { display: block; font-size: 13px; color: var(--avatar-ink); letter-spacing: 0.01em; }
+.avatar-head strong { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--avatar-ink); letter-spacing: 0.01em; }
 .avatar-head small { font-size: 10.5px; color: #8f9289; }
 .avatar-retry {
   margin-left: 0;
@@ -257,6 +262,7 @@ body.avatar-window {
 }
 .avatar-retry + .avatar-clear { margin-left: 0; }
 .avatar-clear:hover, .avatar-clear:focus-visible { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
+.avatar-icon,
 .avatar-close {
   display: grid;
   place-items: center;
@@ -264,18 +270,23 @@ body.avatar-window {
   height: 28px;
   padding: 0;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: #6a6d64;
   cursor: pointer;
-  border-radius: 8px;
+  transition: background-color 140ms ease, color 140ms ease;
 }
+.avatar-icon:hover,
 .avatar-close:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
+.avatar-icon:focus-visible,
+.avatar-close:focus-visible { outline: 2px solid #7cc936; outline-offset: 1px; }
 
 .avatar-close-hide {
   color: #8a3f34;
 }
 
-.avatar-close-hide:hover {
+.avatar-close-hide:hover,
+.avatar-icon.avatar-close-hide:hover {
   background: rgba(180, 61, 45, 0.1);
   color: #8a3f34;
 }
@@ -634,7 +645,12 @@ body.avatar-window {
   box-shadow: 0 24px 70px rgba(13, 18, 12, .3), 0 2px 8px rgba(13, 18, 12, .14);
 }
 .avatar-panel::before { content: ""; display: block; position: absolute; inset: 0 0 auto; z-index: 3; height: 2px; background: linear-gradient(90deg, transparent, #a8f15b 30%, #7cc936 70%, transparent); pointer-events: none; }
-.avatar-head { min-height: 62px; padding: 10px 11px; background: rgba(251, 252, 248, .82); backdrop-filter: blur(16px); }
+.avatar-head { background: rgba(251, 252, 248, .86); backdrop-filter: blur(16px); }
+.avatar-head-row { min-height: 44px; }
+.avatar-nav { padding: 0 8px 7px; }
+.avatar-nav .workos-chat-tabs button { min-height: 28px; padding: 3px 10px; border-radius: 8px; font-size: 11.5px; }
+.avatar-nav .workos-chat-tabs button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 18, .1), inset 0 0 0 1px rgba(24, 32, 24, .06); }
+.avatar-nav .workos-tab-count { background: #edf0ea; font-size: 9px; }
 .avatar-title { gap: 10px; }
 .avatar-head-mark.avatar-otto-mark { width: 36px; height: 36px; overflow: hidden; border-color: #cbd4c5; border-radius: 11px; background: #eef3e9; color: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7); }
 .avatar-otto-mark .otto { width: 34px; height: 34px; transform: translateY(3px); }
@@ -657,7 +673,9 @@ body.avatar-window {
 .avatar-tabs .workos-chat-tabs button.active { background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 18, .1), inset 0 0 0 1px rgba(24, 32, 24, .06); }
 .avatar-tabs .workos-tab-count { background: #edf0ea; font-size: 9px; }
 
-.avatar-chat { gap: 12px; padding: 13px 12px 16px; }
+.avatar-chat { min-height: 0; gap: 12px; padding: 13px 12px 16px; }
+.avatar-chat .avatar-context,
+.avatar-chat .avatar-task-context { margin: 0; }
 .avatar-chat.workos-thread { padding-top: 10px; }
 .avatar-chat .chat-turn { gap: 8px; }
 .avatar-chat .chat-turn-mark { width: 22px; height: 22px; border-radius: 7px; }

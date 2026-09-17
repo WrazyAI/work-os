@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Minus, X } from "lucide-react";
+import { Minus, SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
@@ -284,9 +284,21 @@ function InAppToolsSection() {
 }
 
 const AVATAR_TASKS = [
-  { id: "t-overdue", title: "Repair provider sync", dueDate: "2026-09-06", state: "overdue" },
-  { id: "t-today", title: "Ship the avatar review flow", dueDate: "2026-09-07", state: "pending" },
-  { id: "t-open", title: "Document release evidence", dueDate: null, state: "pending" },
+  {
+    id: "t-overdue",
+    title: "Repair provider sync",
+    dueDate: "2026-09-06",
+    state: "overdue" as const,
+    subtaskTotal: 3,
+    subtaskCompleted: 1,
+    subtasks: [
+      { id: "t-overdue-1", title: "Reproduce the stale mirror", completed: true },
+      { id: "t-overdue-2", title: "Patch the provider refresh", completed: false },
+      { id: "t-overdue-3", title: "Verify with a second device", completed: false },
+    ],
+  },
+  { id: "t-today", title: "Ship the avatar review flow", dueDate: "2026-09-07", state: "pending" as const },
+  { id: "t-open", title: "Document release evidence", dueDate: null, state: "pending" as const },
 ];
 
 function AvatarSection() {
@@ -298,35 +310,43 @@ function AvatarSection() {
       <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>
       <div className="avatar-panel" style={{ width: "min(400px, 100%)", height: 560 }}>
         <header className="avatar-head">
-          <div className="avatar-drag-zone">
-            <div className="avatar-title">
-              <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="focus" /></span>
-              <div>
-                <strong>Otto <em className="avatar-live-dot is-live" /> <span>On shift · 2h 14m</span></strong>
-                <small>Next update 3:05 PM</small>
+          <div className="avatar-head-row">
+            <div className="avatar-drag-zone">
+              <div className="avatar-title">
+                <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="focus" /></span>
+                <div className="avatar-head-copy">
+                  <strong title="On shift · September 7">
+                    <span className="avatar-head-name">Otto</span>
+                    <em className="avatar-live-dot is-live" aria-hidden="true" />
+                    <span className="avatar-head-shift">On shift · 2h 14m</span>
+                  </strong>
+                </div>
               </div>
             </div>
+            <div className="avatar-head-actions">
+              <button className="avatar-icon" aria-label="New conversation" title="New conversation">
+                <SquarePen size={15} aria-hidden="true" />
+              </button>
+              <button className="avatar-icon" aria-label="Minimize to orb" title="Minimize to orb">
+                <Minus size={15} aria-hidden="true" />
+              </button>
+              <button className="avatar-icon avatar-close-hide" aria-label="Hide companion" title="Hide companion">
+                <X size={15} aria-hidden="true" />
+              </button>
+            </div>
           </div>
-          <div className="avatar-head-actions">
-            <button className="avatar-close" aria-label="Minimize to orb">
-              <Minus size={16} aria-hidden="true" />
-            </button>
-            <button className="avatar-close avatar-close-hide" aria-label="Hide companion">
-              <X size={16} aria-hidden="true" />
-            </button>
+          <div className="avatar-nav">
+            <ChatTabs
+              tabs={[
+                { id: "chat", label: "Chat" },
+                { id: "tasks", label: "Tasks", count: AVATAR_TASKS.length },
+              ]}
+              active={tab}
+              onSelect={(id) => setTab(id as "chat" | "tasks")}
+              ariaLabel="Companion view"
+            />
           </div>
         </header>
-        <div className="avatar-tabs">
-          <ChatTabs
-            tabs={[
-              { id: "chat", label: "Chat" },
-              { id: "tasks", label: "Tasks", count: AVATAR_TASKS.length },
-            ]}
-            active={tab}
-            onSelect={(id) => setTab(id as "chat" | "tasks")}
-            ariaLabel="Companion view"
-          />
-        </div>
         {tab === "tasks" ? (
           <div className="avatar-chat">
             <TaskSelectionCard
@@ -339,6 +359,10 @@ function AvatarSection() {
           </div>
         ) : (
           <div className="avatar-chat workos-thread">
+            <section className="avatar-context check_in" aria-label="Check-in due">
+              <strong>Check-in due</strong>
+              <small>Your last recorded update was at 3:06 PM. What's changed since then?</small>
+            </section>
             <ChatTurn role="assistant" text="Share an update, or tell me to create, complete, or block tasks." />
             <ChatTurn role="user" text="Show my pending tasks" />
             <ChatTurn role="assistant" text="Here are your open tasks. Viewing never needs approval.">

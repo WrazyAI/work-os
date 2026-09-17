@@ -22,6 +22,7 @@ import {
   Send,
   TimerReset,
   Trash2,
+  Video,
   X,
 } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
@@ -33,6 +34,7 @@ type AnyRow = Record<string, any>;
 interface DayResponse {
   at: string;
   shiftDate: string;
+  access?: { featureFlags?: Record<string, boolean> };
   shift: {
     startsAt: string;
     endsAt: string;
@@ -130,6 +132,9 @@ export default function EmployeeWorkOsHome() {
   const [clockConfirmKind, setClockConfirmKind] = useState<"late" | "exception" | null>(null);
   const [expandedEvidence, setExpandedEvidence] = useState(false);
   const [reportMarkdown, setReportMarkdown] = useState("");
+  const [loomOpen, setLoomOpen] = useState(false);
+  const [loomUrl, setLoomUrl] = useState("");
+  const [loomTranscript, setLoomTranscript] = useState("");
   const [onboardingName, setOnboardingName] = useState("");
   const [onboardingEmail, setOnboardingEmail] = useState("");
   const [onboardingTimezone, setOnboardingTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
@@ -267,6 +272,13 @@ export default function EmployeeWorkOsHome() {
     }),
     onSuccess: refresh,
   });
+  const loomPreview = useMutation({
+    mutationFn: () => fetchJson<{ videoId: string; url: string; title: string | null; durationSeconds: number | null; thumbnailUrl: string | null; metadataAvailable: boolean }>("/api/work-os/me/loom/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: loomUrl.trim() }),
+    }),
+  });
   const checkIn = useMutation({
     mutationFn: (body: AnyRow) => fetchJson("/api/work-os/check-ins", {
       method: "POST",
@@ -275,6 +287,9 @@ export default function EmployeeWorkOsHome() {
     }),
     onSuccess: () => {
       setInput("");
+      setLoomUrl("");
+      setLoomTranscript("");
+      loomPreview.reset();
       void refresh();
     },
   });
@@ -528,15 +543,76 @@ export default function EmployeeWorkOsHome() {
               className="w-full resize-y border bg-transparent px-3 py-2 text-[13px] leading-6 text-[var(--text-primary)] outline-none"
               style={{ borderColor: "var(--border)" }}
             />
+            {loomOpen ? (
+              <div className="mt-3 border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase text-[var(--text-tertiary)]">Loom update</span>
+                  <button type="button" className="text-[11px] font-semibold text-[var(--text-tertiary)]" onClick={() => { setLoomOpen(false); setLoomUrl(""); setLoomTranscript(""); loomPreview.reset(); }}>Remove</button>
+                </div>
+                <div className="mt-2 flex flex-wrap items-start gap-2">
+                  <input
+                    value={loomUrl}
+                    onChange={(event) => { setLoomUrl(event.target.value); loomPreview.reset(); }}
+                    placeholder="https://www.loom.com/share/…"
+                    className="min-w-[240px] flex-1 border bg-transparent px-3 py-2 text-[12px] text-[var(--text-primary)] outline-none"
+                    style={{ borderColor: "var(--border)" }}
+                    aria-label="Loom share link"
+                  />
+                  <button
+                    type="button"
+                    disabled={!loomUrl.trim() || loomPreview.isPending}
+                    onClick={() => loomPreview.mutate()}
+                    className="inline-flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold disabled:opacity-50"
+                    style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                  >
+                    <Video size={13} /> {loomPreview.isPending ? "Reading…" : "Read Loom"}
+                  </button>
+                </div>
+                {loomPreview.data?.metadataAvailable ? (
+                  <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
+                    {loomPreview.data.title ?? "Loom recording"}{loomPreview.data.durationSeconds ? ` · ${Math.floor(loomPreview.data.durationSeconds / 60)}:${String(Math.round(loomPreview.data.durationSeconds) % 60).padStart(2, "0")}` : ""} · public metadata read from Loom.
+                  </p>
+                ) : null}
+                {loomPreview.data && !loomPreview.data.metadataAvailable ? (
+                  <p className="mt-2 text-[11px] text-[var(--status-warn)]">Loom did not return public metadata for this link — it may be private. The update still records; paste the transcript below.</p>
+                ) : null}
+                {loomPreview.error ? <p className="mt-2 text-[11px] text-[var(--status-warn)]">{(loomPreview.error as Error).message}</p> : null}
+                <textarea
+                  value={loomTranscript}
+                  onChange={(event) => setLoomTranscript(event.target.value)}
+                  rows={3}
+                  maxLength={50000}
+                  placeholder="Optional: paste the transcript (in Loom open Transcript, then Copy) so WorkOS can synthesize this update."
+                  className="mt-2 w-full resize-y border bg-transparent px-3 py-2 text-[12px] leading-5 text-[var(--text-primary)] outline-none"
+                  style={{ borderColor: "var(--border)" }}
+                  aria-label="Loom transcript"
+                />
+                <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">The link and transcript become today’s update and an output artifact. No video is stored.</p>
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
-                disabled={!input.trim() || checkIn.isPending}
-                onClick={() => checkIn.mutate({ input_text: input })}
+                disabled={(!input.trim() && !(loomOpen && loomUrl.trim())) || checkIn.isPending}
+                onClick={() => checkIn.mutate({
+                  input_text: input,
+                  ...(loomOpen && loomUrl.trim() ? { loom: { url: loomUrl.trim(), transcript: loomTranscript.trim() || undefined } } : {}),
+                })}
                 className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--text-inverse)" }}
               >
                 <Send size={14} /> Send update
               </button>
+              {day.data?.access?.featureFlags?.loom_updates === true ? (
+                <button
+                  type="button"
+                  aria-pressed={loomOpen}
+                  onClick={() => { setLoomOpen((current) => !current); loomPreview.reset(); }}
+                  className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] disabled:opacity-50"
+                  style={{ borderColor: loomOpen ? "var(--accent)" : "var(--border)", color: loomOpen ? "var(--accent)" : "var(--text-secondary)" }}
+                >
+                  <Video size={14} /> Loom
+                </button>
+              ) : null}
               <button
                 disabled={checkIn.isPending}
                 onClick={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
@@ -646,9 +722,10 @@ export default function EmployeeWorkOsHome() {
                 <div key={item.id} className="px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[12px] font-medium text-[var(--text-primary)]">{item.title}</p>
-                    <span className="text-[10px] uppercase text-[var(--text-tertiary)]">{item.source}</span>
+                    <span className="text-[10px] uppercase text-[var(--text-tertiary)]">{item.source === "loom" ? "Loom recording" : item.source}</span>
                   </div>
                   {item.summary ? <p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
+                  {item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] font-semibold text-[var(--accent)]">Open recording</a> : null}
                   {item.evidence_event_id && item.event?.correction_status !== "disputed" ? <button disabled={disputeEvidence.isPending} onClick={() => disputeEvidence.mutate(item.evidence_event_id)} className="mt-2 text-[10px] font-semibold text-[var(--status-warn)] disabled:opacity-50">Dispute</button> : null}
                   {item.event?.correction_status === "disputed" ? <span className="mt-2 block text-[10px] font-semibold uppercase text-[var(--status-warn)]">Disputed</span> : null}
                 </div>

@@ -7,6 +7,9 @@ export interface AvatarTaskOption {
   title: string;
   dueDate: string | null;
   completed: boolean;
+  subtaskTotal?: number;
+  subtaskCompleted?: number;
+  subtasks?: Array<{ id: string; title: string; completed?: boolean }>;
 }
 
 export interface AvatarTaskCardItem extends AvatarTaskOption {

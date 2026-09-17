@@ -135,4 +135,12 @@ describe("EodComposer review surface", () => {
     expect(markup.indexOf("Bottleneck — required")).toBeGreaterThan(-1);
     expect(markup.indexOf("Bottleneck — required")).toBeLessThan(markup.indexOf("Refine this draft"));
   });
+
+  it("offers the Loom update path only when the organization enables it", () => {
+    const enabled = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, loomEnabled: true }));
+    expect(enabled).toContain("Recorded a Loom instead?");
+    const disabled = renderToStaticMarkup(createElement(EodComposer, baseProps));
+    expect(disabled).not.toContain("Recorded a Loom instead?");
+    expect(disabled).not.toContain("eod-loom");
+  });
 });

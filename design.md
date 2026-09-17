@@ -471,7 +471,22 @@ differentiate it from ordinary application chrome: a dark rounded face, a
 signal-green progress ring, a large Otto silhouette, and a short plain-language
 state label. The collapsed surface must read as one status object rather than a
 miniature application window. Its expanded composer remains a warm, accessible
-Work OS surface with standard controls and no decorative texture. The companion
+Work OS surface with standard controls and no decorative texture.
+
+The expanded companion is one nav bar plus one scroll region. The nav bar's first
+row shows the Otto mark, the name, a state dot, the shift state and elapsed time
+(`On shift · 2h 14m`), and icon-only actions (New conversation, Minimize to orb,
+Hide companion) each with a title and an accessible name; no visible drag label
+is rendered even though the row stays draggable, and the full date lives in the
+shift label's tooltip instead of a second line. The dot is green while on shift,
+amber while paused, red for a late start, and gray off shift — a due check-in
+never turns it red, because the banner, the orb pulse, and the composer already
+carry that. The second nav row is the Chat / Tasks toggle with the open-task
+count. Below the nav bar the thread is the only scrolling region: the check-in
+banner, the task-context card, and every message live inside it, so the header
+and the composer can never be pushed out of the window no matter how much content
+accumulates. The expanded window is 400x620 logical pixels, clamped to the
+monitor. The companion
 is draggable from its compact grab handle and expanded header, with a visible
 keyboard-operable composer once opened. A prompt bubble may overlap the upper
 portion of the collapsed object, but must preserve Otto's state label, progress
@@ -1267,6 +1282,10 @@ queued count, but it must not claim provider success from local request success.
 - Primary button: signal-green fill with ink text; hover may lighten and lift 1px.
 - Secondary button: white/paper fill with neutral border.
 - Tertiary button: transparent or quiet surface; preserve a visible hover target.
+- Every icon-only control carries a `title` and an `aria-label` that names its
+  action in plain words (New conversation, Minimize to orb, Hide companion,
+  Collapse tasks); hover shows the quiet surface and the native tooltip, and
+  keyboard focus shows the signal ring.
 - Pressed feedback: at most `translateY(1px) scale(.985)`.
 - Disabled controls remain readable, remove hover/press motion, and explain the
   blocker when it is not obvious.
@@ -1328,33 +1347,55 @@ A reusable task selection card is a fixed-height card with a static header and
 footer, plus one internally scrolling row list. It is for pending or overdue
 task data when a parent workflow needs explicit batch-completion intent. Rows use
 native checkboxes, title, one quiet metadata line, and a text status; overdue rows
-add a 2px danger edge and `Overdue` label. The footer action is
-`Mark selected done`, disabled until at least one task is selected, and passes
-only the selected IDs to its parent callback. The card itself never mutates a
-task or claims Nifty confirmation. It defines loading skeletons, a specific empty
-state, a recoverable error with optional retry, a degraded last-known-data notice,
-and dense rows. At narrow widths, status labels may hide, metadata wraps, and the
-footer action becomes full width. Checkbox focus remains visible and all
-non-essential motion is removed with reduced motion.
+carry the danger status chip. The footer action is `Mark selected done`, disabled
+until at least one item is selected, and passes only the selected IDs to its
+parent callback. The card itself never mutates a task or claims Nifty
+confirmation. It defines loading skeletons, a specific empty state, a recoverable
+error with optional retry, a degraded last-known-data notice, and dense rows. At
+narrow widths, status labels may hide, metadata wraps, and the footer action
+becomes full width. Checkbox focus remains visible and all non-essential motion
+is removed with reduced motion.
 
-When the card renders inside the in-app assistant at wide or compact desktop
-widths, `presentation="table"` adds filter chips for All, Pending, and Overdue,
-then uses Task, Due, Status, and Project columns. Filtering is local and never
-fetches or mutates. Below 560px those semantic rows reflow to a two-line compact
-layout with no horizontal page overflow. The floating companion always uses the
-stacked-row presentation because its 400px window is the compact surface.
+The header is compact and carries no kicker or count sentence: the title alone
+(for example `Today's tasks`), then a `N selected` pill and the disclosure
+control on the far right. The disclosure is a 26–28px icon button with
+`aria-expanded`, `aria-controls`, and a `Collapse tasks` / `Expand tasks` title;
+the row list — never the footer — is what it hides. Checking any item collapses
+the row list into the compact confirmation state while the header and the
+confirmation action stay visible; clearing the selection or pressing the
+disclosure restores the list. Confirming proposals moves the card into a receipt
+state, and an optional review action reveals the approval flow (`Review in Chat`
+in the floating companion). Tasks that already have proposals awaiting approval
+are marked `Proposed` and their checkbox is disabled, so the same task cannot be
+proposed twice before the decision. Failures render inline in the card and
+preserve the selection. The card still never claims that a provider mutation
+succeeded.
 
-The card is collapsible at every state, including before anything is selected.
-The header is a disclosure toggle with `aria-expanded` and `aria-controls`;
-collapsed it shows a one-line summary (`3 pending · 2 selected · 1 proposed`) and
-hides the list and footer. Confirming proposals moves the card into a receipt
-state: the selection clears, the card auto-collapses to `<n> completion
-proposal(s) created — review and approve <location>`, and an optional review
-action reveals the approval flow (`Review in Chat` in the floating companion).
-Tasks that already have proposals awaiting approval are marked `Proposed` and
-their checkbox is disabled, so the same task cannot be proposed twice before the
-decision. Failures render inline in the card and preserve the selection. The
-card still never claims that a provider mutation succeeded.
+Collapsed to a one-line summary the card states its selection (`3 selected · 1
+proposed`) or, with nothing selected, the open counts (`2 pending · 1 overdue`).
+Cards that lose thread focus collapse to that line automatically, so an old task
+card never keeps its full list open behind newer messages.
+
+A task with subtasks is an accordion item: its row title becomes a disclosure
+button (`aria-expanded`, `aria-controls`) with a rotating chevron and an `x/y
+subtasks` hint, and its panel is a labelled `role="region"` containing one row
+per subtask (checkbox, title, `Open`/`Done` chip). Multiple rows may be open at
+once. Subtasks are loaded with the payload when it already contains them and
+fetched on first expand otherwise, with inline loading and a retryable error.
+Selecting a subtask files its own completion proposal. When every open subtask
+under a parent is checked, the panel offers a pre-checked `Also mark “<parent>”
+done` option, and the confirm hint names the parent before anything is filed.
+
+The in-app assistant renders this card with `presentation="table"` at wide or
+compact desktop widths, adding filter chips for All, Pending, and Overdue and
+Task, Due, Status, and Project columns. The header, the right-side disclosure,
+the selection-compact state, the expandable rows and their subtask panel, and the
+auto-collapse rule behave exactly as in the floating companion; an expanded
+parent renders its subtask panel as a full-width detail row beneath the columns.
+Filtering is local and never fetches or mutates. Below 560px those semantic rows
+reflow to a two-line compact layout with no horizontal page overflow. The
+floating companion always uses the stacked-row presentation because its 400px
+window is the compact surface.
 
 ### 25.8 Assistant thinking trace
 
@@ -1999,6 +2040,38 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   locally for these tasks with no provider call, and completing them never
   claims a provider confirmation. Planner tasks are due the plan's day and are
   assigned to the confirming employee.
+
+### 29.1e Loom updates
+
+Employees often record their SOD or EOD in Loom before opening Work OS. A Loom
+link is therefore a first-class update source, not an attachment to a second
+report, and it is opt-in per organization behind the `loom_updates` flag.
+
+The composer (web update panel, desktop Update composer, and the EOD composer)
+offers a `Loom` control that reveals a local panel: a link field, a `Read Loom`
+action, and an optional transcript paste. `Read Loom` resolves the link through
+Loom's official oEmbed endpoint and shows only the public title and duration it
+returns; a private or unavailable recording reads as `metadata unavailable` and
+never blocks the update. The panel states plainly that the link and transcript
+become the update and an output artifact and that no video is stored.
+
+The link must be an `https` Loom share or embed URL (or a bare 32-hex video id);
+anything else is rejected before any server-side fetch, and the fetch is
+allow-listed to Loom hosts with no redirects, a short timeout, and a bounded
+response. Transcripts are stored with the check-in in `structured_claims.loom`,
+bounded and labeled with their source (`employee_paste`); the full transcript is
+never shown inline in history — the update stream shows a compact Loom chip with
+the recording's title and length instead.
+
+A Loom update is a substantive update: it feeds proposal synthesis (tasks,
+subtasks, progress) and the AI EOD draft, where the recording appears as a
+`Recorded Loom updates` fact with the explicit note that recordings are
+employee-authored artifacts and do not by themselves prove task completion. It
+also records a `loom` output-evidence event (title, link, duration, thumbnail)
+idempotent per video id, which satisfies the task-completion artifact gate the
+same way a linked pull request does. Attaching a Loom in the EOD composer files
+the update and rebuilds the draft from it, so an employee who already recorded
+their EOD never writes a second one.
 
 ### 29.2 Insights
 

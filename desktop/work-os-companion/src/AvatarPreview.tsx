@@ -4,7 +4,7 @@ import { AgendaReviewCard } from "./AgendaReviewCard";
 import { ApprovalResults } from "./ApprovalFlow";
 import { NavigateButton } from "./NavigateButton";
 import { TaskSelectionCard } from "./TaskSelectionCard";
-import { deriveTaskContext, taskContextTitle } from "./avatarTaskContext";
+import { deriveTaskContext } from "./avatarTaskContext";
 import type { AgendaAnswers } from "./avatarAgenda";
 import type { ToolCallResult } from "./interpretation";
 
@@ -19,7 +19,19 @@ export default function AvatarPreview() {
 
   const context = deriveTaskContext(
     [
-      { id: "t-overdue", title: "Repair provider sync", dueDate: "2026-09-06", completed: false },
+      {
+        id: "t-overdue",
+        title: "Repair provider sync",
+        dueDate: "2026-09-06",
+        completed: false,
+        subtaskTotal: 3,
+        subtaskCompleted: 1,
+        subtasks: [
+          { id: "t-overdue-1", title: "Reproduce the stale mirror", completed: true },
+          { id: "t-overdue-2", title: "Patch the provider refresh", completed: false },
+          { id: "t-overdue-3", title: "Verify with a second device", completed: false },
+        ],
+      },
       { id: "t-today", title: "Ship the avatar review flow", dueDate: "2026-09-07", completed: false },
       { id: "t-open", title: "Document release evidence", dueDate: null, completed: false },
       { id: "t-done", title: "Remove Plan navigation", dueDate: "2026-09-06", completed: true },
@@ -85,15 +97,33 @@ export default function AvatarPreview() {
         <section aria-label="Task context preview">
           <TaskSelectionCard
             dense
-            maxHeight={220}
-            title={taskContextTitle(context)}
+            maxHeight={240}
+            title="Today's tasks"
             tasks={context.visible.map((task) => ({
-              id: task.id, title: task.title, dueDate: task.dueDate, state: task.overdue ? "overdue" : "pending",
+              id: task.id,
+              title: task.title,
+              dueDate: task.dueDate,
+              state: task.overdue ? "overdue" : "pending",
+              subtaskTotal: task.subtaskTotal,
+              subtaskCompleted: task.subtaskCompleted,
+              subtasks: task.subtasks,
             }))}
             onMarkSelectedDone={() => undefined}
-            proposedTaskIds={["t-overdue"]}
+            proposedTaskIds={["t-done"]}
             onReview={() => undefined}
             emptyTitle="No open tasks"
+            emptyMessage="Tasks waiting to be completed will appear here."
+          />
+          <div style={{ height: 16 }} />
+          <TaskSelectionCard
+            dense
+            title="Pending tasks"
+            collapseWhenInactive
+            tasks={context.visible.filter((task) => !task.overdue).map((task) => ({
+              id: task.id, title: task.title, dueDate: task.dueDate, state: "pending" as const,
+            }))}
+            onMarkSelectedDone={() => undefined}
+            emptyTitle="No pending tasks"
             emptyMessage="Tasks waiting to be completed will appear here."
           />
         </section>

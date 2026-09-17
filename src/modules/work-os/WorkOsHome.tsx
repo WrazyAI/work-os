@@ -854,7 +854,7 @@ function EvidenceList({ rows }: { rows: AnyRow[] }) {
         <div key={item.id} className="rounded-lg border p-3 text-[12px]" style={{ borderColor: "var(--border)", background: "var(--bg-secondary)" }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-[var(--text-primary)]">{item.title}</h3>
-            <Pill tone={item.source === "worktivity" ? "ok" : "neutral"}>{item.source}</Pill>
+            <Pill tone={item.source === "worktivity" ? "ok" : "neutral"}>{item.source === "loom" ? "Loom recording" : item.source}</Pill>
           </div>
           <p className="mt-1 leading-5 text-[var(--text-secondary)]">{item.summary || "No summary"}</p>
           {item.metrics?.totalMinutes != null && <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Tracked minutes: {item.metrics.totalMinutes}</p>}
