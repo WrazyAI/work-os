@@ -108,6 +108,18 @@ export interface PlanMemoryContext {
   memoryBlock?: string;
 }
 
+/** Tool output from a Loom recording attached to the day's plan. */
+export interface PlanLoomContext {
+  verdict: string;
+  createdLocalDate: string | null;
+  targetDate: string;
+  line: string;
+  summary: string | null;
+  suggestedTasks: Array<{ title: string; description: string | null; subtasks: string[] }>;
+  cautions: string[];
+  blocked: boolean;
+}
+
 const MEMORY_RULE = "todayContext is the live day state; memoryContext is dated recalled history for continuity only — never treat it as evidence of completion, progress, or current state.";
 
 export function buildPlanningPrompt(
@@ -115,12 +127,29 @@ export function buildPlanningPrompt(
   context: PlanningContext,
   conversation: Array<{ role: "user" | "assistant"; text: string }>,
   memory?: PlanMemoryContext,
+  loom?: PlanLoomContext,
 ) {
+  const loomBlock = loom
+    ? loom.blocked
+      ? {
+          blocked: true,
+          line: loom.line,
+          instruction: `This recording was made ${loom.createdLocalDate ?? "on an unverified date"} and cannot be used for ${loom.targetDate}. Say so in the summary and do not build commitments from it.`,
+        }
+      : {
+          verdict: loom.verdict,
+          line: loom.line,
+          summary: loom.summary,
+          suggestedWork: loom.suggestedTasks.map((task) => ({ title: task.title, steps: task.subtasks })),
+          cautions: loom.cautions,
+        }
+    : undefined;
   return JSON.stringify({
     employeeInput: rawIntent,
     recentConversation: conversation.slice(-8),
     ...(memory?.todayBlock ? { todayContext: memory.todayBlock } : {}),
     ...(memory?.memoryBlock ? { memoryContext: memory.memoryBlock } : {}),
+    ...(loomBlock ? { attachedLoom: loomBlock } : {}),
     context,
     rules: [
       "Preserve the employee's meaning. Do not create, update, complete, or remove any task.",
@@ -128,6 +157,11 @@ export function buildPlanningPrompt(
       "A commitment describes success for today, not a permanent rewrite of a task.",
       "Ask zero questions for a clear plan, one useful question for ordinary ambiguity, and never more than two questions.",
       "Ask only when missing information prevents a useful daily commitment. Use plain language.",
+      ...(loomBlock ? [
+        "attachedLoom is tool output from a recording the employee referenced; use it to shape today's commitments.",
+        "Reconcile it against the supplied context first: link an existing task instead of repeating it, and never claim the recording proves completion, effort, or provider state.",
+        ...(loomBlock.blocked ? ["attachedLoom is blocked: do not build commitments from it."] : []),
+      ] : []),
       ...(memory?.todayBlock || memory?.memoryBlock ? [MEMORY_RULE] : []),
     ],
     output: {
@@ -142,6 +176,7 @@ export async function interpretDailyPlan(
   input: { rawIntent: unknown; conversation?: unknown },
   context: PlanningContext,
   memory?: PlanMemoryContext,
+  loom?: PlanLoomContext,
 ): Promise<PlanInterpretationResult> {
   const rawIntent = text(input.rawIntent, 4_000);
   if (!rawIntent) return { ok: false, reason: "ai_malformed", detail: "input is required" };
@@ -162,7 +197,7 @@ export async function interpretDailyPlan(
         max_tokens: 1_400,
         messages: [
           { role: "system", content: "You are the Work OS planning assistant. Return only valid JSON and do not perform mutations." },
-       { role: "user", content: buildPlanningPrompt(rawIntent, context, conversation, memory) },
+          { role: "user", content: buildPlanningPrompt(rawIntent, context, conversation, memory, loom) },
         ],
         response_format: { type: "json_object" },
       }),

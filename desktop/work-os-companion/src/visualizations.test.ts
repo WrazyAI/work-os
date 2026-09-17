@@ -183,13 +183,29 @@ describe("operational visualizations", () => {
     expect(app).toContain('className="settings-group"');
     expect(app).toContain('className="settings-group danger"');
     expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(2);
-    expect(app).toContain("export function SettingsSwitch");
+    expect(app).toContain('from "./SettingsSwitch"');
+    expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
     expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
     expect(app).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-group-head");
-    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 84px;/);
+    // Settings rows are flat, hairline-separated entries on the page — never
+    // per-row white cards (and never a second card around them).
+    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 74px;/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?border-top: 1px solid var\(--line\);/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?background: transparent;/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?box-shadow: none;/);
+    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?border: 0;/);
+    expect(styles).toContain(".setting-controls");
+    // The update row's actions share one control column, so Check and
+    // What's new stay adjacent instead of being spread across the row.
+    const controlStart = app.indexOf('className="setting-controls"');
+    const updateRow = app.slice(controlStart, app.indexOf("</Setting>", controlStart));
+    expect(updateRow).toContain("checkForUpdates()");
+    expect(updateRow).toContain("setWhatsNew(");
+    expect(styles).not.toMatch(/\.evidence-list,\n\.settings-panel \{/);
     expect(styles).toContain(".settings-switch-track");
     expect(styles).toContain(".status-chip.attention");
     expect(styles).toContain(".settings-group.danger");

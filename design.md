@@ -974,6 +974,16 @@ install are one explicit, resumable flow rather than a launch-time surprise.
   from a `What's new` action in Settings. Every release ships its section:
   the release workflow fails when the released version has no changelog
   entry, and the GitHub release notes carry the same section.
+- **Changelog history.** The modal carries a `Check older updates` action
+  whenever the bundled changelog holds more than the installed release. It
+  swaps the body to one scrollable list of every logged release, newest first,
+  each under a version heading with its bullets and the installed build tagged
+  `This version`. The first page holds the ten newest releases with
+  `Show all N updates` revealing the rest (and `Show 10 newest` restoring it),
+  because the list only grows from here. `Back to <version>` returns to the
+  installed release's notes; Escape, the backdrop, and the close button behave
+  as they do on the notes view, and focus moves to the history heading when
+  the view swaps.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action
@@ -2110,37 +2120,41 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   claims a provider confirmation. Planner tasks are due the plan's day and are
   assigned to the confirming employee.
 
-### 29.1e Loom updates
+### 29.1e Loom analysis
 
-Employees often record their SOD or EOD in Loom before opening Work OS. A Loom
-link is therefore a first-class update source, not an attachment to a second
-report, and it is opt-in per organization behind the `loom_updates` flag.
+Employees often record their SOD or EOD in Loom before opening Work OS. Loom has
+no public REST API for videos or transcripts, so a recording enters Work OS as a
+pasted link an agent analyzes — never as an automatic progress update. The tool
+is opt-in per organization behind the `loom_updates` flag.
 
-The composer (web update panel, desktop Update composer, and the EOD composer)
-offers a `Loom` control that reveals a local panel: a link field, a `Read Loom`
-action, and an optional transcript paste. `Read Loom` resolves the link through
-Loom's official oEmbed endpoint and shows only the public title and duration it
-returns; a private or unavailable recording reads as `metadata unavailable` and
-never blocks the update. The panel states plainly that the link and transcript
-become the update and an output artifact and that no video is stored.
+The analyze tool returns the recording's public metadata (title, duration,
+thumbnail), its public recording date read from the share page, a verdict for
+the target day, the normalized transcript, and a neutral analysis: a summary,
+candidate follow-up tasks with concrete subtask steps, and cautions. Only
+`https` Loom share or embed links (or a bare 32-hex video id) reach the fetch;
+anything else is rejected before any server call, and the fetch is allow-listed
+to Loom hosts with no redirects, a short timeout, and a hard response cap.
 
-The link must be an `https` Loom share or embed URL (or a bare 32-hex video id);
-anything else is rejected before any server-side fetch, and the fetch is
-allow-listed to Loom hosts with no redirects, a short timeout, and a bounded
-response. Transcripts are stored with the check-in in `structured_claims.loom`,
-bounded and labeled with their source (`employee_paste`); the full transcript is
-never shown inline in history — the update stream shows a compact Loom chip with
-the recording's title and length instead.
+The verdict is always relative to the target day: a recording made on another
+day is refused for that day's synthesis — a prior-day EOD may still use a
+recording made that same day — and a recording whose date Loom does not expose
+stays usable only when labeled unverified. The calling agent reconciles the
+analysis against the current task list and live day state before proposing
+anything: it skips what is already recorded, links an existing task instead of
+repeating it, adds subtasks for concrete steps, and never treats a recording as
+proof of completion, progress, or provider state.
 
-A Loom update is a substantive update: it feeds proposal synthesis (tasks,
-subtasks, progress) and the AI EOD draft, where the recording appears as a
-`Recorded Loom updates` fact with the explicit note that recordings are
-employee-authored artifacts and do not by themselves prove task completion. It
-also records a `loom` output-evidence event (title, link, duration, thumbnail)
-idempotent per video id, which satisfies the task-completion artifact gate the
-same way a linked pull request does. Attaching a Loom in the EOD composer files
-the update and rebuilds the draft from it, so an employee who already recorded
-their EOD never writes a second one.
+Chat exposes the tool as an `@` mention that inserts `Loom: `; a bare Loom link
+inside an update reaches the tool server-side. Enrichment is strictly optional:
+a missing link, schedule failure, or analysis outage never blocks the ordinary
+interpretation. The SOD surfaces (desktop planning modal, avatar agenda, and the
+web goal note) call the same tool; the web goal note only prefills editable
+text for the employee to review and save. The EOD composer's Loom panel is
+draft-only: the analysis shapes the AI draft and files nothing — no check-in, no
+evidence row, no task proposals — and report actions lock while it runs.
+
+Transcript entry is always optional and collapsed by default on every Loom card,
+and no video bytes are ever stored.
 
 ### 29.2 Insights
 
@@ -2309,10 +2323,21 @@ The companion groups its rows under those headings (`This device`, `Workday`,
 carries a quiet uppercase label and a one-line purpose; the reset group is
 separated by a rule and a red-led label, never mixed into routine preferences.
 
-Each setting row uses a flexible label/description column and intrinsic control
-column. Rows are normally 72–104px high depending on helper copy: size to the
-copy (min-height 84px) rather than padding every card to a fixed tall height,
-and align the control with the title's first line. At narrow widths, stack the
+Settings rows are a flat table, not a dashboard of cards: each group is a
+two-up column of transparent rows separated by hairlines (one column at 850px
+and below). A row never carries its own border, fill, radius, or shadow, and
+the group never draws a card behind them — settings live on the page surface
+the way task rows do. This is deliberate: white cards around every row read as
+a stack of boxes and bury the grouping, and the two-up rhythm keeps the page
+compact.
+
+A row's controls sit together in one control column (`.setting-controls`), so
+rows with more than one action keep their buttons adjacent instead of letting
+the row's spacing push them apart.
+
+Each row uses a flexible label/description column and an intrinsic control
+column on the centerline. Rows are normally 72–104px high depending on helper
+copy (min-height 74px) and size to their copy. At narrow widths, stack the
 control below the explanation and make it full width when appropriate.
 
 Controls follow one vocabulary:
@@ -2456,6 +2481,40 @@ Specific collapse rules:
 
 Test zoom at 200% or an equivalent narrow content width. Layout must remain
 operable when system font metrics differ from the design machine.
+
+### 29.8 Debugger
+
+The scenario debugger is a separate window (`debug.html`) for reproducing and
+observing states. It is developer-facing, never overlays the employee UI, and
+uses the app's tokens, typography, and controls rather than browser defaults.
+
+- **Header.** The window title, the running state as chips, and the close
+  control. Chips name the effective mode (`Scenario off`, `Scenario on`) and
+  surface anything that reaches further: `Offline bypass` in amber and
+  `Live writes` in red. The chips always reflect the applied scenario, so the
+  dangerous state is visible without scrolling.
+- **Tabs.** `Scenarios`, `Live trace`, and `Export`, as one segmented control;
+  the trace tab carries its buffered event count.
+- **Scenarios.** Preset cards first (each with a one-line description of the
+  state it builds), then flat hairline groups: the master switch, session,
+  backend reach, missing details, My Day conditions, and the companion's forced
+  state. Single on/off overrides use the shared settings switch; the sets
+  (missing details, condition flags) keep checkboxes. Helper copy states the
+  consequence, the master switch resetting when the app exits, and `Reset all
+  overrides` sits last.
+- **Live trace.** Search plus level and source filters, a pause control, and a
+  clear-view action, with the shown/buffered counts and a note that clearing
+  the view leaves disk logs intact. Rows show time, level, source, category,
+  and message on one line, tint warn and error rows, expand to the redacted
+  event JSON, and offer a copy action. An empty result says so instead of
+  rendering a blank list.
+- **Export.** The bundle's contents list, the privacy note naming what is
+  excluded, and `Export diagnostics ZIP` beside `Open logs folder`.
+
+Sections may be reordered within a tab, but no scenario, override, filter,
+export, or bridge event (`work-os://debug-request`, `work-os://debug-current`,
+`work-os://debug-scenario`) may be removed; the debug window's capability stays
+limited to diagnostics commands and the logs folder.
 
 ## 31. Operational state matrix
 

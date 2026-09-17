@@ -38,6 +38,13 @@ describe("Work OS chat catalogs", () => {
     );
   });
 
+  it("offers the Loom link as a mention that inserts the link prefix", () => {
+    const loom = WORK_OS_CHAT_SOURCES.find((source) => source.key === "loom");
+    expect(loom?.name).toBe("Loom link");
+    expect(loom?.insert).toBe("Loom: ");
+    expect(loom?.desc).toMatch(/recording/i);
+  });
+
   it("prefaces text commands instead of claiming execution", () => {
     const commands = workOsChatCommands();
     expect(commands.find((command) => command.key === "progress")?.insert).toBe("Progress: ");

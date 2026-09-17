@@ -90,6 +90,27 @@ describe("debug window contract", () => {
     expect(main).toContain('windows_subsystem = "windows"');
   });
 
+  it("keeps the debugger on the app's control vocabulary", () => {
+    const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
+    const debugStyles = readFileSync(resolve(root, "src/debug.css"), "utf8");
+    const debugEntry = readFileSync(resolve(root, "src/debug.tsx"), "utf8");
+    // One switch control for on/off overrides, status chips for the risky state.
+    expect(debugWindow).toContain('from "./SettingsSwitch"');
+    expect(debugWindow).toContain("SettingsSwitch");
+    expect(debugWindow).not.toContain('type="checkbox" checked={scenario.enabled}');
+    expect(debugWindow).toContain("debug-status");
+    expect(debugStyles).toContain(".debug-status.danger");
+    expect(debugStyles).toContain(".debug-status.warn");
+    // No vestigial in-app overlay, and the window owns its own sheet.
+    expect(debugWindow).not.toContain("debug-overlay");
+    expect(debugStyles).not.toContain(".debug-overlay");
+    expect(debugEntry).toContain('import "./debug.css"');
+    // Presets explain themselves and the trace names an empty result.
+    expect(debugWindow).toContain("preset.description");
+    expect(debugWindow).toContain("No events match these filters.");
+    expect(debugStyles).toContain(".trace-row.error");
+  });
+
   it("splits debug capabilities away from Stronghold", () => {
     const debug = readFileSync(resolve(root, "src-tauri/capabilities/debug.json"), "utf8");
     const mainCap = readFileSync(resolve(root, "src-tauri/capabilities/default.json"), "utf8");

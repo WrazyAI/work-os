@@ -1,19 +1,23 @@
-import { db, nonEmptyString, organizationOwnerId, type Json } from "@/lib/work-os-internal";
+import { localDateForTimezone } from "@/modules/work-os/companion";
+import { nonEmptyString } from "@/lib/work-os-internal";
 
-/** The org feature flag that gates Loom updates. */
+/** The org feature flag that gates Loom analysis. */
 export const LOOM_FEATURE_FLAG = "loom_updates";
-/** Loom transcript stored with the check-in. Bounded so one long recording
- * cannot bloat the row; the AI receives a smaller slice. */
+/** Transcript stored with a recording. Bounded so one long recording cannot
+ * bloat a request; the analysis receives a smaller slice. */
 export const LOOM_TRANSCRIPT_MAX_STORED = 50_000;
 export const LOOM_TRANSCRIPT_MAX_AI = 12_000;
 export const LOOM_METADATA_TIMEOUT_MS = 8_000;
 export const LOOM_METADATA_MAX_BYTES = 64_000;
+export const LOOM_PAGE_MAX_BYTES = 400_000;
 
 const VIDEO_ID = /^[0-9a-f]{32}$/i;
 const LOOM_HOSTS = new Set(["loom.com", "www.loom.com"]);
 const VTT_TIMESTAMP = /^\s*(?:\d{1,3}:)?\d{2}:\d{2}[.,]\d{3}\s*-->/;
 const VTT_HEADER = /^\s*(WEBVTT|NOTE|STYLE|REGION)\b.*$/i;
 const SRT_INDEX = /^\s*\d{1,6}\s*$/;
+const UPLOAD_DATE = /"uploadDate"\s*:\s*"([^"]+)"/;
+const CREATED_AT = /"createdAt"\s*:\s*"([^"]+)"/;
 
 export interface LoomReference {
   videoId: string;
@@ -25,14 +29,19 @@ export interface LoomMetadata {
   title: string | null;
   durationSeconds: number | null;
   thumbnailUrl: string | null;
+  /** Public recording time from the share page; null when Loom does not
+   * expose it (private or metadata-less recordings). */
+  createdAt: string | null;
 }
 
-export interface LoomAttachment extends LoomReference, LoomMetadata {
-  metadataSource: "oembed" | "unavailable";
-  transcript: string | null;
-  transcriptSource: "employee_paste" | null;
-  transcriptChars: number;
-  digest: string | null;
+export type LoomTemporalVerdict = "same_day" | "prior_day" | "future" | "unknown";
+
+export interface LoomTemporal {
+  verdict: LoomTemporalVerdict;
+  createdAt: string | null;
+  createdLocalDate: string | null;
+  targetDate: string;
+  timezone: string;
 }
 
 /** Accepts only https Loom share/embed URLs (or a bare 32-hex video id) and
@@ -58,8 +67,8 @@ export function parseLoomReference(value: string): LoomReference | null {
   return { videoId, url: `https://www.loom.com/share/${videoId}` };
 }
 
-/** Finds the first Loom link inside free text so a link pasted into the
- * ordinary update box still enriches. Only full URLs are detected here. */
+/** Finds the first Loom link inside free text so a link pasted into an
+ * ordinary update still reaches the analyze tool. Only full URLs count. */
 export function findLoomReference(text: string): LoomReference | null {
   const candidates = text.match(/https:\/\/[^\s<>"']+/gi) ?? [];
   for (const candidate of candidates) {
@@ -77,43 +86,104 @@ const metadataCache = new Map<string, { at: number; value: LoomMetadata | null }
 const METADATA_TTL_MS = 5 * 60_000;
 const METADATA_CACHE_MAX = 200;
 
-/** Public metadata only, through Loom's official oEmbed endpoint. Never
- * throws: an unreachable or private video degrades to `null` and the update
- * still records with `metadataSource: "unavailable"`. */
+function stringOrNull(value: unknown, max = 500): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
+}
+
+/** Public metadata only, through Loom's official oEmbed endpoint plus the
+ * public share page for the recording time. Never throws: an unreachable or
+ * private video degrades to null and the caller decides. */
 export async function fetchLoomMetadata(reference: LoomReference): Promise<LoomMetadata | null> {
   const cached = metadataCache.get(reference.videoId);
   if (cached && Date.now() - cached.at < METADATA_TTL_MS) return cached.value;
-  let value: LoomMetadata | null = null;
+  const [oembed, createdAt] = await Promise.all([
+    fetchLoomOembed(reference),
+    fetchLoomCreatedAt(reference),
+  ]);
+  const value = oembed || createdAt
+    ? {
+        title: oembed?.title ?? null,
+        durationSeconds: oembed?.durationSeconds ?? null,
+        thumbnailUrl: oembed?.thumbnailUrl ?? null,
+        createdAt,
+      }
+    : null;
+  if (metadataCache.size >= METADATA_CACHE_MAX) metadataCache.clear();
+  metadataCache.set(reference.videoId, { at: Date.now(), value });
+  return value;
+}
+
+/** Reads a response body with a hard byte cap so a hostile or oversized
+ * payload is never buffered. Returns null when the cap is exceeded. */
+async function readBounded(response: Response, limit: number): Promise<string | null> {
+  const declared = Number(response.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > limit) return null;
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+}
+
+async function fetchLoomOembed(reference: LoomReference): Promise<{ title: string | null; durationSeconds: number | null; thumbnailUrl: string | null } | null> {
   try {
     const response = await fetch(`https://www.loom.com/v1/oembed?url=${encodeURIComponent(reference.url)}&format=json`, {
       signal: AbortSignal.timeout(LOOM_METADATA_TIMEOUT_MS),
       redirect: "error",
       headers: { Accept: "application/json" },
     });
-    if (response.ok) {
-      const body = await response.text();
-      if (body.length <= LOOM_METADATA_MAX_BYTES) {
-        const payload = JSON.parse(body) as { title?: unknown; duration?: unknown; thumbnail_url?: unknown };
-        const title = typeof payload.title === "string" && payload.title.trim() ? payload.title.trim().slice(0, 200) : null;
-        const duration = Number(payload.duration);
-        const thumbnailUrl = typeof payload.thumbnail_url === "string" && /^https:\/\/[^\s]+$/i.test(payload.thumbnail_url)
-          ? payload.thumbnail_url.slice(0, 500)
-          : null;
-        if (title || Number.isFinite(duration) || thumbnailUrl) {
-          value = {
-            title,
-            durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
-            thumbnailUrl,
-          };
-        }
-      }
-    }
+    if (!response.ok) return null;
+    const body = await readBounded(response, LOOM_METADATA_MAX_BYTES);
+    if (!body) return null;
+    const payload = JSON.parse(body) as { title?: unknown; duration?: unknown; thumbnail_url?: unknown };
+    const duration = Number(payload.duration);
+    const thumbnail = stringOrNull(payload.thumbnail_url);
+    const parsed = {
+      title: stringOrNull(payload.title, 200),
+      durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
+      thumbnailUrl: thumbnail && /^https:\/\//i.test(thumbnail) ? thumbnail : null,
+    };
+    return parsed.title || parsed.durationSeconds || parsed.thumbnailUrl ? parsed : null;
   } catch {
-    value = null;
+    return null;
   }
-  if (metadataCache.size >= METADATA_CACHE_MAX) metadataCache.clear();
-  metadataCache.set(reference.videoId, { at: Date.now(), value });
-  return value;
+}
+
+/** The public share page carries the recording time as schema.org metadata
+ * (`uploadDate`, sometimes `createdAt`). Best-effort: null when the page is
+ * unreachable or the recording is not public. */
+async function fetchLoomCreatedAt(reference: LoomReference): Promise<string | null> {
+  try {
+    const response = await fetch(reference.url, {
+      signal: AbortSignal.timeout(LOOM_METADATA_TIMEOUT_MS),
+      redirect: "error",
+      headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36" },
+    });
+    if (!response.ok) return null;
+    const html = await readBounded(response, LOOM_PAGE_MAX_BYTES);
+    if (!html) return null;
+    const match = html.match(UPLOAD_DATE) ?? html.match(CREATED_AT);
+    if (!match) return null;
+    const parsed = new Date(match[1]);
+    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Strips WebVTT/SRT scaffolding from a pasted transcript and collapses it to
@@ -140,126 +210,62 @@ export function formatLoomDuration(seconds: number | null | undefined): string |
     : `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
-export interface LoomAttachmentInput {
+/** Compares the recording's local date with the day it is being used for.
+ * Prior-day (and future-dated) recordings are not usable as that day's
+ * update; an unknown date stays usable but must be labeled as unverified. */
+export function loomTemporal(createdAt: string | null, targetDate: string, timezone: string): LoomTemporal {
+  if (!createdAt) return { verdict: "unknown", createdAt: null, createdLocalDate: null, targetDate, timezone };
+  const at = new Date(createdAt);
+  if (!Number.isFinite(at.getTime())) return { verdict: "unknown", createdAt: null, createdLocalDate: null, targetDate, timezone };
+  let createdLocalDate: string;
+  try {
+    createdLocalDate = localDateForTimezone(at, timezone);
+  } catch {
+    createdLocalDate = at.toISOString().slice(0, 10);
+  }
+  const verdict: LoomTemporalVerdict = createdLocalDate === targetDate
+    ? "same_day"
+    : createdLocalDate < targetDate ? "prior_day" : "future";
+  return { verdict, createdAt: at.toISOString(), createdLocalDate, targetDate, timezone };
+}
+
+export interface LoomBundle {
+  reference: LoomReference;
+  metadata: LoomMetadata | null;
+  temporal: LoomTemporal;
+  transcript: { present: boolean; chars: number; source: "employee_paste" | null; text: string | null };
+}
+
+/** Collects everything the analyze tool needs from one pasted link: canonical
+ * reference, public metadata (including the recording time), the temporal
+ * verdict for the target day, and the normalized transcript. Returns null only
+ * when the link itself is not a Loom share link. */
+export async function collectLoomBundle(input: {
   url: string;
   transcript?: string | null;
-}
-
-/** Resolves the employee's paste into a stored attachment: canonical link,
- * official metadata, normalized transcript. Never throws on enrichment
- * failure — metadata simply reads as unavailable. */
-export async function resolveLoomAttachment(input: LoomAttachmentInput): Promise<{ attachment: LoomAttachment; reference: LoomReference } | null> {
+  targetDate: string;
+  timezone: string;
+}): Promise<LoomBundle | null> {
   const reference = parseLoomReference(input.url);
   if (!reference) return null;
-  const metadata = await fetchLoomMetadata(reference);
-  const transcript = normalizeLoomTranscript(String(input.transcript ?? ""));
+  const [metadata, transcript] = await Promise.all([
+    fetchLoomMetadata(reference),
+    Promise.resolve(normalizeLoomTranscript(String(input.transcript ?? ""))),
+  ]);
   return {
     reference,
-    attachment: {
-      ...reference,
-      title: metadata?.title ?? null,
-      durationSeconds: metadata?.durationSeconds ?? null,
-      thumbnailUrl: metadata?.thumbnailUrl ?? null,
-      metadataSource: metadata ? "oembed" : "unavailable",
-      transcript: transcript || null,
-      transcriptSource: transcript ? "employee_paste" : null,
-      transcriptChars: transcript.length,
-      digest: null,
+    metadata,
+    temporal: loomTemporal(metadata?.createdAt ?? null, input.targetDate, input.timezone),
+    transcript: {
+      present: !!transcript,
+      chars: transcript.length,
+      source: transcript ? "employee_paste" : null,
+      text: transcript || null,
     },
   };
 }
 
-/** The bounded text handed to the check-in AI, so proposals and the EOD draft
- * can use the recording without storing the transcript in the update body. */
-export function loomAiContext(attachment: LoomAttachment): string {
-  const facts = [
-    `Loom recording: ${attachment.title ?? "Untitled"}`,
-    formatLoomDuration(attachment.durationSeconds) ? `Duration: ${formatLoomDuration(attachment.durationSeconds)}` : null,
-    attachment.url,
-  ].filter(Boolean).join("\n");
-  const transcript = attachment.transcript?.slice(0, LOOM_TRANSCRIPT_MAX_AI);
-  return transcript ? `${facts}\nTranscript (pasted by the employee):\n${transcript}` : facts;
-}
-
-export function loomEvidenceTitle(attachment: LoomAttachment) {
-  return `Loom update: ${attachment.title ?? "Untitled recording"}`;
-}
-
-/** Records the Loom artifact once per video: an evidence event plus its
- * mirrored evidence row, attributed to the posting employee. */
-export async function recordLoomEvidence(input: {
-  organizationId: string;
-  personId: string;
-  attachment: LoomAttachment;
-  checkInId: string;
-  occurredAt: string;
-}) {
-  const ownerId = await organizationOwnerId(input.organizationId);
-  const now = new Date().toISOString();
-  const summary = input.attachment.digest
-    ?? input.attachment.transcript?.slice(0, 400)
-    ?? "A Loom recording was attached to this day's update.";
-  const metadata: Json = {
-    videoId: input.attachment.videoId,
-    durationSeconds: input.attachment.durationSeconds,
-    thumbnailUrl: input.attachment.thumbnailUrl,
-    transcriptChars: input.attachment.transcriptChars,
-    transcriptSource: input.attachment.transcriptSource,
-    metadataSource: input.attachment.metadataSource,
-    checkInId: input.checkInId,
-  };
-  const { data: event, error: eventError } = await db()
-    .from("work_evidence_events")
-    .upsert({
-      organization_id: input.organizationId,
-      provider: "loom",
-      external_event_id: input.attachment.videoId,
-      event_type: "loom.update",
-      evidence_class: "output_evidence",
-      person_id: input.personId,
-      task_id: null,
-      attribution_method: "employee_paste",
-      attribution_confidence: 1,
-      title: loomEvidenceTitle(input.attachment),
-      summary,
-      artifact_url: input.attachment.url,
-      occurred_at: input.occurredAt,
-      metadata,
-      raw: { loomUrl: input.attachment.url, checkInId: input.checkInId },
-      updated_at: now,
-    }, { onConflict: "organization_id,provider,external_event_id" })
-    .select("*")
-    .single();
-  if (eventError) throw new Error(`record Loom evidence: ${eventError.message}`);
-  // work_evidence carries only a partial unique index on evidence_event_id, so
-  // ON CONFLICT cannot be used here — select then insert/update.
-  const existing = await db().from("work_evidence").select("id")
-    .eq("organization_id", input.organizationId).eq("evidence_event_id", event.id).maybeSingle();
-  if (existing.error) throw new Error(`load Loom evidence mirror: ${existing.error.message}`);
-  const mirror = {
-    user_id: ownerId,
-    organization_id: input.organizationId,
-    person_id: input.personId,
-    evidence_event_id: event.id,
-    evidence_date: input.occurredAt.slice(0, 10),
-    source: "loom",
-    title: loomEvidenceTitle(input.attachment),
-    summary,
-    url: input.attachment.url,
-    metrics: {
-      evidenceClass: "output_evidence",
-      attributionMethod: "employee_paste",
-      attributionConfidence: 1,
-      durationSeconds: input.attachment.durationSeconds,
-      thumbnailUrl: input.attachment.thumbnailUrl,
-      transcriptSource: input.attachment.transcriptSource,
-    },
-    raw: { evidenceEventId: event.id, checkInId: input.checkInId },
-    updated_at: now,
-  };
-  const { error: mirrorError } = existing.data
-    ? await db().from("work_evidence").update(mirror).eq("id", existing.data.id)
-    : await db().from("work_evidence").insert(mirror);
-  if (mirrorError) throw new Error(`mirror Loom evidence: ${mirrorError.message}`);
-  return event;
+/** True when the recording may be used for the target day at all. */
+export function loomUsableForDay(temporal: LoomTemporal) {
+  return temporal.verdict === "same_day" || temporal.verdict === "unknown";
 }

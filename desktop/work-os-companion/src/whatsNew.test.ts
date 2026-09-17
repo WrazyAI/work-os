@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changelogBulletsFor, parseChangelog, shouldAnnounceUpdate, updateInstalledCopy } from "./whatsNew";
+import { changelogBulletsFor, changelogHistory, parseChangelog, shouldAnnounceUpdate, updateInstalledCopy } from "./whatsNew";
 
 const SAMPLE = `# Changelog
 
@@ -36,6 +36,43 @@ describe("post-install announcement", () => {
       "View changelog opens this modal.",
     ]);
     expect(entries[1]?.bullets).toEqual(["Star bullets count too."]);
+  });
+
+  it("parses a changelog checked out with Windows line endings", () => {
+    const crlf = SAMPLE.replace(/\n/g, "\r\n");
+    expect(changelogBulletsFor(crlf, "0.3.9")).toEqual([
+      "First launch announces itself.",
+      "View changelog opens this modal.",
+    ]);
+    expect(parseChangelog(crlf).map((entry) => entry.version)).toEqual(["0.3.9", "0.3.8"]);
+  });
+
+  it("lists every logged release newest first and flags the installed one", () => {
+    const shuffled = [
+      "## 0.3.9",
+      "",
+      "- Middle release.",
+      "",
+      "## 0.4.0",
+      "",
+      "- Newest release.",
+      "",
+      "## 0.3.8",
+      "",
+      "- Oldest release.",
+    ].join("\n");
+    const history = changelogHistory(shuffled, "0.3.9");
+    expect(history.map((entry) => entry.version)).toEqual(["0.4.0", "0.3.9", "0.3.8"]);
+    expect(history.map((entry) => entry.installed)).toEqual([false, true, false]);
+    expect(history.find((entry) => entry.version === "0.3.9")?.bullets).toEqual(["Middle release."]);
+    expect(changelogHistory("", "0.3.9")).toEqual([]);
+  });
+
+  it("keeps the newest section when a version repeats and reads CRLF files", () => {
+    const repeated = "## 0.3.9\n\n- First copy.\n\n## 0.3.9\n\n- Second copy.\n";
+    expect(changelogHistory(repeated, "0.3.9")[0]?.bullets).toEqual(["First copy."]);
+    const crlf = SAMPLE.replace(/\n/g, "\r\n");
+    expect(changelogHistory(crlf, "0.3.9").map((entry) => entry.version)).toEqual(["0.3.9", "0.3.8"]);
   });
 
   it("returns bullets per version and [] when the build shipped without notes", () => {

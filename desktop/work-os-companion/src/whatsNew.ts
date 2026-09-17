@@ -47,7 +47,9 @@ export type ChangelogEntry = { version: string; bullets: string[] };
 export function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let current: ChangelogEntry | null = null;
-  for (const line of markdown.split("\n")) {
+  // Windows checkouts deliver CRLF; `.` never matches \r, so an unnormalized
+  // split silently dropped every bullet while the headings still matched.
+  for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
     const heading = line.match(/^##\s+(\d+\.\d+\.\d+)\s*$/);
     if (heading) {
       current = { version: heading[1]!, bullets: [] };
@@ -62,6 +64,39 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
     if (bullet && current) current.bullets.push(bullet[1]!.trim());
   }
   return entries;
+}
+
+/** Numeric SemVer comparison; invalid segments sort below valid ones. */
+export function compareVersions(left: string, right: string): number {
+  const parse = (value: string) => value.split(".").map((part) => {
+    const parsed = Number.parseInt(part, 10);
+    return Number.isFinite(parsed) ? parsed : -1;
+  });
+  const a = parse(left);
+  const b = parse(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+export type ChangelogHistoryEntry = ChangelogEntry & { installed: boolean };
+
+/** Every logged release, newest first, with the running version flagged so the
+ * modal can mark where the employee is in the timeline. Duplicate headings keep
+ * their first (newest) section. */
+export function changelogHistory(markdown: string, currentVersion?: string | null): ChangelogHistoryEntry[] {
+  const canonical = (currentVersion ?? "").trim();
+  const seen = new Set<string>();
+  return parseChangelog(markdown)
+    .filter((entry) => {
+      if (seen.has(entry.version)) return false;
+      seen.add(entry.version);
+      return true;
+    })
+    .map((entry) => ({ ...entry, installed: entry.version === canonical }))
+    .sort((left, right) => compareVersions(right.version, left.version));
 }
 
 /** Bullets for one canonical version, or [] when the build shipped without

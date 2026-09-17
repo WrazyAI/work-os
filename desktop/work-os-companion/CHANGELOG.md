@@ -21,6 +21,29 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
+## 0.3.18
+
+- The What changed window can now show every earlier release, newest first, through a Check older updates action.
+- The scenario debugger is tidier and says at a glance when a scenario is on, running offline, or writing to the real server.
+
+## 0.3.17
+
+- Settings are back to two columns with thin dividers, so the page reads as one calm surface instead of a stack of white boxes.
+- On the Desktop updates row, Check and What's new now sit together.
+- The What changed window shows the release notes again for recent updates.
+
+## 0.3.16
+
+- Settings are calmer to read: rows sit on the page with thin dividers instead of each one being its own white box.
+- What Otto remembers is a flat section too, so the whole page reads as one surface with only the facts awaiting your decision in cards.
+
+## 0.3.15
+
+- Paste a Loom link in an update and Otto can read the recording to suggest tasks — the recording never stands in for the update itself.
+- Recordings are checked against the day they were recorded, so an older Loom can't be used as today's work.
+- In the EOD composer, a Loom recording can shape the draft on its own without a second report.
+- The transcript box on Loom cards stays tucked away until you want it.
+
 ## 0.3.14
 
 - What Otto remembers is now three clear lists: what is waiting for your review, the facts you kept, and the recent activity behind them.
