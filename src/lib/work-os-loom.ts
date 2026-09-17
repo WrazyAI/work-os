@@ -231,7 +231,12 @@ export async function recordLoomEvidence(input: {
     .select("*")
     .single();
   if (eventError) throw new Error(`record Loom evidence: ${eventError.message}`);
-  const { error: mirrorError } = await db().from("work_evidence").upsert({
+  // work_evidence carries only a partial unique index on evidence_event_id, so
+  // ON CONFLICT cannot be used here — select then insert/update.
+  const existing = await db().from("work_evidence").select("id")
+    .eq("organization_id", input.organizationId).eq("evidence_event_id", event.id).maybeSingle();
+  if (existing.error) throw new Error(`load Loom evidence mirror: ${existing.error.message}`);
+  const mirror = {
     user_id: ownerId,
     organization_id: input.organizationId,
     person_id: input.personId,
@@ -251,7 +256,10 @@ export async function recordLoomEvidence(input: {
     },
     raw: { evidenceEventId: event.id, checkInId: input.checkInId },
     updated_at: now,
-  }, { onConflict: "evidence_event_id" });
+  };
+  const { error: mirrorError } = existing.data
+    ? await db().from("work_evidence").update(mirror).eq("id", existing.data.id)
+    : await db().from("work_evidence").insert(mirror);
   if (mirrorError) throw new Error(`mirror Loom evidence: ${mirrorError.message}`);
   return event;
 }
