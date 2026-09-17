@@ -3,9 +3,10 @@ import { Minus, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
-import { ApprovalFlow } from "./ApprovalFlow";
+import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
 import { Otto } from "./Otto";
+import type { ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
 
 /** DEV-only visual review surface for the shared chat language
@@ -33,6 +34,13 @@ export default function ChatPreview() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
         <InAppToolsSection />
+      </div>
+    );
+  }
+  if (isolate === "recovery") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <CreateRecoverySection />
       </div>
     );
   }
@@ -125,6 +133,37 @@ function InAppSection() {
 }
 
 const noop = () => undefined;
+
+/** Dev-only fixture for the uncertain-create recovery: the server flags an
+ * unresolved Nifty create and the result offers the clear-and-retry action. */
+function CreateRecoverySection() {
+  const [requested, setRequested] = useState<string | null>(null);
+  const results: ToolCallResult[] = [
+    {
+      op: { op: "create_task", statement: "Add “Prepare companion handoff” to today.", taskTitle: "Prepare companion handoff", proposalId: "preview-create-unresolved", enabled: false },
+      status: "failed",
+      message: "A previous attempt may have created this task in Nifty but it is not listed yet. Retry to adopt it if it exists, or confirm nothing was created to clear the recorded attempt and file it once.",
+      retryable: true,
+      createResolution: "no_task_created",
+    },
+    {
+      op: { op: "complete_task", statement: "Mark done: Repair provider sync", taskTitle: "Repair provider sync", proposalId: "preview-complete-retry", enabled: false },
+      status: "failed",
+      message: "Not filed. The server still shows this proposal as pending, so it is safe to retry.",
+      retryable: true,
+    },
+  ];
+  return (
+    <section aria-label="Uncertain create recovery preview" style={{ display: "grid", gap: 12 }}>
+      <h2 style={{ margin: 0, fontSize: 14 }}>Uncertain Nifty create</h2>
+      <ApprovalResults
+        results={results}
+        onRetry={(result) => setRequested(`${result.createResolution ? "Clear-and-retry" : "Retry"} requested for ${result.op.taskTitle ?? "update"}.`)}
+      />
+      {requested ? <p role="status" style={{ margin: 0, fontSize: 13 }}>{requested}</p> : null}
+    </section>
+  );
+}
 
 function InAppToolsSection() {
   const operations = [
