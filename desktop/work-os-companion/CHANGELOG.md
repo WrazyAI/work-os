@@ -17,15 +17,15 @@ the UI pads the patch segment for display. **Updating this file is a hard
 release requirement: the release workflow fails when the released version
 has no matching section with at least one bullet**, and the GitHub release
 notes are built from that section. While work is in flight, collect entries
-under `## 0.3.11
+under `## Unreleased`; when cutting a release, move them under the new
+`## <version>` heading. Omit refactors, chores, and internal tooling unless
+they change what the employee sees or does.
+
+## 0.3.11
 
 - The Tasks page shows its title once, and the day's focus, view chips, and unfinished-work link sit together on one tidy row.
 - Task rows keep their "On today" tag beside the title, and the checkbox lines up with the title where you expect it.
 - The task list reads as one clean panel, and narrow windows keep every row a single line tall.
-
-## Unreleased`; when cutting a release, move them under the new
-`## <version>` heading. Omit refactors, chores, and internal tooling unless
-they change what the employee sees or does.
 
 ## Unreleased
 
