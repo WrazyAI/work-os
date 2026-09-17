@@ -1989,6 +1989,38 @@ each criterion → subtask title (trimmed to the 240-character title limit).
   claims a provider confirmation. Planner tasks are due the plan's day and are
   assigned to the confirming employee.
 
+### 29.1e Loom updates
+
+Employees often record their SOD or EOD in Loom before opening Work OS. A Loom
+link is therefore a first-class update source, not an attachment to a second
+report, and it is opt-in per organization behind the `loom_updates` flag.
+
+The composer (web update panel, desktop Update composer, and the EOD composer)
+offers a `Loom` control that reveals a local panel: a link field, a `Read Loom`
+action, and an optional transcript paste. `Read Loom` resolves the link through
+Loom's official oEmbed endpoint and shows only the public title and duration it
+returns; a private or unavailable recording reads as `metadata unavailable` and
+never blocks the update. The panel states plainly that the link and transcript
+become the update and an output artifact and that no video is stored.
+
+The link must be an `https` Loom share or embed URL (or a bare 32-hex video id);
+anything else is rejected before any server-side fetch, and the fetch is
+allow-listed to Loom hosts with no redirects, a short timeout, and a bounded
+response. Transcripts are stored with the check-in in `structured_claims.loom`,
+bounded and labeled with their source (`employee_paste`); the full transcript is
+never shown inline in history — the update stream shows a compact Loom chip with
+the recording's title and length instead.
+
+A Loom update is a substantive update: it feeds proposal synthesis (tasks,
+subtasks, progress) and the AI EOD draft, where the recording appears as a
+`Recorded Loom updates` fact with the explicit note that recordings are
+employee-authored artifacts and do not by themselves prove task completion. It
+also records a `loom` output-evidence event (title, link, duration, thumbnail)
+idempotent per video id, which satisfies the task-completion artifact gate the
+same way a linked pull request does. Attaching a Loom in the EOD composer files
+the update and rebuilds the draft from it, so an employee who already recorded
+their EOD never writes a second one.
+
 ### 29.2 Insights
 
 Insights follows summary → comparison → exact record:

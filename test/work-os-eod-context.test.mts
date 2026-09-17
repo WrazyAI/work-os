@@ -17,6 +17,9 @@ const grounding: EodGrounding = {
     { at: "2026-09-15T11:40:00Z", text: "A browser window shows the settlement dashboard.", app: "Google Chrome" },
     { at: "2026-09-15T14:10:00Z", text: "A terminal window shows test output.", app: "Windows Terminal Host" },
   ],
+  media: [
+    { at: "2026-09-15T16:30:00Z", title: "Settlement walkthrough", url: "https://www.loom.com/share/912e89a68ccc42c5ab5096fec7cd63d6", durationSeconds: 326, digest: "Walked through the settlement reconciliation and the two pending approvals.", transcriptChars: 4820 },
+  ],
 };
 
 test("the draft prompt offers screenshot observations as selectable facts", () => {
@@ -33,12 +36,48 @@ test("observed facts are validated and only own ids survive", () => {
     carriedFactIds: [],
     blockerFactIds: [],
     observedFactIds: ["observed:1", "observed:99"],
+    mediaFactIds: [],
   }, grounding);
   assert.ok(selection);
   assert.deepEqual(selection.observedFactIds, ["observed:1"]);
   assert.equal(parseEodSelection({
-    summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: [],
+    summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: [], mediaFactIds: [],
   }, grounding), null);
+});
+
+test("Loom media facts are offered, validated, and rendered with their limitation", () => {
+  const prompt = buildEodPrompt(grounding);
+  assert.match(prompt, /Recorded Loom updates/);
+  assert.match(prompt, /media:0: Settlement walkthrough \(5:26\) — Walked through the settlement reconciliation and the two pending approvals\./);
+  assert.match(prompt, /mediaFactIds/);
+
+  const selection = parseEodSelection({
+    summaryFactIds: [],
+    completedFactIds: [],
+    carriedFactIds: [],
+    blockerFactIds: [],
+    observedFactIds: [],
+    mediaFactIds: ["media:0", "media:9"],
+  }, grounding);
+  assert.ok(selection);
+  assert.deepEqual(selection.mediaFactIds, ["media:0"]);
+
+  const markdown = renderEodSelection({
+    summaryFactIds: ["update:0"],
+    completedFactIds: ["completed:0"],
+    carriedFactIds: [],
+    blockerFactIds: [],
+    observedFactIds: [],
+    mediaFactIds: ["media:0"],
+  }, grounding);
+  assert.match(markdown, /## Recorded Loom updates/);
+  assert.match(markdown, /Settlement walkthrough \(5:26\).*https:\/\/www\.loom\.com\/share\/912e89a68ccc42c5ab5096fec7cd63d6/);
+  assert.match(markdown, /do not by themselves prove task completion/);
+
+  const withoutMedia = renderEodSelection({
+    summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: [], observedFactIds: [], mediaFactIds: [],
+  }, { ...grounding, media: [] });
+  assert.doesNotMatch(withoutMedia, /## Recorded Loom updates/);
 });
 
 test("selected observations render with the neutral limitation note", () => {
@@ -48,6 +87,7 @@ test("selected observations render with the neutral limitation note", () => {
     carriedFactIds: [],
     blockerFactIds: [],
     observedFactIds: ["observed:0"],
+    mediaFactIds: [],
   }, grounding);
   assert.match(markdown, /## Observed activity context/);
   assert.match(markdown, /A browser window shows the settlement dashboard\./);
@@ -57,7 +97,7 @@ test("selected observations render with the neutral limitation note", () => {
 
 test("no observations means no observed section", () => {
   const markdown = renderEodSelection({
-    summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: [], observedFactIds: [],
+    summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: [], observedFactIds: [], mediaFactIds: [],
   }, { ...grounding, observed: [] });
   assert.doesNotMatch(markdown, /## Observed activity context/);
 });

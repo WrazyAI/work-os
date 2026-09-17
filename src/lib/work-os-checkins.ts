@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { listPersonTasks } from "@/lib/work-os";
 import { localDateForTimezone, resolveShiftWindow } from "@/modules/work-os/companion";
 import {
@@ -14,9 +14,18 @@ import {
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { recordWorkMemory, buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import {
+  findLoomReference,
+  loomAiContext,
+  loomEvidenceTitle,
+  loomMetadataEnabled,
+  recordLoomEvidence,
+  resolveLoomAttachment,
+  type LoomAttachment,
+} from "@/lib/work-os-loom";
 
 const CHECK_IN_MODEL = process.env.WORK_OS_AI_MODEL || "gpt-5.4-mini";
-const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v1";
+const CHECK_IN_PROMPT_VERSION = "work-os-check-in-v2";
 
 interface ParsedProposal {
   operation: ProposalOperation;
@@ -39,7 +48,7 @@ export function checkInCommitmentContext(rows: Json[]): CheckInCommitmentContext
   });
 }
 
-async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[], context?: { todayBlock?: string; memoryBlock?: string }): Promise<{ model: string; proposals: ParsedProposal[] }> {
+async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCommitmentContext[], context?: { todayBlock?: string; memoryBlock?: string; mediaContext?: string }): Promise<{ model: string; proposals: ParsedProposal[]; mediaSummary: string | null }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is required to turn a check-in into task proposals");
   const taskContext = tasks.map((task) => ({
@@ -73,8 +82,12 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
               additionalProperties: false,
             },
           },
+          mediaSummary: {
+            type: ["string", "null"],
+            description: "One or two plain sentences describing what the employee said in the attached Loom recording, in their own terms. Null when no recording was attached. Never add facts the recording does not state.",
+          },
         },
-        required: ["proposals"],
+        required: ["proposals", "mediaSummary"],
         additionalProperties: false,
       },
     },
@@ -95,9 +108,10 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
             "Recalled memory is dated history for continuity only. Never treat it as evidence of current state, progress, or completion.",
             "Use complete_task only for explicit completion language. Activity alone never proves completion.",
             "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
+            "An attached Loom recording is the employee's own spoken update. Treat its transcript as employee-stated input, summarize it only in mediaSummary, and never invent details it does not contain.",
           ].join("\n"),
         },
-        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments, ...(context?.todayBlock ? { todayContext: context.todayBlock } : {}), ...(context?.memoryBlock ? { memoryContext: context.memoryBlock } : {}) }) },
+        { role: "user", content: JSON.stringify({ employeeInput: input, currentTasks: taskContext, dailyCommitments: commitments, ...(context?.todayBlock ? { todayContext: context.todayBlock } : {}), ...(context?.memoryBlock ? { memoryContext: context.memoryBlock } : {}), ...(context?.mediaContext ? { attachedMedia: context.mediaContext } : {}) }) },
       ],
       tools: [tool],
       tool_choice: { type: "function", function: { name: "proposeWorkChanges" } },
@@ -117,7 +131,7 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
     [String(task.id), task],
     [String(task.provider_task_id), task],
   ]));
-  const explicitCompletion = /\b(done|completed|finished|shipped|resolved|fixed|delivered)\b/i.test(input);
+  const explicitCompletion = /\b(done|completed|finished|shipped|resolved|fixed|delivered)\b/i.test(`${input}\n${context?.mediaContext ?? ""}`);
   const proposals: ParsedProposal[] = [];
   const seen = new Set<string>();
   for (const candidate of Array.isArray(args.proposals) ? args.proposals as Json[] : []) {
@@ -136,7 +150,10 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
     seen.add(signature);
     proposals.push({ operation, task_id: localTaskId, change });
   }
-  return { model: CHECK_IN_MODEL, proposals };
+  const mediaSummary = typeof args.mediaSummary === "string" && args.mediaSummary.trim()
+    ? args.mediaSummary.trim().slice(0, 600)
+    : null;
+  return { model: CHECK_IN_MODEL, proposals, mediaSummary };
 }
 
 export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
@@ -144,6 +161,11 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   const input = text(body.input_text) ?? "";
   const confirmedExisting = body.confirmed_existing_tasks === true;
   const now = new Date();
+  const loomEnabled = loomMetadataEnabled(access.featureFlags);
+  const requestedLoom = body.loom && typeof body.loom === "object" ? body.loom as Json : null;
+  if (requestedLoom && !loomEnabled) throw new Error("Loom updates are disabled for this organization");
+  if (requestedLoom && !text(requestedLoom.url)) throw new Error("loom.url is required");
+  const autoLoom = !requestedLoom && loomEnabled && input ? findLoomReference(input) : null;
   const requestedSnooze = text(body.snoozed_until);
   let snoozedUntil: string | null = null;
   if (requestedSnooze) {
@@ -152,7 +174,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     if (parsed.getTime() > now.getTime() + 60 * 60_000) throw new Error("check-ins can be snoozed for at most 60 minutes");
     snoozedUntil = parsed.toISOString();
   }
-  if (!input && !confirmedExisting && !snoozedUntil) throw new Error("input_text, confirmed_existing_tasks, or snoozed_until is required");
+  if (!input && !confirmedExisting && !snoozedUntil && !requestedLoom && !autoLoom) throw new Error("input_text, confirmed_existing_tasks, or snoozed_until is required");
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, now);
   const shift = resolveShiftWindow(rules, exceptions, now);
   const shiftDate = shift?.shiftDate ?? localDateForTimezone(now, timezone);
@@ -174,7 +196,8 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     if (existingError) throw new Error(`load idempotent Work OS check-in: ${existingError.message}`);
     if (existing) {
       const { data: existingProposals } = await db().from("work_task_proposals").select("*").eq("check_in_id", existing.id);
-      return { checkIn: existing, proposals: existingProposals ?? [] };
+      const existingClaims = (existing.structured_claims ?? {}) as Json;
+      return { checkIn: existing, proposals: existingProposals ?? [], loom: existingClaims.loom ?? null };
     }
   }
   const tasks = await listPersonTasks(ownerId, personId, { todayOnly: true }) as Json[];
@@ -183,28 +206,54 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     .eq("organization_id", access.organizationId).eq("person_id", personId).eq("shift_date", shiftDate).maybeSingle();
   if (planItems.error) throw new Error(`load check-in planning context: ${planItems.error.message}`);
   const commitments = checkInCommitmentContext(Array.isArray(planItems.data?.items) ? planItems.data.items as Json[] : []);
+  const loomSource = requestedLoom
+    ? { url: text(requestedLoom.url) as string, transcript: text(requestedLoom.transcript) }
+    : autoLoom ? { url: autoLoom.url, transcript: null } : null;
+  const loom = loomSource ? await resolveLoomAttachment(loomSource) : null;
+  if (loomSource && !loom) throw new Error("loom.url must be a Loom share link");
   const context = memoryEnabled(access.featureFlags)
     ? {
         todayBlock: await buildTodaySnapshot({ organizationId: access.organizationId, personId, localDate: shiftDate }),
         memoryBlock: await buildMemoryPromptBlock({ organizationId: access.organizationId, personId }, input || "recent progress and blockers", { limit: 8 }),
       }
     : undefined;
-  const parsed = input ? await parseCheckIn(input, tasks, commitments, context) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
+  const parsed = input || loom
+    ? await parseCheckIn(input, tasks, commitments, { ...context, mediaContext: loom ? loomAiContext(loom.attachment) : undefined })
+    : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[], mediaSummary: null };
+  const loomAttachment: LoomAttachment | null = loom
+    ? { ...loom.attachment, digest: parsed.mediaSummary ?? loom.attachment.transcript?.slice(0, 600) ?? null }
+    : null;
+  const checkInId = randomUUID();
+  const claims: Json = body.structured_claims && typeof body.structured_claims === "object" ? { ...body.structured_claims as Json } : {};
+  if (loomAttachment) claims.loom = loomAttachment as unknown as Json;
+  if (loom && loomAttachment) {
+    await recordLoomEvidence({
+      organizationId: access.organizationId,
+      personId,
+      attachment: loomAttachment,
+      checkInId,
+      occurredAt: now.toISOString(),
+    });
+  }
   const { data: checkIn, error: checkInError } = await db().from("work_check_ins").insert({
+    id: checkInId,
     organization_id: access.organizationId,
     person_id: personId,
     shift_date: shiftDate,
     kind,
     source,
     input_text: input,
-    substantive: confirmedExisting,
+    substantive: confirmedExisting || !!loomAttachment,
     confirmed_existing_tasks: confirmedExisting,
     snoozed_until: snoozedUntil,
     client_request_id: clientRequestId,
     session_id: activeSession?.id ?? null,
-    update_kind: updateKind,
-    structured_claims: body.structured_claims && typeof body.structured_claims === "object" ? body.structured_claims : {},
-    inference_metadata: { commitmentContextCount: commitments.length },
+    update_kind: updateKind ?? (loomAttachment ? "material_progress" : null),
+    structured_claims: claims,
+    inference_metadata: {
+      commitmentContextCount: commitments.length,
+      ...(loomAttachment ? { loomVideoId: loomAttachment.videoId, loomTranscriptChars: loomAttachment.transcriptChars, loomMetadataSource: loomAttachment.metadataSource } : {}),
+    },
     created_by: access.ctx.user.id,
   }).select("*").single();
   if (checkInError) throw new Error(`create Work OS check-in: ${checkInError.message}`);
@@ -229,22 +278,26 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
     if (error) throw new Error(`create Work OS proposals: ${error.message}`);
     proposals = data ?? [];
   }
-  await audit(access, "check_in.created", "check_in", checkIn.id as string, { kind, proposalCount: proposals.length });
+  await audit(access, "check_in.created", "check_in", checkIn.id as string, {
+    kind,
+    proposalCount: proposals.length,
+    ...(loomAttachment ? { loomVideoId: loomAttachment.videoId, loomTranscriptChars: loomAttachment.transcriptChars } : {}),
+  });
   await recordWorkMemory(
     { organizationId: access.organizationId, personId },
     {
       kind: "check_in",
       sourceTable: "work_check_ins",
       sourceId: String(checkIn.id),
-      content: input || (confirmedExisting ? "Confirmed existing Nifty tasks as the current plan." : "Check-in recorded without text."),
-      summary: input ? input.slice(0, 160) : null,
-      metadata: { checkInKind: kind, updateKind, proposalCount: proposals.length },
+      content: input || (loomAttachment ? `${loomEvidenceTitle(loomAttachment)}${loomAttachment.digest ? `: ${loomAttachment.digest}` : ""}` : confirmedExisting ? "Confirmed existing Nifty tasks as the current plan." : "Check-in recorded without text."),
+      summary: input ? input.slice(0, 160) : loomAttachment?.digest?.slice(0, 160) ?? null,
+      metadata: { checkInKind: kind, updateKind, proposalCount: proposals.length, ...(loomAttachment ? { loomVideoId: loomAttachment.videoId } : {}) },
       localDate: shiftDate,
       occurredAt: checkIn.created_at ? String(checkIn.created_at) : now.toISOString(),
     },
   );
-  if (activeSession?.id && (input || confirmedExisting)) {
+  if (activeSession?.id && (input || confirmedExisting || loomAttachment)) {
     await db().from("work_sessions").update({ state: "active", last_substantive_update_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", activeSession.id);
   }
-  return { checkIn, proposals };
+  return { checkIn, proposals, loom: loomAttachment };
 }

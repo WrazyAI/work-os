@@ -18,6 +18,9 @@ export interface EodGrounding {
   commitments?: Array<{ title: string; status: "selected" | "deferred" | "completed" }>;
   /** Neutral, sampled activity observations (Worktivity screenshot summaries). */
   observed?: Array<{ at: string; text: string; app: string | null }>;
+  /** Employee-attached Loom recordings for the day. The transcript stays in
+   * the check-in claims; the digest is what the report may cite. */
+  media?: Array<{ at: string; title: string; url: string; durationSeconds: number | null; digest: string | null; transcriptChars: number }>;
   contextBlock?: string;
 }
 
@@ -29,6 +32,7 @@ export interface EodSelection {
   carriedFactIds: string[];
   blockerFactIds: string[];
   observedFactIds: string[];
+  mediaFactIds: string[];
 }
 
 const EOD_SELECTION_SCHEMA = {
@@ -37,13 +41,14 @@ const EOD_SELECTION_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["summaryFactIds", "completedFactIds", "carriedFactIds", "blockerFactIds", "observedFactIds"],
+    required: ["summaryFactIds", "completedFactIds", "carriedFactIds", "blockerFactIds", "observedFactIds", "mediaFactIds"],
     properties: {
       summaryFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
       completedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
       carriedFactIds: { type: "array", items: { type: "string" }, maxItems: 100 },
       blockerFactIds: { type: "array", items: { type: "string" }, maxItems: 20 },
       observedFactIds: { type: "array", items: { type: "string" }, maxItems: 24 },
+      mediaFactIds: { type: "array", items: { type: "string" }, maxItems: 12 },
     },
   },
 } as const;
@@ -58,7 +63,19 @@ function eodFacts(grounding: EodGrounding) {
       id: `observed:${index}`,
       text: `${observation.text}${observation.app ? ` (observed in ${observation.app})` : ""} at ${observation.at}`,
     })),
+    media: (grounding.media ?? []).map((item, index) => ({
+      id: `media:${index}`,
+      text: `${item.title}${formatLoomLength(item.durationSeconds)}${item.digest ? ` — ${item.digest}` : ""} (${item.url})`,
+    })),
   };
+}
+
+function formatLoomLength(seconds: number | null): string {
+  if (!Number.isFinite(seconds) || (seconds as number) <= 0) return "";
+  const total = Math.round(seconds as number);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return ` (${minutes}:${String(rest).padStart(2, "0")})`;
 }
 
 /** Renders persisted plan state only; it is intentionally separate from task evidence. */
@@ -85,8 +102,9 @@ export function parseEodSelection(raw: unknown, grounding: EodGrounding): EodSel
   const carriedFactIds = selectedFactIds(value.carriedFactIds, "carried:", new Set(facts.carried.map((fact) => fact.id)));
   const blockerFactIds = selectedFactIds(value.blockerFactIds, "blocker:", new Set(facts.blocker.map((fact) => fact.id)));
   const observedFactIds = selectedFactIds(value.observedFactIds, "observed:", new Set(facts.observed.map((fact) => fact.id)));
-  return summaryFactIds && completedFactIds && carriedFactIds && blockerFactIds && observedFactIds
-    ? { summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds }
+  const mediaFactIds = selectedFactIds(value.mediaFactIds, "media:", new Set(facts.media.map((fact) => fact.id)));
+  return summaryFactIds && completedFactIds && carriedFactIds && blockerFactIds && observedFactIds && mediaFactIds
+    ? { summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds, mediaFactIds }
     : null;
 }
 
@@ -101,10 +119,14 @@ export function renderEodSelection(selection: EodSelection, grounding: EodGround
   const carried = selected(selection.carriedFactIds, facts.carried);
   const blockers = selected(selection.blockerFactIds, facts.blocker);
   const observed = selected(selection.observedFactIds, facts.observed);
+  const media = selected(selection.mediaFactIds, facts.media);
   return [
     "## Summary", ...(summary.length ? summary.map((text) => `- ${text}`) : ["- No recorded progress update."]),
     "", "## Completed", ...(completed.length ? completed.map((text) => `- ${text}`) : ["- Nothing completed yet"]),
     "", "## Carried forward", ...(carried.length ? carried.map((text) => `- ${text}`) : ["- Nothing pending"]),
+    ...(media.length
+      ? ["", "## Recorded Loom updates", ...media.map((text) => `- ${text}`), "Recordings are employee-authored artifacts; they do not by themselves prove task completion."]
+      : []),
     ...(observed.length
       ? ["", "## Observed activity context", ...observed.map((text) => `- ${text}`), "Activity context is descriptive and does not prove attendance, productivity, or task completion."]
       : []),
@@ -135,11 +157,14 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Bottleneck facts (recorded blockers):",
     fmt(facts.blocker, "none"),
     "",
+    "Recorded Loom updates (the employee's own recordings; artifacts, never proof of task completion):",
+    fmt(facts.media, "none"),
+    "",
     "Observed activity context (neutral screenshot summaries; never proof of productivity, effort, or task completion):",
     fmt(facts.observed, "none"),
     "",
     grounding.contextBlock ? `Additional context (live day state and recalled history — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",
-    "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, and observedFactIds.",
+    "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds, and mediaFactIds.",
     "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");
 }
@@ -182,7 +207,7 @@ export function formatEodAnnotations(annotations: EodAnnotation[]): string {
 export async function gatherEodGrounding(organizationId: string, personId: string, date: string, personName: string): Promise<EodGrounding> {
   const db = createAdminClient();
   const [updatesResult, eventsResult, sessionResult, planResult] = await Promise.all([
-    db.from("work_check_ins").select("input_text,update_kind,occurred_at").eq("organization_id", organizationId)
+    db.from("work_check_ins").select("input_text,update_kind,occurred_at,structured_claims").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("shift_date", date).eq("substantive", true).order("occurred_at", { ascending: true }),
     db.from("work_task_day_events").select("event_type,task_snapshot").eq("organization_id", organizationId)
       .eq("person_id", personId).eq("local_date", date).order("observed_at", { ascending: true }),
@@ -195,9 +220,35 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   if (eventsResult.error) throw new Error(`load EOD task events: ${eventsResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD commitments: ${planResult.error.message}`);
 
-  const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
+  const checkInRows = (updatesResult.data ?? []) as Array<Record<string, unknown>>;
+  const updates = checkInRows
     .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
     .filter((row) => row.text);
+  const media: NonNullable<EodGrounding["media"]> = [];
+  for (const row of checkInRows) {
+    const claims = (row.structured_claims ?? {}) as Record<string, unknown>;
+    const loom = claims.loom as Record<string, unknown> | null | undefined;
+    if (!loom || typeof loom !== "object") continue;
+    const videoId = typeof loom.videoId === "string" ? loom.videoId : null;
+    const url = typeof loom.url === "string" ? loom.url : null;
+    if (!videoId || !url || media.some((item) => item.url === url)) continue;
+    const digest = typeof loom.digest === "string" && loom.digest.trim() ? loom.digest.trim() : null;
+    const duration = Number(loom.durationSeconds);
+    const at = String(row.occurred_at ?? "");
+    media.push({
+      at,
+      title: typeof loom.title === "string" && loom.title.trim() ? loom.title.trim() : "Loom recording",
+      url,
+      durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
+      digest,
+      transcriptChars: Number.isFinite(Number(loom.transcriptChars)) ? Number(loom.transcriptChars) : 0,
+    });
+    // The recording's digest is the employee's own summary of the update, so
+    // it belongs in the report's update facts when they typed nothing else.
+    if (digest && !updates.some((update) => update.at === at && update.text === digest)) {
+      updates.push({ kind: "loom", text: digest, at });
+    }
+  }
   const completed: string[] = [];
   const carried: string[] = [];
   const blockers: string[] = [];
@@ -227,6 +278,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     carried,
     blockers,
     commitments,
+    ...(media.length ? { media } : {}),
   };
 }
 

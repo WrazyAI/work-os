@@ -45,8 +45,8 @@ test("accepts only record-bound EOD fact ids and renders the original facts", ()
     updates: [{ kind: "material_progress", text: "Finished the debugger fix.", at: "2026-08-27T16:00:00Z" }],
     completed: ["Ship the debugger fix"], carried: ["Package the installer"], blockers: ["Signing certificate"],
   };
-  const selection = parseEodSelection({ summaryFactIds: ["update:0"], completedFactIds: ["completed:0"], carriedFactIds: ["carried:0"], blockerFactIds: ["blocker:0", "foreign:7"] }, grounding);
-  assert.deepEqual(selection, { summaryFactIds: ["update:0"], completedFactIds: ["completed:0"], carriedFactIds: ["carried:0"], blockerFactIds: ["blocker:0"] });
+  const selection = parseEodSelection({ summaryFactIds: ["update:0"], completedFactIds: ["completed:0"], carriedFactIds: ["carried:0"], blockerFactIds: ["blocker:0", "foreign:7"], observedFactIds: [], mediaFactIds: [] }, grounding);
+  assert.deepEqual(selection, { summaryFactIds: ["update:0"], completedFactIds: ["completed:0"], carriedFactIds: ["carried:0"], blockerFactIds: ["blocker:0"], observedFactIds: [], mediaFactIds: [] });
   const markdown = renderEodSelection(selection!, grounding);
   assert.match(markdown, /Finished the debugger fix/);
   assert.match(markdown, /Ship the debugger fix/);
