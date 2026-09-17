@@ -42,7 +42,10 @@ export default function TasksPreview() {
   const [composerOpen, setComposerOpen] = useState(params.has("agenda") || params.has("focus"));
   const [composerPanel, setComposerPanel] = useState<"update" | "goal">(params.has("focus") ? "goal" : "update");
   const [pending, setPending] = useState(params.has("agenda") ? "I completed the retry review and found a release blocker." : "");
-  const [taskView, setTaskView] = useState<"today" | "unfinished" | "completed" | "all">("today");
+  const [taskView, setTaskView] = useState<"today" | "unfinished" | "completed" | "all">(() => {
+    const requested = params.get("view");
+    return requested === "unfinished" || requested === "completed" || requested === "all" ? requested : "today";
+  });
   const [receipt, setReceipt] = useState<{ text: string; message: string; kind: "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task" } | null>(null);
   const suggestion = suggestDailyGoal(tasks, CURRENT_DATE, currentPlan.items);
   const detailsTask = {

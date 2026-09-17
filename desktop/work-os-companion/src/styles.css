@@ -1911,6 +1911,75 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: #f8ded8;
   color: #91392d;
 }
+
+.task-record-section > header > .task-record-section-head {
+  flex: 1;
+  justify-content: flex-start;
+}
+.task-record-section > header > .task-record-section-head small {
+  margin-left: auto;
+}
+/* Functional sort row (design §27.3): real column headers with aria-sort, not
+   an ornamental replica of the row grid. */
+.sort-header-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 2px 5px;
+  border-bottom: 1px solid var(--line);
+}
+.task-records > .sort-header-row {
+  padding-left: 8px;
+}
+.active-task-list > .sort-header-row {
+  padding-left: 37px;
+}
+.sort-header-cell {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.sort-header-cell:first-child {
+  justify-content: flex-start;
+}
+.sort-header-cell button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sort-header-cell button:hover {
+  background: #eef1ea;
+  color: var(--ink);
+}
+.sort-header-cell.is-active button {
+  color: var(--ink);
+}
+.sort-header-idle {
+  opacity: .45;
+}
+.sort-header-cell button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+@media (max-width: 900px) {
+  .sort-header-cell[data-sort-key="priority"],
+  .sort-header-cell[data-sort-key="activity"] {
+    display: none;
+  }
+}
 .task-load-more {
   width: 100%;
   min-height: 42px;

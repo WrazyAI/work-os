@@ -595,6 +595,8 @@ Completed tasks use subdued text and a clear completed control. Do not make them
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
+Task lists state their order. A functional sort row may sit above a list (see 27.3); when it does, its columns are real `columnheader` elements with `aria-sort` and buttons, and the active order is named in text so no list is ever sorted silently.
+
 ### 10.3 Tables
 
 Use tables for comparison across repeated columns, not for arbitrary alignment. Tables require:
@@ -604,6 +606,7 @@ Use tables for comparison across repeated columns, not for arbitrary alignment. 
 - Horizontal scrolling at narrow widths rather than illegible compression.
 - Useful empty states.
 - Row actions that remain discoverable by keyboard.
+- Sortable columns when a stable order helps comparison; sortable headers are buttons inside `columnheader` cells and cycle ascending → descending → the default order.
 
 ## 11. Controls and forms
 
@@ -684,6 +687,7 @@ Current hero metrics:
 
 - `X of Y tasks done`: green progress ring; clicking selects Today.
 - `Z pending tasks from yesterday`: neutral at zero, red when positive; clicking selects Previous day.
+- `N overdue tasks`: strict due-dated open work before today (see 27.3), never a bucket of undated older work; red, and clicking opens `Unfinished`.
 
 ### 13.2 Badges
 
@@ -1842,6 +1846,26 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
 
+**Overdue has one definition everywhere:** open work with a valid due date before
+the current workday. Undated older work is unfinished carry-over, never overdue;
+the amber `Other days` count states that, and no surface may compute its own
+overdue predicate. The dashboard's overdue metric therefore always equals the
+overdue work the `Unfinished` view shows.
+
+**Counts describe their lists.** Every hero number, tab count, chip count, and
+section count derives from the same rendered array it heads. The dashboard hero
+and the Tasks workspace share one day-scoped selector, so `Today` and `My day`
+can never disagree about membership or total.
+
+**Ordering is explicit and user-sortable.** The default order is Status, then due
+date: overdue (oldest due first), open work (soonest due first, undated last),
+completed (latest completion first). A functional sort row above the list holds
+real `columnheader` elements with `aria-sort` and buttons for `Task`, `Status`,
+`Due`, `Priority`, and `Activity`. The `Status` column orders the groups; every
+other column orders rows inside each group. Activating a column cycles ascending
+→ descending → the default order, each section note names the active order, and
+the choice is remembered per surface. No list renders in an unstated order.
+
 Provider refresh timestamps must not masquerade as meaningful task activity when
 a provider-created, provider-updated, completed, or user-action timestamp is
 available. Tie-break deterministically by normalized task title.
@@ -1881,10 +1905,11 @@ depth:
   text's height (~20px), so rows with and without an assignee keep one rhythm.
 - The completion checkbox and the subtask ring align with the title's first line
   while the due date, status pill, and menu stay on the row centerline.
-- Tasks surfaced into today show a small `On today` tag beside the title. No
-  decorative column-header row appears above the list. Aggregate provider
-  freshness lives once in the strip or toolbar; per-row provenance chips are
-  noise.
+- Tasks surfaced into today show a small `On today` tag beside the title. The
+  only header row above a list is the functional sort row from 27.3 — a control
+  surface with real sort buttons, not an ornamental replica of the row grid.
+  Aggregate provider freshness lives once in the strip or toolbar; per-row
+  provenance chips are noise.
 - Completed rows keep the muted treatment, strike-through title, and the `Done`
   pill.
 
