@@ -2282,10 +2282,16 @@ The companion groups its rows under those headings (`This device`, `Workday`,
 carries a quiet uppercase label and a one-line purpose; the reset group is
 separated by a rule and a red-led label, never mixed into routine preferences.
 
-Each setting row uses a flexible label/description column and intrinsic control
-column. Rows are normally 72–104px high depending on helper copy: size to the
-copy (min-height 84px) rather than padding every card to a fixed tall height,
-and align the control with the title's first line. At narrow widths, stack the
+Settings rows are a flat list, not a dashboard of cards: each group is one
+full-width column of transparent rows separated by hairlines, opened by a rule
+under its heading. A row never carries its own border, fill, radius, or shadow,
+and the group never draws a card behind them — settings live on the page
+surface the way task rows do. This is deliberate: white cards around every row
+read as a stack of boxes and bury the grouping.
+
+Each row uses a flexible label/description column and an intrinsic control
+column on the centerline. Rows are normally 72–104px high depending on helper
+copy (min-height 74px) and size to their copy. At narrow widths, stack the
 control below the explanation and make it full width when appropriate.
 
 Controls follow one vocabulary:

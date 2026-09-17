@@ -189,7 +189,14 @@ describe("operational visualizations", () => {
     expect(app).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-group-head");
-    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 84px;/);
+    // Settings rows are flat, hairline-separated entries on the page — never
+    // per-row white cards (and never a second card around them).
+    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 74px;/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?border-top: 1px solid var\(--line\);/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?background: transparent;/);
+    expect(styles).toMatch(/\.setting,[\s\S]*?box-shadow: none;/);
+    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?border: 0;/);
+    expect(styles).not.toMatch(/\.evidence-list,\n\.settings-panel \{/);
     expect(styles).toContain(".settings-switch-track");
     expect(styles).toContain(".status-chip.attention");
     expect(styles).toContain(".settings-group.danger");
