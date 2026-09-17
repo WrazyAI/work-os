@@ -890,7 +890,18 @@ export default function App() {
       setEodDraft({ markdown: String(result.report.markdown ?? ""), source: "deterministic" });
       setEodGate(null);
       invalidateOutstandingEods();
-      notifications.success("Your EOD draft is ready for review. Nothing has been submitted.", "EOD draft ready");
+      // The assistant draft is the default: the standard draft above is the
+      // fallback when the assistant is unavailable or the day is gated.
+      try {
+        const ai = await apiRequest<{ markdown: string; model: string; clockedOut?: boolean; screenshots?: EodScreenshotContext; screenshotSyncUnavailable?: boolean }>("/api/work-os/me/eod/ai-draft", {
+          method: "POST", signal: AbortSignal.timeout(60_000), body: JSON.stringify({ date: target.shiftDate }),
+        });
+        setEodClockedOut(ai.clockedOut === true);
+        setEodDraft({ markdown: ai.markdown, source: "ai", screenshots: ai.screenshots ?? null, screenshotSyncUnavailable: ai.screenshotSyncUnavailable === true });
+        notifications.success("The assistant drafted your EOD from the recorded work. Review every line.", "AI draft ready");
+      } catch {
+        notifications.info("The assistant is unavailable — showing the standard draft.", "Standard draft");
+      }
     } catch (value) {
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
     } finally { setEodRedrafting(false); }
