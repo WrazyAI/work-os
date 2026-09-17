@@ -769,8 +769,7 @@ body {
 .panel,
 .proposal-card,
 .metric,
-.evidence-list,
-.settings-panel {
+.evidence-list {
   border-color: var(--line);
   border-radius: 14px;
   background: var(--surface-raised);
@@ -6222,36 +6221,43 @@ button:not(:disabled):active {
 
 /* Work memory panel: three classes, three treatments. The panel owns its
    layout — it must never reuse .settings-panel, whose two-column card grid
-   interleaved the sections. */
+   interleaved the sections. Like the settings groups it is a flat section on
+   the page surface: a heading, sections, and hairlines, no surrounding card. */
 .memory-panel {
   display: grid;
-  gap: 18px;
-  margin-top: 16px;
-  padding: 20px 22px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card);
+  gap: 16px;
+  margin-top: 26px;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .memory-head {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 16px;
+  gap: 4px 12px;
 }
 
 .memory-head h3 {
   margin: 0;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
 }
 
 .memory-head p {
-  margin: 4px 0 0;
-  max-width: 620px;
+  flex: 1 1 420px;
+  margin: 0;
+  max-width: 640px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -6315,7 +6321,7 @@ button:not(:disabled):active {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid #dde7cf;
   border-radius: 11px;
   background: #f7faf1;
@@ -6487,10 +6493,6 @@ button:not(:disabled):active {
 }
 
 @media (max-width: 640px) {
-  .memory-panel {
-    padding: 16px;
-  }
-
   .memory-head {
     flex-direction: column;
     gap: 8px;

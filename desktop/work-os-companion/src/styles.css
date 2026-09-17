@@ -440,8 +440,7 @@ select:focus-visible {
 .panel,
 .proposal-card,
 .metric,
-.evidence-list,
-.settings-panel {
+.evidence-list {
   border: 1px solid var(--line);
   background: var(--paper);
   border-radius: 16px;
@@ -1044,135 +1043,6 @@ button:disabled {
 .loading p {
   color: #8d9187;
 }
-.debug-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(12, 13, 11, 0.72);
-  backdrop-filter: blur(8px);
-  display: grid;
-  place-items: center;
-  padding: 22px;
-  z-index: 20;
-}
-.debug-shell {
-  background: #f5f4ed;
-  color: var(--ink);
-  min-height: 100vh;
-}
-.debug-shell.embedded {
-  width: min(680px, 96vw);
-  height: min(780px, 92vh);
-  min-height: 0;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-}
-.debug-header {
-  height: 58px;
-  padding: 0 18px;
-  background: #191b16;
-  color: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.debug-header > div {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.debug-header span {
-  display: grid;
-}
-.debug-header small {
-  color: #8d9187;
-  font-size: 10px;
-}
-.debug-header button {
-  background: transparent;
-  border: 0;
-  color: #fff;
-}
-.debug-content {
-  height: calc(100% - 58px);
-  overflow: auto;
-  padding: 18px;
-}
-.debug-warning {
-  background: #eeecd4;
-  border: 1px solid #d8d39e;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 11px;
-}
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 0;
-}
-.debug-section {
-  border-top: 1px solid var(--line);
-  padding: 16px 0;
-}
-.debug-section h2 {
-  font: 600 12px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.preset-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.debug-section button,
-.debug-reset {
-  border: 1px solid var(--line);
-  background: #ebeae2;
-  min-height: 34px;
-  border-radius: 8px;
-}
-.debug-section > label {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  align-items: center;
-  margin: 8px 0;
-  font-size: 11px;
-}
-.debug-section select,
-.debug-section input[type="number"] {
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: white;
-}
-.debug-checks {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 7px;
-}
-.debug-checks label {
-  display: flex;
-  gap: 7px;
-  font-size: 11px;
-}
-.debug-checks label span {
-  display: grid;
-}
-.debug-checks small {
-  font-size: 9px;
-  color: var(--muted);
-}
-.debug-help {
-  font-size: 10px;
-  color: var(--muted);
-}
-.debug-reset {
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 @media (max-width: 850px) {
   .workspace {
     grid-template-columns: 68px 1fr;
@@ -1453,7 +1323,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .panel,
 .proposal-card,
 .evidence-list,
-.settings-panel,
 .daily-goal-card,
 .task-records {
   box-shadow: var(--shadow-soft);
@@ -1607,8 +1476,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .evidence-list h3 { font-size: 15px; }
 .evidence-list p,
 .evidence-list time { font-size: 11px; line-height: 1.55; }
-/* Settings are grouped by user intent (design.md 29.4). Each group owns a
-   heading and a two-up panel of rows; rows size to their copy. */
+/* Settings are grouped by user intent (design.md 29.4). Each group is a flat
+   list under its heading: transparent rows on hairline separators, never a
+   stack of white cards. */
 .settings-group {
   display: grid;
   gap: 10px;
@@ -1635,32 +1505,44 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .settings-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  align-items: start;
+  gap: 0 36px;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
+/* Two-column table: transparent rows on hairlines. Never a card per row, and
+   no card behind the group either — settings live on the page surface. */
 .setting,
 .setting:first-child {
-  min-height: 84px;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper);
-  box-shadow: var(--shadow-soft);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 74px;
+  gap: 16px;
+  padding: 13px 2px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* Controls sit together in the row's control column. */
+.setting-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 .setting > div {
   min-width: 0;
-  gap: 5px;
+  gap: 4px;
 }
 .setting strong { font-size: 13px; }
 .setting small {
   display: block;
-  max-width: 420px;
+  max-width: 560px;
   overflow: visible;
   font-size: 11px;
   line-height: 1.5;
@@ -1790,7 +1672,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 @media (max-width: 850px) {
   .nav-group { display: grid; }
-  .settings-panel { grid-template-columns: 1fr; }
+  .settings-panel { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .setting,
@@ -1798,10 +1680,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     flex-direction: column;
     align-items: stretch;
     min-height: 0;
+    padding: 14px 2px;
   }
   .setting > button,
   .setting > .settings-switch,
-  .setting > .status-chip {
+  .setting > .status-chip,
+  .setting > .setting-controls {
     align-self: flex-start;
   }
   .setting > .quiet-action {
@@ -1910,6 +1794,75 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-record-section.overdue > header span {
   background: #f8ded8;
   color: #91392d;
+}
+
+.task-record-section > header > .task-record-section-head {
+  flex: 1;
+  justify-content: flex-start;
+}
+.task-record-section > header > .task-record-section-head small {
+  margin-left: auto;
+}
+/* Functional sort row (design §27.3): real column headers with aria-sort, not
+   an ornamental replica of the row grid. */
+.sort-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 30px;
+  padding: 2px 2px 5px;
+  border-bottom: 1px solid var(--line);
+}
+.sort-header-cell:nth-child(2) {
+  margin-left: auto;
+}
+.task-records > .sort-header-row {
+  padding-left: 8px;
+}
+.active-task-list > .sort-header-row {
+  padding-left: 37px;
+}
+.active-task-sort-note {
+  margin-left: auto;
+  margin-right: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.sort-header-cell {
+  display: flex;
+  min-width: 0;
+}
+.sort-header-cell button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sort-header-cell button:hover {
+  background: #eef1ea;
+  color: var(--ink);
+}
+.sort-header-cell.is-active button {
+  color: var(--ink);
+}
+.sort-header-idle {
+  opacity: .45;
+}
+.sort-header-cell button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
 }
 .task-load-more {
   width: 100%;
@@ -2574,6 +2527,60 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   margin: 0;
   font-size: 13px;
   color: #626a61;
+}
+.whats-new-history {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.whats-new-release {
+  display: grid;
+  gap: 8px;
+}
+.whats-new-release + .whats-new-release {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.whats-new-release > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.whats-new-release h3 {
+  margin: 0;
+  font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #666a61;
+}
+.whats-new-installed {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8f4da;
+  color: #477527;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.whats-new-show-all {
+  justify-self: start;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  padding: 0 12px;
+  font-size: 11px;
+}
+.whats-new-show-all:hover {
+  border-color: #b8b9af;
+  background: #fffef8;
+}
+.whats-new-older {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .task-modal-body > label {
   display: grid;

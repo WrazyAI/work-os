@@ -595,6 +595,8 @@ Completed tasks use subdued text and a clear completed control. Do not make them
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
+Task lists state their order. A functional sort row may sit above a list (see 27.3). It is a `toolbar` of sort buttons, not a table header: card rows do not map onto those columns, so claiming `columnheader`/`aria-sort` semantics would misannounce every row. Each button carries `aria-pressed`, names the order it applies next, and the active order is stated in visible text, so no list is ever sorted silently.
+
 ### 10.3 Tables
 
 Use tables for comparison across repeated columns, not for arbitrary alignment. Tables require:
@@ -604,6 +606,7 @@ Use tables for comparison across repeated columns, not for arbitrary alignment. 
 - Horizontal scrolling at narrow widths rather than illegible compression.
 - Useful empty states.
 - Row actions that remain discoverable by keyboard.
+- Sortable columns when a stable order helps comparison; sortable headers are buttons inside `columnheader` cells and cycle ascending → descending → the default order.
 
 ## 11. Controls and forms
 
@@ -684,6 +687,7 @@ Current hero metrics:
 
 - `X of Y tasks done`: green progress ring; clicking selects Today.
 - `Z pending tasks from yesterday`: neutral at zero, red when positive; clicking selects Previous day.
+- `N overdue tasks`: strict due-dated open work before today (see 27.3), never a bucket of undated older work; red, and clicking opens `Unfinished`.
 
 ### 13.2 Badges
 
@@ -970,6 +974,16 @@ install are one explicit, resumable flow rather than a launch-time surprise.
   from a `What's new` action in Settings. Every release ships its section:
   the release workflow fails when the released version has no changelog
   entry, and the GitHub release notes carry the same section.
+- **Changelog history.** The modal carries a `Check older updates` action
+  whenever the bundled changelog holds more than the installed release. It
+  swaps the body to one scrollable list of every logged release, newest first,
+  each under a version heading with its bullets and the installed build tagged
+  `This version`. The first page holds the ten newest releases with
+  `Show all N updates` revealing the rest (and `Show 10 newest` restoring it),
+  because the list only grows from here. `Back to <version>` returns to the
+  installed release's notes; Escape, the backdrop, and the close button behave
+  as they do on the notes view, and focus moves to the history heading when
+  the view swaps.
 
 Notification cards support these states through optional `actions` (primary
 and quiet variants), `progress`, and `locked` fields; the single-action
@@ -1847,7 +1861,7 @@ stacked two-panel hero.
 ### 27.3 Task views, ordering, and overdue meaning
 
 `My day` is strictly day-scoped: it contains only tasks surfaced by today's plan,
-due today, or carried into today. Open tasks without a today relationship belong
+due today, created today, or carried into today. Open tasks without a today relationship belong
 in `Unfinished`, even when that leaves `My day` nearly empty — an honest near-empty
 My day with a pull-from-Unfinished empty state beats a mislabeled dump of every
 open task.
@@ -1860,6 +1874,28 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 | Overdue | Open task with due date before current workday | Oldest due first | Red label/count, red status pill, and red due text |
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
+
+**Overdue has one definition everywhere:** open work with a valid due date before
+the current workday. Undated older work is unfinished carry-over, never overdue;
+the amber `Other days` count states that, and no surface may compute its own
+overdue predicate. The dashboard's overdue metric therefore always equals the
+overdue work the `Unfinished` view shows.
+
+**Counts describe their lists.** Every hero number, tab count, chip count, and
+section count derives from the same rendered array it heads. The dashboard hero
+and the Tasks workspace share one day-scoped selector, so `Today` and `My day`
+can never disagree about membership or total.
+
+**Ordering is explicit and user-sortable.** The default order is Status, then due
+date: overdue (oldest due first), open work (soonest due first, undated last),
+completed (latest completion first). A functional sort toolbar above the list
+holds buttons for `Task`, `Status`, `Due`, `Priority`, and `Activity`; each
+button carries `aria-pressed` and names the order it applies next. The `Status`
+control orders the groups; every other control orders rows inside each group.
+Activating a control starts at its natural direction (Activity starts latest
+first), then toggles, then restores the default order on the third activation.
+Each section note, and the dashboard toolbar note, names the active order, and
+the choice is remembered per surface. No list renders in an unstated order.
 
 Provider refresh timestamps must not masquerade as meaningful task activity when
 a provider-created, provider-updated, completed, or user-action timestamp is
@@ -1900,10 +1936,11 @@ depth:
   text's height (~20px), so rows with and without an assignee keep one rhythm.
 - The completion checkbox and the subtask ring align with the title's first line
   while the due date, status pill, and menu stay on the row centerline.
-- Tasks surfaced into today show a small `On today` tag beside the title. No
-  decorative column-header row appears above the list. Aggregate provider
-  freshness lives once in the strip or toolbar; per-row provenance chips are
-  noise.
+- Tasks surfaced into today show a small `On today` tag beside the title. The
+  only header row above a list is the functional sort row from 27.3 — a control
+  surface with real sort buttons, not an ornamental replica of the row grid.
+  Aggregate provider freshness lives once in the strip or toolbar; per-row
+  provenance chips are noise.
 - Completed rows keep the muted treatment, strike-through title, and the `Done`
   pill.
 
@@ -2305,10 +2342,21 @@ The companion groups its rows under those headings (`This device`, `Workday`,
 carries a quiet uppercase label and a one-line purpose; the reset group is
 separated by a rule and a red-led label, never mixed into routine preferences.
 
-Each setting row uses a flexible label/description column and intrinsic control
-column. Rows are normally 72–104px high depending on helper copy: size to the
-copy (min-height 84px) rather than padding every card to a fixed tall height,
-and align the control with the title's first line. At narrow widths, stack the
+Settings rows are a flat table, not a dashboard of cards: each group is a
+two-up column of transparent rows separated by hairlines (one column at 850px
+and below). A row never carries its own border, fill, radius, or shadow, and
+the group never draws a card behind them — settings live on the page surface
+the way task rows do. This is deliberate: white cards around every row read as
+a stack of boxes and bury the grouping, and the two-up rhythm keeps the page
+compact.
+
+A row's controls sit together in one control column (`.setting-controls`), so
+rows with more than one action keep their buttons adjacent instead of letting
+the row's spacing push them apart.
+
+Each row uses a flexible label/description column and an intrinsic control
+column on the centerline. Rows are normally 72–104px high depending on helper
+copy (min-height 74px) and size to their copy. At narrow widths, stack the
 control below the explanation and make it full width when appropriate.
 
 Controls follow one vocabulary:
@@ -2452,6 +2500,40 @@ Specific collapse rules:
 
 Test zoom at 200% or an equivalent narrow content width. Layout must remain
 operable when system font metrics differ from the design machine.
+
+### 29.8 Debugger
+
+The scenario debugger is a separate window (`debug.html`) for reproducing and
+observing states. It is developer-facing, never overlays the employee UI, and
+uses the app's tokens, typography, and controls rather than browser defaults.
+
+- **Header.** The window title, the running state as chips, and the close
+  control. Chips name the effective mode (`Scenario off`, `Scenario on`) and
+  surface anything that reaches further: `Offline bypass` in amber and
+  `Live writes` in red. The chips always reflect the applied scenario, so the
+  dangerous state is visible without scrolling.
+- **Tabs.** `Scenarios`, `Live trace`, and `Export`, as one segmented control;
+  the trace tab carries its buffered event count.
+- **Scenarios.** Preset cards first (each with a one-line description of the
+  state it builds), then flat hairline groups: the master switch, session,
+  backend reach, missing details, My Day conditions, and the companion's forced
+  state. Single on/off overrides use the shared settings switch; the sets
+  (missing details, condition flags) keep checkboxes. Helper copy states the
+  consequence, the master switch resetting when the app exits, and `Reset all
+  overrides` sits last.
+- **Live trace.** Search plus level and source filters, a pause control, and a
+  clear-view action, with the shown/buffered counts and a note that clearing
+  the view leaves disk logs intact. Rows show time, level, source, category,
+  and message on one line, tint warn and error rows, expand to the redacted
+  event JSON, and offer a copy action. An empty result says so instead of
+  rendering a blank list.
+- **Export.** The bundle's contents list, the privacy note naming what is
+  excluded, and `Export diagnostics ZIP` beside `Open logs folder`.
+
+Sections may be reordered within a tab, but no scenario, override, filter,
+export, or bridge event (`work-os://debug-request`, `work-os://debug-current`,
+`work-os://debug-scenario`) may be removed; the debug window's capability stays
+limited to diagnostics commands and the logs folder.
 
 ## 31. Operational state matrix
 

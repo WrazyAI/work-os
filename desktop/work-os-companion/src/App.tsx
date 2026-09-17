@@ -7,7 +7,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
-import { changelogBulletsFor, readAnnouncedVersion, shouldAnnounceUpdate, updateInstalledCopy, WHATS_NEW_ANNOUNCE_KEY, writeAnnouncedVersion } from "./whatsNew";
+import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnnounceUpdate, updateInstalledCopy, WHATS_NEW_ANNOUNCE_KEY, writeAnnouncedVersion } from "./whatsNew";
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -35,7 +35,8 @@ import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
-import { filterWorkspaceTasks, orderTasksByRecency, organizeTaskSections, parentTasks, safeTaskText, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, tasksForDate, unfinishedBefore, uniqueTasks, type TaskRow, type TaskSection } from "./taskWorkspace";
+import { dayScopedTasks, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSection, type TaskSort } from "./taskWorkspace";
+import { SortHeaderRow } from "./SortHeaderRow";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
@@ -47,6 +48,7 @@ import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } 
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { MemorySettings } from "./MemorySettings";
+import { SettingsSwitch } from "./SettingsSwitch";
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
@@ -99,11 +101,6 @@ const timeRemaining = (value?: string | null) => {
   const minutes = Math.floor(remaining / 60_000);
   return value ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : "—";
 };
-const taskState = (task: Record<string, any>, currentDate: string) => task.completed
-  ? "complete" as const
-  : typeof task.due_date === "string" && task.due_date.slice(0, 10) < currentDate
-    ? "overdue" as const
-    : "open" as const;
 const actionSuccessMessages: Record<string, string> = {
   "check_in.create": "Your update was saved.",
   "proposal.reject": "The proposal was rejected.",
@@ -1476,26 +1473,10 @@ export default function App() {
     }
     notifications.persistent("work-os-session-gate", gate.persistentMessage, gate.persistentTitle, "info");
   }, [gate.persistentMessage, gate.persistentTitle, hasVisibleSession, notifications, visibleOnboarding?.onboardingRequired]);
-  const todayParentTasks = parentTasks(visibleDay?.tasks ?? []);
-  const openTasks = todayParentTasks.filter((task) => !task.completed);
-  const allTodayTasksCompleted = todayParentTasks.length > 0 && openTasks.length === 0;
-  const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
-  const reviewParentTasks = parentTasks(reviewDay?.tasks ?? []);
-  const allReviewTasksCompleted = eodDate
-    ? reviewParentTasks.length > 0 && reviewParentTasks.every((task) => task.completed === true)
-    : allTodayTasksCompleted;
-  const outstandingDays = outstandingQuery.data?.days ?? [];
-  const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
-  const unfinishedCarryOver = useMemo(() => visibleDay?.workspaceSummary?.carryOverGroups
-    ? visibleDay.workspaceSummary.carryOverGroups.flatMap((group) => group.tasks.map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } })))
-    : unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? ""), [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
-  const yesterdayDate = moveDate(visibleDay?.shiftDate ?? "", -1);
-  const yesterdayDueTasks = unfinishedCarryOver.filter(({ task }) => !task.completed && task.due_date?.slice(0, 10) === yesterdayDate);
-  const recencyOrder = (task: TaskRow) => {
-    const value = task.updated_at ?? task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? "";
-    const parsed = Date.parse(String(value));
-    return Number.isFinite(parsed) ? -parsed : 0;
-  };
+  const todayParentTasks = useMemo(
+    () => dayScopedTasks(visibleDay?.tasks ?? [], planItems, visibleDay?.shiftDate ?? "", taskHistory),
+    [visibleDay?.tasks, planItems, visibleDay?.shiftDate, taskHistory],
+  );
   const todayCompletedCount = todayParentTasks.filter((task) => task.completed === true).length;
   // Optimistic adds render instantly as rows with a sync state and retry.
   const pendingTaskRows = useMemo<TaskRow[]>(() => pendingTasks.map((pending) => ({
@@ -1507,7 +1488,39 @@ export default function App() {
     pending_status: pending.status,
     pending_error: pending.error,
   })), [pendingTasks, visibleDay?.shiftDate]);
-  const sortedDashboardTasks = [...openTasks]
+  // The hero, its counts, and the tasks workspace all render this exact set, so
+  // no surface can disagree with another about what "today" contains.
+  const visibleTodayTasks = useMemo(() => [...pendingTaskRows, ...todayParentTasks], [pendingTaskRows, todayParentTasks]);
+  const openTasks = visibleTodayTasks.filter((task) => !task.completed);
+  const allTodayTasksCompleted = visibleTodayTasks.length > 0 && openTasks.length === 0;
+  const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
+  const reviewParentTasks = parentTasks(reviewDay?.tasks ?? []);
+  const allReviewTasksCompleted = eodDate
+    ? reviewParentTasks.length > 0 && reviewParentTasks.every((task) => task.completed === true)
+    : allTodayTasksCompleted;
+  const outstandingDays = outstandingQuery.data?.days ?? [];
+  const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
+  const unfinishedCarryOver = useMemo(() => {
+    // The computed attribution is authoritative because it covers undated work
+    // the provider carry-over groups can omit; group-only tasks are merged in so
+    // the dashboard tabs match the Unfinished view's membership.
+    const computed = unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? "");
+    const groups = visibleDay?.workspaceSummary?.carryOverGroups;
+    if (!groups) return computed;
+    const seen = new Set(computed.map(({ task }) => String(task.provider_task_id || task.id)));
+    const extra = groups.flatMap((group) => group.tasks)
+      .filter((task) => !seen.has(String(task.provider_task_id || task.id)))
+      .map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } }));
+    return [...computed, ...extra];
+  }, [taskHistory, visibleDay?.shiftDate, visibleDay?.workspaceSummary]);
+  const yesterdayDate = moveDate(visibleDay?.shiftDate ?? "", -1);
+  const yesterdayDueTasks = unfinishedCarryOver.filter(({ task }) => !task.completed && task.due_date?.slice(0, 10) === yesterdayDate);
+  const recencyOrder = (task: TaskRow) => {
+    const value = task.updated_at ?? task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? "";
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? -parsed : 0;
+  };
+  const sortedDashboardTasks = [...openTasks.filter((task) => !task.pending_status)]
     .sort((left, right) => {
       const leftDue = typeof left.due_date === "string" ? left.due_date.slice(0, 10) : null;
       const rightDue = typeof right.due_date === "string" ? right.due_date.slice(0, 10) : null;
@@ -2452,7 +2465,7 @@ export default function App() {
           </div><div className="hero-companion-art"><Otto pose="sleep" className="otto-hero" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
-        <KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />
+        <KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />
                 <section className="panel dashboard-tasks-card">
           <div className="card-title"><span><BriefcaseBusiness size={17} /> Today’s tasks</span><button onClick={() => { setTaskView("today"); setView("tasks"); }}>View all <ChevronRight size={14} /></button></div>
           {dashboardTopTasks.length ? <div className="dashboard-task-grid">{dashboardTopTasks.map((task) => <DashboardTaskCard key={String(task.provider_task_id || task.id)} task={task} currentDate={visibleDay?.shiftDate ?? ""} onOpen={() => void openTaskDetails(task)} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} />)}</div> : <div className="dashboard-task-empty"><strong>{yesterdayDueTasks.length ? "Nothing scheduled yet" : "Your agenda is open"}</strong><span>{yesterdayDueTasks.length ? "Review unfinished work or add today’s first priority." : "Add your first priority — the composer below plans without clocking you in."}</span></div>}
@@ -2460,7 +2473,7 @@ export default function App() {
       </main> : <ActiveDayWorkspace
         focus={planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}
         focusSource={planIntent ? goalProvenance === "ai_draft" ? "Drafted with Otto" : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note" : goalSuggestion ? "Suggested from today’s tasks" : "Task record"}
-        tasks={[...pendingTaskRows, ...(visibleDay?.tasks ?? [])]}
+        tasks={visibleTodayTasks}
         goalSaveState={planSaveState}
         onRetryGoalSave={() => setPlanDirty(true)}
         onRetryPendingTask={retryPendingTask}
@@ -2494,9 +2507,9 @@ export default function App() {
           void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
         }}
         onClockOut={() => setClockOutConfirmation(true)}
-        kpiStrip={<KpiStrip scheduledCount={todayParentTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
+        kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={[...pendingTaskRows, ...(visibleDay?.tasks ?? [])]} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <section className="panel eod-drafting"><Wave className="loading-wave-large" /><strong>Loading that day…</strong><p>Fetching the recorded work for {formatWorkOsDate(eodDate)}.</p></section>
@@ -2577,13 +2590,15 @@ export default function App() {
               <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
               <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
               <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
-                {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
-                {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
-                {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
-                {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
-                {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
-                {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
-                {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+                <span className="setting-controls">
+                  {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
+                  {(updateFlow.status === "available" || updateFlow.status === "failed") && <button type="button" className="quiet-action" onClick={() => void beginUpdateDownload()}>{updateFlow.status === "failed" ? "Retry" : "Download"}</button>}
+                  {updateFlow.status === "downloaded" && <button type="button" className="quiet-action" onClick={() => void installDownloadedUpdate()}>Install</button>}
+                  {updateFlow.status === "checking" && <span className="status-chip">Checking</span>}
+                  {updateFlow.status === "downloading" && <span className="status-chip">Downloading</span>}
+                  {updateFlow.status === "installing" && <span className="status-chip">Installing</span>}
+                  {installedVersionRaw && <button type="button" className="quiet-action" onClick={() => setWhatsNew({ version: installedVersionRaw })}>What's new</button>}
+                </span>
               </Setting>
             </section>
           </section>
@@ -2661,7 +2676,7 @@ export default function App() {
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
-    {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
+    {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
     <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
@@ -2742,13 +2757,18 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask: (task: TaskRow) => void; onPause: () => void; onClockOut: () => void; kpiStrip?: ReactNode; goalSaveState?: "saved" | "saving" | "offline" | "conflict"; onRetryGoalSave?: () => void; onRetryPendingTask?: (task: TaskRow) => void; onDismissPendingTask?: (task: TaskRow) => void;
 }) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
+  const [sort, setSort] = useState<TaskSort>(() => readTaskSort(DAY_SORT_STORAGE_KEY));
+  useEffect(() => { writeTaskSort(DAY_SORT_STORAGE_KEY, sort); }, [sort]);
   const [detailsMenuOpen, setDetailsMenuOpen] = useState(initialDetailsMenuOpen || initialDetailView !== null);
   const [detailView, setDetailView] = useState<"shift" | "worktivity" | null>(initialDetailView);
-  const displayed = tab === "today" ? tasks : tab === "previous" ? previousTasks : otherTasks;
-  const countedTasks = tasks.filter((task) => !task.pending_status);
-  const completed = countedTasks.filter((task) => task.completed === true).length;
   const today = currentDate || new Date().toISOString().slice(0, 10);
-  const overdueCount = otherTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length + previousTasks.filter((task) => task.completed !== true && typeof task.due_date === "string" && task.due_date.slice(0, 10) < today).length;
+  const rawDisplayed = tab === "today" ? tasks : tab === "previous" ? previousTasks : otherTasks;
+  const displayed = sortTaskList(rawDisplayed, sort, today);
+  const completed = tasks.filter((task) => task.completed === true).length;
+  // One strict overdue definition across the whole tab set (design §27.3):
+  // due-dated open work before today. Undated older work stays carry-over.
+  const overdueCount = uniqueTasks([...previousTasks, ...otherTasks]).filter((task) => isOverdueTask(task, today)).length;
+  const tabLabel = tab === "today" ? "Today tasks" : tab === "previous" ? "Previous day tasks" : "Older tasks";
   const pendingPrevious = previousTasks.filter((task) => task.completed !== true).length;
   const observedStart = attendance?.clockedInAt ? Date.parse(attendance.clockedInAt) : Number.NaN;
   const observedEnd = attendance?.clockedOutAt ? Date.parse(attendance.clockedOutAt) : attendance?.observedAt ? Date.parse(attendance.observedAt) : Number.NaN;
@@ -2762,10 +2782,12 @@ export function ActiveDayWorkspace({ focus, focusSource, tasks, previousTasks, o
         <div className="active-day-actions">{canPause && <button className="shift-action-button" disabled={busy} onClick={onPause}>{paused ? <CirclePlay size={15} aria-hidden="true" /> : <CirclePause size={15} aria-hidden="true" />}<span>{paused ? "Resume" : "Pause"}</span></button>}{canClockOut && <button className="shift-action-button" disabled={busy} onClick={onClockOut}>Clock out</button>}<div className="shift-details-menu"><button className="ellipsis-button" aria-label="Open workday details" aria-expanded={detailsMenuOpen} onClick={() => { setDetailsMenuOpen((current) => !current); setDetailView(null); }}><MoreHorizontal size={17} /></button>{detailsMenuOpen && <><button className="shift-popover-scrim" aria-label="Close workday details" onClick={() => { setDetailsMenuOpen(false); setDetailView(null); }} />{detailView ? <ShiftDetailsFloatingCard view={detailView} progressPercent={progressPercent} shiftStart={shiftStart} remaining={remaining} shiftEnd={shiftEnd} elapsed={elapsed} openTasks={tasks.filter((task) => !task.completed).length} reviews={reviews} attendance={attendance} timezone={timezone} observedActive={observedActive} providerBreak={providerBreak} onBack={() => setDetailView(null)} onClose={() => { setDetailsMenuOpen(false); setDetailView(null); }} /> : <div className="shift-details-options" role="menu"><button role="menuitem" onClick={() => setDetailView("shift")}><Clock3 size={14} /> Workday status</button><button role="menuitem" onClick={() => setDetailView("worktivity")}><Activity size={14} /> Worktivity details</button></div>}</>}</div></div>
       </header>
       <div className="active-focus-block"><div className="active-focus-copy"><span>Today’s focus</span><div className="active-focus-heading"><h2>{focus}</h2><button className="focus-edit-button" onClick={onEditFocus}><Pencil size={14} /> Update focus</button></div><small><Sparkles size={13} /> {focusSource}{goalSaveState === "saving" ? <FadeArc size={11} /> : goalSaveState === "offline" || goalSaveState === "conflict" ? <button type="button" className="goal-retry" title="Goal not saved — click to retry." aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small></div><div className="hero-task-metrics">{overdueCount > 0 && <button className="overdue-metric" onClick={() => onOpenOverdue?.()} aria-label={`${overdueCount} overdue tasks. Show unfinished work in Tasks.`}><span><strong>{overdueCount}</strong></span><em>overdue<br />{overdueCount === 1 ? "task" : "tasks"}</em></button>}</div>
-        <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={countedTasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
-      <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{countedTasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
+        <div className="hero-task-metrics"><button className="hero-metric-button" onClick={() => setTab("today")} aria-label={`${completed} of ${tasks.length} tasks done today. Show Today tasks.`}><CompletionRing completed={completed} total={tasks.length} label="tasks done" /></button><button className={`carryover-metric ${pendingPrevious > 0 ? "pending" : "clear"}`} onClick={() => setTab("previous")} aria-label={`${pendingPrevious} pending task${pendingPrevious === 1 ? "" : "s"} from yesterday. Show Previous day tasks.`}><span><strong>{pendingPrevious}</strong></span><em>pending tasks<br />from yesterday</em></button></div></div>
+      <div className="active-task-toolbar"><div className="active-task-tabs" role="tablist"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Previous day {previousTasks.length > 0 && <em className="alert-count">{previousTasks.length}</em>}</button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Other days {otherTasks.length > 0 && <em className="older-count">{otherTasks.length}</em>}</button></div><small className="active-task-sort-note">Sorted by {taskSortNote(sort)}</small><button className="primary add-day-task" onClick={onAddTask}><Plus size={15} /> Add task</button></div>
       {tab === "other" && otherTasks.length > 0 && <div className="older-task-notice" role="status"><span>{otherTasks.length}</span><strong>Older unfinished task{otherTasks.length === 1 ? "" : "s"}</strong><small>From before yesterday</small></div>}
-      <div className="active-task-list">{displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null; return <article className={`${task.completed ? "completed" : ""}${pendingStatus ? " pending" : ""}`} key={taskId}><button className="task-check" aria-label={task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={busy || pendingStatus !== null} onClick={() => { if (!pendingStatus) onToggleTask(task, !task.completed); }}>{task.completed && <Check size={15} />}</button><button className="active-task-copy" onClick={() => { if (!pendingStatus) onOpenTask(task); }}><strong>{task.title}</strong><small>{pendingStatus ? pendingStatus === "syncing" ? "Adding to your workspace…" : "Failed to add — retry or discard" : task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button>{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-status ${task.completed ? "done" : "open"}`}>{task.completed ? "Done" : "Open"}</span>}{!pendingStatus && <TaskLifecycleMenu task={task} busy={busy} initialOpen={initialTaskMenuId === taskId} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />}</article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
+      <div className="active-task-list">
+        {displayed.length ? <SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={`Sort ${tabLabel.toLowerCase()}`} className="day-task-sort" /> : null}
+        {displayed.length ? displayed.map((task) => { const taskId = String(task.provider_task_id || task.id); const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null; return <article className={`${task.completed ? "completed" : ""}${pendingStatus ? " pending" : ""}`} key={taskId}><button className="task-check" aria-label={task.completed ? `Reopen ${task.title}` : `Complete ${task.title}`} disabled={busy || pendingStatus !== null} onClick={() => { if (!pendingStatus) onToggleTask(task, !task.completed); }}>{task.completed && <Check size={15} />}</button><button className="active-task-copy" onClick={() => { if (!pendingStatus) onOpenTask(task); }}><strong>{task.title}</strong><small>{pendingStatus ? pendingStatus === "syncing" ? "Adding to your workspace…" : "Failed to add — retry or discard" : task.completed ? (typeof task.completed_at === "string" && task.completed_at ? `Completed ${formatWorkOsDate(task.completed_at.slice(0, 10))}` : "Completed") : task.priority ? `${sentence(String(task.priority))} priority` : task.due_date ? `Due ${formatWorkOsDate(task.due_date)}` : "Open today"}</small></button>{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-status ${task.completed ? "done" : "open"}`}>{task.completed ? "Done" : "Open"}</span>}{!pendingStatus && <TaskLifecycleMenu task={task} busy={busy} initialOpen={initialTaskMenuId === taskId} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />}</article>; }) : <Empty title={tab === "today" ? "A clear day" : tab === "previous" ? "Nothing left behind" : "No older work pending"} body={tab === "today" ? "Add the first task you want to move forward today." : tab === "previous" ? "Yesterday’s open work has been cleared." : "Everything from before yesterday is complete."} />}</div>
       <footer className="active-day-footer"><span>Changes save to your workday record.</span><button className="workspace-link-button" onClick={onManageTasks}><span>Open full Tasks workspace</span><ChevronRight size={14} aria-hidden="true" /></button></footer>
     </section>
     {kpiStrip}
@@ -3095,6 +3117,8 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(initialFiltersOpen);
+  const [sort, setSort] = useState<TaskSort>(() => readTaskSort(TASKS_SORT_STORAGE_KEY));
+  useEffect(() => { writeTaskSort(TASKS_SORT_STORAGE_KEY, sort); }, [sort]);
   const selectedDate = historyDate || currentDate;
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
@@ -3108,9 +3132,9 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   });
   const surfacedIds = (shownPlan?.items ?? []).filter((item) => item.task_id && item.disposition !== "removed").map((item) => String(item.task_id));
   const rowId = (task: TaskRow) => String(task.provider_task_id || task.id);
-  // My day is strictly day-scoped: surfaced by today's plan, due today, or
-  // created today. Everything else open lives in Unfinished.
-  const myDayTasks = parentTasks(tasksForDate(uniqueTasks([...todayTasks, ...surfaced]), currentDate, surfacedIds));
+  // My day is strictly day-scoped and shares one definition with the dashboard
+  // hero (design §27.3), so both surfaces count the identical set.
+  const myDayTasks = dayScopedTasks(todayTasks, currentPlan?.items ?? [], currentDate, [...taskHistory, ...historicalTasks]);
   const myDayIds = new Set(myDayTasks.map(rowId));
   const unfinishedTasks = taskHistory.filter((task) => task.completed !== true && !myDayIds.has(rowId(task)));
   const completedTasks = taskHistory.filter((task) => task.completed === true);
@@ -3125,24 +3149,30 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
   const displayed = filterWorkspaceTasks(unfiltered, currentDate, { query: taskSearch, from: filterFrom, to: filterTo });
   const hasFilters = taskSearch.trim().length > 0 || filterFrom.length > 0 || filterTo.length > 0;
   const viewLabel = taskView === "today" ? "My day" : taskView === "unfinished" ? "Unfinished" : taskView === "completed" ? "Completed" : "All tasks";
+  // Every chip counts the exact parents its view will render, subtasks and
+  // duplicates excluded, so a chip can never disagree with its own list.
   const chipCounts: Array<{ id: TaskView; label: string; count: number }> = [
-    { id: "today", label: "My day", count: myDayTasks.filter((task) => task.completed !== true).length },
-    { id: "unfinished", label: "Unfinished", count: unfinishedTasks.length },
-    { id: "completed", label: "Completed", count: completedTasks.length },
-    { id: "all", label: "All tasks", count: taskHistory.length },
+    { id: "today", label: "My day", count: myDayTasks.length },
+    { id: "unfinished", label: "Unfinished", count: parentTasks(uniqueTasks(unfinishedTasks)).length },
+    { id: "completed", label: "Completed", count: parentTasks(uniqueTasks(completedTasks)).length },
+    { id: "all", label: "All tasks", count: parentTasks(uniqueTasks(taskHistory)).length },
   ];
   const todaySections = (): TaskSection[] => {
-    const open = orderTasksByRecency(displayed.filter((task) => task.completed !== true));
-    const done = orderTasksByRecency(displayed.filter((task) => task.completed === true));
+    const open = displayed.filter((task) => task.completed !== true);
+    const done = displayed.filter((task) => task.completed === true);
+    // Default Status order means soonest due for open work and latest
+    // completion for finished work; any explicit column sorts both groups.
+    const openSorted = sortTaskList(open, sort.key === "status" ? { key: "due", direction: "asc" } : sort, currentDate);
+    const doneSorted = sortTaskList(done, sort.key === "status" ? { key: "activity", direction: "desc" } : sort, currentDate);
     return [
-      open.length ? { id: "open", label: "Scheduled today", note: "Latest activity first", tasks: open } : null,
-      done.length ? { id: "completed", label: "Completed today", note: "Latest completion first", tasks: done } : null,
+      openSorted.length ? { id: "open", label: "Scheduled today", note: sort.key === "status" ? "Due date · soonest first" : taskSortNote(sort), tasks: openSorted } : null,
+      doneSorted.length ? { id: "completed", label: "Completed today", note: sort.key === "status" ? "Latest completion first" : taskSortNote(sort), tasks: doneSorted } : null,
     ].filter((section): section is TaskSection => section !== null);
   };
   const displayedSections: TaskSection[] = historical
-    ? displayed.length ? [{ id: "open", label: "Tasks from this day", note: "Latest activity first", tasks: orderTasksByRecency(displayed) }] : []
+    ? displayed.length ? [{ id: "open", label: "Tasks from this day", note: taskSortNote(sort), tasks: sortTaskList(displayed, sort, currentDate) }] : []
     : taskView === "today" ? todaySections()
-      : organizeTaskSections(displayed, currentDate);
+      : organizeTaskSections(displayed, currentDate, sort);
   const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
   const groups = new Map<string, typeof carryOver>();
   for (const item of carryOver) {
@@ -3206,7 +3236,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
         </div>}
       </div>
     </section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className="evidence-list task-records">{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div><strong>{section.label}</strong><span>{section.tasks.length}</span></div><small>{section.note}</small></header>{section.tasks.map((task) => {
+    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className={`evidence-list task-records ${displayedSections.length ? "has-sort" : ""}`.trim()}>{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? <><SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} />{displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div className="task-record-section-head"><strong>{section.label}</strong><span>{section.tasks.length}</span><small>{section.note}</small></div></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;
@@ -3226,7 +3256,7 @@ export function TasksWorkspace({ currentDate, historyDate, currentPlan, historic
       const pendingStatus = typeof task.pending_status === "string" ? task.pending_status as "syncing" | "failed" : null;
       const syncPending = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
       return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}`} role="button" tabIndex={0} key={taskId} aria-selected={isSelected} onClick={() => { if (!pendingStatus) onOpenTask(task, historical); }} onKeyDown={(event) => { if (pendingStatus) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><button className="task-check" aria-label={task.completed ? `Reopen ${title}` : `Complete ${title}`} disabled={busy || historical || pendingStatus !== null} onClick={(event) => { event.stopPropagation(); if (!pendingStatus) onTaskCompletion(task, !task.completed); }}>{task.completed && <Check size={14} />}</button><div className="task-row-body"><div className="task-row-line primary-line"><h3>{title}</h3>{isSelected && <span className="surfaced-tag">On today</span>}</div>{(metaParts.length > 0 || description || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{description && <p className="task-row-desc">{description}</p>}</div>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><CompletionRing compact completed={progress.completed} total={progress.total} label="subtasks" /></span>}{!pendingStatus && dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-state ${state}`}>{stateLabel}</span>}{!historical && !pendingStatus && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}</article>;
-    })}</section>) : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading older tasks…</> : "Load older tasks"}</button>}</section>
+    })}</section>)}</> : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading older tasks…</> : "Load older tasks"}</button>}</section>
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }
@@ -3427,13 +3457,3 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   </main>;
 }
 export function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
-/** One switch control for settings: the track carries the state, the label
- * states it in words, and the whole control is a single focusable switch. */
-export function SettingsSwitch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} className={`settings-switch${checked ? " on" : ""}`} onClick={() => onChange(!checked)}>
-      <span className="settings-switch-track" aria-hidden="true"><span className="settings-switch-knob" /></span>
-      <span className="settings-switch-state" aria-hidden="true">{checked ? "On" : "Off"}</span>
-    </button>
-  );
-}

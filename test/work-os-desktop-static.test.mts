@@ -542,3 +542,34 @@ assert.match(releaseWorkflow, /## What's new in/);
 assert.match(styles, /\.notification-flyout\.persistent\.success/);
 
 console.log("Work OS desktop static checks passed.");
+
+// ── Task-list ordering, overdue meaning, and count reconciliation ──
+const taskWorkspace = read("src/taskWorkspace.ts");
+assert.match(taskWorkspace, /export function isOverdueTask/);
+assert.match(taskWorkspace, /export function sortTaskList/);
+assert.match(taskWorkspace, /export const DEFAULT_TASK_SORT: TaskSort = \{ key: "status", direction: "asc" \};/);
+assert.match(taskWorkspace, /export function dayScopedTasks/);
+const sortHeader = read("src/SortHeaderRow.tsx");
+assert.match(sortHeader, /role="toolbar" aria-label=\{label\}/);
+assert.match(sortHeader, /aria-pressed=\{active\}/);
+assert.match(app, /<SortHeaderRow /);
+// Card rows do not map onto the sort columns, so no fake table semantics.
+assert.doesNotMatch(app, /role: "table" as const/);
+assert.doesNotMatch(sortHeader, /aria-sort=/);
+assert.doesNotMatch(sortHeader, /role="columnheader"/);
+assert.match(app, /active-task-sort-note/);
+assert.match(app, /readTaskSort\(DAY_SORT_STORAGE_KEY\)/);
+assert.match(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
+// One day scope and one overdue predicate; the old split sources must not return.
+assert.match(app, /dayScopedTasks\(todayTasks, currentPlan\?\.items/);
+assert.match(app, /dayScopedTasks\(visibleDay\?\.tasks/);
+assert.match(app, /isOverdueTask\(task, today\)/);
+assert.doesNotMatch(app, /otherTasks\.filter\(\(task\) => typeof task\.due_date === "string"/);
+assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
+// Counts keep describing their own lists.
+assert.match(app, /aria-label=\{`\$\{completed\} of \$\{tasks\.length\} tasks done today/);
+assert.match(app, /count: parentTasks\(uniqueTasks\(unfinishedTasks\)\)\.length/);
+assert.match(app, /count: parentTasks\(uniqueTasks\(taskHistory\)\)\.length/);
+assert.match(styles, /\.sort-header-row/);
+assert.match(styles, /\.sort-header-row \{\n  display: flex;\n  flex-wrap: wrap;/);
+assert.match(styles, /\.active-task-sort-note/);

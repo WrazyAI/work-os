@@ -8,7 +8,8 @@ import { TaskSelectionCard } from "./TaskSelectionCard";
 import { NotificationFlyouts } from "./NotificationFlyouts";
 import { WhatsNewModal } from "./WhatsNewModal";
 import { displayUpdateVersion } from "./updater";
-import { updateInstalledCopy } from "./whatsNew";
+import { changelogHistory, updateInstalledCopy } from "./whatsNew";
+import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { Otto } from "./Otto";
 import type { ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
@@ -253,7 +254,11 @@ function CreateRecoverySection() {
 function WhatsNewSection() {
   const [open, setOpen] = useState(false);
   const [requested, setRequested] = useState<string | null>(null);
-  const version = "0.3.9";
+  // The newest logged release stands in for the installed build, so the modal
+  // previews real notes and the history's installed tag.
+  const version = changelogHistory(CHANGELOG_RAW)[0]?.version ?? "0.0.0";
+  const history = changelogHistory(CHANGELOG_RAW, version);
+  const bullets = history[0]?.bullets ?? [];
   const copy = updateInstalledCopy(version);
   return (
     <section aria-label="Post-update announcement preview" style={{ display: "grid", gap: 12 }}>
@@ -275,7 +280,8 @@ function WhatsNewSection() {
       />
       {open && <WhatsNewModal
         displayVersion={displayUpdateVersion(version)}
-        bullets={["First launch after an update announces itself here.", "View changelog opens this modal from the flyout or Settings."]}
+        bullets={bullets}
+        history={history}
         onClose={() => setOpen(false)}
       />}
       {requested ? <p role="status" style={{ margin: 0, fontSize: 13 }}>{requested}</p> : null}
