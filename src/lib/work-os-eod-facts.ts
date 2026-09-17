@@ -1,9 +1,11 @@
 import type { Json } from "@/lib/work-os-internal";
 
-/** Scheduled agent routines ("Run me-context-update routine (…)") are
+/** Scheduled agent routines ("Run me-context-update routine (2026-09-17)") are
  * automation, not employee deliverables. The EOD collapses every run of the
- * same routine into one line instead of listing each execution. */
-const AUTOMATION_TITLE_RE = /^run\s+(.+?)\s+routine\b/i;
+ * same routine into one line instead of listing each execution. The generated
+ * routines always carry a date suffix, which keeps titles a person might write
+ * ("Run the weekly routine") out of the automation bucket. */
+const AUTOMATION_TITLE_RE = /^run\s+(.+?)\s+routine\s*(?:\(|—|–|-)/i;
 
 export function automationName(title: string): string | null {
   const match = String(title ?? "").trim().match(AUTOMATION_TITLE_RE);
