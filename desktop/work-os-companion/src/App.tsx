@@ -416,10 +416,24 @@ export default function App() {
         tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
       } : current);
     }
-    queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => current ? {
-      ...current,
-      tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
-    } : current);
+    if (patch.completed === true) {
+      // The backlog is open-only: completing a task removes it and shifts the
+      // counts immediately, then a refetch confirms the server totals.
+      queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
+        if (!current || !current.tasks.some((task) => taskRowId(task) === rowId)) return current;
+        return {
+          tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
+          counts: { total: Math.max(0, current.counts.total - 1), open: Math.max(0, current.counts.open - 1), completed: current.counts.completed + 1 },
+        };
+      });
+      void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
+    } else {
+      queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => current ? {
+        ...current,
+        tasks: current.tasks.map((task) => patchTaskRow(task, rowId, patch)),
+      } : current);
+      if (patch.completed === false) void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
+    }
   }, [queryClient]);
 
   const removeTaskFromCaches = useCallback((rowId: string) => {
@@ -1518,12 +1532,24 @@ export default function App() {
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
   // window), so removing today's day-scoped work yields exactly what the Tasks
-  // page shows as Unfinished — one membership rule for both surfaces.
-  const openBacklog = useMemo(() => parentTasks(uniqueTasks(backlogQuery.data?.tasks ?? [])), [backlogQuery.data]);
+  // page shows as Unfinished — one membership rule for both surfaces. Until the
+  // backlog arrives (or if it fails) fall back to the computed carry-over so
+  // the tabs are never silently empty.
+  const openBacklog = useMemo(() => (backlogQuery.data ? parentTasks(uniqueTasks(backlogQuery.data.tasks)) : null), [backlogQuery.data]);
   const unfinishedCarryOver = useMemo(() => {
-    const todayIds = new Set(todayParentTasks.map((task) => taskRowId(task)));
-    return unfinishedBefore(openBacklog.filter((task) => !todayIds.has(taskRowId(task))), visibleDay?.shiftDate ?? "");
-  }, [openBacklog, todayParentTasks, visibleDay?.shiftDate]);
+    if (openBacklog) {
+      const todayIds = new Set(todayParentTasks.map((task) => taskRowId(task)));
+      return unfinishedBefore(openBacklog.filter((task) => !todayIds.has(taskRowId(task))), visibleDay?.shiftDate ?? "");
+    }
+    const computed = unfinishedBefore(parentTasks(taskHistory), visibleDay?.shiftDate ?? "");
+    const groups = visibleDay?.workspaceSummary?.carryOverGroups;
+    if (!groups) return computed;
+    const seen = new Set(computed.map(({ task }) => String(task.provider_task_id || task.id)));
+    const extra = groups.flatMap((group) => group.tasks)
+      .filter((task) => !seen.has(String(task.provider_task_id || task.id)))
+      .map((task) => ({ task, attribution: { date: task.due_date ?? null, reason: "carried" as const } }));
+    return [...computed, ...extra];
+  }, [openBacklog, todayParentTasks, visibleDay?.shiftDate, visibleDay?.workspaceSummary, taskHistory]);
   const yesterdayDate = moveDate(visibleDay?.shiftDate ?? "", -1);
   const yesterdayDueTasks = unfinishedCarryOver.filter(({ task }) => !task.completed && task.due_date?.slice(0, 10) === yesterdayDate);
   const recencyOrder = (task: TaskRow) => {
@@ -2520,7 +2546,7 @@ export default function App() {
         onClockOut={() => setClockOutConfirmation(true)}
         kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
@@ -3112,11 +3138,11 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave }: {
+export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   taskView: TaskView; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
-  backlog?: TaskBacklog | null; backlogLoading?: boolean;
+  backlog?: TaskBacklog | null; backlogLoading?: boolean; backlogError?: boolean;
   loadingMore: boolean; hasMore: boolean; busy: boolean; onTaskView: (view: TaskView) => void; onDate: (date: string) => Promise<void>;
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
   onEditTask: (task: TaskRow) => void; onArchiveTask: (task: TaskRow) => void; onDeleteTask?: (task: TaskRow) => void;
@@ -3258,7 +3284,8 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
         </div>}
       </div>
     </section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}{overflowNote && <small className="task-filter-result" role="status">{overflowNote}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div><div className={`evidence-list task-records ${displayedSections.length ? "has-sort" : ""}`.trim()}>{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? <><SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} />{displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div className="task-record-section-head"><strong>{section.label}</strong><span>{section.tasks.length}</span><small>{section.note}</small></div></header>{section.tasks.map((task) => {
+    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}{overflowNote && <small className="task-filter-result" role="status">{overflowNote}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div>{!historical && taskView === "unfinished" && backlogError && <div className="task-backlog-warning" role="status">The full backlog could not be loaded — this list shows only the tasks already loaded.</div>}
+      <div className={`evidence-list task-records ${displayedSections.length ? "has-sort" : ""}`.trim()}>{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? <><SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} />{displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div className="task-record-section-head"><strong>{section.label}</strong><span>{section.tasks.length}</span><small>{section.note}</small></div></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;

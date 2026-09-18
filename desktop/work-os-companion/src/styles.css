@@ -1864,6 +1864,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   outline: 2px solid var(--signal);
   outline-offset: 1px;
 }
+.task-backlog-warning {
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-warn) 8%, var(--paper));
+  color: var(--ink);
+  font-size: 10px;
+}
 .task-load-more {
   width: 100%;
   min-height: 42px;

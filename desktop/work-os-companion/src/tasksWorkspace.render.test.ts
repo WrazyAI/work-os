@@ -254,6 +254,16 @@ describe("Tasks workspace backlog reconciliation", () => {
     expect(markup).toContain('role="toolbar"');
   });
 
+it("discloses a backlog failure instead of silently using the loaded window", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      taskView: "unfinished",
+      backlogError: true,
+      taskHistory: [props.taskHistory[0]],
+    }));
+    expect(markup).toContain("The full backlog could not be loaded");
+  });
+
   it("counts All tasks from the server total and says how much is on screen", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,

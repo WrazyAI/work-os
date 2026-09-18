@@ -573,6 +573,7 @@ assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
 assert.match(app, /unfinishedBefore\(openBacklog\.filter\(\(task\) => !todayIds\.has\(taskRowId\(task\)\)\), visibleDay\?\.shiftDate/);
 assert.match(app, /useTaskBacklogQuery/);
 assert.match(app, /backlog\?: TaskBacklog \| null/);
+assert.match(app, /task-backlog-warning/);
 assert.match(app, /Showing \$\{unfiltered\.length\} of \$\{viewTotal\}/);
 // Counts keep describing their own lists.
 assert.match(app, /aria-label=\{`\$\{completed\} of \$\{tasks\.length\} tasks done today/);

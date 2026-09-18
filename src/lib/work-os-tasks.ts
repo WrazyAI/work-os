@@ -232,17 +232,26 @@ export async function listPersonOpenTasks(userId: string, personId: string) {
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
   const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
-  const rows = await ensureNoError(
-    db().from("work_tasks")
-      .select("*, project:work_projects(id,name,provider_project_id)")
-      .eq("user_id", userId)
-      .not("status", "in", "(archived,deleted)")
-      .order("due_date", { ascending: true, nullsFirst: false })
-      .order("provider_created_at", { ascending: false })
-      .limit(2500),
-    "load person task backlog",
-  );
-  const parents = (rows ?? []).filter((task) =>
+  // Exact counts require every candidate row, so page through the table instead
+  // of trusting a single capped request.
+  const rows: Record<string, any>[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 20000; offset += pageSize) {
+    const page = await ensureNoError(
+      db().from("work_tasks")
+        .select("*, project:work_projects(id,name,provider_project_id)")
+        .eq("user_id", userId)
+        .not("status", "in", "(archived,deleted)")
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .order("provider_created_at", { ascending: false })
+        .range(offset, offset + pageSize - 1),
+      "load person task backlog",
+    );
+    const batch = page ?? [];
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  const parents = rows.filter((task) =>
     !task.parent_task_id && !task.parent_provider_task_id && isTaskAttributableToPerson(task, personId, niftyMemberId));
   const open = parents.filter((task) => task.completed !== true);
   return {

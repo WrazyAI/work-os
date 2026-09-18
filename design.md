@@ -1875,6 +1875,10 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 | Recent tasks | Open, not overdue | Latest meaningful task activity first | Neutral heading |
 | Recently completed | Completed | Latest completion/activity first | Muted completion treatment |
 
+The table's Order column is the canonical order used when `Status` is the active
+sort; any other active column orders rows inside each group, and the default
+`Due` sort therefore shows the latest due dates first within every group.
+
 **Overdue has one definition everywhere:** open work with a valid due date before
 the current workday. Undated older work is unfinished carry-over, never overdue;
 the amber `Other days` count states that, and no surface may compute its own
