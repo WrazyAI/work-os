@@ -1557,8 +1557,8 @@ time with no second confirmation — and every non-batch operation keeps using i
   when no more specific pill applies. Status names are resolved by the server
   from the employee's own task rows — the target task names where it is now, and
   any task already in the target column names where it is going — and an entry
-  whose name cannot be resolved shows no status pill at all. A raw Nifty column
-  id never reaches the card.
+  whose name cannot be resolved falls back to a plain `Status` pill rather than
+  guessing; a raw Nifty column id never reaches the card.
 - **The card settles, and stays settled.** The lifecycle is `review` →
   (arm) → `confirm` → `filing` → `approved` | `skipped` | `pending` | `failed`.
   On `approved`, `skipped`, or `pending` the card collapses into an accordion
