@@ -258,6 +258,31 @@ export function localDateForTimezone(at: Date, timezone: string) {
   return localParts(at, timezone).date;
 }
 
+/** Half-open UTC bounds for one local calendar day: [local midnight, next
+ * local midnight). Every day-scoped Worktivity read and write uses these so a
+ * frame captured near local midnight belongs to the employee's workday rather
+ * than to whichever UTC date it happens to fall in. */
+export function localDayBounds(date: string, timezone: string): { startIso: string; endIso: string } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { startIso: "", endIso: "" };
+  const next = dateOnlyAfter(date);
+  try {
+    return {
+      startIso: zonedDateTimeToUtc(date, "00:00", timezone || "UTC").toISOString(),
+      endIso: zonedDateTimeToUtc(next, "00:00", timezone || "UTC").toISOString(),
+    };
+  } catch {
+    // An unknown timezone must not fail the run; keep the day usable in UTC.
+    return { startIso: `${date}T00:00:00.000Z`, endIso: `${next}T00:00:00.000Z` };
+  }
+}
+
+function dateOnlyAfter(date: string) {
+  const at = new Date(`${date}T12:00:00Z`);
+  if (!Number.isFinite(at.getTime())) return date;
+  at.setUTCDate(at.getUTCDate() + 1);
+  return at.toISOString().slice(0, 10);
+}
+
 export function formatLocalShift(window: WorkOsShiftWindow) {
   const start = localParts(new Date(window.startsAt), window.timezone);
   const end = localParts(new Date(window.endsAt), window.timezone);

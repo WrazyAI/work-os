@@ -116,7 +116,7 @@ export function capFactLines(lines: string[], limit = EOD_SECTION_LIMIT): string
 }
 
 async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: string, reportDate: string, ownerId: string) {
-  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult, timezoneResult, planResult, gallery] = await Promise.all([
+  const [workspace, personResult, evidenceRows, checkInsResult, eventsResult, timezoneResult, planResult] = await Promise.all([
     resolveDailyWorkspace(access, reportDate, { limit: 100 }),
     db().from("work_people").select("display_name,role_profile:work_role_profiles(name)")
       .eq("organization_id", access.organizationId).eq("id", personId).single(),
@@ -129,7 +129,6 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
       .eq("person_id", personId).maybeSingle(),
     db().from("work_daily_plans").select("id").eq("organization_id", access.organizationId)
       .eq("person_id", personId).eq("shift_date", reportDate).maybeSingle(),
-    listEodScreenshots(access.organizationId, personId, reportDate),
   ]);
   if (personResult.error) throw new Error(`load EOD person: ${personResult.error.message}`);
   if (checkInsResult.error) throw new Error(`load EOD updates: ${checkInsResult.error.message}`);
@@ -137,6 +136,8 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   if (timezoneResult.error) throw new Error(`load EOD timezone: ${timezoneResult.error.message}`);
   if (planResult.error) throw new Error(`load EOD plan: ${planResult.error.message}`);
   const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
+  // The gallery depends on the timezone, so it cannot share the batch above.
+  const gallery = await listEodScreenshots(access.organizationId, personId, reportDate, timezone);
   const planId = planResult.data?.id ? String(planResult.data.id) : null;
   const planItems = planId
     ? await db().from("work_daily_plan_items").select("task_id").eq("plan_id", planId)

@@ -8,8 +8,8 @@ import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { fetchScreenshotsForDay, framesWithinDay, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
-import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
+import { fetchScreenshotsForDay, framesWithinBounds, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
+import { localDateForTimezone, localDayBounds, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
 
@@ -92,13 +92,17 @@ async function assertScreenshotExecutionAllowed(organizationId: string, executio
   }
 }
 
-async function mirrorSummary(access: ScreenshotScope, personId: string, eventId: string, occurredAt: string, summary: string, model: string) {
+async function mirrorSummary(access: ScreenshotScope, personId: string, eventId: string, occurredAt: string, summary: string, model: string, timezone: string) {
   const { data: organization, error: organizationError } = await db().from("work_organizations").select("legacy_owner_id,created_by").eq("id", access.organizationId).single();
   if (organizationError) throw new Error(`load screenshot organization: ${organizationError.message}`);
   const ownerId = organization.legacy_owner_id || organization.created_by;
+  const capturedAt = new Date(occurredAt);
   const payload = {
     user_id: ownerId, organization_id: access.organizationId, person_id: personId, evidence_event_id: eventId,
-    evidence_date: occurredAt.slice(0, 10), source: "worktivity", title: "Worktivity screenshot context", summary,
+    // Evidence dates follow the employee's local day, the same boundary the
+    // fetch, terminal matching, and gallery use.
+    evidence_date: Number.isFinite(capturedAt.getTime()) ? localDateForTimezone(capturedAt, timezone) : occurredAt.slice(0, 10),
+    source: "worktivity", title: "Worktivity screenshot context", summary,
     metrics: { evidenceClass: "activity_observation", model, promptVersion: PROMPT_VERSION }, raw: { evidenceEventId: eventId }, updated_at: new Date().toISOString(),
   };
   // work_evidence carries only a partial unique index on evidence_event_id, so
@@ -183,12 +187,13 @@ function sampleScreenshots(shots: WtScreenshot[], cap = DEFAULT_SCREENSHOTS_PER_
 }
 
 /** Frames that already have a terminal summary are never re-analyzed; failed
- * frames stay pending so the next scheduled run retries them. */
-async function terminallyAnalyzedFrames(organizationId: string, personId: string, date: string) {
+ * frames stay pending so the next scheduled run retries them. The window is the
+ * employee's local day, matching how frames are attributed. */
+async function terminallyAnalyzedFrames(organizationId: string, personId: string, bounds: { startIso: string; endIso: string }) {
   const events = await db().from("work_evidence_events").select("id,external_event_id")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
-    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+    .gte("occurred_at", bounds.startIso).lt("occurred_at", bounds.endIso);
   if (events.error) throw new Error(`load analyzed screenshot frames: ${events.error.message}`);
   const byExternal = new Map((events.data ?? []).map((row: any) => [String(row.external_event_id), String(row.id)]));
   if (!byExternal.size) return new Set<string>();
@@ -302,11 +307,20 @@ async function createEvidenceEvent(access: ScreenshotScope, personId: string, lo
   return data;
 }
 
+/** The employee's timezone from onboarding, used for every local-day boundary
+ * in this pipeline. Callers that already resolved a timezone pass it instead. */
+export async function personTimezone(organizationId: string, personId: string, fallback = "UTC"): Promise<string> {
+  const { data, error } = await db().from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
+  if (error) throw new Error(`load screenshot timezone: ${error.message}`);
+  return typeof data?.timezone === "string" && data.timezone ? data.timezone : fallback;
+}
+
 export async function summarizeWorktivityScreenshots(
   access: ScreenshotScope,
   personId: string,
   date: string,
-  options: { execution?: ScreenshotExecution; maxScreenshots?: number } = {},
+  options: { execution?: ScreenshotExecution; maxScreenshots?: number; timezone?: string } = {},
 ) {
   const execution = options.execution ?? "feature";
   await assertScreenshotExecutionAllowed(access.organizationId, execution);
@@ -320,14 +334,18 @@ export async function summarizeWorktivityScreenshots(
     .single();
   if (personError) throw new Error(`load Worktivity person: ${personError.message}`);
   if (!person.worktivity_employee_id) throw new Error("person has no Worktivity mapping");
+  // Callers that derived the date from a schedule pass that same timezone; the
+  // rest fall back to the employee's onboarding timezone.
+  const timezone = options.timezone ?? await personTimezone(access.organizationId, personId);
+  const bounds = localDayBounds(date, timezone);
   const [fetched, config, analyzed] = await Promise.all([
-    fetchScreenshotsForDay(person.worktivity_employee_id, date),
+    fetchScreenshotsForDay(person.worktivity_employee_id, date, timezone),
     screenshotConfig(access.organizationId, personId),
-    terminallyAnalyzedFrames(access.organizationId, personId, date),
+    terminallyAnalyzedFrames(access.organizationId, personId, bounds),
   ]);
   // The day boundary is enforced again at the processing edge so no caller —
-  // present or future — can ever analyze another day's frame under this date.
-  const shots = framesWithinDay(fetched, date);
+  // present or future — can ever analyze another frame under this date.
+  const shots = framesWithinBounds(fetched, bounds);
   const terminalAfter = new Set(analyzed);
   const pending = shots.filter((shot) => !analyzed.has(`screenshot:${shot.ID}`));
   await ensureBucket();
@@ -426,7 +444,7 @@ export async function summarizeWorktivityScreenshots(
         metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
         updated_at: new Date().toISOString(),
       }).eq("id", event.id);
-      await mirrorSummary(access, personId, event.id, log.CreateDate, observation.summary, MODEL);
+      await mirrorSummary(access, personId, event.id, log.CreateDate, observation.summary, MODEL, timezone);
       results.push(data);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Screenshot analysis failed";
@@ -628,7 +646,7 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
     if (Number.isFinite(lastUnavailableAt) && Date.now() - lastUnavailableAt < 24 * 60 * 60_000) continue;
     const access: ScreenshotScope = { organizationId: row.organization_id as string };
     try {
-      const run = await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate);
+      const run = await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate, { timezone });
       if (run.logs === 0) {
         // Never settle a day that yielded nothing: the provider may serve its
         // frames later (or a transient failure emptied the response), and a
@@ -779,7 +797,7 @@ export async function runScheduledScreenshotAnalysis(limit = 8) {
     } as unknown as WorkOsAccess;
     try {
       const cap = mode === "eod" ? SCHEDULED_EOD_CAP : SCHEDULED_HOURLY_CAP;
-      const run = await summarizeWorktivityScreenshots(access, person.id, localDate, { maxScreenshots: cap });
+      const run = await summarizeWorktivityScreenshots(access, person.id, localDate, { maxScreenshots: cap, timezone });
       const { error: auditError } = await db().from("work_audit_log").insert({
         organization_id: person.organization_id,
         actor_user_id: null,
@@ -889,15 +907,16 @@ export type EodScreenshotGallery = {
   viewable: EodScreenshotItem[];
 };
 
-/** Viewable frames for one day plus an honest breakdown of the rest. Only
- * retained, unexpired images are listed; sensitive and policy exclusions have
- * no image left to show. */
-export async function listEodScreenshots(organizationId: string, personId: string, date: string): Promise<EodScreenshotGallery> {
+/** Viewable frames for one local day plus an honest breakdown of the rest.
+ * Only retained, unexpired images are listed; sensitive and policy exclusions
+ * have no image left to show. */
+export async function listEodScreenshots(organizationId: string, personId: string, date: string, timezone?: string): Promise<EodScreenshotGallery> {
   const gallery: EodScreenshotGallery = { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, total: 0, viewable: [] };
+  const bounds = localDayBounds(date, timezone ?? await personTimezone(organizationId, personId));
   const events = await db().from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
-    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+    .gte("occurred_at", bounds.startIso).lt("occurred_at", bounds.endIso);
   if (events.error) throw new Error(`load screenshot gallery events: ${events.error.message}`);
   const occurredBy = new Map((events.data ?? []).map((row: any) => {
     const at = row.occurred_at instanceof Date ? row.occurred_at.toISOString() : String(row.occurred_at ?? "");

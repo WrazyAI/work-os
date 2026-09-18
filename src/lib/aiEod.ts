@@ -1,6 +1,15 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
+import { localDayBounds } from "@/modules/work-os/companion";
+
+/** The employee's onboarding timezone, the same source the day label uses. */
+async function screenshotTimezone(db: ReturnType<typeof createAdminClient>, organizationId: string, personId: string): Promise<string> {
+  const { data, error } = await db.from("work_employee_onboarding").select("timezone")
+    .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
+  if (error) throw new Error(`load screenshot context timezone: ${error.message}`);
+  return typeof data?.timezone === "string" && data.timezone ? data.timezone : "UTC";
+}
 
 export const EOD_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
@@ -373,12 +382,14 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
 
 /** Processed screenshot summaries for the report date, shaped for the EOD
  * composer's screenshot-context panel. Neutral activity context only. */
-export async function gatherEodScreenshotContext(organizationId: string, personId: string, date: string) {
+export async function gatherEodScreenshotContext(organizationId: string, personId: string, date: string, timezone?: string) {
   const supabase = createAdminClient();
+  const resolvedTimezone = timezone ?? await screenshotTimezone(supabase, organizationId, personId);
+  const bounds = localDayBounds(date, resolvedTimezone);
   const events = await supabase.from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
-    .gte("occurred_at", `${date}T00:00:00.000Z`).lte("occurred_at", `${date}T23:59:59.999Z`);
+    .gte("occurred_at", bounds.startIso).lt("occurred_at", bounds.endIso);
   if (events.error) throw new Error(`load screenshot events: ${events.error.message}`);
   const ids = (events.data ?? []).map((row: any) => String(row.id));
   if (!ids.length) return { processed: 0, excluded: 0, failed: 0, pending: 0, hours: [] as EodScreenshotHour[] };
