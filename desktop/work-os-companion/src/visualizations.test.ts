@@ -175,7 +175,11 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toMatch(/\.task-records\.evidence-list \{[\s\S]*?border: 0;/);
     expect(workspaceStyles).toContain(".task-row-line.secondary-line .task-assignee-tags > span");
     // The dock matches the content column and never traps a focused row.
-    expect(workspaceStyles).toMatch(/html:has\(\.stage\.has-dock\) \{[\s\S]{0,80}?scroll-padding-bottom: 140px;/);
+    // Clearance is scroll-margin on the scroll targets, not scroll-padding on
+    // the scroller: scroll-padding-bottom also drives the browser's caret-reveal
+    // scroll for the pinned composer, which nudged the page on every keystroke.
+    expect(workspaceStyles).toMatch(/\.stage\.has-dock :not\(\.progress-dock\):not\(\.progress-dock \*\) \{[\s\S]{0,40}?scroll-margin-bottom: 140px;/);
+    expect(workspaceStyles).not.toContain("scroll-padding-bottom: 140px;");
     expect(workspaceStyles).toContain("width: min(calc(100% - 48px), 1024px);");
   });
 

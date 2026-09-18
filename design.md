@@ -2092,6 +2092,14 @@ lookalike input bars.
   accessible hidden label at very narrow widths.
 - Send control: 36px square, 11px radius, dark ink when enabled.
 - Reserve page bottom padding so the dock never obscures the last task or footer.
+- Clearance for focus and programmatic reveals is `scroll-margin-bottom` on the
+  content targets, never `scroll-padding-bottom` on the scroller. The composer is
+  pinned `16px` above the fold, so a scroller-level bottom padding can never be
+  satisfied on its behalf and the browser re-scrolls the page on every keystroke
+  to reveal the caret. A target-level margin keeps keyboard/Tab reveals clear of
+  the dock without touching the composer's own caret geometry.
+- Typing must not move the page: growing the draft, opening the flyout, or
+  revealing a thread must leave the content the reader is looking at in place.
 
 ### 28.2 Modes and outcomes
 

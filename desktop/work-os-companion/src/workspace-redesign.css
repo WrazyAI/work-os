@@ -1992,9 +1992,13 @@ body {
   }
 }
 
-/* Focus and programmatic scrolls must clear the sticky composer. */
-html:has(.stage.has-dock) {
-  scroll-padding-bottom: 140px;
+/* Focus and programmatic scrolls must clear the sticky composer. This is
+   scroll-margin on the scroll targets, never scroll-padding on the scroller:
+   scroll-padding-bottom also applies to the browser's caret-reveal scroll for
+   the composer, which is pinned 16px above the fold and can never satisfy
+   140px of bottom padding, so the page scrolled down on every keystroke. */
+.stage.has-dock :not(.progress-dock):not(.progress-dock *) {
+  scroll-margin-bottom: 140px;
 }
 
 .agenda-dock .progress-input-shell {

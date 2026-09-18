@@ -35,7 +35,26 @@ export default function TasksPreview() {
   const scenario = params.get("scenario");
   const pendingMode = params.get("pending");
   const pendingRows = pendingMode ? [{ id: "pending-1", title: "Draft the onboarding checklist", description: "Optimistic add awaiting Nifty confirmation.", completed: false, due_date: CURRENT_DATE, pending_status: pendingMode, pending_error: pendingMode === "failed" ? "Nifty timed out" : undefined }] : [];
-  const degraded = scenario === "degraded" ? tasks.map((task, index) => index === 1 ? { ...task, sync_error: "nifty_unreachable" } : task) : tasks;
+  // A dock-height fixture needs a page that actually scrolls: a short list can
+  // never show the composer's growth displacing the tasks, so `?many` fills the
+  // day beyond the fold with the same row shapes production renders.
+  const many = params.has("many");
+  const manyTasks: TaskRow[] = many ? Array.from({ length: 24 }, (_, index) => ({
+    id: `task-many-${index}`,
+    title: `Reconcile provider record ${index + 1}`,
+    description: "Hold the row rhythm steady while the composer grows beneath it.",
+    due_date: CURRENT_DATE,
+    provider_created_at: `${CURRENT_DATE}T0${index % 9}:${String(index % 60).padStart(2, "0")}:00Z`,
+    priority: index % 3 === 0 ? "high" : index % 3 === 1 ? "medium" : "low",
+    assignee_person_ids: index % 2 === 0 ? ["person-1"] : ["person-1", "person-2"],
+    synced_at: `${CURRENT_DATE}T09:00:00Z`,
+    completed: false,
+    subtask_total: 3,
+    subtask_completed: index % 3,
+    project: { name: index % 2 === 0 ? "Work OS" : "LaunchLoom" },
+  })) : [];
+  const baseTasks = many ? [...tasks, ...manyTasks] : tasks;
+  const degraded = scenario === "degraded" ? baseTasks.map((task, index) => index === 1 ? { ...task, sync_error: "nifty_unreachable" } : task) : baseTasks;
   const [carryOpen, setCarryOpen] = useState(params.has("carryover") || scenario === "carryover");
   const [goal, setGoal] = useState(currentPlan.freeform_intent ?? "");
   const [input, setInput] = useState("");
@@ -47,7 +66,7 @@ export default function TasksPreview() {
     return requested === "unfinished" || requested === "completed" || requested === "all" ? requested : "today";
   });
   const [receipt, setReceipt] = useState<{ text: string; message: string; kind: "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task" } | null>(null);
-  const suggestion = suggestDailyGoal(tasks, CURRENT_DATE, currentPlan.items);
+  const suggestion = suggestDailyGoal(baseTasks, CURRENT_DATE, currentPlan.items);
   const detailsTask = {
     task: { ...tasks[0], description: "Finish the desktop implementation, validate the workflow end to end, and attach the signed verification record." },
     subtasks: [
@@ -55,7 +74,7 @@ export default function TasksPreview() {
       { id: "sub-2", provider_task_id: "sub-2", title: "Fix overdue ordering after midnight", description: "Oldest-due-first must survive a date rollover.", completed: false, due_date: "2026-08-19" },
       { id: "sub-3", provider_task_id: "sub-3", title: "Capture review screenshots", description: "", completed: false, assignees: [{ personId: "person-1", displayName: "David Zahemen", email: null }] },
     ],
-    moveTargets: tasks.slice(1, 3),
+    moveTargets: baseTasks.slice(1, 3),
     subtaskSync: scenario === "degraded" ? { tasks: null, syncedAt: null, error: "nifty_unreachable" } : { tasks: 3, syncedAt: `${CURRENT_DATE}T09:05:00Z`, error: null },
   };
   const menuId = scenario === "menu-bottom" ? "task-old" : scenario === "menu-middle" ? "task-carry" : scenario === "menu-top" ? "task-today" : null;
@@ -63,19 +82,19 @@ export default function TasksPreview() {
   // exact counts, so the Unfinished view and chips can be exercised end to end.
   // The production Unfinished view always receives a server backlog, so the
   // fixture supplies one for that view unless a test asks for the degraded case.
-  const backlog = (params.has("backlog") || (params.get("view") === "unfinished" && !params.has("nobacklog"))) ? {
+  const backlog = (params.has("backlog") || many || (params.get("view") === "unfinished" && !params.has("nobacklog"))) ? {
     tasks: [
-      ...tasks.filter((task) => task.completed !== true),
+      ...baseTasks.filter((task) => task.completed !== true),
       { id: "beyond-window", title: "Beyond the loaded window", due_date: "2026-07-01", provider_created_at: "2026-07-01T09:00:00Z", completed: false, project: { name: "LaunchLoom" } },
     ],
-    counts: { total: 12, open: 4, completed: 8 },
+    counts: { total: many ? 30 : 12, open: many ? 28 : 4, completed: 8 },
   } : null;
   const selectionScenario = scenario?.startsWith("selection-") ? scenario.slice("selection-".length) : null;
   const selectionTasks = tasks.slice(0, 3).map((task, index) => ({ id: String(task.id), title: String(task.title), description: String(task.description), dueDate: task.due_date, projectName: task.project?.name, priority: task.priority, state: index === 1 ? "overdue" as const : "pending" as const }));
   return <div className="workspace preview-workspace">
     <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav aria-label="Work OS"><div className="nav-group nav-core">{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"]].map(([Icon, label]) => <button className={label === "Tasks" ? "active" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-context">{[[Gauge, "Insights"], [ShieldCheck, "Evidence"]].map(([Icon, label]) => <button className={label === "Evidence" ? "nav-evidence" : ""} key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-settings"><button><Settings size={18} /><span>Settings</span></button></div></nav><div className="rail-foot"><span className="presence live" /><div><strong>On shift</strong><small>Synced</small></div></div></aside>
-    <section className="stage"><header className="masthead"><div><p>{formatWorkOsDate(history ? "2026-08-20" : CURRENT_DATE)}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Live · 3 open</span><button className="avatar">DZ</button></div></header>
-      <TasksWorkspace currentDate={CURRENT_DATE} historyDate={history ? "2026-08-20" : CURRENT_DATE} backlog={backlog} currentPlan={currentPlan} historicalPlan={history ? historicalPlan : null} historicalTasks={history ? tasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={degraded} carryOver={unfinishedBefore(tasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} initialTaskMenuId={menuId} initialSearch={scenario === "filtered-empty" ? "zzz no match" : ""} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onDate={async () => undefined} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => undefined} onOpenTask={() => undefined} onEditTask={() => undefined} onArchiveTask={() => undefined} onDeleteTask={() => undefined} onSurfaceTask={() => undefined} onTaskCompletion={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined} />
+    <section className={`stage${history ? "" : " has-dock"}`}><header className="masthead"><div><p>{formatWorkOsDate(history ? "2026-08-20" : CURRENT_DATE)}</p><h1>Tasks</h1></div><div className="mast-actions"><span className="provider">Live · 3 open</span><button className="avatar">DZ</button></div></header>
+      <TasksWorkspace currentDate={CURRENT_DATE} historyDate={history ? "2026-08-20" : CURRENT_DATE} backlog={backlog} currentPlan={currentPlan} historicalPlan={history ? historicalPlan : null} historicalTasks={history ? baseTasks : []} goal={goal} goalProvenance="accepted_suggestion" suggestion={suggestion} saveState="saved" taskView={taskView} todayTasks={[...pendingRows, ...degraded.filter((task) => task.due_date === CURRENT_DATE)]} taskHistory={degraded} carryOver={unfinishedBefore(baseTasks, CURRENT_DATE)} carryOverOpen={carryOpen} loadingMore={false} hasMore={false} busy={false} initialTaskMenuId={menuId} initialSearch={scenario === "filtered-empty" ? "zzz no match" : ""} initialFiltersOpen={params.has("filters")} onTaskView={setTaskView} onDate={async () => undefined} onEditFocus={() => { setComposerPanel("goal"); setComposerOpen(true); }} onAddTask={() => undefined} onOpenTask={() => undefined} onEditTask={() => undefined} onArchiveTask={() => undefined} onDeleteTask={() => undefined} onSurfaceTask={() => undefined} onTaskCompletion={() => undefined} onCarryOverOpen={setCarryOpen} onLoadMore={() => undefined} />
       {!history && <ProgressComposer mode="agenda" input={input} open={composerOpen} panel={composerPanel} pending={pending} receipt={receipt} busy={false} required={false} goal={goal} goalProvenance="accepted_suggestion" goalSuggestion={suggestion} saveState="saved" onInput={setInput} onOpen={() => { setComposerPanel("update"); setComposerOpen(true); }} onOpenGoal={() => { setComposerPanel("goal"); setComposerOpen(true); }} onClose={() => { setComposerOpen(false); setPending(""); }} onSubmit={() => { const text = input.trim(); if (!text) return; setPending(text); setReceipt(null); setInput(""); setComposerOpen(true); }} onClassify={(kind) => { const text = pending; setReceipt({ text, kind, message: kind === "new_task" ? `Added “${text}” to today’s Nifty agenda.` : `Recorded “${text}” as ${kind.replaceAll("_", " ")} for today.` }); setPending(""); }} onGoal={setGoal} onAcceptSuggestion={() => suggestion && setGoal(suggestion.text)} />}
       {scenario === "details" && <TaskDetailsModal details={detailsTask} loading={false} readOnly={false} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={null} moveMenuId={null} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={() => undefined} onMoveMenu={() => undefined} onSubtaskCreate={() => undefined} onEditTask={() => undefined} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
       {scenario === "details-readonly" && <TaskDetailsModal details={detailsTask} loading={false} readOnly={true} currentDate={CURRENT_DATE} busy={false} subtaskTitle="" subtaskDescription="" subtaskMenuId={null} moveMenuId={null} onSubtaskTitle={() => undefined} onSubtaskDescription={() => undefined} onSubtaskMenu={() => undefined} onMoveMenu={() => undefined} onSubtaskCreate={() => undefined} onEditTask={() => undefined} onMoveSubtask={() => undefined} onToggleSubtask={() => undefined} onArchiveSubtask={() => undefined} onDeleteSubtask={() => undefined} onClose={() => undefined} />}
