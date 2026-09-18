@@ -23,6 +23,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.28
+
+- The task list no longer scrolls or jumps while you write in the update bar.
+
 ## 0.3.27
 
 - Approved and skipped task batches now collapse into a short summary with no buttons, so a card can never be approved twice.
