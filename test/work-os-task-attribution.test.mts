@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isNiftyTaskAttributableToMember } from "../src/lib/work-os";
+import { isNiftyTaskAttributableToMember, isTaskAttributableToPerson } from "../src/lib/work-os";
 import { normalizeNiftyTask } from "../src/lib/integrations/nifty";
 import { readFileSync } from "node:fs";
 
@@ -39,4 +39,23 @@ test("subtask moves require Nifty parent readback and preserve safety checks", (
   assert.match(workOsSource, /Only subtasks can be moved to another task/);
   assert.match(workOsSource, /Subtasks can only be moved beneath a top-level task/);
   assert.match(workOsSource, /same Nifty project/);
+});
+
+test("the unified predicate covers local assignment and provider metadata", () => {
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-a"] }, "person-a", "member-a"), true);
+  assert.equal(isTaskAttributableToPerson({ assignee_person_ids: ["person-b"] }, "person-a", "member-a"), false);
+  assert.equal(isTaskAttributableToPerson({ raw: { created_by: "member-a" } }, "person-a", "member-a"), true);
+  assert.equal(isTaskAttributableToPerson({ raw: { subscribers: ["member-a"] } }, "person-a", "member-a"), true);
+  assert.equal(isTaskAttributableToPerson({ assignee_provider_ids: ["member-a"], raw: {} }, "person-a", "member-a"), true);
+  assert.equal(isTaskAttributableToPerson({ raw: { created_by: "member-b" } }, null, "member-a"), false);
+});
+
+test("both task surfaces share the unified attribution predicate", () => {
+  const tasksSource = readFileSync(new URL("../src/lib/work-os-tasks.ts", import.meta.url), "utf8");
+  const workspaceSource = readFileSync(new URL("../src/lib/work-os-daily-workspace.ts", import.meta.url), "utf8");
+  assert.match(tasksSource, /export function isTaskAttributableToPerson/);
+  assert.match(tasksSource, /isTaskAttributableToPerson\(task, personId, niftyMemberId\)/);
+  assert.match(workspaceSource, /isTaskAttributableToPerson\(task, access\.personId, context\.niftyMemberId\)/);
+  assert.doesNotMatch(workspaceSource, /isNiftyTaskAttributableToMember/);
+  assert.match(tasksSource, /export async function listPersonOpenTasks/);
 });

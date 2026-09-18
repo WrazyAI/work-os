@@ -62,20 +62,19 @@ export function taskState(task: TaskRow, currentDate: string) {
   return isOverdueTask(task, currentDate) ? "overdue" as const : "open" as const;
 }
 
-export type TaskSortKey = "title" | "status" | "due" | "priority" | "activity";
+export type TaskSortKey = "title" | "status" | "due" | "priority";
 export type TaskSortDirection = "asc" | "desc";
 export type TaskSort = { key: TaskSortKey; direction: TaskSortDirection };
 
-export const DEFAULT_TASK_SORT: TaskSort = { key: "status", direction: "asc" };
+export const DEFAULT_TASK_SORT: TaskSort = { key: "due", direction: "desc" };
 export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v1";
 export const DAY_SORT_STORAGE_KEY = "work-os.day-sort.v1";
 
 export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
   { key: "title", label: "Task", initialDirection: "asc" },
   { key: "status", label: "Status", initialDirection: "asc" },
-  { key: "due", label: "Due", initialDirection: "asc" },
+  { key: "due", label: "Due", initialDirection: "desc" },
   { key: "priority", label: "Priority", initialDirection: "asc" },
-  { key: "activity", label: "Activity", initialDirection: "desc" },
 ];
 
 const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
@@ -86,6 +85,10 @@ export function readTaskSort(storageKey: string): TaskSort {
     const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) as Partial<TaskSort> | null : null;
     if (parsed && TASK_SORT_KEYS.includes(parsed.key as TaskSortKey) && (parsed.direction === "asc" || parsed.direction === "desc")) {
+      // The previous default (Status ascending) and the retired Activity
+      // column both migrate to the current default instead of pinning users
+      // to an order they never chose explicitly.
+      if (parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
       return { key: parsed.key as TaskSortKey, direction: parsed.direction };
     }
   } catch { /* best effort: a corrupt preference never blocks the list */ }
@@ -104,7 +107,6 @@ export function taskSortNote(sort: TaskSort): string {
     case "status": return sort.direction === "asc" ? "Overdue first, then due date" : "Completed first, then due date";
     case "due": return sort.direction === "asc" ? "Due date · soonest first" : "Due date · latest first";
     case "priority": return sort.direction === "asc" ? "Priority · highest first" : "Priority · lowest first";
-    case "activity": return sort.direction === "asc" ? "Oldest activity first" : "Latest activity first";
     case "title": return sort.direction === "asc" ? "Title A–Z" : "Title Z–A";
   }
 }
@@ -126,16 +128,16 @@ function statusRank(task: TaskRow, currentDate: string) {
 
 export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, currentDate: string) {
   const direction = sort.direction === "asc" ? 1 : -1;
-  // byRecency already reads newest-first, so ascending activity flips it.
-  const recencyDirection = sort.direction === "asc" ? -1 : 1;
   const byTitle = () => safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task"));
   const byRecency = () => recency(right) - recency(left);
   const byStatus = () => (statusRank(left, currentDate) - statusRank(right, currentDate)) * direction;
+  // Completed work always sits after open work when ordering by due date; the
+  // due comparison then decides within each half and undated rows stay last.
+  const openFirst = () => Number(left.completed === true) - Number(right.completed === true);
   switch (sort.key) {
     case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "due": return compareDueDirectional(left, right, sort.direction) || (statusRank(left, currentDate) - statusRank(right, currentDate)) || byRecency() || byTitle();
+    case "due": return openFirst() || compareDueDirectional(left, right, sort.direction) || byRecency() || byTitle();
     case "priority": return (priorityRank(left.priority) - priorityRank(right.priority)) * direction || (statusRank(left, currentDate) - statusRank(right, currentDate)) || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "activity": return byRecency() * recencyDirection || byTitle();
     case "title": return byTitle() * direction || byRecency();
   }
 }

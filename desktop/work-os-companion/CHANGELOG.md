@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Task lists now open sorted by due date, latest first, with open work above completed work.
+- The Activity sort option is gone; Task, Status, Due, and Priority remain.
+- The dashboard's older-work count no longer includes tasks that are already on today's plan.
+- Unfinished now shows your complete open backlog, including longer-running projects, with exact counts.
+
 ## 0.3.22
 
 - Your end-of-day activity summary now reads one line per hour — “3–4 PM: …” — instead of listing every screenshot.

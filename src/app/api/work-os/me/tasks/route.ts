@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listPersonTasks } from "@/lib/work-os";
+import { listPersonOpenTasks, listPersonTasks } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmployeeTaskSelection } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
@@ -37,6 +37,10 @@ export async function GET(req: Request) {
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
     if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, limit));
+    // The exact open backlog: small enough to return whole, so both the
+    // dashboard carry-over tabs and the Tasks Unfinished view can be complete
+    // instead of counted from the paginated history window.
+    if (view === "open") return NextResponse.json(await listPersonOpenTasks(ownerId, auth.access.personId as string));
     if (view === "today" || view === "day" || params.has("cursor")) {
       const workspace = await resolveDailyWorkspace(auth.access, requestedDate, {
         cursor: params.get("cursor"),

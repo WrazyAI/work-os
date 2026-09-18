@@ -595,7 +595,7 @@ Completed tasks use subdued text and a clear completed control. Do not make them
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
-Task lists state their order. A functional sort row may sit above a list (see 27.3). It is a `toolbar` of sort buttons, not a table header: card rows do not map onto those columns, so claiming `columnheader`/`aria-sort` semantics would misannounce every row. Each button carries `aria-pressed`, names the order it applies next, and the active order is stated in visible text, so no list is ever sorted silently.
+Task lists state their order. A functional sort row may sit above a list (see 27.3). It is a `toolbar` of sort buttons (`Task`, `Status`, `Due`, `Priority`), not a table header: card rows do not map onto those columns, so claiming `columnheader`/`aria-sort` semantics would misannounce every row. Each button carries `aria-pressed`, names the order it applies next, and the active order is stated in visible text, so no list is ever sorted silently.
 
 ### 10.3 Tables
 
@@ -1878,24 +1878,29 @@ Tasks are grouped, not presented as an undifferentiated provider dump. Inside
 **Overdue has one definition everywhere:** open work with a valid due date before
 the current workday. Undated older work is unfinished carry-over, never overdue;
 the amber `Other days` count states that, and no surface may compute its own
-overdue predicate. The dashboard's overdue metric therefore always equals the
-overdue work the `Unfinished` view shows.
+overdue predicate. The dashboard's `Previous`/`Other days` buckets and the
+Tasks `Unfinished` view render from the same open backlog with today's
+day-scoped work excluded, so a task can never count as both `My day` and older
+unfinished work.
 
 **Counts describe their lists.** Every hero number, tab count, chip count, and
-section count derives from the same rendered array it heads. The dashboard hero
-and the Tasks workspace share one day-scoped selector, so `Today` and `My day`
-can never disagree about membership or total.
+section count derives from the same rendered array it heads, or from the server
+total with an explicit `Showing N of M` note when the list is paginated. The
+dashboard hero and the Tasks workspace share one day-scoped selector, and one
+server-computed open backlog feeds both the dashboard's `Previous`/`Other days`
+tabs and `Unfinished`, so no two surfaces can disagree about an open task's
+bucket or a view's total.
 
-**Ordering is explicit and user-sortable.** The default order is Status, then due
-date: overdue (oldest due first), open work (soonest due first, undated last),
-completed (latest completion first). A functional sort toolbar above the list
-holds buttons for `Task`, `Status`, `Due`, `Priority`, and `Activity`; each
-button carries `aria-pressed` and names the order it applies next. The `Status`
-control orders the groups; every other control orders rows inside each group.
-Activating a control starts at its natural direction (Activity starts latest
-first), then toggles, then restores the default order on the third activation.
-Each section note, and the dashboard toolbar note, names the active order, and
-the choice is remembered per surface. No list renders in an unstated order.
+**Ordering is explicit and user-sortable.** The default order is due date,
+latest first, with open work always above completed work and undated rows last.
+A functional sort toolbar above the list holds buttons for `Task`, `Status`,
+`Due`, and `Priority`; each button carries `aria-pressed` and names the order it
+applies next. `Due` starts latest-first, every other control starts ascending,
+and activating a control toggles the direction before a third activation
+restores the default. The `Status` control orders the groups; every other
+control orders rows inside each group. Each section note, and the dashboard
+toolbar note, names the active order, and the choice is remembered per surface.
+No list renders in an unstated order.
 
 Provider refresh timestamps must not masquerade as meaningful task activity when
 a provider-created, provider-updated, completed, or user-action timestamp is

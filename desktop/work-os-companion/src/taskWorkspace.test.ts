@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -61,7 +61,7 @@ describe("unified Tasks workspace", () => {
       { id: "done", title: "Done", completed_at: "2026-08-26T13:00:00Z", completed: true },
     ], "2026-08-26");
     expect(sections.map((section) => [section.id, section.tasks.map((task) => task.id)])).toEqual([
-      ["overdue", ["late-one", "late-two"]],
+      ["overdue", ["late-two", "late-one"]],
       ["open", ["recent", "older"]],
       ["completed", ["done"]],
     ]);
@@ -122,7 +122,7 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(taskState({ id: "done", completed: true }, today)).toBe("complete");
   });
 
-  it("defaults to status then due date with completed work last", () => {
+  it("defaults to due latest first with completed work last", () => {
     const ordered = sortTaskList([
       { id: "done", title: "Done", completed: true, completed_at: "2026-09-16T10:00:00Z" },
       { id: "open-undated", title: "Open undated", completed: false },
@@ -131,7 +131,16 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
       { id: "open-today", title: "Open today", due_date: "2026-09-17", completed: false },
       { id: "overdue-older", title: "Overdue older", due_date: "2026-09-10", completed: false },
     ], DEFAULT_TASK_SORT, today).map((task) => task.id);
-    expect(ordered).toEqual(["overdue-older", "overdue-newer", "open-today", "open-later", "open-undated", "done"]);
+    expect(DEFAULT_TASK_SORT).toEqual({ key: "due", direction: "desc" });
+    expect(ordered).toEqual(["open-later", "open-today", "overdue-newer", "overdue-older", "open-undated", "done"]);
+  });
+
+  it("keeps completed work after open work even when its due date is later", () => {
+    const ordered = sortTaskList([
+      { id: "done-late", title: "Done late", completed: true, due_date: "2026-12-01" },
+      { id: "open-early", title: "Open early", completed: false, due_date: "2026-09-01" },
+    ], DEFAULT_TASK_SORT, today).map((task) => task.id);
+    expect(ordered).toEqual(["open-early", "done-late"]);
   });
 
   it("keeps undated work last in both due-date directions", () => {
@@ -144,34 +153,51 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(sortTaskList(tasks, { key: "due", direction: "desc" }, today).map((task) => task.id)).toEqual(["dated-late", "dated-early", "undated"]);
   });
 
-  it("sorts by priority and activity and names every order", () => {
+  it("sorts by priority and title and names every order", () => {
     const tasks = [
       { id: "low", title: "Low", priority: "low", completed: false, provider_updated_at: "2026-09-16T09:00:00Z" },
       { id: "high", title: "High", priority: "high", completed: false, provider_updated_at: "2026-09-15T09:00:00Z" },
     ];
     expect(sortTaskList(tasks, { key: "priority", direction: "asc" }, today).map((task) => task.id)).toEqual(["high", "low"]);
-    expect(sortTaskList(tasks, { key: "activity", direction: "desc" }, today).map((task) => task.id)).toEqual(["low", "high"]);
+    expect(sortTaskList(tasks, { key: "title", direction: "desc" }, today).map((task) => task.id)).toEqual(["low", "high"]);
     expect(taskSortNote({ key: "status", direction: "asc" })).toBe("Overdue first, then due date");
     expect(taskSortNote({ key: "due", direction: "desc" })).toBe("Due date · latest first");
-    expect(taskSortNote({ key: "activity", direction: "desc" })).toBe("Latest activity first");
+    expect(taskSortNote({ key: "priority", direction: "asc" })).toBe("Priority · highest first");
   });
 
-  it("cycles ascending-first columns through ascending, descending, and the default", () => {
-    const due = { key: "due" as const, label: "Due", initialDirection: "asc" as const };
-    const first = nextSortState(DEFAULT_TASK_SORT, due, DEFAULT_TASK_SORT);
-    expect(first).toEqual({ key: "due", direction: "asc" });
-    const second = nextSortState(first, due, DEFAULT_TASK_SORT);
-    expect(second).toEqual({ key: "due", direction: "desc" });
-    expect(nextSortState(second, due, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+  it("migrates the retired Activity column and the old default to due latest first", () => {
+    const store = new Map<string, string>([["sort", JSON.stringify({ key: "activity", direction: "desc" })]]);
+    const fakeWindow = { localStorage: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value) } };
+    const originalWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = fakeWindow;
+    try {
+      expect(readTaskSort("sort")).toEqual(DEFAULT_TASK_SORT);
+      store.set("sort", JSON.stringify({ key: "status", direction: "asc" }));
+      expect(readTaskSort("sort")).toEqual(DEFAULT_TASK_SORT);
+      store.set("sort", JSON.stringify({ key: "priority", direction: "asc" }));
+      expect(readTaskSort("sort")).toEqual({ key: "priority", direction: "asc" });
+    } finally {
+      (globalThis as { window?: unknown }).window = originalWindow;
+    }
   });
 
   it("cycles descending-first columns through descending, ascending, and the default", () => {
-    const activity = { key: "activity" as const, label: "Activity", initialDirection: "desc" as const };
-    const first = nextSortState(DEFAULT_TASK_SORT, activity, DEFAULT_TASK_SORT);
-    expect(first).toEqual({ key: "activity", direction: "desc" });
-    const second = nextSortState(first, activity, DEFAULT_TASK_SORT);
-    expect(second).toEqual({ key: "activity", direction: "asc" });
-    expect(nextSortState(second, activity, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+    const due = { key: "due" as const, label: "Due", initialDirection: "desc" as const };
+    const other = { key: "priority" as const, direction: "asc" as const };
+    const first = nextSortState(other, due, DEFAULT_TASK_SORT);
+    expect(first).toEqual({ key: "due", direction: "desc" });
+    const second = nextSortState(first, due, DEFAULT_TASK_SORT);
+    expect(second).toEqual({ key: "due", direction: "asc" });
+    expect(nextSortState(second, due, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
+  });
+
+  it("cycles ascending-first columns through ascending, descending, and the default", () => {
+    const title = { key: "title" as const, label: "Task", initialDirection: "asc" as const };
+    const first = nextSortState(DEFAULT_TASK_SORT, title, DEFAULT_TASK_SORT);
+    expect(first).toEqual({ key: "title", direction: "asc" });
+    const second = nextSortState(first, title, DEFAULT_TASK_SORT);
+    expect(second).toEqual({ key: "title", direction: "desc" });
+    expect(nextSortState(second, title, DEFAULT_TASK_SORT)).toEqual(DEFAULT_TASK_SORT);
   });
 
   it("restarts the cycle instead of restoring an incompatible fallback", () => {

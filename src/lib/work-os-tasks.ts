@@ -87,12 +87,23 @@ export interface TaskListOptions {
   limit?: number;
   includeCompleted?: boolean;
   includeLedgerHistory?: boolean;
+  /** SQL-side attribution filters used to mirror Nifty creator/subscriber metadata. */
+  rawCreatedBy?: string | null;
+  rawSubscriber?: string | null;
+  providerAssignee?: string | null;
 }
 
 export const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
 
 function stringValues(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** One attribution rule for every task surface: the local person id, the
+ * Nifty assignee mapping, or Nifty creator/subscriber metadata. */
+export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
+  if (personId && stringValues(task.assignee_person_ids).includes(String(personId))) return true;
+  return isNiftyTaskAttributableToMember(task, niftyMemberId);
 }
 
 export function isNiftyTaskAttributableToMember(task: Record<string, any>, niftyMemberId: string | null | undefined) {
@@ -117,6 +128,9 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   if (opts.projectId) query = query.eq("project_id", opts.projectId);
   if (opts.providerProjectId) query = query.eq("provider_project_id", opts.providerProjectId);
   if (opts.personId) query = query.contains("assignee_person_ids", [opts.personId]);
+  if (opts.rawCreatedBy) query = query.eq("raw->>created_by", opts.rawCreatedBy);
+  if (opts.rawSubscriber) query = query.contains("raw->subscribers", JSON.stringify([opts.rawSubscriber]));
+  if (opts.providerAssignee) query = query.contains("assignee_provider_ids", [opts.providerAssignee]);
   if (opts.todayOnly) {
     const d = opts.todayDate ?? today();
     const previous = new Date(`${d}T12:00:00Z`);
@@ -154,27 +168,30 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
   const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
-  const ledgerProjectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_LEDGER_PROJECT_ID;
-  const ledgerOptions: TaskListOptions = { ...baseOptions, providerProjectId: ledgerProjectId };
+  // Metadata-attributable work lives in every project, not only the ledger, so
+  // the same attribution rule runs against each provenance path in SQL.
+  const metadataOptions: TaskListOptions = { ...baseOptions };
   if (opts.todayOnly || (!opts.includeLedgerHistory && !opts.fromDate && !opts.toDate)) {
     const date = opts.todayDate ?? today();
     const previous = new Date(`${date}T12:00:00Z`);
     previous.setUTCDate(previous.getUTCDate() - 1);
     const next = new Date(`${date}T12:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
-    ledgerOptions.todayOnly = false;
-    ledgerOptions.fromDate = previous.toISOString().slice(0, 10);
-    ledgerOptions.toDate = next.toISOString().slice(0, 10);
-    if (opts.includeCompleted !== true && !opts.completed) ledgerOptions.completed = "false";
+    metadataOptions.todayOnly = false;
+    metadataOptions.fromDate = previous.toISOString().slice(0, 10);
+    metadataOptions.toDate = next.toISOString().slice(0, 10);
+    if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
-  const [assigned, ledger] = await Promise.all([
+  const [assigned, providerAssigned, createdBy, subscriber] = await Promise.all([
     listTasks(userId, { ...baseOptions, personId }),
-    niftyMemberId ? listTasks(userId, ledgerOptions) : Promise.resolve([]),
+    niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
   for (const task of assigned ?? []) rows.set(String(task.id), task);
-  for (const task of ledger ?? []) {
-    if (isNiftyTaskAttributableToMember(task, niftyMemberId)) rows.set(String(task.id), task);
+  for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
+    if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
   const selected = [...rows.values()]
     .sort((left, right) => {
@@ -203,6 +220,35 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
   return hydrateTaskAssignees(userId, withProgress);
+}
+
+/**
+ * The complete open backlog for a person, independent of the paginated history
+ * window: every attributable open parent plus exact parent counts. The
+ * dashboard carry-over tabs and the Tasks Unfinished view both render from this
+ * set so the two surfaces cannot disagree.
+ */
+export async function listPersonOpenTasks(userId: string, personId: string) {
+  const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
+  if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
+  const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
+  const rows = await ensureNoError(
+    db().from("work_tasks")
+      .select("*, project:work_projects(id,name,provider_project_id)")
+      .eq("user_id", userId)
+      .not("status", "in", "(archived,deleted)")
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("provider_created_at", { ascending: false })
+      .limit(2500),
+    "load person task backlog",
+  );
+  const parents = (rows ?? []).filter((task) =>
+    !task.parent_task_id && !task.parent_provider_task_id && isTaskAttributableToPerson(task, personId, niftyMemberId));
+  const open = parents.filter((task) => task.completed !== true);
+  return {
+    tasks: open,
+    counts: { total: parents.length, open: open.length, completed: parents.length - open.length },
+  };
 }
 
 type NormalizedNiftyTask = NonNullable<ReturnType<typeof normalizeNiftyTaskPayload>>;

@@ -6,6 +6,7 @@ import { secureState } from "./vault";
 export const DAY_STALE_MS = 60_000;
 export const DAY_DETAILS_STALE_MS = 2 * 60_000;
 export const TASK_HISTORY_STALE_MS = 5 * 60_000;
+export const TASK_BACKLOG_STALE_MS = 60_000;
 export const TASK_DETAILS_STALE_MS = 60_000;
 export const INSIGHTS_STALE_MS = 5 * 60_000;
 export const ONBOARDING_STALE_MS = 30 * 60_000;
@@ -15,6 +16,7 @@ export const HISTORICAL_STALE_MS = 10 * 60_000;
 export const workOsKeys = {
   day: (variant: "compact" | "details") => ["work-os", "day", variant] as const,
   taskHistory: () => ["work-os", "task-history"] as const,
+  taskBacklog: () => ["work-os", "task-backlog"] as const,
   taskDetails: (taskId: string) => ["work-os", "task", taskId] as const,
   insights: (range: string, through: string) => ["work-os", "insights", range, through] as const,
   historicalDay: (date: string) => ["work-os", "historical", date] as const,

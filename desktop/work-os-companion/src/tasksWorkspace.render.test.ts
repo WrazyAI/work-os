@@ -172,14 +172,15 @@ describe("Tasks workspace ordering contract", () => {
     onLoadMore: () => undefined,
   };
 
-  it("renders a real sort header row and applies the default status-then-due order", () => {
+  it("renders a real sort header row and applies the default due-latest-first order", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, props));
 
     expect(markup).toContain('role="toolbar"');
     expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain("Status, sorted ascending.");
-    expect(markup).toContain("Sort by due, ascending.");
-    expect(markup).toContain("Oldest due first");
+    expect(markup).toContain("Due, sorted descending.");
+    expect(markup).toContain("Sort by status, ascending.");
+    expect(markup).toContain("Due date · latest first");
+    expect(markup).not.toContain("Activity");
 
     const overdueIndex = markup.indexOf("Late work");
     const openIndex = markup.indexOf("Soon work");
@@ -195,5 +196,71 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup).toContain("Completed<em>1</em>");
     expect(markup).toContain("All tasks<em>3</em>");
     expect(markup).not.toContain("All tasks<em>3</em><em>");
+  });
+});
+
+describe("Tasks workspace backlog reconciliation", () => {
+  const props = {
+    currentDate: "2026-08-26",
+    historyDate: "2026-08-26",
+    currentPlan: null,
+    historicalPlan: null,
+    historicalTasks: [],
+    goal: "",
+    goalProvenance: null,
+    suggestion: null,
+    saveState: "saved" as const,
+    taskView: "all" as const,
+    todayTasks: [],
+    taskHistory: [
+      { id: "late", title: "Late work", due_date: "2026-08-20", completed: false },
+      { id: "soon", title: "Soon work", due_date: "2026-08-28", completed: false },
+      { id: "finished", title: "Finished work", completed: true, completed_at: "2026-08-26T10:00:00Z" },
+    ],
+    carryOver: [],
+    carryOverOpen: false,
+    loadingMore: false,
+    hasMore: false,
+    busy: false,
+    onTaskView: () => undefined,
+    onDate: async () => undefined,
+    onEditFocus: () => undefined,
+    onAddTask: () => undefined,
+    onOpenTask: () => undefined,
+    onEditTask: () => undefined,
+    onArchiveTask: () => undefined,
+    onDeleteTask: () => undefined,
+    onSurfaceTask: () => undefined,
+    onTaskCompletion: () => undefined,
+    onCarryOverOpen: () => undefined,
+    onLoadMore: () => undefined,
+  };
+
+  it("renders Unfinished from the full backlog instead of the loaded history window", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      taskView: "unfinished",
+      taskHistory: [props.taskHistory[0]],
+      backlog: {
+        tasks: [
+          { id: "late", title: "Late work", due_date: "2026-08-20", completed: false },
+          { id: "beyond-window", title: "Beyond the loaded window", due_date: "2026-07-01", completed: false },
+        ],
+        counts: { total: 12, open: 2, completed: 10 },
+      },
+    }));
+    expect(markup).toContain("Beyond the loaded window");
+    expect(markup).toContain("Unfinished<em>2</em>");
+    expect(markup).toContain('role="toolbar"');
+  });
+
+  it("counts All tasks from the server total and says how much is on screen", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      backlog: { tasks: [], counts: { total: 12, open: 2, completed: 10 } },
+    }));
+    expect(markup).toContain("All tasks<em>12</em>");
+    expect(markup).toContain("Completed<em>10</em>");
+    expect(markup).toContain("Showing 3 of 12");
   });
 });

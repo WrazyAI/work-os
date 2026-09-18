@@ -43,6 +43,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const onboardingService = await source("src/lib/work-os-onboarding.ts");
   const nifty = await source("src/lib/integrations/nifty.ts");
   const workOs = await source("src/lib/work-os-tasks.ts");
+  assert.match(workOs, /raw->>created_by/);
+  assert.match(workOs, /rawSubscriber/);
+  assert.match(workOs, /providerAssignee/);
   assert.match(checkIns, /idempotency-key/);
   assert.match(proposals, /decision_idempotency_key/);
   assert.match(reports, /requireWorkOsAccess/);
@@ -90,6 +93,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(tasks, /createWorkOsEmployeeTask/);
   assert.match(tasks, /todayDate: requestedDate/);
   assert.match(tasks, /includeCompleted/);
+  assert.match(tasks, /view === "open"/);
+  assert.match(tasks, /listPersonOpenTasks\(ownerId, auth\.access\.personId as string\)/);
   assert.match(taskDetails, /export async function GET/);
   assert.match(taskDetails, /getWorkOsEmployeeTaskDetails/);
   assert.match(taskDetails, /export async function DELETE/);

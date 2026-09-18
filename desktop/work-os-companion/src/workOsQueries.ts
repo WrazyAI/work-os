@@ -6,6 +6,7 @@ import {
   HISTORICAL_STALE_MS,
   INSIGHTS_STALE_MS,
   ONBOARDING_STALE_MS,
+  TASK_BACKLOG_STALE_MS,
   TASK_DETAILS_STALE_MS,
   TASK_HISTORY_STALE_MS,
   TASK_OPTIONS_STALE_MS,
@@ -21,6 +22,13 @@ export type TaskDetails = {
 };
 
 export type TaskHistoryPage = { tasks: Array<Record<string, any>>; nextOffset: number | null };
+
+/** The complete open backlog plus exact parent counts, returned whole so both
+ * the dashboard carry-over tabs and the Tasks Unfinished view are complete. */
+export type TaskBacklog = {
+  tasks: Array<Record<string, any>>;
+  counts: { total: number; open: number; completed: number };
+};
 
 /** Provider sync can return a partial but otherwise usable day. Keep that
  * response renderable instead of letting a missing collection trip React. */
@@ -83,6 +91,15 @@ export function useTaskHistoryQuery(options: { enabled: boolean }) {
     initialPageParam: 0,
     getNextPageParam: (lastPage: TaskHistoryPage) => lastPage.nextOffset ?? undefined,
     queryFn: ({ pageParam }) => apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?view=history&offset=${pageParam}&limit=100`),
+  });
+}
+
+export function useTaskBacklogQuery(options: { enabled: boolean }) {
+  return useQuery({
+    queryKey: workOsKeys.taskBacklog(),
+    enabled: options.enabled,
+    staleTime: TASK_BACKLOG_STALE_MS,
+    queryFn: () => apiRequest<TaskBacklog>("/api/work-os/me/tasks?view=open"),
   });
 }
 
