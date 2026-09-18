@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.25
+
+- Otto can now archive, delete, log progress on, or hand over several tasks at once, and can import a whole task template in one go.
+- Every batch still shows on one card, asks before removing anything, and reports what happened to each task.
+
 ## 0.3.24
 
 - You can now ask Otto to add several tasks and their steps in one go, or to update a batch of tasks, and review the whole change on one card.
