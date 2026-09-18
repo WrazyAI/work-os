@@ -74,6 +74,10 @@ async function mirrorExtendedTaskFields(taskId: string, values: Json) {
   return selectFirst(db().from("work_tasks").update(patch).eq("id", taskId).select("*"), "mirror extended task fields");
 }
 
+/** `due` is the workspace default (soonest due first). `recency` puts the most
+ * recently active task first, for surfaces that mirror the assistant's view. */
+export type TaskListOrder = "due" | "recency";
+
 export interface TaskListOptions {
   completed?: string | null;
   personId?: string | null;
@@ -91,6 +95,7 @@ export interface TaskListOptions {
   rawCreatedBy?: string | null;
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
+  order?: TaskListOrder;
 }
 
 export const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
@@ -160,6 +165,31 @@ export async function hydrateTaskAssignees(userId: string, tasks: Record<string,
  * daily status updates. Include only ledger rows attributable through Nifty's
  * creator/subscriber metadata; unrelated unassigned project work stays hidden.
  */
+/** The timestamp that decides a task's place in a recency list. Nifty's own
+ * activity wins when the mirror has it, then provider creation, then the local
+ * row: the mirror's `updated_at` is rewrite noise from the last sync, so it
+ * must never make an old task look recent. The pg driver returns timestamptz
+ * columns as `Date` objects while other clients hand back ISO strings, so both
+ * shapes normalize to one comparable stamp. */
+export function taskRecencyStamp(task: Record<string, any>) {
+  const value = task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? task.updated_at;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? "" : value.toISOString();
+  return typeof value === "string" ? value : "";
+}
+
+/** Newest activity first, title as the stable tiebreak. */
+export function compareTaskRecency(left: Record<string, any>, right: Record<string, any>) {
+  return taskRecencyStamp(right).localeCompare(taskRecencyStamp(left))
+    || String(left.title ?? "").localeCompare(String(right.title ?? ""));
+}
+
+/** The workspace default: soonest due first, undated last, newest created next. */
+function compareTaskDueOrder(left: Record<string, any>, right: Record<string, any>) {
+  const leftDue = String(left.due_date ?? "9999-12-31");
+  const rightDue = String(right.due_date ?? "9999-12-31");
+  return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
+}
+
 export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
@@ -194,11 +224,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
   const selected = [...rows.values()]
-    .sort((left, right) => {
-      const leftDue = String(left.due_date ?? "9999-12-31");
-      const rightDue = String(right.due_date ?? "9999-12-31");
-      return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
-    })
+    .sort(opts.order === "recency" ? compareTaskRecency : compareTaskDueOrder)
     .slice(offset, offset + limit);
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)

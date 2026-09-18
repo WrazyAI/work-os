@@ -1,5 +1,6 @@
 import {
   archiveTask,
+  compareTaskRecency,
   completeTask,
   createTask,
   deleteTask,
@@ -162,7 +163,13 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
   return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
-/** Returns provider-backed task rows for a read-only assistant selection card. */
+/**
+ * Returns provider-backed task rows for a read-only assistant selection card.
+ *
+ * Both views answer with open work only, so a long completed history can never
+ * crowd the card's window, and pending lists the newest activity first (Nifty
+ * activity, then creation); overdue keeps oldest-due-first (design §27.3).
+ */
 export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view: "pending" | "overdue", requestedLimit?: unknown) {
   const limit = Math.min(100, Math.max(1, Math.trunc(Number(requestedLimit) || 20)));
   const personId = access.personId as string;
@@ -171,7 +178,7 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
     organizationOwnerId(access.organizationId),
   ]);
   const currentDate = localDateForTimezone(new Date(), timezone);
-  const tasks = await listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 500 }) as Json[];
+  const tasks = await listPersonTasks(ownerId, personId, { completed: "false", includeLedgerHistory: true, limit: 500, order: "recency" }) as Json[];
   const pending = tasks.filter((task) => task.completed !== true && !["archived", "deleted"].includes(String(task.status ?? "")));
   const selected = (view === "overdue"
     ? pending.filter((task) => {
@@ -180,8 +187,8 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
     })
     : pending)
     .sort((left, right) => view === "overdue"
-      ? String(dateOnly(typeof left.due_date === "string" ? left.due_date : null)).localeCompare(String(dateOnly(typeof right.due_date === "string" ? right.due_date : null)))
-      : String(right.provider_updated_at ?? right.updated_at ?? right.created_at ?? "").localeCompare(String(left.provider_updated_at ?? left.updated_at ?? left.created_at ?? "")))
+      ? String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date)))
+      : compareTaskRecency(left, right))
     .slice(0, limit);
   // Attach child progress for the same page so a parent row can show `2/5` and
   // offer its subtasks without a per-row round trip (design §25.7).

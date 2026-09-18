@@ -29,6 +29,7 @@ import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
+import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
@@ -2922,12 +2923,12 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
           if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={`${op.op}-${index}`} page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} />;
           if (!isDisplayToolOp(op)) return null;
           if (result?.status === "failed") return <p key={`${op.op}-${index}`} className="tool-display-error">{result.message}</p>;
-          const selection = (result?.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
+          const selection = taskSelectionFromResult(result);
           if (!selection) return null;
-          const displayKey = `${op.op}:${selection.view}:${(selection.tasks ?? []).map((task) => String(task.id ?? "")).join(",")}`;
+          const displayKey = `${op.op}:${selection.view}:${selection.tasks.map((task) => String(task.id ?? "")).join(",")}`;
           if (seenDisplayCards.has(displayKey)) return null;
           seenDisplayCards.add(displayKey);
-          const selectionTasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
+          const selectionTasks: TaskSelectionCardTask[] = selection.tasks.map((task) => ({
             id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
             description: typeof task.description === "string" ? task.description : null,
             dueDate: typeof task.due_date === "string" ? task.due_date : null,
@@ -2936,7 +2937,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
             state: task.state === "overdue" || task.state === "pending" ? task.state : selection.view === "overdue" ? "overdue" : "pending",
             subtaskTotal: Number(task.subtask_total ?? 0) || 0,
             subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
-          })).filter((task) => !!task.id) : [];
+          })).filter((task) => !!task.id);
           return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}

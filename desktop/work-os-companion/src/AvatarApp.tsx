@@ -15,6 +15,7 @@ import { BatchApprovalCards } from "./TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -1162,12 +1163,12 @@ export default function AvatarApp(): React.ReactElement {
                           />
                         )}
                         {entry.toolResults?.map((result, resultIndex) => {
-                          const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
+                          const selection = taskSelectionFromResult(result);
                           if (!selection) return null;
-                          const displayKey = `${result.op.op}:${selection.view}:${(selection.tasks ?? []).map((task) => String(task.id ?? "")).join(",")}`;
+                          const displayKey = `${result.op.op}:${selection.view}:${selection.tasks.map((task) => String(task.id ?? "")).join(",")}`;
                           if (seenCards.has(displayKey)) return null;
                           seenCards.add(displayKey);
-                          const tasks: TaskSelectionCardTask[] = Array.isArray(selection.tasks) ? selection.tasks.map((task) => ({
+                          const tasks: TaskSelectionCardTask[] = selection.tasks.map((task) => ({
                             id: String(task.id ?? ""), title: typeof task.title === "string" ? task.title : "Untitled Nifty task",
                             description: typeof task.description === "string" ? task.description : null,
                             dueDate: typeof task.due_date === "string" ? task.due_date : null,
@@ -1175,7 +1176,7 @@ export default function AvatarApp(): React.ReactElement {
                             state: selection.view === "overdue" ? "overdue" : "pending",
                             subtaskTotal: Number(task.subtask_total ?? 0) || 0,
                             subtaskCompleted: Number(task.subtask_completed ?? 0) || 0,
-                          })).filter((task) => !!task.id) : [];
+                          })).filter((task) => !!task.id);
                           return <TaskSelectionCard key={`${result.op.op}-${resultIndex}`} title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={tasks} onMarkSelectedDone={proposeAvatarSelectedCompletions} onLoadSubtasks={loadTaskSubtasks} collapseWhenInactive={entryIndex < allEntries.length - 1} proposedTaskIds={[...proposedTaskIds]} onReview={() => setAvatarTab("chat")} maxHeight={250} emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
                         })}
                         {entry.operations?.length ? (

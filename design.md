@@ -1453,6 +1453,16 @@ Contract:
   read-only task-selection endpoint with the requested limit (1–100) and
   render the reusable task selection card. Failures render a short inline
   error, never an approval card and never a blank region.
+- The card lists open work only, so a long completed history can never crowd
+  its window. Pending lists the newest activity first — Nifty's own activity
+  timestamp when the mirror has it, then provider creation, then the local
+  row; the mirror's bulk-sync `updated_at` must never make an old task look
+  recent. Overdue keeps oldest-due-first (design §27.3).
+- Only a genuine display-tool result renders a card: its payload must carry a
+  real `tasks` array. Recorded mutations attach the server proposal row, which
+  always has a `provider_result` object (jsonb `{}` default), and that must
+  never render a task card — a truthy `provider_result` alone produced an
+  empty "No pending tasks" card after every recorded action.
 - `navigate_to_page` accepts only the six primary destinations (`day`,
   `tasks`, `review`, `insights`, `evidence`, `settings`). Anything else is
   dropped before render. The button reads `Open <destination>` and moves

@@ -5,6 +5,8 @@
  * is only a task list or a set of action results is still copyable. Everything
  * here is derived from the same data the cards render — nothing is invented. */
 
+import { taskSelectionFromResult } from "./selection";
+
 export interface CopyableTurnResult {
   status: string;
   message?: string | null;
@@ -29,10 +31,10 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function taskLines(result: CopyableTurnResult): string[] {
-  const provider = (result.data as { provider_result?: { view?: string; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
-  if (!provider || !Array.isArray(provider.tasks) || !provider.tasks.length) return [];
-  const view = provider.view === "overdue" ? "Overdue tasks" : "Pending tasks";
-  const lines = provider.tasks.map((task) => {
+  const selection = taskSelectionFromResult(result);
+  if (!selection || !selection.tasks.length) return [];
+  const view = selection.view === "overdue" ? "Overdue tasks" : "Pending tasks";
+  const lines = selection.tasks.map((task) => {
     const title = typeof task.title === "string" ? task.title : "Untitled task";
     const state = typeof task.state === "string" ? task.state : view === "Overdue tasks" ? "overdue" : "pending";
     const due = typeof task.due_date === "string" && task.due_date ? `, due ${task.due_date.slice(0, 10)}` : "";

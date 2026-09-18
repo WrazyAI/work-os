@@ -7,6 +7,7 @@ import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp } from
 import { BatchApprovalCards } from "../TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCardTask } from "../TaskSelectionCard";
 import { ChatTurn } from "./ChatTurn";
+import { taskSelectionFromResult } from "./selection";
 import type { CopyableTurn } from "./turnCopy";
 
 /** One persisted conversation turn, with everything it rendered.
@@ -80,7 +81,7 @@ export function HistoryTurnExtras({
   const results = turn.toolResults ?? [];
   const operations = turn.operations ?? [];
   const displayCards = results.flatMap((result, index) => {
-    const selection = (result.data as { provider_result?: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> } } | undefined)?.provider_result;
+    const selection = taskSelectionFromResult(result);
     if (!selection) return [];
     const displayKey = `${result.op.op}:${selection.view}:${(selection.tasks ?? []).map((task) => String(task.id ?? "")).join(",")}`;
     if (seenCards.has(displayKey)) return [];
@@ -102,6 +103,17 @@ export function HistoryTurnExtras({
     ];
   });
   const mutationResults = results.filter((result) => isMutatingToolOp(result.op));
+  // A mutating operation is only pending until a result settles it. Without
+  // this gate `ApprovalFlow` (which falls back to `ApprovalResults` when
+  // nothing is pending) doubled the recorded summary line after every
+  // decision. `AssistantOperations` already gates the same way.
+  const hasPendingMutations = operations.some((operation) =>
+    isMutatingToolOp(operation)
+    && !isBatchToolOp(operation)
+    && !isPlanImportOp(operation)
+    && !operation.failure
+    && !results.some((result) => result.op === operation || (operation.proposalId !== undefined && result.op.proposalId === operation.proposalId)),
+  );
   const unfiled = operations.filter((operation) => !!operation.failure && !results.some((result) => result.op === operation));
   return (
     <ChatSectionBoundary label="chat turn actions">
@@ -117,7 +129,7 @@ export function HistoryTurnExtras({
               return null;
             })}
             {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-            {operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op)) ? (
+            {hasPendingMutations ? (
               <ApprovalFlow
                 operations={operations.filter((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op))}
                 results={results}

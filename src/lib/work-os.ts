@@ -23,6 +23,7 @@ export {
   addTaskProgress,
   adoptProviderTask,
   archiveTask,
+  compareTaskRecency,
   completeTask,
   createTask,
   deleteTask,
@@ -37,9 +38,10 @@ export {
   listTasks,
   moveTaskToParent,
   providerCreateFailureDefinite,
+  taskRecencyStamp,
   updateTask,
 } from "@/lib/work-os-tasks";
-export type { TaskListOptions } from "@/lib/work-os-tasks";
+export type { TaskListOptions, TaskListOrder } from "@/lib/work-os-tasks";
 export { createEvidence, listEvidence } from "@/lib/work-os-evidence-log";
 export { generateBlueprintTasks, listBlueprints } from "@/lib/work-os-blueprints";
 export { createEodReport, listReports, reviewReport } from "@/lib/work-os-reports";

@@ -87,6 +87,24 @@ function HistorySection() {
     operations: [operation],
     toolResults,
   };
+  // The recorded-completion shape from production: the filed result carries
+  // the proposal row, whose provider_result is jsonb `{}`. It must render the
+  // action result alone — never an empty "No pending tasks" card (design §25.9).
+  const completionOp = { op: "complete_task" as const, statement: "Employee confirmed completion of Repair provider sync.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "p-history-1", enabled: false };
+  const completionTurn = {
+    id: "a-history-3",
+    role: "assistant" as const,
+    text: "I found the matching task and can propose checking it off for your approval.",
+    meta: "1 proposed update",
+    createdAt: "2026-09-17T18:21:00.000Z",
+    operations: [completionOp],
+    toolResults: [{
+      op: completionOp,
+      status: "recorded" as const,
+      message: "Recorded. Provider confirmation follows the normal sync state.",
+      data: { provider_result: {}, outcome: "applied" },
+    }],
+  };
   const composer = {
     input: "", open: true, panel: "update" as const, receipt: null, pending: "", busy: false,
     required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
@@ -102,6 +120,7 @@ function HistorySection() {
           { id: "u-history-1", role: "user", text: "Can u show me a list of incomplete tasks from my todos?", createdAt: "2026-09-17T18:19:00.000Z" },
           assistantTurn,
           { ...assistantTurn, id: "a-history-2" },
+          completionTurn,
         ]}
       />
     </section>

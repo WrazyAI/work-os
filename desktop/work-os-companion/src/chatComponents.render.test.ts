@@ -144,4 +144,28 @@ describe("HistoryTurn", () => {
     expect(markup).toContain("chat-copy-row");
     expect(markup).toContain("Review these before anything changes.");
   });
+
+  it("never renders a task card for a recorded result's provider row", () => {
+    // Production shape: a filed completion returns the proposal row, whose
+    // provider_result is an object (jsonb default '{}'). Treating that as a
+    // task view rendered an empty "No pending tasks" card after every record.
+    const turn = {
+      id: "a-2",
+      role: "assistant" as const,
+      text: "Recorded your update.",
+      operations: [{ op: "complete_task" as const, statement: "Done.", taskTitle: "Repair provider sync", proposalId: "p-2", enabled: false }],
+      toolResults: [{
+        op: { op: "complete_task" as const, statement: "Done.", proposalId: "p-2", enabled: false },
+        status: "recorded" as const,
+        message: "Recorded. Provider confirmation follows the normal sync state.",
+        data: { provider_result: {} },
+      }],
+    };
+    const markup = renderToStaticMarkup(createElement(HistoryTurn, { turn }));
+    expect(markup).not.toContain("Pending tasks");
+    expect(markup).not.toContain("No pending tasks");
+    // Exactly one summary: ApprovalFlow must not fall back to a second
+    // ApprovalResults now that every mutating operation has a result.
+    expect(markup.match(/class="approval-results"/g) ?? []).toHaveLength(1);
+  });
 });
