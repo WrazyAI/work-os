@@ -420,7 +420,7 @@ export default function App() {
       // The backlog is open-only: completing a task removes it and shifts the
       // counts immediately, then a refetch confirms the server totals.
       queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
-        if (!current || !current.tasks.some((task) => taskRowId(task) === rowId)) return current;
+        if (!current || !current.counts || !current.tasks.some((task) => taskRowId(task) === rowId)) return current;
         return {
           tasks: current.tasks.filter((task) => taskRowId(task) !== rowId),
           counts: { total: Math.max(0, current.counts.total - 1), open: Math.max(0, current.counts.open - 1), completed: current.counts.completed + 1 },
@@ -450,6 +450,7 @@ export default function App() {
     queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
       if (!current) return current;
       const tasks = current.tasks.filter((task) => taskRowId(task) !== rowId);
+      if (!current.counts) return { ...current, tasks };
       const removed = current.tasks.length - tasks.length;
       return { tasks, counts: { ...current.counts, total: Math.max(0, current.counts.total - removed), open: Math.max(0, current.counts.open - removed) } };
     });
@@ -471,6 +472,7 @@ export default function App() {
     }
     queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => {
       if (!current || current.tasks.some((row) => taskRowId(row) === taskRowId(task))) return current;
+      if (!current.counts) return { ...current, tasks: [task, ...current.tasks] };
       return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
     });
   }, [queryClient]);
@@ -3195,6 +3197,8 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   // Every chip counts the exact parents its view will render, subtasks and
   // duplicates excluded, so a chip can never disagree with its own list.
   const serverCounts = backlog?.counts ?? null;
+  // Null counts mean the server does not provide totals yet; chips fall back to
+  // the loaded window and no pagination note is claimed.
   const chipCounts: Array<{ id: TaskView; label: string; count: number }> = [
     { id: "today", label: "My day", count: myDayTasks.length },
     { id: "unfinished", label: "Unfinished", count: parentTasks(uniqueTasks(unfinishedTasks)).length },

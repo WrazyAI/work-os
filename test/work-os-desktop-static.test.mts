@@ -572,6 +572,9 @@ assert.match(app, /sortTaskList\(rawDisplayed, sort, today\)/);
 // One exact open backlog feeds both the dashboard tabs and Tasks Unfinished.
 assert.match(app, /unfinishedBefore\(openBacklog\.filter\(\(task\) => !todayIds\.has\(taskRowId\(task\)\)\), visibleDay\?\.shiftDate/);
 assert.match(app, /useTaskBacklogQuery/);
+const backlogQueries = read("src/workOsQueries.ts");
+assert.match(backlogQueries, /view=open/);
+assert.match(backlogQueries, /view=pending&limit=100/);
 assert.match(app, /backlog\?: TaskBacklog \| null/);
 assert.match(app, /task-backlog-warning/);
 assert.match(app, /Showing \$\{unfiltered\.length\} of \$\{viewTotal\}/);

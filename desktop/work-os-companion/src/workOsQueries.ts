@@ -27,7 +27,7 @@ export type TaskHistoryPage = { tasks: Array<Record<string, any>>; nextOffset: n
  * the dashboard carry-over tabs and the Tasks Unfinished view are complete. */
 export type TaskBacklog = {
   tasks: Array<Record<string, any>>;
-  counts: { total: number; open: number; completed: number };
+  counts: { total: number; open: number; completed: number } | null;
 };
 
 /** Provider sync can return a partial but otherwise usable day. Keep that
@@ -94,12 +94,23 @@ export function useTaskHistoryQuery(options: { enabled: boolean }) {
   });
 }
 
+/** The open backlog. Servers that predate `view=open` answer it with a
+ * windowed row set and no counts, so the response is capability-checked and
+ * rebuilt from the assistant's pending selection instead of rendered wrong. */
+export async function fetchTaskBacklog(): Promise<TaskBacklog> {
+  const open = await apiRequest<TaskBacklog & { counts?: unknown }>("/api/work-os/me/tasks?view=open");
+  if (open && open.counts) return open;
+  const pending = await apiRequest<{ tasks?: Array<Record<string, any>> }>("/api/work-os/me/tasks?view=pending&limit=100");
+  const tasks = Array.isArray(pending?.tasks) ? pending.tasks.filter((task) => task.completed !== true) : [];
+  return { tasks, counts: null };
+}
+
 export function useTaskBacklogQuery(options: { enabled: boolean }) {
   return useQuery({
     queryKey: workOsKeys.taskBacklog(),
     enabled: options.enabled,
     staleTime: TASK_BACKLOG_STALE_MS,
-    queryFn: () => apiRequest<TaskBacklog>("/api/work-os/me/tasks?view=open"),
+    queryFn: () => fetchTaskBacklog(),
   });
 }
 
