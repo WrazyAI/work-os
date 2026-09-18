@@ -161,6 +161,9 @@ export default function App() {
    * idle, counts while the composer waits, `pending: null` while the first
    * batch is still being requested. */
   const [eodPreparing, setEodPreparing] = useState<{ date: string; analyzed: number; total: number; pending: number | null; failed: number } | null>(null);
+  /** Honest explanation kept after preparation ends when the provider serves
+   * no frames for the day (so the composer does not silently look empty). */
+  const [eodScreenshotNotice, setEodScreenshotNotice] = useState<string | null>(null);
   const eodPrepareCancelRef = useRef(false);
   const eodPrepareAbandonRef = useRef(false);
   const eodPrepareAbortRef = useRef<AbortController | null>(null);
@@ -509,7 +512,7 @@ export default function App() {
     eodPrepareCancelRef.current = true;
     eodPrepareAbandonRef.current = true;
     eodPrepareAbortRef.current?.abort();
-    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null);
+    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null);
   }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
@@ -761,6 +764,13 @@ export default function App() {
         // waiting counts match the frames the gallery can already show.
         const analyzed = Math.max(0, preparation.total - preparation.pending);
         setEodPreparing({ date, analyzed, total: preparation.total, pending: preparation.pending, failed: preparation.failed });
+        if (preparation.unavailable || preparation.total === 0) {
+          // Worktivity serves no frames for this day (older than its retention
+          // or a transient empty response): waiting longer cannot help.
+          setEodScreenshotNotice("Worktivity has no retrievable screenshots for this day.");
+          break;
+        }
+        setEodScreenshotNotice(null);
         if (preparation.pending <= 0) break;
       }
     } finally {
@@ -2539,6 +2549,7 @@ export default function App() {
                     screenshotContext={eodDraft?.screenshots ?? null}
                     screenshotGallery={screenshotGalleryQuery.data ?? null}
                     screenshotSyncUnavailable={eodDraft?.screenshotSyncUnavailable === true}
+                    screenshotNotice={eodScreenshotNotice}
                     preparing={eodPreparing}
                     onDraftAnyway={draftEodAnyway}
                     loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true}

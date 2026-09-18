@@ -8,7 +8,7 @@ import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { fetchScreenshotsForDay, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
+import { fetchScreenshotsForDay, framesWithinDay, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
@@ -320,11 +320,14 @@ export async function summarizeWorktivityScreenshots(
     .single();
   if (personError) throw new Error(`load Worktivity person: ${personError.message}`);
   if (!person.worktivity_employee_id) throw new Error("person has no Worktivity mapping");
-  const [shots, config, analyzed] = await Promise.all([
+  const [fetched, config, analyzed] = await Promise.all([
     fetchScreenshotsForDay(person.worktivity_employee_id, date),
     screenshotConfig(access.organizationId, personId),
     terminallyAnalyzedFrames(access.organizationId, personId, date),
   ]);
+  // The day boundary is enforced again at the processing edge so no caller —
+  // present or future — can ever analyze another day's frame under this date.
+  const shots = framesWithinDay(fetched, date);
   const terminalAfter = new Set(analyzed);
   const pending = shots.filter((shot) => !analyzed.has(`screenshot:${shot.ID}`));
   await ensureBucket();
@@ -462,10 +465,13 @@ export type EodPreparation = {
   failed: number;
   /** Frames that still have no terminal summary after this batch. */
   pending: number;
-  /** Total frames Worktivity captured for the day. */
+  /** Frames Worktivity still serves for this day. */
   total: number;
   /** Frames this batch attempted. */
   sampled: number;
+  /** True when the provider returned no retrievable frames for this day (for
+   * example a day older than its retention); callers must stop waiting. */
+  unavailable: boolean;
 };
 
 const prepareInFlight = new Map<string, Promise<EodPreparation>>();
@@ -497,6 +503,7 @@ export async function prepareEodScreenshots(
       pending: result.pending,
       total: result.logs,
       sampled: result.sampled,
+      unavailable: result.logs === 0,
     };
     await db().from("work_audit_log").insert({
       organization_id: access.organizationId,
@@ -611,14 +618,31 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
     if (completedError || completed?.length) continue;
     const access: ScreenshotScope = { organizationId: row.organization_id as string };
     try {
-      await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate);
+      const run = await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate);
+      if (run.logs === 0) {
+        // Never settle a day that yielded nothing: the provider may serve its
+        // frames later (or a transient failure emptied the response), and a
+        // completion marker would permanently skip it. Record the attempt so
+        // the failure is visible without closing the day.
+        const { error: auditError } = await supabase.from("work_audit_log").insert({
+          organization_id: row.organization_id,
+          actor_user_id: null,
+          action: "screenshot.due_sync_unavailable",
+          target_type: "workday",
+          target_id: candidateKey,
+          metadata: { source: "scheduled_due_sync", shiftDate, personId: row.person_id, reason: "no frames retrievable for the day" },
+        });
+        if (auditError) throw new Error(`audit unavailable screenshot due sync: ${auditError.message}`);
+        results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: "unavailable" });
+        continue;
+      }
       const { error: auditError } = await supabase.from("work_audit_log").insert({
         organization_id: row.organization_id,
         actor_user_id: null,
         action: "screenshot.due_sync_completed",
         target_type: "workday",
         target_id: candidateKey,
-        metadata: { source: "scheduled_due_sync", shiftDate, personId: row.person_id },
+        metadata: { source: "scheduled_due_sync", shiftDate, personId: row.person_id, frames: run.logs, sampled: run.sampled },
       });
       if (auditError) throw new Error(`audit screenshot due sync: ${auditError.message}`);
       results.push({ organizationId: row.organization_id as string, personId: row.person_id as string, date: shiftDate, status: "processed" });

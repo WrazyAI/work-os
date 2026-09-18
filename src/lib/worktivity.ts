@@ -133,31 +133,74 @@ export interface WtScreenshot {
   OrganizationAppId: string | null;
 }
 
+/** `/Screenshots/List` ignores StartDate/EndDate unless DateFilter selects a
+ * preset. 10 is the API's custom-range value; its window behaves as
+ * [startDate, startDate + ~48h] and returns newest-first, so requests span the
+ * day on both sides and the frames are then filtered to the exact day here.
+ * Provider filtering is advisory — this local filter is the contract. */
+export const WT_SCREENSHOT_CUSTOM_RANGE = 10;
+const SCREENSHOT_PAGE_SIZE = 100;
+const SCREENSHOT_MAX_PAGES = 8;
+/** The prepare loop asks for the same day several times within a minute. */
+const SCREENSHOT_DAY_CACHE_MS = 90_000;
+const screenshotDayCache = new Map<string, { at: number; frames: WtScreenshot[] }>();
+
+/** Keeps only frames captured inside the requested UTC day. Exported so the
+ * day boundary is unit-tested independently of the provider. */
+export function framesWithinDay<T extends { CaptureDate?: string | null; CreateDate?: string | null }>(frames: T[], date: string): T[] {
+  const start = Date.parse(`${date}T00:00:00.000Z`);
+  const end = Date.parse(`${date}T23:59:59.999Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  return frames.filter((frame) => {
+    const at = Date.parse(frame.CaptureDate || frame.CreateDate || "");
+    return Number.isFinite(at) && at >= start && at <= end;
+  });
+}
+
+function shiftIsoDate(date: string, days: number): string {
+  const at = new Date(`${date}T12:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
+}
+
 /** Screenshots live on the dedicated /Screenshots/List endpoint — the
  * /ActivityLogs/List Screenshot field stays null for this organization. The
  * provider has ignored narrow filters at page boundaries before, so filter by
- * employee client-side and dedupe by ID. */
+ * employee and by day client-side and dedupe by ID. */
 export async function fetchScreenshotsForDay(employeeId: string, date: string): Promise<WtScreenshot[]> {
-  const all: WtScreenshot[] = [];
+  const cacheKey = `${employeeId}:${date}`;
+  const cached = screenshotDayCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < SCREENSHOT_DAY_CACHE_MS) return cached.frames;
+
+  const collected = new Map<string, WtScreenshot>();
   let page = 1;
   let pageCount = 1;
+  let emptyPages = 0;
   do {
     const data = await wtPost<WtPaged<WtScreenshot>>("/Screenshots/List", {
-      StartDate: `${date}T00:00:00Z`,
-      EndDate: `${date}T23:59:59Z`,
       EmployeeId: employeeId,
+      DateFilter: WT_SCREENSHOT_CUSTOM_RANGE,
+      startDate: `${shiftIsoDate(date, -1)}T00:00:00Z`,
+      endDate: `${shiftIsoDate(date, 1)}T23:59:59Z`,
       Page: page,
-      PageSize: 100,
+      PageSize: SCREENSHOT_PAGE_SIZE,
     });
-    all.push(...(data.Items ?? []));
+    const items = (data.Items ?? []).filter((shot) => shot.EmployeeId === employeeId && !!shot.Screenshot && !!shot.ID);
+    for (const item of items) collected.set(item.ID, item);
     pageCount = data.PageCount ?? 1;
+    emptyPages = items.length ? 0 : emptyPages + 1;
     page += 1;
-    if (page <= pageCount) await sleep(250); // stay under the shared 5 req/s limit
-  } while (page <= pageCount);
-  return [...new Map(
-    all
-      .filter((shot) => shot.EmployeeId === employeeId && !!shot.Screenshot)
-      .map((shot) => [shot.ID, shot] as const),
-  ).values()].sort((left, right) =>
+    // The provider occasionally returns an empty page mid-run; pause briefly
+    // and keep going rather than treating it as the end of the data.
+    if (page <= pageCount && page <= SCREENSHOT_MAX_PAGES) await sleep(emptyPages ? 400 : 250);
+  } while (page <= pageCount && page <= SCREENSHOT_MAX_PAGES && emptyPages < 2);
+
+  const frames = framesWithinDay([...collected.values()], date).sort((left, right) =>
     String(left.CaptureDate || left.CreateDate).localeCompare(String(right.CaptureDate || right.CreateDate)));
+  screenshotDayCache.set(cacheKey, { at: Date.now(), frames });
+  if (screenshotDayCache.size > 40) {
+    const oldest = [...screenshotDayCache.entries()].sort((left, right) => left[1].at - right[1].at)[0];
+    if (oldest) screenshotDayCache.delete(oldest[0]);
+  }
+  return frames;
 }

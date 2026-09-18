@@ -375,4 +375,6 @@ export interface EodScreenshotPreparation {
   pending: number;
   total: number;
   sampled: number;
+  /** The provider serves no retrievable frames for this day; stop waiting. */
+  unavailable: boolean;
 }
