@@ -612,10 +612,20 @@ export async function syncDueWorkOsScreenshots(limit = 12) {
       .eq("organization_id", row.organization_id).eq("person_id", row.person_id).eq("provider", "worktivity")
       .like("external_event_id", "screenshot:%").gte("occurred_at", startAt).lt("occurred_at", endAt).limit(1);
     if (existingError || existing?.length) continue;
-    const { data: completed, error: completedError } = await supabase.from("work_audit_log").select("id")
-      .eq("organization_id", row.organization_id).eq("action", "screenshot.due_sync_completed")
-      .eq("target_type", "workday").eq("target_id", candidateKey).limit(1);
-    if (completedError || completed?.length) continue;
+    const { data: ledger, error: completedError } = await supabase.from("work_audit_log").select("action,created_at")
+      .eq("organization_id", row.organization_id)
+      .in("action", ["screenshot.due_sync_completed", "screenshot.due_sync_unavailable"])
+      .eq("target_type", "workday").eq("target_id", candidateKey)
+      .order("created_at", { ascending: false }).limit(4);
+    if (completedError) continue;
+    const ledgerRows = (ledger ?? []) as Array<{ action: string; created_at: unknown }>;
+    if (ledgerRows.some((entry) => entry.action === "screenshot.due_sync_completed")) continue;
+    // A day that yielded nothing is retried with a cooldown instead of on every
+    // tick: repeated empties would otherwise consume the run limit and starve
+    // older candidates forever.
+    const lastUnavailable = ledgerRows.find((entry) => entry.action === "screenshot.due_sync_unavailable")?.created_at;
+    const lastUnavailableAt = lastUnavailable instanceof Date ? lastUnavailable.getTime() : Date.parse(String(lastUnavailable ?? ""));
+    if (Number.isFinite(lastUnavailableAt) && Date.now() - lastUnavailableAt < 24 * 60 * 60_000) continue;
     const access: ScreenshotScope = { organizationId: row.organization_id as string };
     try {
       const run = await summarizeWorktivityScreenshots(access, row.person_id as string, shiftDate);

@@ -778,6 +778,9 @@ export default function App() {
     const date = target.shiftDate;
     eodPrepareCancelRef.current = false;
     eodPrepareAbandonRef.current = false;
+    // A new attempt starts from a clean slate: any notice from an earlier try
+    // must not linger while this preparation runs.
+    setEodScreenshotNotice(null);
     setEodPreparing({ date, analyzed: 0, total: 0, pending: null, failed: 0 });
     try {
       for (let round = 0; round < EOD_PREPARE_ROUNDS; round += 1) {
