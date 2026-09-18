@@ -61,7 +61,9 @@ export default function TasksPreview() {
   const menuId = scenario === "menu-bottom" ? "task-old" : scenario === "menu-middle" ? "task-carry" : scenario === "menu-top" ? "task-today" : null;
   // The full server backlog: an open task beyond the loaded history window plus
   // exact counts, so the Unfinished view and chips can be exercised end to end.
-  const backlog = params.has("backlog") ? {
+  // The production Unfinished view always receives a server backlog, so the
+  // fixture supplies one for that view unless a test asks for the degraded case.
+  const backlog = (params.has("backlog") || (params.get("view") === "unfinished" && !params.has("nobacklog"))) ? {
     tasks: [
       ...tasks.filter((task) => task.completed !== true),
       { id: "beyond-window", title: "Beyond the loaded window", due_date: "2026-07-01", provider_created_at: "2026-07-01T09:00:00Z", completed: false, project: { name: "LaunchLoom" } },
