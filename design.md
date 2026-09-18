@@ -1545,11 +1545,34 @@ time with no second confirmation — and every non-batch operation keeps using i
   `Review reassignment`, or `Review plan import`, a summary that names the
   change (`Add 1 task with 3 steps`, `Update 3 tasks`, `Archive 2 tasks`),
   then numbered entries (`01`, `02`) with hairlines, each showing its title,
-  description, and steps indented beneath it. An entry that targets an existing
-  task is tagged `Existing task`, because the card is also used to add steps to
-  work that already exists; an entry the agent named only by id takes its real
-  title from the same task list the employee sees. Reading is the default state;
-  the card is a document, not a stack of form controls.
+  description, and steps indented beneath it. An entry the agent named only by
+  id takes its real title from the same task list the employee sees. Reading is
+  the default state; the card is a document, not a stack of form controls.
+- **What each entry does is labelled.** Every entry carries a pill naming its
+  change, computed from the current draft so a field the employee clears stops
+  claiming it: `NEW` for a task that will be created and for every step,
+  `EDIT` for wording, `(OLD STATUS) → (NEW STATUS)` for a status move, `DONE` /
+  `REOPEN` for completion, and `ARCHIVE` / `DELETE` / `LOG` / `REASSIGN` for the
+  tools that act on existing work. `Existing task` remains only as the fallback
+  when no more specific pill applies. Status names are resolved by the server
+  from the employee's own task rows — the target task names where it is now, and
+  any task already in the target column names where it is going — and an entry
+  whose name cannot be resolved shows no status pill at all. A raw Nifty column
+  id never reaches the card.
+- **The card settles, and stays settled.** The lifecycle is `review` →
+  (arm) → `confirm` → `filing` → `approved` | `skipped` | `pending` | `failed`.
+  On `approved`, `skipped`, or `pending` the card collapses into an accordion
+  immediately, including in the newest turn: the header carries the outcome
+  (`Filed`, `Skipped`, `Filing`) and the summary, the body is read-only when
+  expanded with per-entry outcome pills (`Filed`, `Needs attention`, `Skipped`),
+  and there is no footer, no pencil, and no approve or skip action left. A
+  settled card can never be approved twice. `Skipped` is deliberately quiet —
+  never a failure and never a success — and a skipped batch says plainly that
+  nothing was filed. A rejected or stale item also reads `Skipped` rather than
+  `Pending`. `failed` is the exception: it stays expanded with `Retry` and
+  `Skip`, because hiding a failure behind a collapsed row is worse. Per-entry
+  results are matched by the batch's stable key, not by object identity, so a
+  re-mapped or reloaded turn renders the same settled card.
 - **Removal is danger-toned.** Archive and delete cards carry the danger edge
   and heading, state the consequence in the hint (`Archiving hides these tasks
   from your lists`, `Deleting removes these tasks permanently`), mark each entry

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BatchApprovalCards, TaskBatchCard } from "./TaskBatchCard";
 import {
   attachFiledProposals,
+  batchEntryOutcome,
   batchItemCount,
   filedProposalGroups,
   isBatchToolOp,
@@ -12,7 +13,9 @@ import {
   normalizeInterpretation,
   operationToolCall,
   skipBatchOperation,
+  toolCallKey,
   type ApprovalTransport,
+  type BatchReviewResult,
   type ProposedOperation,
   type ToolCallResult,
 } from "./interpretation";
@@ -115,11 +118,15 @@ describe("TaskBatchCard", () => {
       },
     };
     const markup = render(addBatch, result);
+    // The card settles and collapses; the per-entry result is what the expanded
+    // accordion reports, so assert it through the shared outcome helper.
     expect(markup).toContain("Filed");
-    expect(markup).toContain("Needs attention");
-    expect(markup).toContain("That task is no longer in your task list.");
-    expect(markup).toContain("Approved. Each item reports its own result below.");
+    expect(markup).toContain("is-settled");
+    expect(markup).not.toContain("task-batch-list");
     expect(markup).not.toContain("Approve all 4 changes");
+    const items = (result.data as { batch: { results: BatchReviewResult[] } }).batch.results;
+    expect(batchEntryOutcome(items, "s3")).toMatchObject({ tone: "failed", label: "Needs attention", message: "That task is no longer in your task list." });
+    expect(batchEntryOutcome(items, "t1")).toMatchObject({ tone: "ok", label: "Filed" });
   });
 
   it("offers a retry when the batch itself failed", () => {
@@ -380,5 +387,85 @@ describe("batch entry titles", () => {
     }, "import", []);
     expect(review?.operations).toHaveLength(1);
     expect(review?.operations[0]?.planImport).toMatchObject({ blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" });
+  });
+});
+
+const approvedResult = (op: ProposedOperation): ToolCallResult => ({
+  op,
+  status: "recorded",
+  message: "Filed 2 changes.",
+  data: { batch: { results: [
+    { proposal_id: "p1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "applied", outcome: "applied", message: "Recorded." },
+    { proposal_id: "p2", client_id: "s3", parent_client_id: "t-1", operation: "add_subtask", status: "applied", outcome: "applied", message: "Recorded." },
+  ] } },
+});
+
+const skippedResult: ToolCallResult = {
+  op: addBatch,
+  status: "denied",
+  message: "Skipped. Nothing from this batch was recorded.",
+  data: { batch: { results: [
+    { proposal_id: "p1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "rejected", outcome: "rejected", message: "Rejected." },
+    { proposal_id: "p2", client_id: "s3", parent_client_id: "t-1", operation: "add_subtask", status: "skipped", outcome: null, message: "Its task was not created, so this step was left alone." },
+  ] } },
+};
+
+describe("TaskBatchCard — settled states", () => {
+  it("keys a batch by its id so a re-mapped copy still matches", () => {
+    expect(toolCallKey(addBatch)).toBe("batch-1");
+    const remapped: ProposedOperation = { ...addBatch, statement: "A different statement.", tasks: [...(addBatch.tasks ?? [])] };
+    expect(toolCallKey(remapped)).toBe("batch-1");
+  });
+
+  it("stays settled when the filed result carries a copy of the operation", () => {
+    // The host files a copy ({...op, tasks: draft}) and re-maps the turn's
+    // operations, so identity matching made an approved card look unapproved —
+    // and clickable — again.
+    const filedCopy = { ...addBatch, tasks: [...(addBatch.tasks ?? [])] };
+    const markup = renderToStaticMarkup(createElement(BatchApprovalCards, {
+      operations: [addBatch],
+      results: [{ ...approvedResult(filedCopy), op: filedCopy }],
+      context,
+      onApprove: () => undefined,
+      onSkip: () => undefined,
+    }));
+    expect(markup).toContain("task-batch-card");
+    expect(markup).not.toContain("Approve all");
+    expect(markup).not.toContain(">Skip<");
+  });
+
+  it("collapses an approved card and offers no further action", () => {
+    const markup = render(addBatch, approvedResult(addBatch));
+    expect(markup).toContain("is-settled");
+    expect(markup).not.toContain("task-batch-list");
+    expect(markup).not.toContain("Approve all");
+    expect(markup).not.toContain("Confirm ");
+    expect(markup).not.toContain("Edit these changes");
+    expect(markup).not.toContain(">Skip<");
+  });
+
+  it("collapses a skipped card into a muted Skipped summary and never claims approval", () => {
+    const markup = render(addBatch, skippedResult);
+    expect(markup).toContain("is-skipped");
+    expect(markup).toContain("Skipped");
+    expect(markup).not.toContain("Approved.");
+    expect(markup).not.toContain("Approve all");
+    expect(markup).not.toContain("Edit these changes");
+    expect(markup).not.toContain(">Skip<");
+  });
+
+  it("reports a rejected item as Skipped rather than Pending", () => {
+    const skippedItems = (skippedResult.data as { batch: { results: BatchReviewResult[] } }).batch.results;
+    expect(batchEntryOutcome(skippedItems, "t1")).toMatchObject({ tone: "skipped", label: "Skipped" });
+    const approvedItems = (approvedResult(addBatch).data as { batch: { results: BatchReviewResult[] } }).batch.results;
+    expect(batchEntryOutcome(approvedItems, "t1")).toMatchObject({ tone: "ok", label: "Filed" });
+  });
+
+  it("keeps a failed batch expanded and actionable", () => {
+    const markup = render(addBatch, { op: addBatch, status: "failed", message: "Nothing was filed.", retryable: true });
+    expect(markup).toContain("task-batch-list");
+    expect(markup).toContain("Retry");
+    expect(markup).toContain(">Skip<");
+    expect(markup).not.toContain("is-settled");
   });
 });

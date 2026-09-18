@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, Pencil, RotateCcw } from "lucide-react";
 import {
+  batchEntryOutcome,
   batchItemCount,
   isBatchToolOp,
   isDestructiveBatchOp,
   isPlanImportOp,
   operationToolCall,
+  toolCallKey,
   type ApprovedOpContext,
   type BatchReviewResult,
   type ProposedBatchSubtask,
@@ -18,25 +20,59 @@ import {
  * approved together in two deliberate steps. Unlike the shared approval card
  * (one action per screen), a batch is one decision over several items — so it
  * shows the shape of the whole change, labels every item, and only arms on the
- * first click. */
+ * first click.
+ *
+ * Once decided, the card settles: it collapses into an accordion that reports
+ * what happened, its actions disappear, and it can never be approved twice. */
 
-type EntryOutcome = { tone: "ok" | "pending" | "failed"; label: string; message: string };
+/** The card's lifecycle. `filing` is the in-flight moment; `approved`, `skipped`
+ * and `pending` are the settled states. */
+type CardState = "review" | "filing" | "approved" | "skipped" | "pending" | "failed";
 
-function outcomeFor(results: BatchReviewResult[] | undefined, clientId: string): EntryOutcome | null {
-  const mine = (results ?? []).filter((item) => item.client_id === clientId);
-  if (!mine.length) return null;
-  if (mine.some((item) => item.status === "failed" || item.status === "needs_review")) {
-    const failed = mine.find((item) => item.status === "failed" || item.status === "needs_review")!;
-    return { tone: "failed", label: "Needs attention", message: failed.message };
+function cardStateFor(result: ToolCallResult | undefined, busy: boolean): CardState {
+  if (!result) return busy ? "filing" : "review";
+  if (result.status === "failed") return "failed";
+  if (result.status === "denied") return "skipped";
+  if (result.status === "processing" || result.status === "queued") return "pending";
+  return "approved";
+}
+
+function isSettled(state: CardState): boolean {
+  return state === "approved" || state === "skipped" || state === "pending";
+}
+
+type EntryPill = { key: string; label: string; tone: "new" | "edit" | "status" | "state" | "tool" };
+
+/** The tool's own verb, for the operations that are not an add or an edit. */
+function toolPill(operation: ProposedOperation): EntryPill | null {
+  switch (operation.op) {
+    case "multi_task_archive": return { key: "tool", label: "Archive", tone: "tool" };
+    case "multi_task_delete": return { key: "tool", label: "Delete", tone: "tool" };
+    case "multi_task_log": return { key: "tool", label: "Log", tone: "tool" };
+    case "multi_task_reassign": return { key: "tool", label: "Reassign", tone: "tool" };
+    default: return null;
   }
-  if (mine.some((item) => item.status === "skipped")) {
-    return { tone: "failed", label: "Not filed", message: "Its task was not created, so this step was left alone." };
+}
+
+/** What this entry does, computed from the current draft so a cleared field
+ * stops claiming a change the employee took back. */
+function taskPills(operation: ProposedOperation, task: ProposedBatchTask): EntryPill[] {
+  const pills: EntryPill[] = [];
+  const tool = toolPill(operation);
+  if (tool) pills.push(tool);
+  if (operation.op === "multi_task_add" && !task.taskId) pills.push({ key: "new", label: "New", tone: "new" });
+  if (operation.op === "multi_task_edit") {
+    if (task.title !== undefined || task.description !== undefined) pills.push({ key: "edit", label: "Edit", tone: "edit" });
+    if (task.taskGroupId !== undefined) {
+      pills.push({
+        key: "status",
+        label: task.fromStatus && task.toStatus ? `${task.fromStatus} → ${task.toStatus}` : "Status",
+        tone: "status",
+      });
+    }
+    if (task.completed !== undefined) pills.push({ key: "completion", label: task.completed ? "Done" : "Reopen", tone: "state" });
   }
-  if (mine.some((item) => item.status === "applying" || item.status === "processing")) {
-    return { tone: "pending", label: "Filing", message: "The server is still applying this item." };
-  }
-  if (mine.every((item) => item.status === "applied")) return { tone: "ok", label: "Filed", message: "" };
-  return { tone: "pending", label: "Pending", message: "" };
+  return pills;
 }
 
 function batchResults(result: ToolCallResult | undefined): BatchReviewResult[] | undefined {
@@ -89,12 +125,15 @@ export function TaskBatchCard({
   onSkip: (operation: ProposedOperation) => void;
   onRetry?: (result: ToolCallResult) => void;
 }) {
+  const state = cardStateFor(result, busy);
+  const settled = isSettled(state);
   const [editing, setEditing] = useState(false);
   const [armed, setArmed] = useState(false);
-  const [expanded, setExpanded] = useState(!collapseWhenInactive);
+  // A card that already has an outcome opens collapsed; if the outcome arrives
+  // later the effect below collapses it then. The toggle stays available so the
+  // results can still be read.
+  const [expanded, setExpanded] = useState(() => !settled && !collapseWhenInactive);
   const [draft, setDraft] = useState<ProposedBatchTask[]>(operation.tasks ?? []);
-  const filed = !!result && result.status !== "failed";
-  const failed = result?.status === "failed";
   const results = batchResults(result);
   const count = useMemo(() => batchItemCount({ op: operation.op, tasks: draft }), [draft, operation.op]);
   // The status control must survive being cleared: it is offered whenever the
@@ -115,6 +154,16 @@ export function TaskBatchCard({
     setArmed(false);
   }, [operation]);
 
+  // Settle the card the moment its outcome lands: collapse it and drop every
+  // editing affordance, so an approved or skipped batch can never look actionable.
+  useEffect(() => {
+    if (isSettled(cardStateFor(result, busy))) {
+      setExpanded(false);
+      setEditing(false);
+      setArmed(false);
+    }
+  }, [result, busy]);
+
   const updateTask = (clientId: string, patch: Partial<ProposedBatchTask>) => {
     setDraft((current) => current.map((task) => task.clientId === clientId ? { ...task, ...patch } : task));
   };
@@ -127,15 +176,19 @@ export function TaskBatchCard({
   const title = batchSummary(operation, draft);
   const destructive = isDestructiveBatchOp(operation);
   const planImport = isPlanImportOp(operation);
+  const showToggle = settled || collapseWhenInactive;
 
-  return <section className={`task-batch-card${editing ? " is-editing" : ""}${filed ? " is-filed" : ""}${destructive ? " is-destructive" : ""}`} aria-label={title}>
+  return <section className={`task-batch-card${editing ? " is-editing" : ""}${state === "approved" ? " is-filed is-settled" : ""}${state === "skipped" ? " is-skipped is-settled" : ""}${state === "pending" ? " is-settled" : ""}${destructive ? " is-destructive" : ""}`} aria-label={title}>
     <header className="task-batch-head">
       <div>
         <small>{headingFor(operation)}</small>
         <strong>{title}</strong>
       </div>
       <div className="task-batch-head-actions">
-        {collapseWhenInactive && <button
+        {state === "approved" && <span className="task-batch-outcome ok" role="status">Filed</span>}
+        {state === "skipped" && <span className="task-batch-outcome skipped" role="status">Skipped</span>}
+        {state === "pending" && <span className="task-batch-outcome pending" role="status">Filing</span>}
+        {showToggle && <button
           type="button"
           className="planning-icon-button"
           aria-expanded={expanded}
@@ -143,7 +196,7 @@ export function TaskBatchCard({
           title={expanded ? "Hide the changes" : "Show the changes"}
           onClick={() => setExpanded((current) => !current)}
         ><ChevronDown size={15} className={expanded ? "" : "task-batch-collapsed-mark"} /></button>}
-        {!filed && !failed && expanded && <button
+        {state === "review" && expanded && <button
           type="button"
           className={`planning-icon-button${editing ? " is-active" : ""}`}
           aria-pressed={editing}
@@ -155,13 +208,15 @@ export function TaskBatchCard({
       </div>
     </header>
     {expanded && <p className="task-batch-hint">
-      {failed ? "Some items could not be filed. Nothing else was changed."
-        : filed ? "Approved. Each item reports its own result below."
-          : planImport ? "Importing creates the template's tasks in your workspace. Nothing is created until you confirm."
-            : operation.op === "multi_task_delete" ? "Deleting removes these tasks permanently. Nothing is deleted until you confirm."
-              : operation.op === "multi_task_archive" ? "Archiving hides these tasks from your lists. Nothing changes until you confirm."
-                : editing ? "Edit any wording or status, then approve the whole card."
-                  : "Check the tasks and steps, then approve them together."}
+      {state === "failed" ? "Some items could not be filed. Nothing else was changed."
+        : state === "skipped" ? "Skipped. Nothing from this batch was filed."
+          : state === "approved" ? "Approved. Each item reports its own result below."
+            : state === "pending" ? "Still being filed. This card settles on its own."
+              : planImport ? "Importing creates the template's tasks in your workspace. Nothing is created until you confirm."
+                : operation.op === "multi_task_delete" ? "Deleting removes these tasks permanently. Nothing is deleted until you confirm."
+                  : operation.op === "multi_task_archive" ? "Archiving hides these tasks from your lists. Nothing changes until you confirm."
+                    : editing ? "Edit any wording or status, then approve the whole card."
+                      : "Check the tasks and steps, then approve them together."}
     </p>}
     {expanded && planImport && <div className="task-batch-import">
       <p><strong>{operation.planImport?.clientName ? `${operation.planImport.clientName}` : "No client name"}</strong></p>
@@ -170,7 +225,8 @@ export function TaskBatchCard({
     </div>}
     {expanded && !planImport && <ol className="task-batch-list">
       {draft.map((task, index) => {
-        const outcome = outcomeFor(results, task.clientId);
+        const outcome = batchEntryOutcome(results, task.clientId);
+        const pills = taskPills(operation, task);
         return <li key={task.clientId}>
           <article>
             <b aria-hidden="true"><span className="planning-review-index">{String(index + 1).padStart(2, "0")}</span></b>
@@ -179,7 +235,8 @@ export function TaskBatchCard({
                 {editing
                   ? <input className="task-batch-title" value={task.title ?? ""} maxLength={240} aria-label={`Task ${index + 1} title`} onChange={(event) => updateTask(task.clientId, { title: event.target.value })} />
                   : <h3>{task.title ?? task.description ?? "Task"}</h3>}
-                {task.taskId && <span className="task-batch-chip">Existing task</span>}
+                {pills.map((pill) => <span key={pill.key} className={`task-batch-pill ${pill.tone}`}>{pill.label}</span>)}
+                {!pills.length && task.taskId && <span className="task-batch-chip">Existing task</span>}
                 {outcome && <span className={`task-batch-outcome ${outcome.tone}`} role="status">{outcome.label}</span>}
               </div>
               {(editing || task.description) && (editing
@@ -187,14 +244,14 @@ export function TaskBatchCard({
                 : <p>{task.description}</p>)}
               {task.completed !== undefined && <p className="task-batch-state"><Check size={13} aria-hidden="true" /> {task.completed ? "Mark this task done" : "Reopen this task"}</p>}
               {task.assigneePersonId && <p className="task-batch-state">{operation.op === "multi_task_reassign" ? "Assign to the named person" : "Change the assignee"}</p>}
-              {destructive && !filed && <p className="task-batch-state">{operation.op === "multi_task_delete" ? "Delete permanently" : "Archive"}</p>}
+              {destructive && state === "review" && <p className="task-batch-state">{operation.op === "multi_task_delete" ? "Delete permanently" : "Archive"}</p>}
               {proposedStatus.has(task.clientId) && (editing
                 ? <label className="task-batch-status"><span>Status</span><select value={task.taskGroupId ?? ""} aria-label={`Task ${index + 1} status`} onChange={(event) => updateTask(task.clientId, { taskGroupId: event.target.value })}><option value={proposedStatus.get(task.clientId)}>Move to the proposed status</option><option value="">Leave the status unchanged</option></select></label>
                 : <p className="task-batch-state">{task.taskGroupId ? "Move to the proposed status" : "Status unchanged"}</p>)}
               {outcome?.message && <p className="task-batch-entry-message">{outcome.message}</p>}
               {task.subtasks.length > 0 && <ol className="task-batch-steps">
                 {task.subtasks.map((subtask, subtaskIndex) => {
-                  const subtaskOutcome = outcomeFor(results, subtask.clientId);
+                  const subtaskOutcome = batchEntryOutcome(results, subtask.clientId);
                   return <li key={subtask.clientId}>
                     <span className="task-batch-step-mark" aria-hidden="true">›</span>
                     <div>
@@ -202,6 +259,7 @@ export function TaskBatchCard({
                         {editing
                           ? <input className="task-batch-title" value={subtask.title} maxLength={240} aria-label={`Task ${index + 1} step ${subtaskIndex + 1} title`} onChange={(event) => updateSubtask(task.clientId, subtask.clientId, { title: event.target.value })} />
                           : <strong>{subtask.title}</strong>}
+                        <span className="task-batch-pill new">New</span>
                         {subtaskOutcome && <span className={`task-batch-outcome ${subtaskOutcome.tone}`} role="status">{subtaskOutcome.label}</span>}
                       </div>
                       {(editing || subtask.description) && (editing
@@ -217,12 +275,12 @@ export function TaskBatchCard({
         </li>;
       })}
     </ol>}
-    {failed && <p className="task-batch-error" role="status"><AlertTriangle size={14} /> <span>{result?.message}</span></p>}
+    {state === "failed" && <p className="task-batch-error" role="status"><AlertTriangle size={14} /> <span>{result?.message}</span></p>}
     {expanded && <details className="task-batch-details">
       <summary>Technical details</summary>
       <code>{call.command}</code>
     </details>}
-    {expanded && !filed && !failed && <footer className="task-batch-foot">
+    {expanded && state === "review" && <footer className="task-batch-foot">
       {!armed ? <>
         <button type="button" className="secondary" disabled={busy} onClick={() => onSkip(operation)}>Skip</button>
         <button type="button" className="primary" disabled={busy} onClick={() => setArmed(true)}><Check size={15} /> {planImport ? "Approve import" : `Approve all ${count} change${count === 1 ? "" : "s"}`}</button>
@@ -231,7 +289,7 @@ export function TaskBatchCard({
         <button type="button" className="primary" disabled={busy} onClick={() => onApprove({ ...operation, tasks: draft })}>{busy ? "Filing…" : planImport ? "Confirm import" : `Confirm ${count} change${count === 1 ? "" : "s"}`}</button>
       </>}
     </footer>}
-    {expanded && failed && result && <footer className="task-batch-foot">
+    {expanded && state === "failed" && result && <footer className="task-batch-foot">
       {onRetry && result.retryable !== false && <button type="button" className="secondary" disabled={busy} onClick={() => onRetry(result)}><RotateCcw size={15} /> Retry</button>}
       <button type="button" className="secondary" disabled={busy} onClick={() => onSkip(operation)}>Skip</button>
     </footer>}
@@ -263,7 +321,10 @@ export function BatchApprovalCards({
   const batches = operations.filter((op) => isBatchToolOp(op) || isPlanImportOp(op));
   if (!batches.length) return null;
   return <>{batches.map((op, index) => {
-    const result = results.find((item) => item.op === op);
+    // Match by the stable batch key, never by object identity: the hosts file a
+    // copy of the operation and re-map the turn's operations afterwards, which
+    // used to make an already-approved card look actionable again.
+    const result = results.find((item) => toolCallKey(item.op) === toolCallKey(op));
     return <TaskBatchCard
       key={op.batchId ?? `${op.op}-${index}`}
       /* plan imports share the batch review path and its two-step approval */

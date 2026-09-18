@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import { INTERPRET_RESPONSE_SCHEMA, parseInterpretation } from "../src/lib/aiInterpret";
+import { annotateBatchStatusNames, type BatchLabelEntry } from "../src/lib/aiBatchLabels";
 import { interpretedOperations, prepareProposals, proposalDecisionEdits } from "../src/lib/work-os-proposals";
 
 const root = resolve(import.meta.dirname, "..");
@@ -385,4 +386,52 @@ test("the extra tools keep their existing write paths and stay grouped", () => {
   for (const tool of ["multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign", "plan_import"]) {
     assert.match(interpretation, new RegExp(tool));
   }
+});
+
+test("status moves are labelled from the employee's own task rows", () => {
+  const tasks = [
+    { id: "t-1", title: "Ship it", status: "In review", task_group_id: "col-review" },
+    { id: "t-2", title: "Wrap it", status: "Done", task_group_id: "col-done" },
+    { id: "t-3", title: "Unmapped", status: "Backlog" },
+  ];
+  const interpretation: { operations: Array<{ tasks: BatchLabelEntry[] }> } = {
+    operations: [{
+      tasks: [
+        { taskId: "t-1", taskGroupId: "col-done" },
+        { taskId: "t-3", taskGroupId: "col-missing" },
+        { taskGroupId: "col-done" },
+      ],
+    }],
+  };
+  annotateBatchStatusNames(interpretation, tasks);
+  const [first, second, third] = interpretation.operations[0]!.tasks;
+  // The move names where it is now and where it is going.
+  assert.equal(first?.fromStatus, "In review");
+  assert.equal(first?.toStatus, "Done");
+  // An unmappable column is left unlabelled rather than printing its id.
+  assert.equal(second?.fromStatus, "Backlog");
+  assert.equal(second?.toStatus, undefined);
+  // A new task has no current status, only a destination.
+  assert.equal(third?.fromStatus, undefined);
+  assert.equal(third?.toStatus, "Done");
+});
+
+test("status labels never require every entry to resolve", () => {
+  const interpretation: { operations: Array<{ tasks: BatchLabelEntry[] }> } = { operations: [{ tasks: [{ taskId: "ghost", taskGroupId: "col-x" }] }] };
+  annotateBatchStatusNames(interpretation, [{ id: "t-1", status: "Open", task_group_id: "col-open" }]);
+  assert.equal(interpretation.operations[0]!.tasks[0]!.fromStatus, undefined);
+  assert.equal(interpretation.operations[0]!.tasks[0]!.toStatus, undefined);
+  assert.doesNotThrow(() => annotateBatchStatusNames(undefined, []));
+});
+
+test("a filed status move persists both names for later replays", () => {
+  const proposals = read("src/lib/work-os-proposals.ts");
+  assert.match(proposals, /async function resolveTaskGroupName/);
+  assert.match(proposals, /from_status: text\(task\.status\)/);
+  assert.match(proposals, /to_status: await resolveTaskGroupName/);
+  const route = read("src/app/api/work-os/me/interpret/route.ts");
+  assert.match(route, /annotateBatchStatusNames\(result\.interpretation, tasks\)/);
+  const client = read("desktop/work-os-companion/src/interpretation.ts");
+  assert.match(client, /proposed_change\?\.from_status/);
+  assert.match(client, /fromStatus/);
 });

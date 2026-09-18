@@ -6,6 +6,7 @@ import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 import { getWorkOsOrganizationOwnerId, listBlueprints } from "@/lib/work-os";
 import { loadShiftData } from "@/lib/work-os-internal";
 import { persistInterpretHistory, recentConversationTurns } from "@/lib/work-conversations";
+import { annotateBatchStatusNames } from "@/lib/aiBatchLabels";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
 
@@ -94,6 +95,11 @@ export async function POST(req: Request) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;
       return NextResponse.json({ error: result.detail ?? "AI interpretation unavailable", reason: result.reason }, { status });
     }
+    // Status names for the batch card: the employee's own task rows already carry
+    // both the column id and the human status, so a status move can read
+    // "In review → Done" without an extra query. Entries we cannot name keep no
+    // label at all — a raw column id must never reach the card.
+    annotateBatchStatusNames(result.interpretation, tasks);
     await persistInterpretHistory(conversationScope, body.history, body.input);
     return NextResponse.json({ interpretation: result.interpretation, model: result.model });
   } catch (error) {

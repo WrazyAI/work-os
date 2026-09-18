@@ -25,6 +25,9 @@ export interface ProposedBatchTask {
   completed?: boolean;
   assigneePersonId?: string;
   dueDate?: string;
+  /** Human status names for a status move, resolved by the server. */
+  fromStatus?: string;
+  toStatus?: string;
   subtasks: ProposedBatchSubtask[];
   proposalIds?: string[];
 }
@@ -288,6 +291,10 @@ function normalizeBatchTasks(
       }
     }
     const assigneePersonId = typeof entry.assigneePersonId === "string" && entry.assigneePersonId.trim() ? entry.assigneePersonId.trim().slice(0, 80) : undefined;
+    // Status names resolved by the server, so a move reads as "In review → Done"
+    // instead of a raw column id (and is omitted when it cannot be resolved).
+    const fromStatus = typeof entry.fromStatus === "string" && entry.fromStatus.trim() ? entry.fromStatus.trim().slice(0, 120) : undefined;
+    const toStatus = typeof entry.toStatus === "string" && entry.toStatus.trim() ? entry.toStatus.trim().slice(0, 120) : undefined;
     const rawDue = typeof entry.dueDate === "string" ? entry.dueDate.trim().slice(0, 10) : "";
     const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? rawDue : undefined;
     if (op === "multi_task_add") {
@@ -308,6 +315,8 @@ function normalizeBatchTasks(
       ...(completed === undefined ? {} : { completed }),
       ...(assigneePersonId ? { assigneePersonId } : {}),
       ...(dueDate ? { dueDate } : {}),
+      ...(fromStatus ? { fromStatus } : {}),
+      ...(toStatus ? { toStatus } : {}),
       subtasks,
     });
   }
@@ -507,6 +516,8 @@ export interface FiledProposalRow {
   /** The server's stored task state, used to name an entry the agent described
    * only by id (a log, archive, or reassign never carries the task title). */
   before_state?: { title?: string | null } | null;
+  /** The server's persisted status names for a status move. */
+  proposed_change?: { from_status?: string | null; to_status?: string | null } | null;
 }
 
 /** Groups filed rows by the operation the client sent. A batch files several
@@ -534,6 +545,7 @@ export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalR
   const batchId = rows.find((row) => row.batch_id)?.batch_id ?? undefined;
   const idsByClientId = new Map<string, string[]>();
   const titleByClientId = new Map<string, string>();
+  const statusByClientId = new Map<string, { fromStatus?: string; toStatus?: string }>();
   for (const row of rows) {
     if (!row.client_id) continue;
     const list = idsByClientId.get(row.client_id) ?? [];
@@ -541,15 +553,25 @@ export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalR
     idsByClientId.set(row.client_id, list);
     const title = row.before_state?.title;
     if (typeof title === "string" && title.trim()) titleByClientId.set(row.client_id, title.trim());
+    const fromStatus = row.proposed_change?.from_status;
+    const toStatus = row.proposed_change?.to_status;
+    if (typeof toStatus === "string" && toStatus.trim()) {
+      statusByClientId.set(row.client_id, {
+        ...(typeof fromStatus === "string" && fromStatus.trim() ? { fromStatus: fromStatus.trim() } : {}),
+        toStatus: toStatus.trim(),
+      });
+    }
   }
-  const withIds = <T extends { clientId: string; title?: string }>(entry: T): T => {
+  const withIds = <T extends { clientId: string; title?: string; fromStatus?: string; toStatus?: string }>(entry: T): T => {
     const ids = idsByClientId.get(entry.clientId);
     const title = titleByClientId.get(entry.clientId);
+    const status = statusByClientId.get(entry.clientId);
     return {
       ...entry,
       // A tool that named its target only by id gets the real task title here,
       // so the card never shows a note as if it were the task name.
       ...(entry.title === undefined && title ? { title } : {}),
+      ...(status ? { ...(entry.fromStatus === undefined && status.fromStatus ? { fromStatus: status.fromStatus } : {}), ...(entry.toStatus === undefined ? { toStatus: status.toStatus } : {}) } : {}),
       ...(ids ? { proposalIds: ids } : {}),
     };
   };
@@ -569,6 +591,36 @@ export interface BatchReviewResult {
   outcome: string | null;
   message: string;
   create_resolution?: "no_task_created";
+}
+
+export type BatchEntryTone = "ok" | "pending" | "failed" | "skipped";
+export interface BatchEntryOutcome {
+  tone: BatchEntryTone;
+  label: string;
+  message: string;
+}
+
+/** How one entry of a batch reads after filing. Shared by the card and its tests
+ * so a settled batch can never claim a state the server did not report. */
+export function batchEntryOutcome(results: readonly BatchReviewResult[] | undefined, clientId: string): BatchEntryOutcome | null {
+  const mine = (results ?? []).filter((item) => item.client_id === clientId);
+  if (!mine.length) return null;
+  if (mine.some((item) => item.status === "failed" || item.status === "needs_review")) {
+    const failed = mine.find((item) => item.status === "failed" || item.status === "needs_review")!;
+    return { tone: "failed", label: "Needs attention", message: failed.message };
+  }
+  if (mine.some((item) => item.status === "skipped")) {
+    return { tone: "skipped", label: "Skipped", message: "Its task was not created, so this step was left alone." };
+  }
+  // A rejected or stale item was deliberately not filed.
+  if (mine.some((item) => item.status === "rejected" || item.status === "stale")) {
+    return { tone: "skipped", label: "Skipped", message: "" };
+  }
+  if (mine.some((item) => item.status === "applying" || item.status === "processing")) {
+    return { tone: "pending", label: "Filing", message: "The server is still applying this item." };
+  }
+  if (mine.every((item) => item.status === "applied")) return { tone: "ok", label: "Filed", message: "" };
+  return { tone: "pending", label: "Pending", message: "" };
 }
 
 export interface BatchReviewResponse {
@@ -617,8 +669,10 @@ export async function fileApprovedOperations(
         // A skip rejects every pending item in the batch in one decision. There
         // are no edits to carry: nothing is being applied.
         if (options?.decision === "reject") {
-          await transport.reviewBatch(batchId, { decision: "reject", decisions: [] });
-          outcome.results.push({ op, status: "denied", message: "Skipped. Nothing from this batch was recorded." });
+          // Keep the server's per-item response so a skipped card can say which
+          // entries were rejected and which steps were left alone.
+          const response = await transport.reviewBatch(batchId, { decision: "reject", decisions: [] });
+          outcome.results.push({ op, status: "denied", message: "Skipped. Nothing from this batch was recorded.", data: { batch: response } });
           continue;
         }
         const decisions: Array<{ proposal_id: string; edits?: Record<string, unknown> }> = [];
@@ -758,8 +812,12 @@ export function filingFailureMessage(error: unknown): string {
 
 /** Stable identity for a tool call across windows. Server proposals carry an
  * id; immediate display results fall back to their content coordinates. */
-export function toolCallKey(op: Pick<ProposedOperation, "proposalId" | "op" | "taskId" | "statement">): string {
-  return op.proposalId ?? `${op.op}|${op.taskId ?? ""}|${op.statement}`;
+export function toolCallKey(op: Pick<ProposedOperation, "proposalId" | "batchId" | "op" | "taskId" | "statement">): string {
+  // A batch never receives a proposalId, so its batch id is the stable identity:
+  // it survives the `{...op}` copies the chat surfaces make when they file, and it
+  // survives a reload of the persisted turn. Without it, an approved card looked
+  // unapproved again — and clickable — as soon as its operation object changed.
+  return op.proposalId ?? op.batchId ?? `${op.op}|${op.taskId ?? ""}|${op.statement}`;
 }
 
 /** One pending review shared between the main window and the avatar so a

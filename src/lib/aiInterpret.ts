@@ -106,6 +106,10 @@ export interface CandidateBatchTask {
   completed?: boolean;
   assigneePersonId?: string;
   dueDate?: string;
+  /** Human status names for a status move, filled in by the interpret route
+   * from the employee's own task rows — never emitted by the model. */
+  fromStatus?: string;
+  toStatus?: string;
   subtasks?: CandidateBatchSubtask[];
 }
 

@@ -6965,3 +6965,35 @@ button:not(:disabled):active {
 
 .task-batch-import p { margin: 0; font-size: 11.5px; }
 .task-batch-import-note { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+
+/* Batch entry pills: what each entry does — a new task or step, an edit, a
+   status move, or the tool's own verb. They replace the old generic
+   "Existing task" chip wherever a more specific label applies. */
+.task-batch-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eceada;
+  color: #5f6358;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.task-batch-pill.new { background: #ddf6bf; color: #34591a; }
+.task-batch-pill.edit { background: #e2ecf8; color: #2f4f74; }
+.task-batch-pill.status { background: #f0e6f9; color: #5c3b78; }
+.task-batch-pill.state { background: #e7e6dd; color: #4c4f45; }
+.task-batch-pill.tool { background: #f6e3b5; color: #6d4d0c; }
+
+/* A skipped item is deliberately quiet, never a failure and never a success. */
+.task-batch-outcome.skipped { background: #eceada; color: #5f6358; }
+
+/* Settled cards read as a record, not a form: the surface flattens, the heading
+   quiets, and nothing inside invites another action. */
+.task-batch-card.is-settled { background: #fbfbf5; }
+.task-batch-card.is-skipped { background: #f7f7f1; }
+.task-batch-card.is-settled .task-batch-head small { color: var(--muted); }

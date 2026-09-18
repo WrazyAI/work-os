@@ -741,6 +741,17 @@ export function proposalDecisionEdits(operation: string, value: unknown): Json |
   return Object.keys(narrowed).length ? narrowed : null;
 }
 
+/** The human name of a status column, read from any task already sitting in it.
+ * Used only for display on the review card; an unresolvable name stays null. */
+async function resolveTaskGroupName(ownerId: string, task: Json, taskGroupId: string): Promise<string | null> {
+  const taskProjectId = text(task.provider_project_id);
+  if (!taskProjectId) return null;
+  const { data, error } = await db().from("work_tasks").select("status")
+    .eq("user_id", ownerId).eq("provider_project_id", taskProjectId).eq("task_group_id", taskGroupId).limit(1);
+  if (error) return null;
+  return text((data?.[0] as { status?: string } | undefined)?.status) ?? null;
+}
+
 async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: string | null, input: string, opts?: { requireInInput?: boolean }) {
   if (!taskGroupId || ((opts?.requireInInput ?? true) && !input.includes(taskGroupId))) {
     throw new Error("A status move requires an existing status column for this project.");
@@ -883,9 +894,16 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
         task_group_id: task.task_group_id,
         parent_provider_task_id: task.parent_provider_task_id,
       } : {};
-      const proposedChange: Json = item.assigneePersonId
-        ? { ...item.change, assignees: [await resolveBatchAssignee(access, item.assigneePersonId)] }
-        : item.change;
+      // A status move records both names so a filed (or reloaded) card can keep
+      // showing "In review → Done" with no extra lookups.
+      const statusNames = item.taskGroupId && task
+        ? { from_status: text(task.status), to_status: await resolveTaskGroupName(ownerId, task, item.taskGroupId) }
+        : {};
+      const proposedChange: Json = {
+        ...item.change,
+        ...statusNames,
+        ...(item.assigneePersonId ? { assignees: [await resolveBatchAssignee(access, item.assigneePersonId)] } : {}),
+      };
       const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
         organization_id: access.organizationId,
         person_id: personId,

@@ -549,7 +549,7 @@ function BatchSection() {
     enabled: true,
     batchId: "batch-preview-edit",
     tasks: [
-      { clientId: "t1", taskId: "t-1", title: "Ship the debugger fix (final)", taskGroupId: "col-done", subtasks: [] },
+      { clientId: "t1", taskId: "t-1", title: "Ship the debugger fix (final)", taskGroupId: "col-done", fromStatus: "In review", toStatus: "Done", subtasks: [] },
       { clientId: "t2", taskId: "t-2", completed: true, subtasks: [] },
       { clientId: "t3", taskId: "t-3", title: "Package the Windows installer", subtasks: [] },
     ],
@@ -597,6 +597,19 @@ function BatchSection() {
     batchId: "batch-preview-import",
     planImport: { blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" },
   };
+  const skipped = {
+    op: addBatch,
+    status: "denied" as const,
+    message: "Skipped. Nothing from this batch was recorded.",
+    data: {
+      batch: {
+        results: [
+          { proposal_id: "r1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "rejected", outcome: "rejected", message: "Rejected." },
+          { proposal_id: "r2", client_id: "s1", parent_client_id: "t1", operation: "add_subtask", status: "skipped", outcome: null, message: "Its task was not created, so this step was left alone." },
+        ],
+      },
+    },
+  };
   const filed = {
     op: editBatch,
     status: "recorded" as const,
@@ -632,6 +645,9 @@ function BatchSection() {
     </section>
     <section><strong style={{ fontSize: 12 }}>Plan import</strong>
       <TaskBatchCard operation={importBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Skipped</strong>
+      <TaskBatchCard operation={addBatch} result={skipped} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
     </section>
   </>;
 }
