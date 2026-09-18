@@ -146,6 +146,12 @@ dominate a small change.
   them. Its backend harness validates code without executing it — treat a
   backend "pass" as lint and execute the same test directly (or drive the
   API/DB) before reporting a verdict.
+- **The floating companion has a token-free DEV fixture** for the avatar chat:
+  `?window=avatar&avatar-fixture=recorded-completion` renders a persisted
+  display turn plus a recorded completion (one action summary, no empty card)
+  without a desktop session. Use it for TestSprite or browser checks on the
+  avatar surface instead of minting live tokens; the live `?window=avatar&token=`
+  path stays the end-to-end option when real API behavior matters.
 - **Live probes are the primary evidence for provider, runner, and
   state-machine behavior.** Reviews cannot see runtime truth (a provider
   ignoring date filters, a stale build racing a deploy, a Date-vs-string read).

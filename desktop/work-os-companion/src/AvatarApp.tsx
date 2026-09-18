@@ -17,6 +17,7 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
+import { avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -144,18 +145,22 @@ export default function AvatarApp(): React.ReactElement {
     try { return isTauri() ? getCurrentWindow() : null; }
     catch { return null; }
   }, []);
-  const [expanded, setExpanded] = useState(false);
-  const [connected, setConnected] = useState<boolean | null>(null);
-  const [facts, setFacts] = useState<DayFacts>({
+  // DEV-only visual fixture (see avatarFixture.ts): renders the recorded
+  // completion without a session token so TestSprite or a plain browser can
+  // check the avatar's recorded-result rendering. Inert in production.
+  const avatarFixture = avatarFixtureRequested(window.location.search);
+  const [expanded, setExpanded] = useState(avatarFixture);
+  const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
+  const [facts, setFacts] = useState<DayFacts>(() => avatarFixture ? avatarFixtureFacts() : {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
     timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [], lateReasonRequired: false,
   });
-  const [daySyncState, setDaySyncState] = useState<DaySyncState>("loading");
+  const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [chat, setChat] = useState<ChatEntry[]>([]);
+  const [chat, setChat] = useState<ChatEntry[]>(() => avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const [input, setInput] = useState("");
@@ -200,6 +205,7 @@ export default function AvatarApp(): React.ReactElement {
   // ── Boot: session + saved position + notifications ──
   useEffect(() => {
     (async () => {
+      if (avatarFixture) { setConnected(true); notificationPermission.current = false; return; }
       const session = (await secureState.session().catch(() => null)) as SessionInfo | null;
       setDesktopSession(session);
       setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
@@ -293,10 +299,11 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   useEffect(() => {
+    if (avatarFixture) return;
     void loadDay(true);
     const poll = setInterval(() => { void loadDay(); }, DAY_POLL_MS);
     return () => clearInterval(poll);
-  }, [loadDay]);
+  }, [avatarFixture, loadDay]);
 
   // The main and companion windows own separate React trees. Refresh promptly
   // after a main-window write or sign-in instead of waiting for the minute poll.
@@ -318,6 +325,7 @@ export default function AvatarApp(): React.ReactElement {
     ? `workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}`
     : null;
   useEffect(() => {
+    if (avatarFixture) return;
     let cancelled = false;
     chatConversationSignature.current = "";
     setLoadedChatConversation(null);
@@ -333,7 +341,7 @@ export default function AvatarApp(): React.ReactElement {
       if (!cancelled) setLoadedChatConversation(avatarConversationScope);
     });
     return () => { cancelled = true; };
-  }, [avatarConversationScope]);
+  }, [avatarConversationScope, avatarFixture]);
   useEffect(() => {
     if (!avatarConversationScope || loadedChatConversation !== avatarConversationScope) return;
     const turns = chat
