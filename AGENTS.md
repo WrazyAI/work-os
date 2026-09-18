@@ -94,6 +94,32 @@ and the exact external dependency when a provider, credential, permission, or
 deployment is missing. Do not convert a successful subprocess exit into a
 claim that the user-visible workflow completed.
 
+## Verification and review cadence
+
+Quality gates are mandatory; their cadence is batched so tool latency does not
+dominate a small change.
+
+- **One CodeRabbit pass per task batch, not per commit.** The free CLI tier
+  allows three reviews per window. Run `coderabbit review --agent
+  --base-commit <batch base>` once the batch is complete, fix every still-valid
+  finding, and re-run only when a fix materially changes the reviewed surface.
+  Batch the fixes into one commit and one redeploy.
+- **TestSprite is required for UI-affecting changes**, and only when a fixture
+  exists or is needed anyway; reuse fixtures across runs instead of rebuilding
+  them. Its backend harness validates code without executing it — treat a
+  backend "pass" as lint and execute the same test directly (or drive the
+  API/DB) before reporting a verdict.
+- **Live probes are the primary evidence for provider, runner, and
+  state-machine behavior.** Reviews cannot see runtime truth (a provider
+  ignoring date filters, a stale build racing a deploy, a Date-vs-string read).
+  Verify against the running system: read-only queries first, then the smallest
+  write that proves the path.
+- **Reviews earn their cost on security, tenant isolation, data correctness and
+  attribution, and state transitions.** They add little on copy, labels, and
+  formatting; spend the passes accordingly.
+- Report tool latency (rate-limit waits, build time) separately from
+  engineering time in the handoff.
+
 ## Running services (systemd --user)
 Both live in `~/.config/systemd/user/`, auto-restart, `Linger=yes` (start on boot):
 - **`agentos-web`** — `next start` on :3000 (UI + all API routes).
