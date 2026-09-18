@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.27
+
+- Approved and skipped task batches now collapse into a short summary with no buttons, so a card can never be approved twice.
+- Every task on a batch card now says what it does — New, Edit, or the old and new status for a status move.
+
 ## 0.3.26
 
 - Pending task lists now show the newest tasks first, so recent work no longer sits underneath older items.
