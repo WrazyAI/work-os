@@ -3,7 +3,28 @@ import { safeTaskText } from "./taskWorkspace";
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
   | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
-  | "navigate_to_page";
+  | "navigate_to_page" | "multi_task_add" | "multi_task_edit";
+
+/** One step of a batch entry. proposalIds are the server rows this step filed,
+ * so an edited card can send its edits to the right proposals. */
+export interface ProposedBatchSubtask {
+  clientId: string;
+  title: string;
+  description?: string;
+  proposalIds?: string[];
+}
+
+/** One entry of a multi_task_add / multi_task_edit batch. */
+export interface ProposedBatchTask {
+  clientId: string;
+  taskId?: string;
+  title?: string;
+  description?: string;
+  taskGroupId?: string;
+  completed?: boolean;
+  subtasks: ProposedBatchSubtask[];
+  proposalIds?: string[];
+}
 
 /** Destinations the assistant may link inline. Anything else is dropped. */
 export const NAVIGATE_PAGES = ["day", "tasks", "review", "insights", "evidence", "settings"] as const;
@@ -18,6 +39,10 @@ export interface ProposedOperation {
   taskGroupId?: string;
   limit?: number;
   page?: NavigatePage;
+  /** Batch payload for multi_task_add / multi_task_edit. */
+  tasks?: ProposedBatchTask[];
+  /** Server batch id, set once the batch has been filed for review. */
+  batchId?: string;
   proposalId?: string;
   /** Set when the operation could not be filed for review (usually the task
    * left the list). The operation is then disabled and explained inline. */
@@ -62,6 +87,8 @@ const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
   display_pending_tasks: "Show pending tasks",
   display_overdue_tasks: "Show overdue tasks",
   navigate_to_page: "Open page:",
+  multi_task_add: "Add tasks:",
+  multi_task_edit: "Update tasks:",
 };
 
 export function operationLabel(op: CandidateOperationKind): string {
@@ -72,6 +99,27 @@ export function operationLabel(op: CandidateOperationKind): string {
  * navigating mutates nothing, so these never enter the approval queue. */
 export function isDisplayToolOp(op: Pick<ProposedOperation, "op">): boolean {
   return op.op === "display_pending_tasks" || op.op === "display_overdue_tasks";
+}
+
+/** How many reviewable items a batch files. An add batch files one new task per
+ * new entry plus every step; an edit batch files one change per edited field
+ * group (wording/status, then completion) plus any steps. An entry that only
+ * adds steps to an existing task files no task row of its own. */
+export function batchItemCount(op: Pick<ProposedOperation, "op" | "tasks">): number {
+  return (op.tasks ?? []).reduce((total, task) => {
+    if (op.op === "multi_task_edit") {
+      const wording = task.title !== undefined || task.description !== undefined || task.taskGroupId !== undefined ? 1 : 0;
+      const completion = task.completed !== undefined ? 1 : 0;
+      return total + wording + completion + task.subtasks.length;
+    }
+    return total + (task.taskId ? 0 : 1) + task.subtasks.length;
+  }, 0);
+}
+
+/** Batch tools render their own grouped approval card instead of the shared
+ * one: they carry several tasks and steps in a single decision. */
+export function isBatchToolOp(op: Pick<ProposedOperation, "op">): boolean {
+  return op.op === "multi_task_add" || op.op === "multi_task_edit";
 }
 
 /** Mutating tools always require an explicit approval decision first. */
@@ -95,6 +143,13 @@ export function pendingApprovalCount(
 
 /** The exact Work OS request an approved assistant proposal will make. */
 export function operationToolCall(op: ProposedOperation, context: ApprovedOpContext): { tool: string; command: string } {
+  if (isBatchToolOp(op)) {
+    const items = batchItemCount(op);
+    return {
+      tool: "work_os.proposals.review_batch",
+      command: `POST /api/work-os/proposal-batches/${op.batchId ?? "<batch>"} ${JSON.stringify({ decision: "accept", decisions: `${items} item(s)` })}`,
+    };
+  }
   if (op.proposalId) {
     return {
       tool: "work_os.proposals.review",
@@ -143,6 +198,7 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
 }
 
 export function proposalApprovalCommand(op: ProposedOperation): string | null {
+  if (isBatchToolOp(op)) return op.batchId ? `POST /api/work-os/proposal-batches/${op.batchId} ${JSON.stringify({ decision: "accept" })}` : null;
   return op.proposalId ? `PATCH /api/work-os/proposals/${op.proposalId} ${JSON.stringify({ decision: "accept" })}` : null;
 }
 
@@ -152,6 +208,57 @@ export function proposalApprovalCommand(op: ProposedOperation): string | null {
  * must exist in the employee's task list, and any structural surprise returns
  * null so the UI falls back to the manual classifier.
  */
+/** Defensive batch parsing for the chat card. Mirrors the server's rules: a
+ * foreign task id is dropped, a title is capped, and an entry with nothing to
+ * do is discarded so the card never shows an empty row. */
+function normalizeBatchTasks(
+  value: unknown,
+  op: "multi_task_add" | "multi_task_edit",
+  allowed: Set<string>,
+): ProposedBatchTask[] {
+  if (!Array.isArray(value)) return [];
+  const tasks: ProposedBatchTask[] = [];
+  for (const rawTask of value.slice(0, 20)) {
+    if (!rawTask || typeof rawTask !== "object") continue;
+    const entry = rawTask as Record<string, unknown>;
+    const taskId = typeof entry.taskId === "string" && allowed.has(entry.taskId) ? entry.taskId : undefined;
+    const title = typeof entry.title === "string" && entry.title.trim() ? safeTaskText(entry.title, "").slice(0, 240) || undefined : undefined;
+    const description = typeof entry.description === "string" && entry.description.trim() ? entry.description.trim().slice(0, 2000) : undefined;
+    const taskGroupId = typeof entry.taskGroupId === "string" && entry.taskGroupId.trim() ? entry.taskGroupId.trim().slice(0, 160) : undefined;
+    const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
+    const subtasks: ProposedBatchSubtask[] = [];
+    if (Array.isArray(entry.subtasks)) {
+      for (const rawSubtask of entry.subtasks.slice(0, 20)) {
+        if (!rawSubtask || typeof rawSubtask !== "object") continue;
+        const subtask = rawSubtask as Record<string, unknown>;
+        const subtaskTitle = typeof subtask.title === "string" && subtask.title.trim() ? safeTaskText(subtask.title, "").slice(0, 240) : "";
+        if (!subtaskTitle) continue;
+        const subtaskDescription = typeof subtask.description === "string" && subtask.description.trim() ? subtask.description.trim().slice(0, 2000) : undefined;
+        subtasks.push({
+          clientId: typeof subtask.clientId === "string" && subtask.clientId.trim() ? subtask.clientId.trim().slice(0, 80) : `s${subtasks.length + 1}`,
+          title: subtaskTitle,
+          ...(subtaskDescription ? { description: subtaskDescription } : {}),
+        });
+      }
+    }
+    if (op === "multi_task_add") {
+      if (!taskId && !title) continue;
+    } else if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) {
+      continue;
+    }
+    tasks.push({
+      clientId: typeof entry.clientId === "string" && entry.clientId.trim() ? entry.clientId.trim().slice(0, 80) : `t${tasks.length + 1}`,
+      ...(taskId ? { taskId } : {}),
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      ...(taskGroupId ? { taskGroupId } : {}),
+      ...(completed === undefined ? {} : { completed }),
+      subtasks,
+    });
+  }
+  return tasks;
+}
+
 export function normalizeInterpretation(
   raw: unknown,
   originalInput: string,
@@ -182,7 +289,10 @@ export function normalizeInterpretation(
       ? candidate.page as NavigatePage
       : undefined;
     if (op === "navigate_to_page" && !page) continue;
-    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, page, enabled: true });
+    const batch = op === "multi_task_add" || op === "multi_task_edit";
+    const tasks = batch ? normalizeBatchTasks(candidate.tasks, op, allowed) : undefined;
+    if (batch && !tasks?.length) continue;
+    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, page, tasks, enabled: true });
   }
   if (!operations.length && !reply) return null;
   return { originalInput, operations, reply };
@@ -285,6 +395,8 @@ export interface ApprovalTransport {
   reviewProposal(proposalId: string, options?: { providerCreateResolution?: "no_task_created" }): Promise<unknown>;
   /** Owner-scoped readback for reconciling an interrupted approval. */
   readProposal?(proposalId: string): Promise<unknown>;
+  /** One decision for a whole batch, with the employee's per-item edits. */
+  reviewBatch?(batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown> }> }): Promise<unknown>;
 }
 
 export interface ApprovalOutcome {
@@ -308,16 +420,162 @@ function createResolutionFor(row: Record<string, unknown> | null): "no_task_crea
   return row?.create_intent_unresolved === true ? "no_task_created" : undefined;
 }
 
+/** One reject decision for a whole batch, shaped like any other filing outcome
+ * so the chat surfaces can merge it without a special case. */
+export async function skipBatchOperation(operation: ProposedOperation, transport: ApprovalTransport): Promise<ToolCallResult> {
+  const outcome = await fileApprovedOperations([operation], transport, { decision: "reject" });
+  return outcome.results[0] ?? { op: operation, status: "denied", message: "Skipped. Nothing from this batch was recorded." };
+}
+
+/** A filed proposal row, as the proposals endpoint returns it. */
+export interface FiledProposalRow {
+  id: string;
+  client_operation_index: number;
+  client_id?: string | null;
+  batch_id?: string | null;
+  batch_index?: number | null;
+}
+
+/** Groups filed rows by the operation the client sent. A batch files several
+ * rows for one operation, so they must stay together. */
+export function filedProposalGroups(
+  proposals: FiledProposalRow[],
+  indexOf: (clientOperationIndex: number) => number | undefined,
+): Map<number, FiledProposalRow[]> {
+  const byIndex = new Map<number, FiledProposalRow[]>();
+  for (const proposal of proposals) {
+    const original = indexOf(proposal.client_operation_index);
+    if (original === undefined) continue;
+    const list = byIndex.get(original) ?? [];
+    list.push(proposal);
+    byIndex.set(original, list);
+  }
+  return byIndex;
+}
+
+/** Attaches filed rows back onto the operation they came from. A single
+ * operation keeps its one proposal id; a batch receives its batch id and gives
+ * every task and step the ids it filed, so the card's edits reach the rows. */
+export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalRow[]): ProposedOperation {
+  if (!isBatchToolOp(op)) return { ...op, proposalId: rows[0]?.id };
+  const batchId = rows.find((row) => row.batch_id)?.batch_id ?? undefined;
+  const idsByClientId = new Map<string, string[]>();
+  for (const row of rows) {
+    if (!row.client_id) continue;
+    const list = idsByClientId.get(row.client_id) ?? [];
+    list.push(row.id);
+    idsByClientId.set(row.client_id, list);
+  }
+  const withIds = <T extends { clientId: string }>(entry: T): T => {
+    const ids = idsByClientId.get(entry.clientId);
+    return ids ? { ...entry, proposalIds: ids } : entry;
+  };
+  return {
+    ...op,
+    ...(batchId ? { batchId } : {}),
+    tasks: (op.tasks ?? []).map((task) => ({ ...withIds(task), subtasks: task.subtasks.map(withIds) })),
+  };
+}
+
+export interface BatchReviewResult {
+  proposal_id: string;
+  client_id: string | null;
+  parent_client_id: string | null;
+  operation: string;
+  status: string;
+  outcome: string | null;
+  message: string;
+  create_resolution?: "no_task_created";
+}
+
+export interface BatchReviewResponse {
+  batch_id: string;
+  decision: "accept" | "reject";
+  results: BatchReviewResult[];
+  accepted: number;
+  failed: number;
+  skipped: number;
+  outcome: string;
+}
+
+/** The editable fields of a batch entry, omitted when untouched so an approval
+ * can never clear a value the employee did not change. */
+function batchEntryEdits(task: ProposedBatchTask): Record<string, unknown> | undefined {
+  const edits: Record<string, unknown> = {};
+  if (task.title !== undefined) edits.name = task.title;
+  if (task.description !== undefined) edits.description = task.description;
+  if (task.taskGroupId !== undefined) edits.task_group_id = task.taskGroupId;
+  return Object.keys(edits).length ? edits : undefined;
+}
+
+function batchStepEdits(subtask: ProposedBatchSubtask): Record<string, unknown> | undefined {
+  const edits: Record<string, unknown> = {};
+  if (subtask.title !== undefined) edits.name = subtask.title;
+  if (subtask.description !== undefined) edits.description = subtask.description;
+  return Object.keys(edits).length ? edits : undefined;
+}
+
 /** Accepts stored proposals one at a time. An assistant result cannot mutate a
  * task or Nifty until the exact persisted proposal receives this decision. */
 export async function fileApprovedOperations(
   operations: ProposedOperation[],
   transport: ApprovalTransport,
-  options?: { createResolution?: "no_task_created" },
+  options?: { createResolution?: "no_task_created"; decision?: "accept" | "reject" },
 ): Promise<ApprovalOutcome> {
   const outcome: ApprovalOutcome = { recorded: 0, queued: 0, processing: 0, failed: [], results: [] };
   for (const op of operations) {
     try {
+      // A batch files every item through one decision, carrying the employee's
+      // edits. Items are still reviewed server-side one at a time, so a failure
+      // stays per item instead of pretending the whole batch applied.
+      if (isBatchToolOp(op)) {
+        const batchId = op.batchId;
+        if (!batchId || !transport.reviewBatch) throw new Error("This update no longer has a server-side batch record. Interpret it again before filing.");
+        // A skip rejects every pending item in the batch in one decision. There
+        // are no edits to carry: nothing is being applied.
+        if (options?.decision === "reject") {
+          await transport.reviewBatch(batchId, { decision: "reject", decisions: [] });
+          outcome.results.push({ op, status: "denied", message: "Skipped. Nothing from this batch was recorded." });
+          continue;
+        }
+        const decisions: Array<{ proposal_id: string; edits?: Record<string, unknown> }> = [];
+        for (const task of op.tasks ?? []) {
+          const edits = batchEntryEdits(task);
+          for (const proposalId of task.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...(edits ? { edits } : {}) });
+          for (const subtask of task.subtasks) {
+            const subtaskEdits = batchStepEdits(subtask);
+            for (const proposalId of subtask.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...(subtaskEdits ? { edits: subtaskEdits } : {}) });
+          }
+        }
+        if (!decisions.length) throw new Error("This update has no server-side batch items. Interpret it again before filing.");
+        const response = await transport.reviewBatch(batchId, { decision: "accept", decisions }) as BatchReviewResponse | undefined;
+        const items = Array.isArray(response?.results) ? response.results : [];
+        const recorded = items.filter((item) => item.status === "applied").length;
+        const attention = items.filter((item) => item.status === "failed" || item.status === "needs_review" || item.status === "skipped");
+        if (!items.length) {
+          outcome.recorded += 1;
+          outcome.results.push({ op, status: "recorded", message: "Recorded.", data: { batch: response } });
+          continue;
+        }
+        if (attention.length) {
+          const message = attention.length === items.length
+            ? "Nothing was filed. The batch needs attention before it can be approved."
+            : `${recorded} of ${items.length} changes were filed. ${attention.length === 1 ? "One still needs" : `${attention.length} still need`} attention.`;
+          outcome.failed.push({ op, message });
+          outcome.results.push({
+            op,
+            status: "failed",
+            message,
+            retryable: true,
+            ...(attention.some((item) => item.create_resolution) ? { createResolution: "no_task_created" as const } : {}),
+            data: { batch: response },
+          });
+          continue;
+        }
+        outcome.recorded += recorded;
+        outcome.results.push({ op, status: "recorded", message: `Filed ${recorded} change${recorded === 1 ? "" : "s"}.`, data: { batch: response } });
+        continue;
+      }
       if (!op.proposalId) throw new Error("This update no longer has a server-side approval record. Interpret it again before filing.");
       const result = await transport.reviewProposal(op.proposalId, options?.createResolution ? { providerCreateResolution: options.createResolution } : undefined);
       if ((result as { queued?: boolean } | undefined)?.queued === true) {

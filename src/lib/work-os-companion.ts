@@ -26,6 +26,10 @@ export {
   reviewWorkOsProposal,
 } from "@/lib/work-os-proposals";
 export {
+  getWorkOsProposalBatch,
+  reviewWorkOsProposalBatch,
+} from "@/lib/work-os-proposal-batches";
+export {
   draftWorkOsEod,
   submitWorkOsEod,
   reviewWorkOsEod,

@@ -34,6 +34,8 @@ import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, 
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
+import { BatchApprovalCards } from "./TaskBatchCard";
+import { attachFiledProposals, filedProposalGroups, isBatchToolOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, organizeTaskSections, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSection, type TaskSort } from "./taskWorkspace";
 import { SortHeaderRow } from "./SortHeaderRow";
@@ -128,6 +130,7 @@ function proposalFilingTransport() {
   return {
     reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
     readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+    reviewBatch: (batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown> }> }) => apiRequest(`/api/work-os/proposal-batches/${encodeURIComponent(batchId)}`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) }),
   };
 }
 
@@ -2115,18 +2118,18 @@ export default function App() {
       const mutating = review.operations.map((op, index) => ({ op, index })).filter(({ op }) => isMutatingToolOp(op));
       if (mutating.length) advanceTrace("Filing proposals");
       const filing = mutating.length ? await apiRequest<{
-        proposals: Array<{ id: string; client_operation_index: number }>;
+        proposals: FiledProposalRow[];
         failures?: Array<{ client_operation_index: number; error: string }>;
       }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
-      }) : { proposals: [] as Array<{ id: string; client_operation_index: number }>, failures: [] as Array<{ client_operation_index: number; error: string }> };
-      const proposalIdByOriginal = new Map(filing.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
+        body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit, tasks: op.tasks ?? null })) }),
+      }) : { proposals: [] as FiledProposalRow[], failures: [] as Array<{ client_operation_index: number; error: string }> };
+      const filedByOriginal = filedProposalGroups(filing.proposals, (clientOperationIndex) => mutating[clientOperationIndex]?.index);
       const failureByOriginal = new Map((filing.failures ?? []).map((failure) => [mutating[failure.client_operation_index]?.index, failure.error]));
       if (failureByOriginal.size) notifications.error([...failureByOriginal.values()][0]!, "Some updates could not be filed");
       const operations = review.operations.map((op, index) => {
         const failure = failureByOriginal.get(index);
-        return { ...op, enabled: isMutatingToolOp(op) && !failure, proposalId: proposalIdByOriginal.get(index), failure };
+        return { ...attachFiledProposals(op, filedByOriginal.get(index) ?? []), enabled: isMutatingToolOp(op) && !failure, failure };
       });
       // Read-only display tools fetch immediately — viewing tasks mutates
       // nothing, so there is nothing to approve.
@@ -2205,6 +2208,7 @@ export default function App() {
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
+            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
             if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
@@ -2303,6 +2307,7 @@ export default function App() {
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
+            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
             if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
@@ -2352,7 +2357,7 @@ export default function App() {
 
   function retryHistoryOperation(turnId: string, result: ToolCallResult) {
     const op = { ...result.op, enabled: true };
-    if (!op.proposalId || busy) return;
+    if ((!op.proposalId && !op.batchId) || busy) return;
     setBusy(true); setError("");
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
       patchHistoryTurn(turnId, outcome.results);
@@ -2935,7 +2940,8 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
           return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-        {hasPendingMutations ? <ApprovalFlow operations={interpretation.operations} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
+        {hasPendingMutations && mutating.some((op) => !isBatchToolOp(op)) ? <ApprovalFlow operations={mutating.filter((op) => !isBatchToolOp(op))} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
+        <BatchApprovalCards operations={actionable.filter(isBatchToolOp)} results={interpretation.results ?? []} busy={busy} context={toolContext} onApprove={(op) => onReviewOperations?.([op], [])} onSkip={(op) => onReviewOperations?.([], [op])} onRetry={onRetryOperation} />
         {unfiled.map((op, index) => <p key={`unfiled-${index}`} className="tool-display-error">{op.taskTitle ? `${op.taskTitle}: ` : ""}{op.failure}</p>)}
       </div>
     </ChatSectionBoundary>

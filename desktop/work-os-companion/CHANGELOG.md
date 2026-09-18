@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.24
+
+- You can now ask Otto to add several tasks and their steps in one go, or to update a batch of tasks, and review the whole change on one card.
+- Batch cards can be edited before you approve them, approve in two steps, and report what happened to every task and step.
+
 ## 0.3.23
 
 - Task lists now open sorted by due date, latest first, with open work above completed work.

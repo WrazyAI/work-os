@@ -37,9 +37,103 @@ const STALENESS_REFRESH_TIMEOUT_MS = 5_000;
 
 type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
-  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks";
+  | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
+  | "multi_task_add" | "multi_task_edit";
 
-function interpretedOperations(value: unknown) {
+/** A batch entry's step. clientId is the agent's stable handle for the item. */
+export interface InterpretedBatchSubtask {
+  clientId: string;
+  title: string;
+  description?: string;
+}
+
+/** One entry of a multi_task_add / multi_task_edit payload. */
+export interface InterpretedBatchTask {
+  clientId: string;
+  taskId?: string;
+  title?: string;
+  description?: string;
+  taskGroupId?: string;
+  completed?: boolean;
+  subtasks: InterpretedBatchSubtask[];
+}
+
+export interface InterpretedOperationEntry {
+  op: InterpretedOperation;
+  statement: string;
+  taskId?: string;
+  taskTitle?: string;
+  taskGroupId?: string;
+  limit?: number;
+  tasks?: InterpretedBatchTask[];
+}
+
+const BATCH_OPERATIONS = ["multi_task_add", "multi_task_edit"];
+const BATCH_TASK_LIMIT = 20;
+const BATCH_ITEM_LIMIT = 40;
+const BATCH_DESCRIPTION_LIMIT = 20_000;
+
+/** Shape validation for a batch payload. The interpret layer already normalized
+ * it for the assistant path, but this endpoint also accepts a client-built
+ * operation list, so nothing is trusted here: ids are resolved against Work OS
+ * in the filing loop, and every string is capped before it reaches a row. */
+function interpretedBatchTasks(op: InterpretedOperation, value: unknown): InterpretedBatchTask[] {
+  if (!Array.isArray(value)) return [];
+  const tasks: InterpretedBatchTask[] = [];
+  let itemCount = 0;
+  for (const rawTask of value.slice(0, BATCH_TASK_LIMIT)) {
+    if (!rawTask || typeof rawTask !== "object") continue;
+    const entry = rawTask as Json;
+    const taskId = text(entry.task_id);
+    const rawTitle = text(entry.title);
+    const title = rawTitle ? rawTitle.slice(0, 240) : undefined;
+    const rawDescription = text(entry.description);
+    const description = rawDescription ? rawDescription.slice(0, BATCH_DESCRIPTION_LIMIT) : undefined;
+    const rawTaskGroupId = text(entry.task_group_id);
+    const taskGroupId = rawTaskGroupId ? rawTaskGroupId.slice(0, 160) : undefined;
+    const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
+    const subtasks: InterpretedBatchSubtask[] = [];
+    if (Array.isArray(entry.subtasks)) {
+      for (const rawSubtask of entry.subtasks.slice(0, BATCH_TASK_LIMIT)) {
+        if (itemCount >= BATCH_ITEM_LIMIT) break;
+        if (!rawSubtask || typeof rawSubtask !== "object") continue;
+        const subtask = rawSubtask as Json;
+        const rawSubtaskTitle = text(subtask.title);
+        if (!rawSubtaskTitle) continue;
+        const rawSubtaskDescription = text(subtask.description);
+        subtasks.push({
+          clientId: text(subtask.client_id)?.slice(0, 80) ?? `s${subtasks.length + 1}`,
+          title: rawSubtaskTitle.slice(0, 240),
+          description: rawSubtaskDescription ? rawSubtaskDescription.slice(0, BATCH_DESCRIPTION_LIMIT) : undefined,
+        });
+        itemCount += 1;
+      }
+    }
+    if (op === "multi_task_add") {
+      if (!taskId && !title) continue;
+    } else if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) {
+      continue;
+    }
+    // A new task counts against the item budget; a step-only entry on an
+    // existing task does not.
+    const creatingTask = taskId === null || taskId === undefined || taskId === "";
+    if (creatingTask && itemCount >= BATCH_ITEM_LIMIT) break;
+    if (creatingTask) itemCount += 1;
+    tasks.push({
+      clientId: text(entry.client_id)?.slice(0, 80) ?? `t${tasks.length + 1}`,
+      taskId: taskId ?? undefined,
+      title,
+      description,
+      taskGroupId,
+      completed,
+      subtasks,
+    });
+  }
+  return tasks;
+}
+
+/** Exported for the batch contract tests. */
+export function interpretedOperations(value: unknown): InterpretedOperationEntry[] {
   if (!Array.isArray(value) || !value.length || value.length > 20) throw new Error("Choose between 1 and 20 proposed updates");
   return value.map((entry, index) => {
     if (!entry || typeof entry !== "object") throw new Error(`Proposed update ${index + 1} is invalid`);
@@ -50,14 +144,173 @@ function interpretedOperations(value: unknown) {
     const taskTitle = text(row.task_title);
     const taskGroupId = text(row.task_group_id);
     const limit = Math.min(100, Math.max(1, Math.trunc(Number(row.limit) || 20)));
-    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks"].includes(op) || !statement || statement.length > 1000) {
+    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "multi_task_add", "multi_task_edit"].includes(op) || !statement || statement.length > 1000) {
       throw new Error(`Proposed update ${index + 1} is invalid`);
     }
-    if (!["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
+    const batch = BATCH_OPERATIONS.includes(op);
+    if (!batch && !["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
     if (["create_task", "add_task", "add_subtask"].includes(op) && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
     if (op === "modify_task_status" && !taskGroupId) throw new Error("task_group_id is required for a Nifty status move");
-    return { op, statement, taskId, taskTitle, taskGroupId, limit };
+    const tasks = batch ? interpretedBatchTasks(op, row.tasks) : undefined;
+    if (batch && !tasks?.length) throw new Error(`Proposed update ${index + 1} carries no tasks`);
+    return {
+      op,
+      statement,
+      taskId: taskId ?? undefined,
+      taskTitle: taskTitle ?? undefined,
+      taskGroupId: taskGroupId ?? undefined,
+      limit,
+      tasks,
+    };
   });
+}
+
+/** One reviewable item: a single operation, or one child of a batch. */
+export interface PreparedProposal {
+  /** The stored proposal operation. */
+  providerOperation: ProposalOperation;
+  /** Index of the operation the client sent, so its card can be matched back. */
+  clientOperationIndex: number;
+  /** Grouping metadata for a batch child; null for a standalone operation. */
+  batch: {
+    id: string;
+    kind: "multi_task_add" | "multi_task_edit";
+    index: number;
+    clientId: string;
+    parentClientId?: string;
+  } | null;
+  taskId?: string;
+  taskGroupId?: string;
+  /** The stored proposed_change, built here so singles keep their exact shape. */
+  change: Json;
+}
+
+function providerOperationFor(op: InterpretedOperation): ProposalOperation {
+  return op === "record_progress" ? "log_progress"
+    : op === "record_blocker" ? "add_blocker"
+    : op === "add_task" ? "create_task"
+    : op === "modify_task_description" || op === "modify_task_status" || op === "modify_subtask" ? "update_task"
+    : op === "add_subtask" ? "add_subtask"
+    : op === "delete_subtask" ? "delete_task"
+    : op === "display_pending_tasks" || op === "display_overdue_tasks" ? "display_tasks"
+    : op as ProposalOperation;
+}
+
+function singleOperationChange(operation: InterpretedOperationEntry): Json {
+  if (operation.op === "create_task" || operation.op === "add_task") {
+    return {
+      name: operation.taskTitle ?? operation.statement.slice(0, 240),
+      description: operation.statement,
+      task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5",
+    };
+  }
+  if (operation.op === "record_progress") return { summary: operation.statement };
+  if (operation.op === "record_blocker") return { description: operation.statement };
+  if (operation.op === "modify_task_description" || operation.op === "modify_subtask") return { description: operation.statement };
+  if (operation.op === "modify_task_status") return { task_group_id: operation.taskGroupId as string };
+  if (operation.op === "add_subtask") return { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement };
+  if (operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks") {
+    return { view: operation.op === "display_overdue_tasks" ? "overdue" : "pending", limit: operation.limit };
+  }
+  return {};
+}
+
+/**
+ * Flattens the operation list into reviewable items. A batch expands into the
+ * existing per-item operations so every entry keeps the exactly-once provider
+ * path; the batch metadata is what lets the client draw one card and file the
+ * items together.
+ */
+/** Exported for the batch contract tests. */
+export function prepareProposals(operations: InterpretedOperationEntry[]): PreparedProposal[] {
+  const prepared: PreparedProposal[] = [];
+  operations.forEach((operation, clientOperationIndex) => {
+    if (operation.op === "multi_task_add" || operation.op === "multi_task_edit") {
+      const id = randomUUID();
+      const kind = operation.op;
+      let batchIndex = 0;
+      const group = (clientId: string, parentClientId?: string) => ({
+        id,
+        kind,
+        index: batchIndex++,
+        clientId,
+        ...(parentClientId ? { parentClientId } : {}),
+      });
+      for (const task of operation.tasks ?? []) {
+        if (kind === "multi_task_add" && task.taskId) {
+          // Steps attached to a task that already exists: the parent is known.
+          for (const subtask of task.subtasks) {
+            prepared.push({
+              providerOperation: "add_subtask",
+              clientOperationIndex,
+              batch: group(subtask.clientId, task.clientId),
+              taskId: task.taskId,
+              change: { name: subtask.title, ...(subtask.description ? { description: subtask.description } : {}) },
+            });
+          }
+          continue;
+        }
+        if (kind === "multi_task_add") {
+          prepared.push({
+            providerOperation: "create_task",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            change: {
+              name: task.title,
+              ...(task.description ? { description: task.description } : {}),
+              task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5",
+            },
+          });
+          for (const subtask of task.subtasks) {
+            // The parent does not exist yet; parent_client_id resolves it when
+            // the batch is filed, in index order.
+            prepared.push({
+              providerOperation: "add_subtask",
+              clientOperationIndex,
+              batch: group(subtask.clientId, task.clientId),
+              change: { name: subtask.title, ...(subtask.description ? { description: subtask.description } : {}) },
+            });
+          }
+          continue;
+        }
+        // multi_task_edit: wording/status first, then completion, so a single
+        // entry may legitimately produce two reviewable items.
+        if (task.title || task.description || task.taskGroupId) {
+          prepared.push({
+            providerOperation: "update_task",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            taskId: task.taskId,
+            taskGroupId: task.taskGroupId,
+            change: {
+              ...(task.title ? { name: task.title } : {}),
+              ...(task.description ? { description: task.description } : {}),
+              ...(task.taskGroupId ? { task_group_id: task.taskGroupId } : {}),
+            },
+          });
+        }
+        if (task.completed !== undefined) {
+          prepared.push({
+            providerOperation: task.completed ? "complete_task" : "reopen_task",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            taskId: task.taskId,
+            change: {},
+          });
+        }
+      }
+      return;
+    }
+    prepared.push({
+      providerOperation: providerOperationFor(operation.op),
+      clientOperationIndex,
+      batch: null,
+      taskId: operation.taskId,
+      taskGroupId: operation.taskGroupId,
+      change: singleOperationChange(operation),
+    });
+  });
+  return prepared;
 }
 
 export async function listWorkOsProposals(access: WorkOsAccess, personId: string, status?: string | null) {
@@ -334,10 +587,6 @@ async function applyProposal(
   throw new Error("unsupported proposal operation");
 }
 
-/** Task-reference exemptions: these operations either create a task or only
- * read a view, so they carry no existing-task requirement. */
-const TASK_EXEMPT_OPERATIONS = ["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"];
-
 /** Resolves one referenced task straight from Work OS and verifies the
  * employee may act on it: assigned to them, or — only for the configured
  * ledger project — attributable through the creator/subscriber metadata a
@@ -375,8 +624,58 @@ async function resolveProposalTask(input: {
 /** A status move needs an existing status column for the task's own project.
  * The candidate id is checked directly so a large project cannot cap the
  * query and reject a valid column. */
-async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: string | null, input: string) {
-  if (!taskGroupId || !input.includes(taskGroupId)) {
+export interface WorkOsProposalRow extends Json {
+  id?: string;
+  operation?: string;
+  status?: string;
+  batch_id?: string | null;
+  batch_index?: number | null;
+  batch_kind?: string | null;
+  client_id?: string | null;
+  parent_client_id?: string | null;
+  task_id?: string | null;
+  provider_result?: Json;
+  before_state?: Json;
+  proposed_change?: Json;
+  decided_change?: Json | null;
+  failure_reason?: string | null;
+  outcome?: string;
+  create_intent_unresolved?: boolean;
+}
+
+/**
+ * Validates the editable fields an employee may change on the review card.
+ * Only the fields that belong to the operation survive, capped exactly like
+ * the drafted path, so an edited approval can never widen what the agent was
+ * allowed to propose.
+ */
+/** Exported for the batch contract tests. */
+export function proposalDecisionEdits(operation: string, value: unknown): Json | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Json;
+  const edits: Json = {};
+  const name = text(source.name);
+  if (name) edits.name = name.slice(0, 240);
+  if ("description" in source) {
+    const description = text(source.description);
+    edits.description = description ? description.slice(0, 20_000) : null;
+  }
+  const taskGroupId = text(source.task_group_id);
+  if (taskGroupId) edits.task_group_id = taskGroupId.slice(0, 160);
+  const editable =
+    operation === "create_task" ? ["name", "description"]
+    : operation === "add_subtask" ? ["name", "description"]
+    : operation === "update_task" ? ["name", "description", "task_group_id"]
+    : [];
+  const narrowed: Json = {};
+  for (const key of editable) {
+    if (key in edits) narrowed[key] = edits[key];
+  }
+  return Object.keys(narrowed).length ? narrowed : null;
+}
+
+async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: string | null, input: string, opts?: { requireInInput?: boolean }) {
+  if (!taskGroupId || ((opts?.requireInInput ?? true) && !input.includes(taskGroupId))) {
     throw new Error("A status move requires an existing status column for this project.");
   }
   const taskProjectId = text(task.provider_project_id);
@@ -407,20 +706,24 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
   const proposals: Array<Json & { client_operation_index: number }> = [];
   const failures: Array<{ client_operation_index: number; error: string }> = [];
   const resolved = new Map<string, Json>();
-  for (const [index, operation] of operations.entries()) {
+  const prepared = prepareProposals(operations);
+  for (const [index, item] of prepared.entries()) {
     try {
       const operationKey = `${idempotencyKey}:${index}`;
       const { data: existing, error: existingError } = await db().from("work_task_proposals").select("*")
         .eq("organization_id", access.organizationId).eq("person_id", personId).eq("idempotency_key", operationKey).maybeSingle();
       if (existingError) throw new Error(`load idempotent interpreted proposal: ${existingError.message}`);
       if (existing) {
-        proposals.push({ ...(existing as Json), client_operation_index: index });
+        proposals.push({ ...(existing as Json), client_operation_index: item.clientOperationIndex });
         continue;
       }
-      const needsTask = !TASK_EXEMPT_OPERATIONS.includes(operation.op);
+      // A batch subtask whose parent is created in the same batch has no task id
+      // yet: parent_client_id defers it until the batch is filed in order.
+      const deferredParent = item.providerOperation === "add_subtask" && !item.taskId && !!item.batch?.parentClientId;
+      const needsTask = !["create_task", "display_tasks"].includes(item.providerOperation) && !deferredParent;
       let task: Json | null = null;
-      if (needsTask && operation.taskId) {
-        const cached = resolved.get(operation.taskId);
+      if (needsTask && item.taskId) {
+        const cached = resolved.get(item.taskId);
         if (cached) {
           task = cached;
         } else {
@@ -430,23 +733,15 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
             personId,
             ledgerProjectId,
             niftyMemberId,
-            taskId: operation.taskId,
+            taskId: item.taskId,
           });
-          resolved.set(operation.taskId, task);
+          resolved.set(item.taskId, task);
         }
       }
       if (needsTask && !task) throw new Error("That task is no longer in your task list. Refresh and try again.");
-      if (operation.op === "modify_task_status") {
-        await assertKnownTaskGroup(ownerId, task as Json, operation.taskGroupId, input);
+      if (item.taskGroupId) {
+        await assertKnownTaskGroup(ownerId, task as Json, item.taskGroupId, input);
       }
-      const providerOperation: ProposalOperation = operation.op === "record_progress" ? "log_progress"
-        : operation.op === "record_blocker" ? "add_blocker"
-        : operation.op === "add_task" ? "create_task"
-        : operation.op === "modify_task_description" || operation.op === "modify_task_status" || operation.op === "modify_subtask" ? "update_task"
-        : operation.op === "add_subtask" ? "add_subtask"
-        : operation.op === "delete_subtask" ? "delete_task"
-        : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks" ? "display_tasks"
-        : operation.op as ProposalOperation;
       const beforeState = task ? {
         id: task.id,
         title: task.title,
@@ -458,26 +753,12 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
         task_group_id: task.task_group_id,
         parent_provider_task_id: task.parent_provider_task_id,
       } : {};
-      const proposedChange: Json = operation.op === "create_task" || operation.op === "add_task"
-        ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement, task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5" }
-        : operation.op === "record_progress"
-          ? { summary: operation.statement }
-          : operation.op === "record_blocker"
-            ? { description: operation.statement }
-            : operation.op === "modify_task_description" || operation.op === "modify_subtask"
-              ? { description: operation.statement }
-              : operation.op === "modify_task_status"
-                ? { task_group_id: operation.taskGroupId as string }
-                : operation.op === "add_subtask"
-                  ? { name: operation.taskTitle ?? operation.statement.slice(0, 240), description: operation.statement }
-                  : operation.op === "display_pending_tasks" || operation.op === "display_overdue_tasks"
-                    ? { view: operation.op === "display_overdue_tasks" ? "overdue" : "pending", limit: operation.limit }
-                    : {};
+      const proposedChange: Json = item.change;
       const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
         organization_id: access.organizationId,
         person_id: personId,
         task_id: task?.id ?? null,
-        operation: providerOperation,
+        operation: item.providerOperation,
         input_text: input,
         before_state: beforeState,
         proposed_change: proposedChange,
@@ -485,13 +766,18 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
         prompt_version: "desktop-interpretation-v1",
         idempotency_key: operationKey,
         created_by: access.ctx.user.id,
+        batch_id: item.batch?.id ?? null,
+        batch_index: item.batch?.index ?? null,
+        batch_kind: item.batch?.kind ?? null,
+        client_id: item.batch?.clientId ?? null,
+        parent_client_id: item.batch?.parentClientId ?? null,
       }).select("*").single();
       if (proposalError) throw new Error(`create interpreted proposal: ${proposalError.message}`);
-      await audit(access, "proposal.interpreted", "task_proposal", proposal.id as string, { operation: providerOperation, clientOperationIndex: index });
-      proposals.push({ ...(proposal as Json), client_operation_index: index });
+      await audit(access, "proposal.interpreted", "task_proposal", proposal.id as string, { operation: item.providerOperation, clientOperationIndex: item.clientOperationIndex });
+      proposals.push({ ...(proposal as Json), client_operation_index: item.clientOperationIndex });
     } catch (error) {
       failures.push({
-        client_operation_index: index,
+        client_operation_index: item.clientOperationIndex,
         error: error instanceof Error && error.message ? error.message : "That update could not be filed. Refresh and try again.",
       });
     }
@@ -604,6 +890,9 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (loadError) throw new Error(`load Work OS proposal: ${loadError.message}`);
   if (proposal.person_id !== access.personId) throw new Error("Only the proposal owner can accept or reject it");
   const decisionKey = text(body.decision_idempotency_key);
+  // Employee edits made on the review card, validated against the operation
+  // they belong to. The agent's original proposed_change is never overwritten.
+  const decisionEdits = proposalDecisionEdits(String(proposal.operation), body.edits);
   if (proposal.status === "applying") {
     const applyingSince = new Date(proposal.updated_at as string).getTime();
     if (Date.now() - applyingSince <= 5 * 60_000) return withOutcome(proposal);
@@ -623,7 +912,14 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     if (recoveryError) throw new Error(`recover stalled Work OS proposal: ${recoveryError.message}`);
     if (recovered) Object.assign(proposal, recovered);
   }
-  if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) return withOutcome(proposal);
+  if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
+    // A replay must carry the same edits. An approval that already settled is
+    // never silently rewritten by a different card state.
+    if (decisionEdits && proposal.decided_change && JSON.stringify(proposal.decided_change) !== JSON.stringify(decisionEdits)) {
+      throw new Error("This update was already approved with different edits. Refresh to see the approved version.");
+    }
+    return withOutcome(proposal);
+  }
   // Employee recovery for an uncertain provider create: "nothing was created in
   // Nifty" clears the recorded attempt so the accept files it exactly once.
   const resolution = text(body.provider_create_resolution);
@@ -648,6 +944,15 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   }
   if (!["pending", "failed", "needs_review"].includes(proposal.status)) return withOutcome(proposal);
   const proposedChange = proposal.proposed_change as Json;
+  const appliedChange: Json = decisionEdits ? { ...proposedChange, ...decisionEdits } : proposedChange;
+  // An employee-chosen status column is validated against the project here;
+  // unlike the drafted path, it need not appear verbatim in the input text
+  // (the employee picked it from the card, the model did not invent it).
+  if (decisionEdits && text(appliedChange.task_group_id) !== text(proposedChange.task_group_id)) {
+    const ownerId = await organizationOwnerId(access.organizationId);
+    const target = await getTaskByLocalOrProviderId(ownerId, (proposal.task_id as string) ?? "");
+    await assertKnownTaskGroup(ownerId, target, text(appliedChange.task_group_id), "", { requireInInput: false });
+  }
   // Completion and reopen are idempotent state writes whose target is
   // validated inside the employee task service, so unrelated provider drift
   // (title, due date, description) must not block an employee's check-off.
@@ -706,6 +1011,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     status: "applying",
     apply_attempt: applyAttempt,
     proposed_change: proposedChange,
+    decided_change: decisionEdits,
     decided_by: access.ctx.user.id,
     decided_at: new Date().toISOString(),
     decision_idempotency_key: decisionKey,
@@ -725,7 +1031,14 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       .then(() => undefined, () => undefined);
   }, 60_000);
   try {
-    const providerResult = await applyProposal(access, applying as Json, applyAttempt, { firstAttempt, confirmedNoTaskCreated });
+    const providerResult = await applyProposal(
+      access,
+      // Apply the employee's agreed values while proposed_change keeps the
+      // agent's original wording for the audit trail.
+      (decisionEdits ? { ...(applying as Json), proposed_change: appliedChange } : applying) as Json,
+      applyAttempt,
+      { firstAttempt, confirmedNoTaskCreated },
+    );
     const { data, error } = await db().from("work_task_proposals").update({
       status: "applied",
       provider_result: providerResult ?? {},

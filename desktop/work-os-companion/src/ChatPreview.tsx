@@ -13,6 +13,7 @@ import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { Otto } from "./Otto";
 import type { ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
+import { TaskBatchCard } from "./TaskBatchCard";
 
 /** DEV-only visual review surface for the shared chat language
  * (design §25.11): the real in-app ProgressComposer plus a faithful
@@ -53,6 +54,13 @@ export default function ChatPreview() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
         <WhatsNewSection />
+      </div>
+    );
+  }
+  if (isolate === "batch") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
+        <BatchSection />
       </div>
     );
   }
@@ -491,4 +499,84 @@ function AvatarSection() {
       </div>
     </section>
   );
+}
+
+/** DEV-only: the grouped batch card in all three states — awaiting a decision,
+ * after a partial failure, and after every item filed. Used for the visual and
+ * interaction review of the multi-task tools (design §25.10.2). */
+function BatchSection() {
+  const context = { shiftDate: "2026-09-18", personId: "person-1", promptKind: "optional" };
+  const addBatch = {
+    op: "multi_task_add" as const,
+    statement: "Add the launch checklist.",
+    enabled: true,
+    batchId: "batch-preview-add",
+    tasks: [
+      {
+        clientId: "t1",
+        title: "Draft the launch plan",
+        description: "Cover scope, owners, and the rollout order.",
+        subtasks: [
+          { clientId: "s1", title: "Collect inputs from each team" },
+          { clientId: "s2", title: "Circulate the draft for review", description: "Two working days ahead." },
+        ],
+      },
+      { clientId: "t2", taskId: "t-1", subtasks: [{ clientId: "s3", title: "Verify the debug window fixture" }] },
+    ],
+  };
+  const editBatch = {
+    op: "multi_task_edit" as const,
+    statement: "Move the release work on.",
+    enabled: true,
+    batchId: "batch-preview-edit",
+    tasks: [
+      { clientId: "t1", taskId: "t-1", title: "Ship the debugger fix (final)", taskGroupId: "col-done", subtasks: [] },
+      { clientId: "t2", taskId: "t-2", completed: true, subtasks: [] },
+      { clientId: "t3", taskId: "t-3", title: "Package the Windows installer", subtasks: [] },
+    ],
+  };
+  const partial = {
+    op: addBatch,
+    status: "failed" as const,
+    message: "1 of 2 changes were filed. 1 still needs attention.",
+    retryable: true,
+    data: {
+      batch: {
+        results: [
+          { proposal_id: "p1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "applied", outcome: "applied", message: "Recorded." },
+          { proposal_id: "p2", client_id: "s1", parent_client_id: "t1", operation: "add_subtask", status: "applied", outcome: "applied", message: "Recorded." },
+          { proposal_id: "p3", client_id: "s2", parent_client_id: "t1", operation: "add_subtask", status: "applied", outcome: "applied", message: "Recorded." },
+          { proposal_id: "p4", client_id: "s3", parent_client_id: "t-1", operation: "add_subtask", status: "failed", outcome: "failed", message: "The task changed after this proposal was drafted. Create a new proposal from the current task state." },
+        ],
+      },
+    },
+  };
+  const filed = {
+    op: editBatch,
+    status: "recorded" as const,
+    message: "Filed 3 changes.",
+    data: {
+      batch: {
+        results: [
+          { proposal_id: "q1", client_id: "t1", parent_client_id: null, operation: "update_task", status: "applied", outcome: "applied", message: "Recorded." },
+          { proposal_id: "q2", client_id: "t2", parent_client_id: null, operation: "complete_task", status: "applied", outcome: "applied", message: "Recorded." },
+          { proposal_id: "q3", client_id: "t3", parent_client_id: null, operation: "update_task", status: "applied", outcome: "applied", message: "Recorded." },
+        ],
+      },
+    },
+  };
+  return <>
+    <section><strong style={{ fontSize: 12 }}>Awaiting a decision</strong>
+      <TaskBatchCard operation={addBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Edits, after a partial failure</strong>
+      <TaskBatchCard operation={addBatch} result={partial} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>An edit batch</strong>
+      <TaskBatchCard operation={editBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Filed</strong>
+      <TaskBatchCard operation={editBatch} result={filed} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+  </>;
 }

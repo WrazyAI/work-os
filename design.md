@@ -1513,6 +1513,55 @@ the floating companion re-adopts an open review from the shared pending-tools
 record on load — a review survives reloads, restarts, and cross-window traffic
 identically in both surfaces.
 
+### 25.10.2 Batch task tools
+
+Two assistant tools act on several tasks at once and therefore get their own
+card instead of one action per screen: `multi_task_add` (new tasks, each with
+its own steps, in one proposal) and `multi_task_edit` (wording, status, or
+completion across several existing tasks). Both expand server-side into the
+existing single-item proposals, grouped by a batch id, so each item keeps the
+exactly-once provider path and reports its own outcome. The shared
+`ApprovalFlow` contract above is unchanged — it still shows one action at a
+time with no second confirmation — and every non-batch operation keeps using it.
+
+- **Shape.** One card per batch: `Review new tasks` or `Review changes`, a
+  summary that names the change (`Add 1 task with 3 steps`, `Update 3 tasks`),
+  then numbered entries (`01`, `02`) with hairlines, each showing its title,
+  description, and steps indented beneath it. An entry that targets an existing
+  task is tagged `Existing task`, because the card is also used to add steps to
+  work that already exists. Reading is the default state; the card is a
+  document, not a stack of form controls.
+- **Editing.** One pencil switches the whole card into an editable canvas:
+  titles, descriptions, and — for a status move the batch proposed — a status
+  control offering the proposed column or `Leave the status unchanged`. Clearing
+  the status keeps the control so the choice can be taken back, and the review
+  view then says `Status unchanged`. Completion entries (`Mark this task done`,
+  `Reopen this task`) are statements, not editable fields. There is no
+  annotation or refine step in chat, and no entry may be added or removed while
+  reviewing.
+- **Approval is two deliberate steps.** The footer starts with `Skip` and
+  `Approve all N changes`; the first click only arms the card and swaps in
+  `Back` plus `Confirm N changes`. Nothing is filed until the confirm, and the
+  armed state is never the default. This is the one place a chat approval asks
+  twice, and it is a different card — `ApprovalFlow` must not gain a second step.
+- **Edits are approved content.** The employee's edited wording and status
+  travel with the decision. The server validates them against the same rules as
+  the drafted path, stores them separately from the agent's original proposal,
+  and applies the agreed values. A replay of a settled approval that carries
+  different edits is rejected rather than silently rewriting what was approved.
+- **Per-item outcomes.** After filing, every entry reports its own result:
+  `Filed`, `Needs attention` with the server's reason, or `Not filed` for a step
+  whose task was never created. The card never presents the batch as wholly
+  successful when only part of it landed. A partial failure keeps `Retry` and
+  `Skip` available; a clean success offers neither, and the approved card has no
+  approval affordance left.
+- **Technical details.** The exact request
+  (`POST /api/work-os/proposal-batches/<id>`) stays collapsed behind `Technical
+  details`, as on the shared card.
+- **Responsive and motion.** Below the compact breakpoint the entry grid
+  collapses to one column, the index circles drop out, and footer actions stretch
+  to full width; the card adds no motion of its own.
+
 ### 25.11 Assistant chat panel and prompt bar
 
 The in-app dock composer and the floating companion panel share one chat

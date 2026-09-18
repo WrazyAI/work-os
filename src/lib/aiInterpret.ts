@@ -14,7 +14,55 @@ export const INTERPRET_RESPONSE_SCHEMA = {
       reply: { type: "string" },
       taskMatches: { type: "array", items: { type: "object", additionalProperties: false, required: ["taskId", "confidence"], properties: { taskId: { type: "string" }, confidence: { type: "number" } } }, maxItems: 20 },
       claims: { type: "array", items: { type: "object", additionalProperties: false, required: ["kind", "statement", "taskId"], properties: { kind: { type: "string" }, statement: { type: "string" }, taskId: { type: ["string", "null"] } } }, maxItems: 20 },
-      operations: { type: "array", items: { type: "object", additionalProperties: false, required: ["op", "statement", "taskId", "taskTitle", "taskGroupId", "limit", "page"], properties: { op: { type: "string" }, statement: { type: "string" }, taskId: { type: ["string", "null"] }, taskTitle: { type: ["string", "null"] }, taskGroupId: { type: ["string", "null"] }, limit: { type: ["integer", "null"] }, page: { type: ["string", "null"] } } }, maxItems: 20 },
+      operations: {
+        type: "array",
+        maxItems: 20,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["op", "statement", "taskId", "taskTitle", "taskGroupId", "limit", "page", "tasks"],
+          properties: {
+            op: { type: "string" },
+            statement: { type: "string" },
+            taskId: { type: ["string", "null"] },
+            taskTitle: { type: ["string", "null"] },
+            taskGroupId: { type: ["string", "null"] },
+            limit: { type: ["integer", "null"] },
+            page: { type: ["string", "null"] },
+            tasks: {
+              type: ["array", "null"],
+              maxItems: 20,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["clientId", "taskId", "title", "description", "taskGroupId", "completed", "subtasks"],
+                properties: {
+                  clientId: { type: ["string", "null"] },
+                  taskId: { type: ["string", "null"] },
+                  title: { type: ["string", "null"] },
+                  description: { type: ["string", "null"] },
+                  taskGroupId: { type: ["string", "null"] },
+                  completed: { type: ["boolean", "null"] },
+                  subtasks: {
+                    type: ["array", "null"],
+                    maxItems: 20,
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["clientId", "title", "description"],
+                      properties: {
+                        clientId: { type: ["string", "null"] },
+                        title: { type: ["string", "null"] },
+                        description: { type: ["string", "null"] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 } as const;
@@ -22,8 +70,28 @@ export const INTERPRET_RESPONSE_SCHEMA = {
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
   | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
-  | "navigate_to_page";
+  | "navigate_to_page" | "multi_task_add" | "multi_task_edit";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
+
+/** One step under a batch task. The clientId is the agent's stable handle for
+ * the item, so a subtask can point at a task created in the same batch. */
+export interface CandidateBatchSubtask {
+  clientId: string;
+  title: string;
+  description?: string;
+}
+
+/** One entry in a batch operation: a new or existing task, its optional steps,
+ * and — for edits — the fields the employee asked to change. */
+export interface CandidateBatchTask {
+  clientId: string;
+  taskId?: string;
+  title?: string;
+  description?: string;
+  taskGroupId?: string;
+  completed?: boolean;
+  subtasks?: CandidateBatchSubtask[];
+}
 
 export interface CandidateOperation {
   op: CandidateOperationKind;
@@ -33,6 +101,8 @@ export interface CandidateOperation {
   taskGroupId?: string;
   limit?: number;
   page?: string;
+  /** Batch payload for multi_task_add / multi_task_edit. */
+  tasks?: CandidateBatchTask[];
 }
 
 export interface CandidateWorkUpdate {
@@ -45,7 +115,14 @@ export interface CandidateWorkUpdate {
 
 export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed" | "nifty_failure";
 
-const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "navigate_to_page"];
+const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "navigate_to_page", "multi_task_add", "multi_task_edit"];
+/** Batch operations carry a `tasks` payload instead of a single taskId. */
+export const MULTI_OPERATION_KINDS: CandidateOperationKind[] = ["multi_task_add", "multi_task_edit"];
+/** Every item the single-task operations may reference without an existing task. */
+const TASK_REFERENCE_EXEMPT: CandidateOperationKind[] = ["create_task", "add_task", "add_subtask", "display_pending_tasks", "display_overdue_tasks", ...MULTI_OPERATION_KINDS];
+export const MAX_BATCH_TASKS = 20;
+const MAX_BATCH_ITEMS = 40;
+const MAX_BATCH_DESCRIPTION = 2_000;
 const NAVIGATE_PAGES = ["day", "tasks", "review", "insights", "evidence", "settings"];
 const CLAIM_KINDS: CandidateClaimKind[] = ["progress", "completion", "blocker", "priority_change", "new_work"];
 
@@ -55,6 +132,73 @@ function text(value: unknown, max = 4000): string | null {
 
 function safeId(value: unknown, allowed: { has(id: string): boolean }): string | undefined {
   return typeof value === "string" && allowed.has(value) ? value : undefined;
+}
+
+function isMultiOperation(kind: CandidateOperationKind): kind is "multi_task_add" | "multi_task_edit" {
+  return MULTI_OPERATION_KINDS.includes(kind);
+}
+
+/**
+ * Normalizes a batch payload. Task and subtask references are held to the same
+ * allow-list as single operations, so a hallucinated or cross-org id can never
+ * enter a batch. Entries with nothing actionable are dropped rather than filed.
+ */
+function parseBatchTasks(
+  value: unknown,
+  op: "multi_task_add" | "multi_task_edit",
+  allowed: Map<string, string>,
+  allowedTaskGroupIds: Set<string>,
+): CandidateBatchTask[] {
+  if (!Array.isArray(value)) return [];
+  const tasks: CandidateBatchTask[] = [];
+  let itemCount = 0;
+  for (const rawTask of value.slice(0, MAX_BATCH_TASKS)) {
+    if (!rawTask || typeof rawTask !== "object") continue;
+    const entry = rawTask as Record<string, unknown>;
+    const existingId = safeId(entry.taskId ?? entry.task_id, allowed);
+    const title = text(entry.title, 240) ?? undefined;
+    const description = text(entry.description, MAX_BATCH_DESCRIPTION) ?? undefined;
+    let taskGroupId = text(entry.taskGroupId ?? entry.task_group_id, 160) ?? undefined;
+    const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
+    // A column the employee never supplied is stripped rather than trusted, but
+    // the entry's other fields survive: only the invented status is dropped.
+    if (taskGroupId && !allowedTaskGroupIds.has(taskGroupId)) taskGroupId = undefined;
+    const subtasks: CandidateBatchSubtask[] = [];
+    if (Array.isArray(entry.subtasks)) {
+      for (const rawSubtask of entry.subtasks.slice(0, MAX_BATCH_TASKS)) {
+        if (itemCount >= MAX_BATCH_ITEMS) break;
+        if (!rawSubtask || typeof rawSubtask !== "object") continue;
+        const subtask = rawSubtask as Record<string, unknown>;
+        const subtaskTitle = text(subtask.title, 240);
+        if (!subtaskTitle) continue;
+        subtasks.push({
+          clientId: text(subtask.clientId ?? subtask.client_id, 80) ?? `s${subtasks.length + 1}`,
+          title: subtaskTitle,
+          description: text(subtask.description, MAX_BATCH_DESCRIPTION) ?? undefined,
+        });
+        itemCount += 1;
+      }
+    }
+    if (op === "multi_task_add") {
+      // A new task needs a title; an existing task may carry only steps.
+      if (!existingId && !title) continue;
+    } else {
+      // An edit always targets a task that already exists and must change something.
+      if (!existingId || (!title && !description && !taskGroupId && completed === undefined)) continue;
+    }
+    if (!existingId && itemCount >= MAX_BATCH_ITEMS) break;
+    if (!existingId) itemCount += 1;
+    tasks.push({
+      clientId: text(entry.clientId ?? entry.client_id, 80) ?? `t${tasks.length + 1}`,
+      taskId: existingId,
+      title,
+      description,
+      taskGroupId,
+      completed,
+      subtasks: subtasks.length ? subtasks : undefined,
+    });
+  }
+  return tasks;
 }
 
 /**
@@ -100,11 +244,15 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
       const statement = text(entry.statement, 1000);
       if (!op || !statement) continue;
       const taskId = safeId(entry.taskId ?? entry.task_id, allowed);
-      if ((op === "complete_task" || op === "reopen_task" || op === "record_progress" || op === "record_blocker" || op === "archive_task" || op === "delete_task" || op === "modify_task_description" || op === "modify_task_status" || op === "add_subtask" || op === "modify_subtask" || op === "delete_subtask") && !taskId) continue;
+      if (!TASK_REFERENCE_EXEMPT.includes(op) && !taskId) continue;
       const taskGroupId = text(entry.taskGroupId ?? entry.task_group_id, 160) ?? undefined;
       if (op === "modify_task_status" && (!taskGroupId || !allowedTaskGroupIds.has(taskGroupId))) continue;
       const page = op === "navigate_to_page" && typeof entry.page === "string" && NAVIGATE_PAGES.includes(entry.page) ? entry.page : undefined;
       if (op === "navigate_to_page" && !page) continue;
+      // A batch that survived validation with no usable entry is dropped rather
+      // than filed as an empty approval card.
+      const tasks = isMultiOperation(op) ? parseBatchTasks(entry.tasks, op, allowed, allowedTaskGroupIds) : undefined;
+      if (isMultiOperation(op) && !tasks?.length) continue;
       operations.push({
         op,
         statement,
@@ -113,6 +261,7 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
         taskGroupId,
         limit: typeof entry.limit === "number" && Number.isInteger(entry.limit) ? Math.min(100, Math.max(1, entry.limit)) : undefined,
         page,
+        tasks,
       });
     }
   }
@@ -185,7 +334,13 @@ function buildPrompt(
     "",
     "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
-    '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review"}]}',
+    '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page|multi_task_add|multi_task_edit","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review","tasks":null}]}',
+    "- multi_task_add and multi_task_edit carry their entries in `tasks`; every other operation sets tasks to null.",
+    '- A multi_task_add entry is {"clientId":"t1","taskId":null,"title":"...","description":"...","taskGroupId":null,"completed":null,"subtasks":[{"clientId":"s1","title":"...","description":"..."}]}. clientId is a short stable handle you choose; a subtask lists under the task it belongs to, and its clientId may be referenced by nothing else.',
+    '- A multi_task_edit entry is {"clientId":"t1","taskId":"<existing task id>","title":null,"description":null,"taskGroupId":null,"completed":null,"subtasks":null}. Set only the fields the employee asked to change; every entry must reference an id from the list above.',
+    "- Use multi_task_add when one update describes several new tasks, or one task with its own steps. Use taskId only to attach steps to a task that already exists; leave it null for a new task.",
+    "- Use multi_task_edit when one update changes several existing tasks at once (statuses, wording, completion). A status move must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
+    "- Prefer multi_task_add or multi_task_edit over repeating single create_task, add_subtask, or modify_task_status operations when an update names three or more of the same kind.",
     "- reply is 1-2 short, warm, plain sentences that acknowledge the update and point to the proposed next step. Never claim an action already happened or was approved.",
     "- Only reference taskIds from the list above; never invent ids.",
     "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",
@@ -233,7 +388,7 @@ export async function interpretWorkUpdate(
           { role: "user", content: buildPrompt(input, tasks, planIntent, today, context) },
         ],
         temperature: 0.2,
-        max_tokens: 1200,
+        max_tokens: 2400,
         response_format: { type: "json_schema", json_schema: INTERPRET_RESPONSE_SCHEMA },
       }),
       signal: AbortSignal.timeout(INTERPRET_TIMEOUT_MS),
