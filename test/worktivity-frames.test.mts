@@ -44,6 +44,8 @@ test("screenshot processing enforces the day boundary and reports unavailability
   assert.match(lib, /unavailable: result\.logs === 0/);
   assert.match(lib, /action: "screenshot\.due_sync_unavailable"/);
   assert.match(lib, /if \(run\.logs === 0\) \{/);
+  // Retrying an empty day every tick would starve older candidates.
+  assert.match(lib, /Date\.now\(\) - lastUnavailableAt < 24 \* 60 \* 60_000/);
   const unavailableBranch = lib.slice(lib.indexOf("if (run.logs === 0) {"), lib.indexOf("const { error: auditError } = await supabase.from(\"work_audit_log\").insert({\n        organization_id: row.organization_id,\n        actor_user_id: null,\n        action: \"screenshot.due_sync_completed\""));
   assert.doesNotMatch(unavailableBranch, /screenshot\.due_sync_completed/, "an empty day is never settled as completed");
 });
