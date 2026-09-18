@@ -17,6 +17,7 @@ import SkeletonsPreview from "./SkeletonsPreview";
 import OttoPreview from "./OttoPreview";
 import MemoryPreview from "./MemoryPreview";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
+import { installBootTrace } from "./bootTrace";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { restoreWorkOsQueryCache, startWorkOsQueryPersistence, workOsQueryClient } from "./queryClient";
@@ -30,6 +31,7 @@ import "./chat/chat.css";
 import "./avatar.css";
 
 installDiagnosticErrorHandlers();
+installBootTrace();
 diagnostics.info("app.webview.start", "WebView booting", { search: window.location.search, userAgent: navigator.userAgent });
 
 const params = new URLSearchParams(window.location.search);

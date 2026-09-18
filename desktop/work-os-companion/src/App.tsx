@@ -15,6 +15,7 @@ import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, Ca
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
+import { markBootPhase, markCleanExit } from "./bootTrace";
 import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
@@ -1226,6 +1227,9 @@ export default function App() {
     // reported to diagnostics instead of blocking the update.
     notifications.clearPersistent(UPDATE_AVAILABLE_KEY);
     setUpdateFlow({ status: "installing", update: flow.update });
+    // The install step ends this process on purpose, so the next launch must not
+    // report the exit as a crash.
+    markCleanExit();
     let watchdogArmed = false;
     try {
       await invoke("arm_update_exit_watchdog");
@@ -2484,6 +2488,15 @@ export default function App() {
       setPendingProgressUpdate("");
     });
   }
+
+  // Boot breadcrumb: the phase a crash would leave behind, reported on the next
+  // launch when the previous session never reached a clean exit.
+  const bootPhase = !vaultReady ? "boot:loading"
+    : !visibleSession ? "boot:connect_screen"
+      : !visibleOnboarding ? "boot:waiting_for_data"
+        : visibleOnboarding.onboardingRequired ? "boot:onboarding"
+          : "boot:workspace_ready";
+  useEffect(() => { markBootPhase(bootPhase); }, [bootPhase]);
 
   if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
