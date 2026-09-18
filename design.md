@@ -1524,16 +1524,43 @@ exactly-once provider path and reports its own outcome. The shared
 `ApprovalFlow` contract above is unchanged — it still shows one action at a
 time with no second confirmation — and every non-batch operation keeps using it.
 
-- **Shape.** One card per batch: `Review new tasks` or `Review changes`, a
-  summary that names the change (`Add 1 task with 3 steps`, `Update 3 tasks`),
+- **The tools.** `multi_task_add` and `multi_task_edit` are joined by
+  `multi_task_archive` and `multi_task_delete` (removal), `multi_task_log`
+  (one progress note per task), `multi_task_reassign` (hand work to a person),
+  and `plan_import` (materialize a template the employee already has). The
+  removal, log, and reassign tools act only on existing tasks; `plan_import` is
+  a single-decision card for one template, not a table.
+- **Shape.** One card per batch: `Review new tasks`, `Review changes`,
+  `Review archiving`, `Review deletion`, `Review progress notes`,
+  `Review reassignment`, or `Review plan import`, a summary that names the
+  change (`Add 1 task with 3 steps`, `Update 3 tasks`, `Archive 2 tasks`),
   then numbered entries (`01`, `02`) with hairlines, each showing its title,
   description, and steps indented beneath it. An entry that targets an existing
   task is tagged `Existing task`, because the card is also used to add steps to
-  work that already exists. Reading is the default state; the card is a
-  document, not a stack of form controls.
+  work that already exists; an entry the agent named only by id takes its real
+  title from the same task list the employee sees. Reading is the default state;
+  the card is a document, not a stack of form controls.
+- **Removal is danger-toned.** Archive and delete cards carry the danger edge
+  and heading, state the consequence in the hint (`Archiving hides these tasks
+  from your lists`, `Deleting removes these tasks permanently`), mark each entry
+  `Archive` or `Delete permanently`, and use the red confirm action. The
+  two-step approval is unchanged, and the copy never implies a delete when the
+  tool archives.
+- **Notes and handoffs.** A log entry's description is the progress note and is
+  editable in place; it has no status control and no completion statement. A
+  reassignment states that the named person will own the task, and the server
+  enforces the same assignable-people rule as manual assignment: an employee may
+  hand work to themselves, and only an administrator may hand it to someone else.
+- **Plan import.** The card names the template's client and start date, says
+  that its tasks and steps are created together, and offers a single
+  `Approve import` → `Confirm import` decision. The blueprint is read at filing
+  time and expanded into the same add-batch path, so a template with no tasks
+  fails that one operation with a plain reason instead of creating nothing
+  silently.
 - **Editing.** One pencil switches the whole card into an editable canvas:
-  titles, descriptions, and — for a status move the batch proposed — a status
-  control offering the proposed column or `Leave the status unchanged`. Clearing
+  titles, descriptions (including a log batch's notes), and — for a status move
+  the batch proposed — a status control offering the proposed column or
+  `Leave the status unchanged`. Clearing
   the status keeps the control so the choice can be taken back, and the review
   view then says `Status unchanged`. Completion entries (`Mark this task done`,
   `Reopen this task`) are statements, not editable fields. There is no
