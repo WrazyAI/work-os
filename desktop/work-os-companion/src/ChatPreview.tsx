@@ -551,6 +551,33 @@ function BatchSection() {
       },
     },
   };
+  const archiveBatch = {
+    op: "multi_task_archive" as const,
+    statement: "Archive the finished release work.",
+    enabled: true,
+    batchId: "batch-preview-archive",
+    tasks: [
+      { clientId: "t1", taskId: "t-1", subtasks: [] },
+      { clientId: "t2", taskId: "t-2", subtasks: [] },
+    ],
+  };
+  const logBatch = {
+    op: "multi_task_log" as const,
+    statement: "Note progress on two tasks.",
+    enabled: true,
+    batchId: "batch-preview-log",
+    tasks: [
+      { clientId: "t1", taskId: "t-1", description: "Shipped the batch schema and the grouped card.", subtasks: [] },
+      { clientId: "t2", taskId: "t-2", description: "Paired on the review and closed the feedback.", subtasks: [] },
+    ],
+  };
+  const importBatch = {
+    op: "plan_import" as const,
+    statement: "Import the SEO onboarding plan for Acme.",
+    enabled: true,
+    batchId: "batch-preview-import",
+    planImport: { blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" },
+  };
   const filed = {
     op: editBatch,
     status: "recorded" as const,
@@ -577,6 +604,15 @@ function BatchSection() {
     </section>
     <section><strong style={{ fontSize: 12 }}>Filed</strong>
       <TaskBatchCard operation={editBatch} result={filed} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Archiving (danger tone)</strong>
+      <TaskBatchCard operation={archiveBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Progress notes</strong>
+      <TaskBatchCard operation={logBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
+    </section>
+    <section><strong style={{ fontSize: 12 }}>Plan import</strong>
+      <TaskBatchCard operation={importBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
     </section>
   </>;
 }

@@ -3,7 +3,7 @@ import { interpretWorkUpdate, loadInterpretationTasks, type InterpretContext } f
 import { buildLoomAttachment } from "@/lib/aiLoom";
 import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
-import { getWorkOsOrganizationOwnerId } from "@/lib/work-os";
+import { getWorkOsOrganizationOwnerId, listBlueprints } from "@/lib/work-os";
 import { loadShiftData } from "@/lib/work-os-internal";
 import { persistInterpretHistory, recentConversationTurns } from "@/lib/work-conversations";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
@@ -69,7 +69,26 @@ export async function POST(req: Request) {
         loomContext = undefined;
       }
     }
-    const interpretContext: InterpretContext = { ...memoryContext, ...(loomContext ? { loom: loomContext } : {}) };
+    // A template list makes plan_import usable. It is optional context: a
+    // blueprint read failure must never block the plain-text interpretation.
+    let blueprints: InterpretContext["blueprints"];
+    try {
+      const rows = await listBlueprints(ownerId);
+      blueprints = (rows as Array<Record<string, unknown>>).map((blueprint) => ({
+        id: String(blueprint.id),
+        name: String(blueprint.name ?? "Blueprint"),
+        taskCount: Array.isArray(blueprint.phases)
+          ? (blueprint.phases as Array<{ tasks?: unknown[] }>).reduce((total, phase) => total + (phase.tasks?.length ?? 0), 0)
+          : 0,
+      })).filter((blueprint) => blueprint.taskCount > 0);
+    } catch {
+      blueprints = undefined;
+    }
+    const interpretContext: InterpretContext = {
+      ...memoryContext,
+      ...(loomContext ? { loom: loomContext } : {}),
+      ...(blueprints?.length ? { blueprints } : {}),
+    };
     const result = await interpretWorkUpdate(body, tasks, interpretContext);
     if (!result.ok) {
       const status = result.reason === "ai_unconfigured" ? 501 : 503;

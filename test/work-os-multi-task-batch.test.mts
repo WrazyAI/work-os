@@ -248,3 +248,141 @@ test("the client files a batch through its own endpoint", () => {
   assert.match(interpretation, /export async function skipBatchOperation/);
   assert.match(interpretation, /export function batchItemCount/);
 });
+
+test("parses the extra batch tools and drops unusable entries", () => {
+  const parsed = parseInterpretation({
+    operations: [
+      batch([
+        { clientId: "t1", taskId: "t-1", description: "Shipped the schema." },
+        { clientId: "t2", taskId: "t-2", description: "Paired on the review." },
+        { clientId: "t3", taskId: "foreign", description: "Not mine." },
+        { clientId: "t4", taskId: "t-3" },
+      ], "multi_task_log"),
+      batch([
+        { clientId: "t1", taskId: "t-1" },
+        { clientId: "t2", taskId: "foreign" },
+      ], "multi_task_archive"),
+      batch([
+        { clientId: "t1", taskId: "t-2", assigneePersonId: "person-9" },
+      ], "multi_task_reassign"),
+    ],
+  }, "clear the board and hand off", TASKS);
+
+  assert.deepEqual(parsed?.operations.map((operation) => operation.op), ["multi_task_log", "multi_task_archive", "multi_task_reassign"]);
+  const log = parsed?.operations[0];
+  // A note is required, so the entry without one is dropped; a foreign id never survives.
+  assert.deepEqual(log?.tasks?.map((task) => task.clientId), ["t1", "t2"]);
+  assert.equal(log?.tasks?.[0]?.description, "Shipped the schema.");
+  const archive = parsed?.operations[1];
+  assert.deepEqual(archive?.tasks?.map((task) => task.taskId), ["t-1"]);
+  assert.equal(parsed?.operations[2]?.tasks?.[0]?.assigneePersonId, "person-9");
+});
+
+test("parses a plan import only when it names a blueprint", () => {
+  const parsed = parseInterpretation({
+    operations: [
+      { op: "plan_import", statement: "Import the SEO onboarding plan.", planImport: { blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" } },
+      { op: "plan_import", statement: "Import nothing.", planImport: { blueprintId: "" } },
+      { op: "plan_import", statement: "Import with a bad date.", planImport: { blueprintId: "bp-2", startDate: "next Tuesday" } },
+    ],
+  }, "import the template", TASKS);
+  assert.equal(parsed?.operations.length, 2);
+  assert.equal(parsed?.operations[0]?.planImport?.blueprintId, "bp-1");
+  assert.equal(parsed?.operations[0]?.planImport?.clientName, "Acme");
+  assert.equal(parsed?.operations[0]?.planImport?.startDate, "2026-09-22");
+  assert.equal(parsed?.operations[1]?.planImport?.blueprintId, "bp-2");
+  assert.equal(parsed?.operations[1]?.planImport?.startDate, undefined);
+});
+
+test("the proposals endpoint accepts the extra batch tools and plan imports", () => {
+  const [log] = interpretedOperations([{
+    op: "multi_task_log",
+    statement: "Note on two tasks.",
+    tasks: [{ task_id: "t-1", description: "Shipped the schema." }],
+  }]);
+  assert.equal(log?.op, "multi_task_log");
+  assert.equal(log?.tasks?.[0]?.description, "Shipped the schema.");
+
+  const [reassign] = interpretedOperations([{
+    op: "multi_task_reassign",
+    statement: "Hand two tasks over.",
+    tasks: [{ task_id: "t-1", assignee_person_id: "person-9" }],
+  }]);
+  assert.equal(reassign?.tasks?.[0]?.assigneePersonId, "person-9");
+
+  const [imported] = interpretedOperations([{
+    op: "plan_import",
+    statement: "Import the template.",
+    blueprint_id: "bp-1",
+    client_name: "Acme",
+    start_date: "2026-09-22",
+  }]);
+  assert.equal(imported?.blueprintId, "bp-1");
+  assert.equal(imported?.clientName, "Acme");
+  assert.equal(imported?.startDate, "2026-09-22");
+
+  assert.throws(() => interpretedOperations([{ op: "plan_import", statement: "No blueprint." }]), /requires a blueprint/);
+  assert.throws(() => interpretedOperations([{ op: "multi_task_log", statement: "No note.", tasks: [{ task_id: "t-1" }] }]), /carries no tasks/);
+  assert.throws(() => interpretedOperations([{ op: "multi_task_reassign", statement: "No task.", tasks: [{ assignee_person_id: "person-9" }] }]), /carries no tasks/);
+});
+
+test("expands the extra batch tools onto their existing write paths", () => {
+  const prepared = prepareProposals(interpretedOperations([
+    { op: "multi_task_archive", statement: "Archive two.", tasks: [{ client_id: "t1", task_id: "t-1" }, { client_id: "t2", task_id: "t-2" }] },
+    { op: "multi_task_delete", statement: "Delete one.", tasks: [{ client_id: "t3", task_id: "t-3" }] },
+    { op: "multi_task_log", statement: "Note one.", tasks: [{ client_id: "t4", task_id: "t-1", description: "Shipped the schema." }] },
+    { op: "multi_task_reassign", statement: "Hand one over.", tasks: [{ client_id: "t5", task_id: "t-2", assignee_person_id: "person-9" }] },
+  ]) as Parameters<typeof prepareProposals>[0]);
+
+  assert.deepEqual(prepared.map((item) => item.providerOperation), ["archive_task", "archive_task", "delete_task", "log_progress", "update_task"]);
+  assert.deepEqual(prepared[0]?.change, {});
+  assert.deepEqual(prepared[3]?.change, { summary: "Shipped the schema." });
+  assert.equal(prepared[4]?.assigneePersonId, "person-9");
+  // Each tool still opens its own batch, so four operations mean four cards.
+  assert.equal(new Set(prepared.map((item) => item.batch?.id)).size, 4);
+  assert.deepEqual(prepared.map((item) => item.batch?.kind), ["multi_task_archive", "multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign"]);
+});
+
+test("a plan import is materialized from its blueprint through the add path", () => {
+  const proposals = read("src/lib/work-os-proposals.ts");
+  assert.match(proposals, /async function planImportTasks/);
+  assert.match(proposals, /op: "multi_task_add", tasks: await planImportTasks/);
+  assert.match(proposals, /work_blueprints/);
+  // A blueprint with no tasks fails that operation only, not the whole request.
+  assert.match(proposals, /That blueprint has no tasks to import/);
+});
+
+test("reassignments resolve the person through the assignable-people guard", () => {
+  const proposals = read("src/lib/work-os-proposals.ts");
+  assert.match(proposals, /async function resolveBatchAssignee/);
+  assert.match(proposals, /getWorkOsTaskCreationOptions/);
+  assert.match(proposals, /only assign work to yourself unless you are an administrator/);
+  assert.match(proposals, /assignees: \[await resolveBatchAssignee/);
+});
+
+test("the prompt teaches the extra tools and the blueprint list", () => {
+  const source = read("src/lib/aiInterpret.ts");
+  for (const tool of ["multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign", "plan_import"]) {
+    assert.match(source, new RegExp(tool));
+  }
+  assert.match(source, /Templates available to import/);
+  const route = read("src/app/api/work-os/me/interpret/route.ts");
+  assert.match(route, /listBlueprints/);
+});
+
+test("the extra tools keep their existing write paths and stay grouped", () => {
+  const proposals = read("src/lib/work-os-proposals.ts");
+  // No new provider operation is introduced: each tool reuses a reviewed one.
+  assert.match(proposals, /providerOperation: kind === "multi_task_archive" \? "archive_task" : "delete_task"/);
+  assert.match(proposals, /providerOperation: "log_progress"/);
+  assert.match(proposals, /providerOperation: "update_task"/);
+  assert.match(proposals, /assigneePersonId: task.assigneePersonId/);
+  const card = read("desktop/work-os-companion/src/TaskBatchCard.tsx");
+  assert.match(card, /Review deletion|Review archiving|Review progress notes|Review reassignment|Review plan import/);
+  assert.match(card, /is-destructive/);
+  assert.match(card, /Approve import/);
+  const interpretation = read("desktop/work-os-companion/src/interpretation.ts");
+  for (const tool of ["multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign", "plan_import"]) {
+    assert.match(interpretation, new RegExp(tool));
+  }
+});

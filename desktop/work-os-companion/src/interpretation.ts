@@ -3,7 +3,8 @@ import { safeTaskText } from "./taskWorkspace";
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
   | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
-  | "navigate_to_page" | "multi_task_add" | "multi_task_edit";
+  | "navigate_to_page" | "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete"
+  | "multi_task_log" | "multi_task_reassign" | "plan_import";
 
 /** One step of a batch entry. proposalIds are the server rows this step filed,
  * so an edited card can send its edits to the right proposals. */
@@ -22,8 +23,17 @@ export interface ProposedBatchTask {
   description?: string;
   taskGroupId?: string;
   completed?: boolean;
+  assigneePersonId?: string;
+  dueDate?: string;
   subtasks: ProposedBatchSubtask[];
   proposalIds?: string[];
+}
+
+/** A plan import names the template to materialize. */
+export interface ProposedPlanImport {
+  blueprintId: string;
+  clientName?: string;
+  startDate?: string;
 }
 
 /** Destinations the assistant may link inline. Anything else is dropped. */
@@ -39,8 +49,10 @@ export interface ProposedOperation {
   taskGroupId?: string;
   limit?: number;
   page?: NavigatePage;
-  /** Batch payload for multi_task_add / multi_task_edit. */
+  /** Batch payload for the multi-task operations. */
   tasks?: ProposedBatchTask[];
+  /** plan_import only: which template to materialize. */
+  planImport?: ProposedPlanImport;
   /** Server batch id, set once the batch has been filed for review. */
   batchId?: string;
   proposalId?: string;
@@ -89,6 +101,11 @@ const OPERATION_LABELS: Record<CandidateOperationKind, string> = {
   navigate_to_page: "Open page:",
   multi_task_add: "Add tasks:",
   multi_task_edit: "Update tasks:",
+  multi_task_archive: "Archive tasks:",
+  multi_task_delete: "Delete tasks:",
+  multi_task_log: "Log progress:",
+  multi_task_reassign: "Reassign tasks:",
+  plan_import: "Import a plan:",
 };
 
 export function operationLabel(op: CandidateOperationKind): string {
@@ -112,6 +129,10 @@ export function batchItemCount(op: Pick<ProposedOperation, "op" | "tasks">): num
       const completion = task.completed !== undefined ? 1 : 0;
       return total + wording + completion + task.subtasks.length;
     }
+    if (op.op === "multi_task_archive" || op.op === "multi_task_delete" || op.op === "multi_task_log" || op.op === "multi_task_reassign") {
+      // One item per named task; these tools never add steps.
+      return total + 1;
+    }
     return total + (task.taskId ? 0 : 1) + task.subtasks.length;
   }, 0);
 }
@@ -119,7 +140,23 @@ export function batchItemCount(op: Pick<ProposedOperation, "op" | "tasks">): num
 /** Batch tools render their own grouped approval card instead of the shared
  * one: they carry several tasks and steps in a single decision. */
 export function isBatchToolOp(op: Pick<ProposedOperation, "op">): boolean {
-  return op.op === "multi_task_add" || op.op === "multi_task_edit";
+  return op.op === "multi_task_add" || op.op === "multi_task_edit" || op.op === "multi_task_archive"
+    || op.op === "multi_task_delete" || op.op === "multi_task_log" || op.op === "multi_task_reassign";
+}
+
+/** The batch tools that remove work, which the card renders in the danger tone. */
+export function isDestructiveBatchOp(op: Pick<ProposedOperation, "op">): boolean {
+  return op.op === "multi_task_delete" || op.op === "multi_task_archive";
+}
+
+/** plan_import is its own one-card operation, not a tasks table. */
+export function isPlanImportOp(op: Pick<ProposedOperation, "op">): boolean {
+  return op.op === "plan_import";
+}
+
+/** Everything the grouped card renders: the batch tools plus plan_import. */
+export function usesGroupedCard(op: Pick<ProposedOperation, "op">): boolean {
+  return isBatchToolOp(op) || isPlanImportOp(op);
 }
 
 /** Mutating tools always require an explicit approval decision first. */
@@ -148,6 +185,12 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
     return {
       tool: "work_os.proposals.review_batch",
       command: `POST /api/work-os/proposal-batches/${op.batchId ?? "<batch>"} ${JSON.stringify({ decision: "accept", decisions: `${items} item(s)` })}`,
+    };
+  }
+  if (op.op === "plan_import") {
+    return {
+      tool: "work_os.proposals.review_batch",
+      command: `POST /api/work-os/proposal-batches/${op.batchId ?? "<batch>"} ${JSON.stringify({ decision: "accept", decisions: "import" })}`,
     };
   }
   if (op.proposalId) {
@@ -198,7 +241,7 @@ export function operationToolCall(op: ProposedOperation, context: ApprovedOpCont
 }
 
 export function proposalApprovalCommand(op: ProposedOperation): string | null {
-  if (isBatchToolOp(op)) return op.batchId ? `POST /api/work-os/proposal-batches/${op.batchId} ${JSON.stringify({ decision: "accept" })}` : null;
+  if (isBatchToolOp(op) || isPlanImportOp(op)) return op.batchId ? `POST /api/work-os/proposal-batches/${op.batchId} ${JSON.stringify({ decision: "accept" })}` : null;
   return op.proposalId ? `PATCH /api/work-os/proposals/${op.proposalId} ${JSON.stringify({ decision: "accept" })}` : null;
 }
 
@@ -213,8 +256,8 @@ export function proposalApprovalCommand(op: ProposedOperation): string | null {
  * do is discarded so the card never shows an empty row. */
 function normalizeBatchTasks(
   value: unknown,
-  op: "multi_task_add" | "multi_task_edit",
-  allowed: Set<string>,
+  op: "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete" | "multi_task_log" | "multi_task_reassign",
+  allowed: Map<string, string>,
 ): ProposedBatchTask[] {
   if (!Array.isArray(value)) return [];
   const tasks: ProposedBatchTask[] = [];
@@ -222,7 +265,10 @@ function normalizeBatchTasks(
     if (!rawTask || typeof rawTask !== "object") continue;
     const entry = rawTask as Record<string, unknown>;
     const taskId = typeof entry.taskId === "string" && allowed.has(entry.taskId) ? entry.taskId : undefined;
-    const title = typeof entry.title === "string" && entry.title.trim() ? safeTaskText(entry.title, "").slice(0, 240) || undefined : undefined;
+    const statedTitle = typeof entry.title === "string" && entry.title.trim() ? safeTaskText(entry.title, "").slice(0, 240) || undefined : undefined;
+    // A tool that names its target only by id (log, archive, delete, reassign)
+    // still shows the real task title, taken from the same list the employee sees.
+    const title = statedTitle ?? (taskId ? allowed.get(taskId) : undefined);
     const description = typeof entry.description === "string" && entry.description.trim() ? entry.description.trim().slice(0, 2000) : undefined;
     const taskGroupId = typeof entry.taskGroupId === "string" && entry.taskGroupId.trim() ? entry.taskGroupId.trim().slice(0, 160) : undefined;
     const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
@@ -241,9 +287,16 @@ function normalizeBatchTasks(
         });
       }
     }
+    const assigneePersonId = typeof entry.assigneePersonId === "string" && entry.assigneePersonId.trim() ? entry.assigneePersonId.trim().slice(0, 80) : undefined;
+    const rawDue = typeof entry.dueDate === "string" ? entry.dueDate.trim().slice(0, 10) : "";
+    const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? rawDue : undefined;
     if (op === "multi_task_add") {
       if (!taskId && !title) continue;
-    } else if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) {
+    } else if (op === "multi_task_edit") {
+      if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) continue;
+    } else if (op === "multi_task_log") {
+      if (!taskId || !description) continue;
+    } else if (!taskId) {
       continue;
     }
     tasks.push({
@@ -253,10 +306,24 @@ function normalizeBatchTasks(
       ...(description ? { description } : {}),
       ...(taskGroupId ? { taskGroupId } : {}),
       ...(completed === undefined ? {} : { completed }),
+      ...(assigneePersonId ? { assigneePersonId } : {}),
+      ...(dueDate ? { dueDate } : {}),
       subtasks,
     });
   }
   return tasks;
+}
+
+/** plan_import names a template. */
+function normalizePlanImport(value: unknown): ProposedPlanImport | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const entry = value as Record<string, unknown>;
+  const blueprintId = typeof entry.blueprintId === "string" && entry.blueprintId.trim() ? entry.blueprintId.trim().slice(0, 80) : undefined;
+  if (!blueprintId) return undefined;
+  const clientName = typeof entry.clientName === "string" && entry.clientName.trim() ? entry.clientName.trim().slice(0, 120) : undefined;
+  const rawStart = typeof entry.startDate === "string" ? entry.startDate.trim().slice(0, 10) : "";
+  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(rawStart) ? rawStart : undefined;
+  return { blueprintId, ...(clientName ? { clientName } : {}), ...(startDate ? { startDate } : {}) };
 }
 
 export function normalizeInterpretation(
@@ -266,7 +333,7 @@ export function normalizeInterpretation(
 ): CandidateReview | null {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as { operations?: unknown; reply?: unknown };
-  const allowed = new Set(tasks.map((task) => task.id));
+  const allowed = new Map(tasks.map((task) => [task.id, task.title]));
   const reply = typeof source.reply === "string" && source.reply.trim() ? source.reply.replace(/\r\n?/g, "\n").split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n").slice(0, 1200) || undefined : undefined;
   if (!Array.isArray(source.operations)) {
     // A conversational reply with nothing to record is a valid assistant turn.
@@ -289,10 +356,13 @@ export function normalizeInterpretation(
       ? candidate.page as NavigatePage
       : undefined;
     if (op === "navigate_to_page" && !page) continue;
-    const batch = op === "multi_task_add" || op === "multi_task_edit";
+    const batch = op === "multi_task_add" || op === "multi_task_edit" || op === "multi_task_archive"
+      || op === "multi_task_delete" || op === "multi_task_log" || op === "multi_task_reassign";
     const tasks = batch ? normalizeBatchTasks(candidate.tasks, op, allowed) : undefined;
     if (batch && !tasks?.length) continue;
-    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, page, tasks, enabled: true });
+    const planImport = op === "plan_import" ? normalizePlanImport(candidate.planImport ?? candidate.plan_import) : undefined;
+    if (op === "plan_import" && !planImport) continue;
+    operations.push({ op, statement, taskId, taskTitle, taskGroupId, limit, page, tasks, planImport, enabled: true });
   }
   if (!operations.length && !reply) return null;
   return { originalInput, operations, reply };
@@ -434,6 +504,9 @@ export interface FiledProposalRow {
   client_id?: string | null;
   batch_id?: string | null;
   batch_index?: number | null;
+  /** The server's stored task state, used to name an entry the agent described
+   * only by id (a log, archive, or reassign never carries the task title). */
+  before_state?: { title?: string | null } | null;
 }
 
 /** Groups filed rows by the operation the client sent. A batch files several
@@ -457,23 +530,33 @@ export function filedProposalGroups(
  * operation keeps its one proposal id; a batch receives its batch id and gives
  * every task and step the ids it filed, so the card's edits reach the rows. */
 export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalRow[]): ProposedOperation {
-  if (!isBatchToolOp(op)) return { ...op, proposalId: rows[0]?.id };
+  if (!isBatchToolOp(op) && !isPlanImportOp(op)) return { ...op, proposalId: rows[0]?.id };
   const batchId = rows.find((row) => row.batch_id)?.batch_id ?? undefined;
   const idsByClientId = new Map<string, string[]>();
+  const titleByClientId = new Map<string, string>();
   for (const row of rows) {
     if (!row.client_id) continue;
     const list = idsByClientId.get(row.client_id) ?? [];
     list.push(row.id);
     idsByClientId.set(row.client_id, list);
+    const title = row.before_state?.title;
+    if (typeof title === "string" && title.trim()) titleByClientId.set(row.client_id, title.trim());
   }
-  const withIds = <T extends { clientId: string }>(entry: T): T => {
+  const withIds = <T extends { clientId: string; title?: string }>(entry: T): T => {
     const ids = idsByClientId.get(entry.clientId);
-    return ids ? { ...entry, proposalIds: ids } : entry;
+    const title = titleByClientId.get(entry.clientId);
+    return {
+      ...entry,
+      // A tool that named its target only by id gets the real task title here,
+      // so the card never shows a note as if it were the task name.
+      ...(entry.title === undefined && title ? { title } : {}),
+      ...(ids ? { proposalIds: ids } : {}),
+    };
   };
   return {
     ...op,
     ...(batchId ? { batchId } : {}),
-    tasks: (op.tasks ?? []).map((task) => ({ ...withIds(task), subtasks: task.subtasks.map(withIds) })),
+    ...(op.tasks ? { tasks: op.tasks.map((task) => ({ ...withIds(task), subtasks: task.subtasks.map(withIds) })) } : {}),
   };
 }
 
@@ -528,7 +611,7 @@ export async function fileApprovedOperations(
       // A batch files every item through one decision, carrying the employee's
       // edits. Items are still reviewed server-side one at a time, so a failure
       // stays per item instead of pretending the whole batch applied.
-      if (isBatchToolOp(op)) {
+      if (isBatchToolOp(op) || isPlanImportOp(op)) {
         const batchId = op.batchId;
         if (!batchId || !transport.reviewBatch) throw new Error("This update no longer has a server-side batch record. Interpret it again before filing.");
         // A skip rejects every pending item in the batch in one decision. There
@@ -547,7 +630,11 @@ export async function fileApprovedOperations(
             for (const proposalId of subtask.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...(subtaskEdits ? { edits: subtaskEdits } : {}) });
           }
         }
-        if (!decisions.length) throw new Error("This update has no server-side batch items. Interpret it again before filing.");
+        // A plan import expands server-side, so the client has no per-entry ids
+        // to send; an empty decisions list approves every pending item.
+        if (!decisions.length && !isPlanImportOp(op)) {
+          throw new Error("This update has no server-side batch items. Interpret it again before filing.");
+        }
         const response = await transport.reviewBatch(batchId, { decision: "accept", decisions }) as BatchReviewResponse | undefined;
         const items = Array.isArray(response?.results) ? response.results : [];
         const recorded = items.filter((item) => item.status === "applied").length;

@@ -3,7 +3,7 @@ import { ApprovalFlow, ApprovalResults } from "../ApprovalFlow";
 import { NavigateButton } from "../NavigateButton";
 import { ChatSectionBoundary } from "../ErrorBoundary";
 import type { ApprovedOpContext, ProposedOperation, ToolCallResult } from "../interpretation";
-import { isBatchToolOp, isDisplayToolOp, isMutatingToolOp } from "../interpretation";
+import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp } from "../interpretation";
 import { BatchApprovalCards } from "../TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCardTask } from "../TaskSelectionCard";
 import { ChatTurn } from "./ChatTurn";
@@ -117,9 +117,9 @@ export function HistoryTurnExtras({
               return null;
             })}
             {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-            {operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op)) ? (
+            {operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op)) ? (
               <ApprovalFlow
-                operations={operations.filter((op) => isMutatingToolOp(op) && !isBatchToolOp(op))}
+                operations={operations.filter((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op))}
                 results={results}
                 context={toolContext ?? { shiftDate: null, personId: null, promptKind: "optional" }}
                 busy={busy ?? false}
@@ -128,7 +128,7 @@ export function HistoryTurnExtras({
               />
             ) : null}
             <BatchApprovalCards
-              operations={operations.filter((op) => isMutatingToolOp(op) && isBatchToolOp(op) && !op.failure)}
+              operations={operations.filter((op) => isMutatingToolOp(op) && (isBatchToolOp(op) || isPlanImportOp(op)) && !op.failure)}
               results={results}
               busy={busy ?? false}
               context={toolContext ?? { shiftDate: null, personId: null, promptKind: "optional" }}

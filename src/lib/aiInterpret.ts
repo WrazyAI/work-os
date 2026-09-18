@@ -20,7 +20,7 @@ export const INTERPRET_RESPONSE_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["op", "statement", "taskId", "taskTitle", "taskGroupId", "limit", "page", "tasks"],
+          required: ["op", "statement", "taskId", "taskTitle", "taskGroupId", "limit", "page", "tasks", "planImport"],
           properties: {
             op: { type: "string" },
             statement: { type: "string" },
@@ -29,13 +29,23 @@ export const INTERPRET_RESPONSE_SCHEMA = {
             taskGroupId: { type: ["string", "null"] },
             limit: { type: ["integer", "null"] },
             page: { type: ["string", "null"] },
+            planImport: {
+              type: ["object", "null"],
+              additionalProperties: false,
+              required: ["blueprintId", "clientName", "startDate"],
+              properties: {
+                blueprintId: { type: ["string", "null"] },
+                clientName: { type: ["string", "null"] },
+                startDate: { type: ["string", "null"] },
+              },
+            },
             tasks: {
               type: ["array", "null"],
               maxItems: 20,
               items: {
                 type: "object",
                 additionalProperties: false,
-                required: ["clientId", "taskId", "title", "description", "taskGroupId", "completed", "subtasks"],
+                required: ["clientId", "taskId", "title", "description", "taskGroupId", "completed", "assigneePersonId", "dueDate", "subtasks"],
                 properties: {
                   clientId: { type: ["string", "null"] },
                   taskId: { type: ["string", "null"] },
@@ -43,6 +53,8 @@ export const INTERPRET_RESPONSE_SCHEMA = {
                   description: { type: ["string", "null"] },
                   taskGroupId: { type: ["string", "null"] },
                   completed: { type: ["boolean", "null"] },
+                  assigneePersonId: { type: ["string", "null"] },
+                  dueDate: { type: ["string", "null"] },
                   subtasks: {
                     type: ["array", "null"],
                     maxItems: 20,
@@ -70,7 +82,8 @@ export const INTERPRET_RESPONSE_SCHEMA = {
 export type CandidateOperationKind = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
   | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
-  | "navigate_to_page" | "multi_task_add" | "multi_task_edit";
+  | "navigate_to_page" | "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete"
+  | "multi_task_log" | "multi_task_reassign" | "plan_import";
 export type CandidateClaimKind = "progress" | "completion" | "blocker" | "priority_change" | "new_work";
 
 /** One step under a batch task. The clientId is the agent's stable handle for
@@ -82,7 +95,8 @@ export interface CandidateBatchSubtask {
 }
 
 /** One entry in a batch operation: a new or existing task, its optional steps,
- * and — for edits — the fields the employee asked to change. */
+ * and the fields the operation needs — the change for an edit, the note for a
+ * log, the assignee for a reassignment, or the blueprint to import. */
 export interface CandidateBatchTask {
   clientId: string;
   taskId?: string;
@@ -90,7 +104,16 @@ export interface CandidateBatchTask {
   description?: string;
   taskGroupId?: string;
   completed?: boolean;
+  assigneePersonId?: string;
+  dueDate?: string;
   subtasks?: CandidateBatchSubtask[];
+}
+
+/** A plan import carries one blueprint plus the naming context. */
+export interface CandidatePlanImport {
+  blueprintId: string;
+  clientName?: string;
+  startDate?: string;
 }
 
 export interface CandidateOperation {
@@ -101,8 +124,10 @@ export interface CandidateOperation {
   taskGroupId?: string;
   limit?: number;
   page?: string;
-  /** Batch payload for multi_task_add / multi_task_edit. */
+  /** Batch payload for the multi-task operations. */
   tasks?: CandidateBatchTask[];
+  /** Payload for plan_import: which blueprint to materialize. */
+  planImport?: CandidatePlanImport;
 }
 
 export interface CandidateWorkUpdate {
@@ -115,11 +140,12 @@ export interface CandidateWorkUpdate {
 
 export type InterpretationFailure = "ai_unconfigured" | "ai_unavailable" | "ai_malformed" | "nifty_failure";
 
-const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "navigate_to_page", "multi_task_add", "multi_task_edit"];
-/** Batch operations carry a `tasks` payload instead of a single taskId. */
-export const MULTI_OPERATION_KINDS: CandidateOperationKind[] = ["multi_task_add", "multi_task_edit"];
+const OPERATION_KINDS: CandidateOperationKind[] = ["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "navigate_to_page", "multi_task_add", "multi_task_edit", "multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign", "plan_import"];
+/** Batch operations carry a `tasks` payload instead of a single taskId.
+ * plan_import carries a blueprint instead. */
+export const MULTI_OPERATION_KINDS: CandidateOperationKind[] = ["multi_task_add", "multi_task_edit", "multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign"];
 /** Every item the single-task operations may reference without an existing task. */
-const TASK_REFERENCE_EXEMPT: CandidateOperationKind[] = ["create_task", "add_task", "add_subtask", "display_pending_tasks", "display_overdue_tasks", ...MULTI_OPERATION_KINDS];
+const TASK_REFERENCE_EXEMPT: CandidateOperationKind[] = ["create_task", "add_task", "add_subtask", "display_pending_tasks", "display_overdue_tasks", "plan_import", ...MULTI_OPERATION_KINDS];
 export const MAX_BATCH_TASKS = 20;
 const MAX_BATCH_ITEMS = 40;
 const MAX_BATCH_DESCRIPTION = 2_000;
@@ -136,6 +162,18 @@ function safeId(value: unknown, allowed: { has(id: string): boolean }): string |
 
 function isMultiOperation(kind: CandidateOperationKind): kind is "multi_task_add" | "multi_task_edit" {
   return MULTI_OPERATION_KINDS.includes(kind);
+}
+
+/** plan_import names one blueprint the employee actually has. */
+function parsePlanImport(value: unknown): CandidatePlanImport | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const entry = value as Record<string, unknown>;
+  const blueprintId = text(entry.blueprintId ?? entry.blueprint_id ?? entry.id, 80);
+  if (!blueprintId) return undefined;
+  const clientName = text(entry.clientName ?? entry.client_name, 120) ?? undefined;
+  const rawStart = text(entry.startDate ?? entry.start_date, 10);
+  const startDate = rawStart && /^\d{4}-\d{2}-\d{2}$/.test(rawStart) ? rawStart : undefined;
+  return { blueprintId, ...(clientName ? { clientName } : {}), ...(startDate ? { startDate } : {}) };
 }
 
 /**
@@ -160,6 +198,9 @@ function parseBatchTasks(
     const description = text(entry.description, MAX_BATCH_DESCRIPTION) ?? undefined;
     let taskGroupId = text(entry.taskGroupId ?? entry.task_group_id, 160) ?? undefined;
     const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
+    const assigneePersonId = text(entry.assigneePersonId ?? entry.assignee_person_id, 80) ?? undefined;
+    const rawDue = text(entry.dueDate ?? entry.due_date, 10);
+    const dueDate = rawDue && /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? rawDue : undefined;
     // A column the employee never supplied is stripped rather than trusted, but
     // the entry's other fields survive: only the invented status is dropped.
     if (taskGroupId && !allowedTaskGroupIds.has(taskGroupId)) taskGroupId = undefined;
@@ -182,9 +223,15 @@ function parseBatchTasks(
     if (op === "multi_task_add") {
       // A new task needs a title; an existing task may carry only steps.
       if (!existingId && !title) continue;
-    } else {
+    } else if (op === "multi_task_edit") {
       // An edit always targets a task that already exists and must change something.
       if (!existingId || (!title && !description && !taskGroupId && completed === undefined)) continue;
+    } else if (op === "multi_task_log") {
+      // A progress note needs its task and the note itself.
+      if (!existingId || !description) continue;
+    } else if (!existingId) {
+      // Archive, delete, and reassign only name existing tasks.
+      continue;
     }
     if (!existingId && itemCount >= MAX_BATCH_ITEMS) break;
     if (!existingId) itemCount += 1;
@@ -195,6 +242,8 @@ function parseBatchTasks(
       description,
       taskGroupId,
       completed,
+      assigneePersonId,
+      dueDate,
       subtasks: subtasks.length ? subtasks : undefined,
     });
   }
@@ -250,9 +299,11 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
       const page = op === "navigate_to_page" && typeof entry.page === "string" && NAVIGATE_PAGES.includes(entry.page) ? entry.page : undefined;
       if (op === "navigate_to_page" && !page) continue;
       // A batch that survived validation with no usable entry is dropped rather
-      // than filed as an empty approval card.
+      // than filed as an empty approval card. plan_import carries one blueprint.
       const tasks = isMultiOperation(op) ? parseBatchTasks(entry.tasks, op, allowed, allowedTaskGroupIds) : undefined;
       if (isMultiOperation(op) && !tasks?.length) continue;
+      const planImport = op === "plan_import" ? parsePlanImport(entry.planImport ?? entry.plan_import) : undefined;
+      if (op === "plan_import" && !planImport) continue;
       operations.push({
         op,
         statement,
@@ -262,6 +313,7 @@ export function parseInterpretation(raw: unknown, originalInput: string, allowed
         limit: typeof entry.limit === "number" && Number.isInteger(entry.limit) ? Math.min(100, Math.max(1, entry.limit)) : undefined,
         page,
         tasks,
+        planImport,
       });
     }
   }
@@ -273,6 +325,8 @@ export interface InterpretContext {
   todayBlock?: string;
   memoryBlock?: string;
   conversation?: Array<{ role: string; content: string }>;
+  /** Templates the employee can import as a whole task set. */
+  blueprints?: Array<{ id: string; name: string; taskCount: number }>;
   /** Tool output from a Loom recording referenced in this update. */
   loom?: {
     verdict: string;
@@ -301,6 +355,10 @@ function buildPrompt(
     .map((turn) => `${turn.role === "user" ? "Employee" : "Assistant"}: ${turn.content.replace(/\s+/g, " ").trim().slice(0, 1000)}`)
     .filter((line) => line.length > 10)
     .join("\n");
+  const blueprints = context?.blueprints ?? [];
+  const blueprintBlock = blueprints.length
+    ? `Templates available to import (plan_import):\n${blueprints.map((blueprint) => `- id: ${blueprint.id} | ${blueprint.name} | ${blueprint.taskCount} task(s)`).join("\n")}`
+    : "";
   const loom = context?.loom;
   const loomBlock = loom
     ? loom.blocked
@@ -328,19 +386,27 @@ function buildPrompt(
     context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
     conversation ? `Recent conversation:\n${conversation}` : "",
     context?.memoryBlock ? `Recalled memory (dated history only — never current facts or completion evidence):\n${context.memoryBlock}` : "",
+    blueprintBlock,
     loomBlock,
     "Their tasks:",
     taskList,
     "",
     "Convert the update into structured operations. Every mutation is proposed for employee approval; display tools never mutate. Rules:",
     "- Output ONLY JSON, no markdown, matching exactly:",
-    '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page|multi_task_add|multi_task_edit","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review","tasks":null}]}',
+    '{"reply":"...","taskMatches":[{"taskId":"...","confidence":0.0}],"claims":[{"kind":"progress|completion|blocker|priority_change|new_work","statement":"...","taskId":"..."}],"operations":[{"op":"record_progress|record_blocker|complete_task|reopen_task|create_task|add_task|archive_task|delete_task|modify_task_description|modify_task_status|add_subtask|modify_subtask|delete_subtask|display_pending_tasks|display_overdue_tasks|navigate_to_page|multi_task_add|multi_task_edit|multi_task_archive|multi_task_delete|multi_task_log|multi_task_reassign|plan_import","statement":"...","taskId":"...","taskTitle":"...","taskGroupId":"...","limit":20,"page":"review","tasks":null,"planImport":null}]}',
     "- multi_task_add and multi_task_edit carry their entries in `tasks`; every other operation sets tasks to null.",
-    '- A multi_task_add entry is {"clientId":"t1","taskId":null,"title":"...","description":"...","taskGroupId":null,"completed":null,"subtasks":[{"clientId":"s1","title":"...","description":"..."}]}. clientId is a short stable handle you choose; a subtask lists under the task it belongs to, and its clientId may be referenced by nothing else.',
+    '- A multi_task_add entry is {"clientId":"t1","taskId":null,"title":"...","description":"...","taskGroupId":null,"completed":null,"assigneePersonId":null,"dueDate":null,"subtasks":[{"clientId":"s1","title":"...","description":"..."}]}. clientId is a short stable handle you choose; a subtask lists under the task it belongs to, and its clientId may be referenced by nothing else.',
+    '- A multi_task_edit entry is the same shape with taskId set, carrying only the fields the employee asked to change. A multi_task_log entry sets taskId and carries the note in description; archive, delete, and reassign entries set only clientId, taskId, and (for reassign) assigneePersonId.',
+    '- plan_import sets tasks to null and planImport to {"blueprintId":"<listed id>","clientName":"...","startDate":"YYYY-MM-DD"}, with nulls for anything the employee did not say.',
     '- A multi_task_edit entry is {"clientId":"t1","taskId":"<existing task id>","title":null,"description":null,"taskGroupId":null,"completed":null,"subtasks":null}. Set only the fields the employee asked to change; every entry must reference an id from the list above.',
     "- Use multi_task_add when one update describes several new tasks, or one task with its own steps. Use taskId only to attach steps to a task that already exists; leave it null for a new task.",
     "- Use multi_task_edit when one update changes several existing tasks at once (statuses, wording, completion). A status move must repeat an existing Nifty status-column ID the employee supplied; do not invent one.",
     "- Prefer multi_task_add or multi_task_edit over repeating single create_task, add_subtask, or modify_task_status operations when an update names three or more of the same kind.",
+    "- Use multi_task_archive or multi_task_delete when the employee asks to clear several tasks at once; every entry names an existing taskId. Prefer archive unless they clearly mean permanent deletion.",
+    "- Use multi_task_log when one update records a progress note against several tasks; put each task's note in that entry's description.",
+    "- Use multi_task_reassign when one update hands several tasks to a person. Set assigneePersonId when the employee names someone else; leave it null to mean the employee themselves.",
+    "- Use plan_import only when the employee asks to import one of the listed templates: set tasks to null and planImport.blueprintId to that template's exact id. If none fits, use multi_task_add.",
+    "- Archive, delete, log, and reassign batches never create a task: every entry must carry an existing taskId.",
     "- reply is 1-2 short, warm, plain sentences that acknowledge the update and point to the proposed next step. Never claim an action already happened or was approved.",
     "- Only reference taskIds from the list above; never invent ids.",
     "- Use display_pending_tasks or display_overdue_tasks when the employee asks to see those tasks. Set a limit from 1 to 100 and do not attach a taskId.",

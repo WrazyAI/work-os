@@ -8,7 +8,7 @@ import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay, fetchTaskDetails } from "./workOsQueries";
-import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, skipBatchOperation, toolCallKey } from "./interpretation";
+import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
@@ -619,7 +619,7 @@ export default function AvatarApp(): React.ReactElement {
         approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
-            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
+            if (isBatchToolOp(op) || isPlanImportOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }) });
             // A 200 is not proof of rejection: the action may already have
@@ -1186,8 +1186,8 @@ export default function AvatarApp(): React.ReactElement {
                               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
                               return null;
                             })}
-                            {entry.operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op)) ? <ApprovalFlow
-                              operations={entry.operations.filter((op) => !isBatchToolOp(op))}
+                            {entry.operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op)) ? <ApprovalFlow
+                              operations={entry.operations.filter((op) => !isBatchToolOp(op) && !isPlanImportOp(op))}
                               results={entry.toolResults}
                               context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}
                               busy={filing}
@@ -1195,7 +1195,7 @@ export default function AvatarApp(): React.ReactElement {
                               onRetry={(result) => retryOperation(entry.id, result)}
                             /> : null}
                             <BatchApprovalCards
-                              operations={entry.operations.filter((op) => isMutatingToolOp(op) && isBatchToolOp(op))}
+                              operations={entry.operations.filter((op) => isMutatingToolOp(op) && (isBatchToolOp(op) || isPlanImportOp(op)))}
                               results={entry.toolResults ?? []}
                               busy={filing}
                               context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}

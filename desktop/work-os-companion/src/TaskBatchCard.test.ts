@@ -4,8 +4,12 @@ import { describe, expect, it } from "vitest";
 import { BatchApprovalCards, TaskBatchCard } from "./TaskBatchCard";
 import {
   attachFiledProposals,
+  batchItemCount,
   filedProposalGroups,
   isBatchToolOp,
+  isDestructiveBatchOp,
+  isPlanImportOp,
+  normalizeInterpretation,
   operationToolCall,
   skipBatchOperation,
   type ApprovalTransport,
@@ -217,5 +221,164 @@ describe("batch filing helpers", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.batchId).toBe("batch-1");
     expect(calls[0]?.body).toMatchObject({ decision: "reject", decisions: [] });
+  });
+});
+
+const archiveBatch: ProposedOperation = {
+  op: "multi_task_archive",
+  statement: "Archive the finished work.",
+  enabled: true,
+  batchId: "batch-archive",
+  tasks: [{ clientId: "t1", taskId: "t-1", subtasks: [], proposalIds: ["p1"] }, { clientId: "t2", taskId: "t-2", subtasks: [], proposalIds: ["p2"] }],
+};
+
+const logBatch: ProposedOperation = {
+  op: "multi_task_log",
+  statement: "Note progress on two tasks.",
+  enabled: true,
+  batchId: "batch-log",
+  tasks: [
+    { clientId: "t1", taskId: "t-1", description: "Shipped the schema.", subtasks: [], proposalIds: ["p1"] },
+    { clientId: "t2", taskId: "t-2", description: "Paired on the review.", subtasks: [], proposalIds: ["p2"] },
+  ],
+};
+
+const reassignBatch: ProposedOperation = {
+  op: "multi_task_reassign",
+  statement: "Hand the launch work over.",
+  enabled: true,
+  batchId: "batch-reassign",
+  tasks: [{ clientId: "t1", taskId: "t-1", assigneePersonId: "person-9", subtasks: [], proposalIds: ["p1"] }],
+};
+
+const importBatch: ProposedOperation = {
+  op: "plan_import",
+  statement: "Import the SEO onboarding plan.",
+  enabled: true,
+  batchId: "batch-import",
+  planImport: { blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" },
+};
+
+describe("TaskBatchCard — the extra tools", () => {
+  it("labels each tool and names its change", () => {
+    expect(render(archiveBatch)).toContain("Archive 2 tasks");
+    expect(render(archiveBatch)).toContain("Review archiving");
+    expect(render({ ...archiveBatch, op: "multi_task_delete" })).toContain("Delete 2 tasks");
+    expect(render({ ...archiveBatch, op: "multi_task_delete" })).toContain("Review deletion");
+    expect(render(logBatch)).toContain("Log progress on 2 tasks");
+    expect(render(reassignBatch)).toContain("Reassign 1 task");
+    expect(render(importBatch)).toContain("Import Acme’s plan");
+    expect(render(importBatch)).toContain("Review plan import");
+  });
+
+  it("uses the danger tone for removal and says what it means", () => {
+    const markup = render({ ...archiveBatch, op: "multi_task_delete" });
+    expect(markup).toContain("is-destructive");
+    expect(markup).toContain("Delete permanently");
+    expect(markup).toContain("Deleting removes these tasks permanently.");
+    const archive = render(archiveBatch);
+    expect(archive).toContain("is-destructive");
+    expect(archive).toContain("Archiving hides these tasks from your lists.");
+    expect(archive).not.toContain("Delete permanently");
+  });
+
+  it("makes a progress note editable and shows the reassignment", () => {
+    const log = render(logBatch);
+    expect(log).toContain("Shipped the schema.");
+    expect(log).toContain("Approve all 2 changes");
+    const reassign = render(reassignBatch);
+    expect(reassign).toContain("Assign to the named person");
+    // A log batch has no status control and no completion statement.
+    expect(log).not.toContain("task-batch-status");
+    expect(log).not.toContain("Mark this task done");
+  });
+
+  it("renders a plan import as one template, not a task table", () => {
+    const markup = render(importBatch);
+    expect(markup).toContain("Acme");
+    expect(markup).toContain("Starting 2026-09-22");
+    expect(markup).toContain("Approve import");
+    expect(markup).toContain("tasks and steps are created together");
+    expect(markup).not.toContain("task-batch-list");
+    expect(markup).not.toContain("Approve all");
+  });
+
+  it("counts one item per named task for the removal and handoff tools", () => {
+    expect(batchItemCount(archiveBatch)).toBe(2);
+    expect(batchItemCount(logBatch)).toBe(2);
+    expect(batchItemCount(reassignBatch)).toBe(1);
+    expect(render(archiveBatch)).toContain("Approve all 2 changes");
+    expect(render(reassignBatch)).toContain("Approve all 1 change");
+  });
+
+  it("recognizes the new operations and keeps plan_import out of the batch predicate", () => {
+    expect(isBatchToolOp(archiveBatch)).toBe(true);
+    expect(isBatchToolOp(logBatch)).toBe(true);
+    expect(isBatchToolOp(reassignBatch)).toBe(true);
+    expect(isBatchToolOp(importBatch)).toBe(false);
+    expect(isPlanImportOp(importBatch)).toBe(true);
+    expect(isDestructiveBatchOp(archiveBatch)).toBe(true);
+    expect(isDestructiveBatchOp({ ...archiveBatch, op: "multi_task_delete" })).toBe(true);
+    expect(isDestructiveBatchOp(logBatch)).toBe(false);
+  });
+
+  it("renders a plan import card through the grouped renderer", () => {
+    const markup = renderToStaticMarkup(createElement(BatchApprovalCards, {
+      operations: [importBatch, archiveBatch],
+      results: [],
+      context,
+      onApprove: () => undefined,
+      onSkip: () => undefined,
+    }));
+    expect(markup).toContain("Approve import");
+    expect(markup).toContain("Approve all 2 changes");
+  });
+
+  it("names the import request and files it without per-entry ids", () => {
+    const call = operationToolCall(importBatch, context);
+    expect(call.tool).toBe("work_os.proposals.review_batch");
+    expect(call.command).toContain("/api/work-os/proposal-batches/batch-import");
+  });
+});
+
+describe("batch entry titles", () => {
+  it("names an id-only entry from the task list the employee sees", () => {
+    const review = normalizeInterpretation({
+      operations: [{
+        op: "multi_task_log",
+        statement: "Note progress on two tasks.",
+        tasks: [
+          { taskId: "t-1", description: "Shipped the schema." },
+          { taskId: "t-2", title: "Package the Windows build", description: "Paired on the review." },
+        ],
+      }],
+    }, "note progress", [
+      { id: "t-1", title: "Ship the debugger fix" },
+      { id: "t-2", title: "Package the Windows build" },
+    ]);
+    const tasks = review?.operations[0]?.tasks ?? [];
+    // The log names only ids, so the card takes the real titles from the list.
+    expect(tasks[0]?.title).toBe("Ship the debugger fix");
+    // A stated title wins over the list title.
+    expect(tasks[1]?.title).toBe("Package the Windows build");
+    expect(tasks[0]?.description).toBe("Shipped the schema.");
+  });
+
+  it("drops an id-only entry whose task is not in the list", () => {
+    const review = normalizeInterpretation({
+      operations: [{ op: "multi_task_archive", statement: "Archive.", tasks: [{ taskId: "foreign" }] }],
+    }, "archive", [{ id: "t-1", title: "Ship the debugger fix" }]);
+    expect(review?.operations ?? []).toHaveLength(0);
+  });
+
+  it("parses a plan import and rejects one without a blueprint", () => {
+    const review = normalizeInterpretation({
+      operations: [
+        { op: "plan_import", statement: "Import.", planImport: { blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" } },
+        { op: "plan_import", statement: "No template.", planImport: { blueprintId: "" } },
+      ],
+    }, "import", []);
+    expect(review?.operations).toHaveLength(1);
+    expect(review?.operations[0]?.planImport).toMatchObject({ blueprintId: "bp-1", clientName: "Acme", startDate: "2026-09-22" });
   });
 });

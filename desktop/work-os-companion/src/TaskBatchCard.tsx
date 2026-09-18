@@ -3,6 +3,8 @@ import { AlertTriangle, Check, ChevronDown, Pencil, RotateCcw } from "lucide-rea
 import {
   batchItemCount,
   isBatchToolOp,
+  isDestructiveBatchOp,
+  isPlanImportOp,
   operationToolCall,
   type ApprovedOpContext,
   type BatchReviewResult,
@@ -43,13 +45,29 @@ function batchResults(result: ToolCallResult | undefined): BatchReviewResult[] |
 }
 
 function batchSummary(operation: ProposedOperation, tasks: ProposedBatchTask[]): string {
+  const count = tasks.length;
+  const plural = (word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  if (operation.op === "multi_task_edit") return `Update ${plural("task")}`;
+  if (operation.op === "multi_task_archive") return `Archive ${plural("task")}`;
+  if (operation.op === "multi_task_delete") return `Delete ${plural("task")}`;
+  if (operation.op === "multi_task_log") return `Log progress on ${plural("task")}`;
+  if (operation.op === "multi_task_reassign") return `Reassign ${plural("task")}`;
+  if (operation.op === "plan_import") return `Import ${operation.planImport?.clientName ? `${operation.planImport.clientName}’s plan` : "a plan template"}`;
   const newTasks = tasks.filter((task) => !task.taskId).length;
   const steps = tasks.reduce((total, task) => total + task.subtasks.length, 0);
-  if (operation.op === "multi_task_edit") return `Update ${tasks.length} task${tasks.length === 1 ? "" : "s"}`;
   const parts: string[] = [];
   if (newTasks) parts.push(`${newTasks} task${newTasks === 1 ? "" : "s"}`);
   if (steps) parts.push(`${steps} step${steps === 1 ? "" : "s"}`);
   return parts.length ? `Add ${parts.join(" with ")}` : "Add tasks";
+}
+
+function headingFor(operation: ProposedOperation): string {
+  if (operation.op === "multi_task_delete") return "Review deletion";
+  if (operation.op === "multi_task_archive") return "Review archiving";
+  if (operation.op === "multi_task_log") return "Review progress notes";
+  if (operation.op === "multi_task_reassign") return "Review reassignment";
+  if (operation.op === "plan_import") return "Review plan import";
+  return operation.op === "multi_task_edit" ? "Review changes" : "Review new tasks";
 }
 
 export function TaskBatchCard({
@@ -107,11 +125,13 @@ export function TaskBatchCard({
   };
 
   const title = batchSummary(operation, draft);
+  const destructive = isDestructiveBatchOp(operation);
+  const planImport = isPlanImportOp(operation);
 
-  return <section className={`task-batch-card${editing ? " is-editing" : ""}${filed ? " is-filed" : ""}`} aria-label={title}>
+  return <section className={`task-batch-card${editing ? " is-editing" : ""}${filed ? " is-filed" : ""}${destructive ? " is-destructive" : ""}`} aria-label={title}>
     <header className="task-batch-head">
       <div>
-        <small>{operation.op === "multi_task_edit" ? "Review changes" : "Review new tasks"}</small>
+        <small>{headingFor(operation)}</small>
         <strong>{title}</strong>
       </div>
       <div className="task-batch-head-actions">
@@ -137,10 +157,18 @@ export function TaskBatchCard({
     {expanded && <p className="task-batch-hint">
       {failed ? "Some items could not be filed. Nothing else was changed."
         : filed ? "Approved. Each item reports its own result below."
-          : editing ? "Edit any wording or status, then approve the whole card."
-            : "Check the tasks and steps, then approve them together."}
+          : planImport ? "Importing creates the template's tasks in your workspace. Nothing is created until you confirm."
+            : operation.op === "multi_task_delete" ? "Deleting removes these tasks permanently. Nothing is deleted until you confirm."
+              : operation.op === "multi_task_archive" ? "Archiving hides these tasks from your lists. Nothing changes until you confirm."
+                : editing ? "Edit any wording or status, then approve the whole card."
+                  : "Check the tasks and steps, then approve them together."}
     </p>}
-    {expanded && <ol className="task-batch-list">
+    {expanded && planImport && <div className="task-batch-import">
+      <p><strong>{operation.planImport?.clientName ? `${operation.planImport.clientName}` : "No client name"}</strong></p>
+      <p>{operation.planImport?.startDate ? `Starting ${operation.planImport.startDate}` : "Starting today"}</p>
+      <p className="task-batch-import-note">The template's tasks and steps are created together and appear in your workspace once approved.</p>
+    </div>}
+    {expanded && !planImport && <ol className="task-batch-list">
       {draft.map((task, index) => {
         const outcome = outcomeFor(results, task.clientId);
         return <li key={task.clientId}>
@@ -155,9 +183,11 @@ export function TaskBatchCard({
                 {outcome && <span className={`task-batch-outcome ${outcome.tone}`} role="status">{outcome.label}</span>}
               </div>
               {(editing || task.description) && (editing
-                ? <textarea className="task-batch-description" value={task.description ?? ""} maxLength={2000} aria-label={`Task ${index + 1} description`} placeholder="Add a description" onChange={(event) => updateTask(task.clientId, { description: event.target.value })} />
+                ? <textarea className="task-batch-description" value={task.description ?? ""} maxLength={2000} aria-label={operation.op === "multi_task_log" ? `Task ${index + 1} progress note` : `Task ${index + 1} description`} placeholder={operation.op === "multi_task_log" ? "What was done on this task" : "Add a description"} onChange={(event) => updateTask(task.clientId, { description: event.target.value })} />
                 : <p>{task.description}</p>)}
               {task.completed !== undefined && <p className="task-batch-state"><Check size={13} aria-hidden="true" /> {task.completed ? "Mark this task done" : "Reopen this task"}</p>}
+              {task.assigneePersonId && <p className="task-batch-state">{operation.op === "multi_task_reassign" ? "Assign to the named person" : "Change the assignee"}</p>}
+              {destructive && !filed && <p className="task-batch-state">{operation.op === "multi_task_delete" ? "Delete permanently" : "Archive"}</p>}
               {proposedStatus.has(task.clientId) && (editing
                 ? <label className="task-batch-status"><span>Status</span><select value={task.taskGroupId ?? ""} aria-label={`Task ${index + 1} status`} onChange={(event) => updateTask(task.clientId, { taskGroupId: event.target.value })}><option value={proposedStatus.get(task.clientId)}>Move to the proposed status</option><option value="">Leave the status unchanged</option></select></label>
                 : <p className="task-batch-state">{task.taskGroupId ? "Move to the proposed status" : "Status unchanged"}</p>)}
@@ -195,10 +225,10 @@ export function TaskBatchCard({
     {expanded && !filed && !failed && <footer className="task-batch-foot">
       {!armed ? <>
         <button type="button" className="secondary" disabled={busy} onClick={() => onSkip(operation)}>Skip</button>
-        <button type="button" className="primary" disabled={busy} onClick={() => setArmed(true)}><Check size={15} /> Approve all {count} change{count === 1 ? "" : "s"}</button>
+        <button type="button" className="primary" disabled={busy} onClick={() => setArmed(true)}><Check size={15} /> {planImport ? "Approve import" : `Approve all ${count} change${count === 1 ? "" : "s"}`}</button>
       </> : <>
         <button type="button" className="secondary" disabled={busy} onClick={() => setArmed(false)}><ChevronDown size={15} className="task-batch-back-mark" /> Back</button>
-        <button type="button" className="primary" disabled={busy} onClick={() => onApprove({ ...operation, tasks: draft })}>{busy ? "Filing…" : `Confirm ${count} change${count === 1 ? "" : "s"}`}</button>
+        <button type="button" className="primary" disabled={busy} onClick={() => onApprove({ ...operation, tasks: draft })}>{busy ? "Filing…" : planImport ? "Confirm import" : `Confirm ${count} change${count === 1 ? "" : "s"}`}</button>
       </>}
     </footer>}
     {expanded && failed && result && <footer className="task-batch-foot">
@@ -230,12 +260,13 @@ export function BatchApprovalCards({
   onSkip: (operation: ProposedOperation) => void;
   onRetry?: (result: ToolCallResult) => void;
 }) {
-  const batches = operations.filter(isBatchToolOp);
+  const batches = operations.filter((op) => isBatchToolOp(op) || isPlanImportOp(op));
   if (!batches.length) return null;
   return <>{batches.map((op, index) => {
     const result = results.find((item) => item.op === op);
     return <TaskBatchCard
       key={op.batchId ?? `${op.op}-${index}`}
+      /* plan imports share the batch review path and its two-step approval */
       operation={op}
       result={result}
       busy={busy}

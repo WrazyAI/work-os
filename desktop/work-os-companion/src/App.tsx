@@ -35,7 +35,7 @@ import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
-import { attachFiledProposals, filedProposalGroups, isBatchToolOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
+import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { dayScopedTasks, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, organizeTaskSections, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, type TaskRow, type TaskSection, type TaskSort } from "./taskWorkspace";
 import { SortHeaderRow } from "./SortHeaderRow";
@@ -2208,7 +2208,7 @@ export default function App() {
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
-            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
+            if (isBatchToolOp(op) || isPlanImportOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
             if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
@@ -2940,8 +2940,8 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
           return <TaskSelectionCard key={`${op.op}-${index}`} presentation="table" title={selection.view === "overdue" ? "Overdue tasks" : "Pending tasks"} tasks={selectionTasks} onMarkSelectedDone={onMarkSelectedDone ?? (() => undefined)} onLoadSubtasks={onLoadSubtasks} proposedTaskIds={proposedTaskIds} approvalLocation="below" emptyTitle={selection.view === "overdue" ? "No overdue tasks" : "No pending tasks"} emptyMessage={selection.view === "overdue" ? "Nothing is past its due date." : "Tasks waiting to be completed will appear here."} />;
         })}
         {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-        {hasPendingMutations && mutating.some((op) => !isBatchToolOp(op)) ? <ApprovalFlow operations={mutating.filter((op) => !isBatchToolOp(op))} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
-        <BatchApprovalCards operations={actionable.filter(isBatchToolOp)} results={interpretation.results ?? []} busy={busy} context={toolContext} onApprove={(op) => onReviewOperations?.([op], [])} onSkip={(op) => onReviewOperations?.([], [op])} onRetry={onRetryOperation} />
+        {hasPendingMutations && mutating.some((op) => !isBatchToolOp(op) && !isPlanImportOp(op)) ? <ApprovalFlow operations={mutating.filter((op) => !isBatchToolOp(op) && !isPlanImportOp(op))} results={interpretation.results} context={toolContext} busy={busy} onSubmit={(approved, rejected) => onReviewOperations?.(approved, rejected)} onRetry={onRetryOperation} /> : null}
+        <BatchApprovalCards operations={actionable.filter((op) => isBatchToolOp(op) || isPlanImportOp(op))} results={interpretation.results ?? []} busy={busy} context={toolContext} onApprove={(op) => onReviewOperations?.([op], [])} onSkip={(op) => onReviewOperations?.([], [op])} onRetry={onRetryOperation} />
         {unfiled.map((op, index) => <p key={`unfiled-${index}`} className="tool-display-error">{op.taskTitle ? `${op.taskTitle}: ` : ""}{op.failure}</p>)}
       </div>
     </ChatSectionBoundary>

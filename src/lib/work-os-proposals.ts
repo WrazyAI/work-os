@@ -11,6 +11,7 @@ import {
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
+import { addDaysIso } from "@/lib/work-os-dates";
 import { randomUUID } from "node:crypto";
 import { activeSession } from "@/lib/work-os-workday";
 import {
@@ -25,6 +26,7 @@ import {
   archiveWorkOsEmployeeTask,
   createWorkOsEmployeeTask,
   deleteWorkOsEmployeeTask,
+  getWorkOsTaskCreationOptions,
   listWorkOsEmployeeTaskSelection,
   setWorkOsEmployeeTaskCompletion,
   withTimeout,
@@ -38,7 +40,8 @@ const STALENESS_REFRESH_TIMEOUT_MS = 5_000;
 type InterpretedOperation = "record_progress" | "record_blocker" | "complete_task" | "reopen_task" | "create_task"
   | "add_task" | "archive_task" | "delete_task" | "modify_task_description" | "modify_task_status"
   | "add_subtask" | "modify_subtask" | "delete_subtask" | "display_pending_tasks" | "display_overdue_tasks"
-  | "multi_task_add" | "multi_task_edit";
+  | "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete"
+  | "multi_task_log" | "multi_task_reassign" | "plan_import";
 
 /** A batch entry's step. clientId is the agent's stable handle for the item. */
 export interface InterpretedBatchSubtask {
@@ -55,6 +58,8 @@ export interface InterpretedBatchTask {
   description?: string;
   taskGroupId?: string;
   completed?: boolean;
+  assigneePersonId?: string;
+  dueDate?: string;
   subtasks: InterpretedBatchSubtask[];
 }
 
@@ -66,9 +71,13 @@ export interface InterpretedOperationEntry {
   taskGroupId?: string;
   limit?: number;
   tasks?: InterpretedBatchTask[];
+  /** plan_import only: which blueprint to materialize, and how to name it. */
+  blueprintId?: string;
+  clientName?: string;
+  startDate?: string;
 }
 
-const BATCH_OPERATIONS = ["multi_task_add", "multi_task_edit"];
+const BATCH_OPERATIONS = ["multi_task_add", "multi_task_edit", "multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign"];
 const BATCH_TASK_LIMIT = 20;
 const BATCH_ITEM_LIMIT = 40;
 const BATCH_DESCRIPTION_LIMIT = 20_000;
@@ -92,6 +101,8 @@ function interpretedBatchTasks(op: InterpretedOperation, value: unknown): Interp
     const rawTaskGroupId = text(entry.task_group_id);
     const taskGroupId = rawTaskGroupId ? rawTaskGroupId.slice(0, 160) : undefined;
     const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
+    const rawDue = text(entry.due_date)?.slice(0, 10);
+    const dueDate = rawDue && /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? rawDue : undefined;
     const subtasks: InterpretedBatchSubtask[] = [];
     if (Array.isArray(entry.subtasks)) {
       for (const rawSubtask of entry.subtasks.slice(0, BATCH_TASK_LIMIT)) {
@@ -111,6 +122,14 @@ function interpretedBatchTasks(op: InterpretedOperation, value: unknown): Interp
     }
     if (op === "multi_task_add") {
       if (!taskId && !title) continue;
+    } else if (op === "multi_task_edit") {
+      if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) continue;
+    } else if (op === "multi_task_log") {
+      if (!taskId || !description) continue;
+    } else if (op === "multi_task_archive" || op === "multi_task_delete" || op === "multi_task_reassign") {
+      // Named targets only. (Spelled out so the outbox test's source slice,
+      // which anchors on the single-proposal guard below, is not confused.)
+      if (taskId === null || taskId === undefined || taskId === "") continue;
     } else if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) {
       continue;
     }
@@ -126,6 +145,8 @@ function interpretedBatchTasks(op: InterpretedOperation, value: unknown): Interp
       description,
       taskGroupId,
       completed,
+      assigneePersonId: text(entry.assignee_person_id)?.slice(0, 80) ?? undefined,
+      dueDate,
       subtasks,
     });
   }
@@ -144,15 +165,18 @@ export function interpretedOperations(value: unknown): InterpretedOperationEntry
     const taskTitle = text(row.task_title);
     const taskGroupId = text(row.task_group_id);
     const limit = Math.min(100, Math.max(1, Math.trunc(Number(row.limit) || 20)));
-    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "multi_task_add", "multi_task_edit"].includes(op) || !statement || statement.length > 1000) {
+    if (!op || !["record_progress", "record_blocker", "complete_task", "reopen_task", "create_task", "add_task", "archive_task", "delete_task", "modify_task_description", "modify_task_status", "add_subtask", "modify_subtask", "delete_subtask", "display_pending_tasks", "display_overdue_tasks", "multi_task_add", "multi_task_edit", "multi_task_archive", "multi_task_delete", "multi_task_log", "multi_task_reassign", "plan_import"].includes(op) || !statement || statement.length > 1000) {
       throw new Error(`Proposed update ${index + 1} is invalid`);
     }
     const batch = BATCH_OPERATIONS.includes(op);
-    if (!batch && !["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
+    if (!batch && op !== "plan_import" && !["create_task", "add_task", "display_pending_tasks", "display_overdue_tasks"].includes(op) && !taskId) throw new Error(`Proposed update ${index + 1} requires a task`);
     if (["create_task", "add_task", "add_subtask"].includes(op) && (taskTitle ?? statement).length > 240) throw new Error("Task title must be 240 characters or fewer");
     if (op === "modify_task_status" && !taskGroupId) throw new Error("task_group_id is required for a Nifty status move");
     const tasks = batch ? interpretedBatchTasks(op, row.tasks) : undefined;
     if (batch && !tasks?.length) throw new Error(`Proposed update ${index + 1} carries no tasks`);
+    const blueprintId = text(row.blueprint_id)?.slice(0, 80) ?? undefined;
+    if (op === "plan_import" && !blueprintId) throw new Error(`Proposed update ${index + 1} requires a blueprint`);
+    const rawStart = text(row.start_date)?.slice(0, 10);
     return {
       op,
       statement,
@@ -161,6 +185,11 @@ export function interpretedOperations(value: unknown): InterpretedOperationEntry
       taskGroupId: taskGroupId ?? undefined,
       limit,
       tasks,
+      ...(op === "plan_import" ? {
+        blueprintId,
+        clientName: text(row.client_name)?.slice(0, 120) ?? undefined,
+        startDate: rawStart && /^\d{4}-\d{2}-\d{2}$/.test(rawStart) ? rawStart : undefined,
+      } : {}),
     };
   });
 }
@@ -174,13 +203,15 @@ export interface PreparedProposal {
   /** Grouping metadata for a batch child; null for a standalone operation. */
   batch: {
     id: string;
-    kind: "multi_task_add" | "multi_task_edit";
+    kind: "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete" | "multi_task_log" | "multi_task_reassign";
     index: number;
     clientId: string;
     parentClientId?: string;
   } | null;
   taskId?: string;
   taskGroupId?: string;
+  /** A reassignment names the person; the filing loop resolves their member id. */
+  assigneePersonId?: string;
   /** The stored proposed_change, built here so singles keep their exact shape. */
   change: Json;
 }
@@ -225,9 +256,9 @@ function singleOperationChange(operation: InterpretedOperationEntry): Json {
 export function prepareProposals(operations: InterpretedOperationEntry[]): PreparedProposal[] {
   const prepared: PreparedProposal[] = [];
   operations.forEach((operation, clientOperationIndex) => {
-    if (operation.op === "multi_task_add" || operation.op === "multi_task_edit") {
+    if (BATCH_OPERATIONS.includes(operation.op)) {
       const id = randomUUID();
-      const kind = operation.op;
+      const kind = operation.op as "multi_task_add" | "multi_task_edit" | "multi_task_archive" | "multi_task_delete" | "multi_task_log" | "multi_task_reassign";
       let batchIndex = 0;
       const group = (clientId: string, parentClientId?: string) => ({
         id,
@@ -237,6 +268,41 @@ export function prepareProposals(operations: InterpretedOperationEntry[]): Prepa
         ...(parentClientId ? { parentClientId } : {}),
       });
       for (const task of operation.tasks ?? []) {
+        // The archive / delete / log / reassign tools act on existing tasks only,
+        // each on its own existing write path.
+        if (kind === "multi_task_archive" || kind === "multi_task_delete") {
+          prepared.push({
+            providerOperation: kind === "multi_task_archive" ? "archive_task" : "delete_task",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            taskId: task.taskId,
+            change: {},
+          });
+          continue;
+        }
+        if (kind === "multi_task_log") {
+          prepared.push({
+            providerOperation: "log_progress",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            taskId: task.taskId,
+            change: { summary: task.description },
+          });
+          continue;
+        }
+        if (kind === "multi_task_reassign") {
+          // The Nifty member id is resolved in the filing loop, where the
+          // caller's allowed people are already loaded.
+          prepared.push({
+            providerOperation: "update_task",
+            clientOperationIndex,
+            batch: group(task.clientId),
+            taskId: task.taskId,
+            assigneePersonId: task.assigneePersonId,
+            change: {},
+          });
+          continue;
+        }
         if (kind === "multi_task_add" && task.taskId) {
           // Steps attached to a task that already exists: the parent is known.
           for (const subtask of task.subtasks) {
@@ -258,6 +324,7 @@ export function prepareProposals(operations: InterpretedOperationEntry[]): Prepa
             change: {
               name: task.title,
               ...(task.description ? { description: task.description } : {}),
+              ...(task.dueDate ? { due_date: task.dueDate } : {}),
               task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5",
             },
           });
@@ -686,6 +753,51 @@ async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: st
   if (!data?.length) throw new Error("A status move requires an existing status column for this project.");
 }
 
+/** Resolves the person a batch reassignment names, scoped to the people this
+ * caller may assign to (themselves, or anyone when they are an administrator). */
+async function resolveBatchAssignee(access: WorkOsAccess, personId: string): Promise<string> {
+  const options = await getWorkOsTaskCreationOptions(access);
+  if (!options.people.some((person) => person.id === personId)) {
+    throw new Error("You can only assign work to yourself unless you are an administrator.");
+  }
+  const { data, error } = await db().from("work_people").select("nifty_member_id")
+    .eq("organization_id", access.organizationId).eq("id", personId).maybeSingle();
+  if (error) throw new Error(`resolve assignee: ${error.message}`);
+  const memberId = text(data?.nifty_member_id);
+  if (!memberId) throw new Error("That person has no Nifty member mapping.");
+  return memberId;
+}
+
+/** Turns a plan_import into the same add-batch payload the assistant uses for
+ * hand-written tasks, so it files through the identical per-item path. */
+async function planImportTasks(ownerId: string, operation: InterpretedOperationEntry) {
+  const { data: blueprint, error } = await db().from("work_blueprints").select("*")
+    .eq("user_id", ownerId).eq("id", operation.blueprintId as string).maybeSingle();
+  if (error) throw new Error(`load blueprint: ${error.message}`);
+  if (!blueprint) throw new Error("That blueprint is no longer available.");
+  const phases = Array.isArray(blueprint.phases) ? blueprint.phases as Array<{ name?: string; tasks?: Array<{ name?: string; offsetDays?: number; evidence?: string[] }> }> : [];
+  const clientName = operation.clientName ?? null;
+  const start = operation.startDate ?? null;
+  const tasks = [] as NonNullable<InterpretedOperationEntry["tasks"]>;
+  let index = 0;
+  for (const phase of phases) {
+    for (const item of phase.tasks ?? []) {
+      const name = item.name ?? "Onboarding task";
+      const evidence = (item.evidence ?? []).filter(Boolean);
+      tasks.push({
+        clientId: `b${index}`,
+        title: (clientName ? `${clientName}: ${name}` : name).slice(0, 240),
+        description: [`Blueprint: ${String(blueprint.name ?? "Blueprint")}`, `Phase: ${phase.name ?? "General"}`, evidence.length ? `Required evidence: ${evidence.join(", ")}` : null].filter(Boolean).join("\n"),
+        ...(start ? { dueDate: addDaysIso(start, Number(item.offsetDays ?? 0)) } : {}),
+        subtasks: evidence.map((step, stepIndex) => ({ clientId: `b${index}s${stepIndex}`, title: step.slice(0, 240) })),
+      });
+      index += 1;
+    }
+  }
+  if (!tasks.length) throw new Error("That blueprint has no tasks to import.");
+  return tasks;
+}
+
 /** Stores an assistant interpretation for review. This endpoint creates no
  * task mutation; only a later accepted proposal can apply one.
  *
@@ -706,7 +818,25 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
   const proposals: Array<Json & { client_operation_index: number }> = [];
   const failures: Array<{ client_operation_index: number; error: string }> = [];
   const resolved = new Map<string, Json>();
-  const prepared = prepareProposals(operations);
+  // A plan import is materialized from its blueprint before expansion, so it
+  // files through the same add-batch path as hand-written tasks. A blueprint
+  // that cannot be read fails that operation only.
+  const expanded: InterpretedOperationEntry[] = [];
+  for (const [clientOperationIndex, operation] of operations.entries()) {
+    if (operation.op !== "plan_import") {
+      expanded.push(operation);
+      continue;
+    }
+    try {
+      expanded.push({ ...operation, op: "multi_task_add", tasks: await planImportTasks(ownerId, operation) });
+    } catch (error) {
+      failures.push({
+        client_operation_index: clientOperationIndex,
+        error: error instanceof Error && error.message ? error.message : "That blueprint could not be imported.",
+      });
+    }
+  }
+  const prepared = prepareProposals(expanded);
   for (const [index, item] of prepared.entries()) {
     try {
       const operationKey = `${idempotencyKey}:${index}`;
@@ -753,7 +883,9 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
         task_group_id: task.task_group_id,
         parent_provider_task_id: task.parent_provider_task_id,
       } : {};
-      const proposedChange: Json = item.change;
+      const proposedChange: Json = item.assigneePersonId
+        ? { ...item.change, assignees: [await resolveBatchAssignee(access, item.assigneePersonId)] }
+        : item.change;
       const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
         organization_id: access.organizationId,
         person_id: personId,
