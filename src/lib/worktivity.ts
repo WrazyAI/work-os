@@ -8,6 +8,8 @@
 // Rate limits (enforced by Worktivity): 5/sec, 100/min, 1000/hour — which is why
 // the route handlers cache responses for a few seconds and coalesce.
 
+import { localDayBounds } from "@/modules/work-os/companion";
+
 const BASE = "https://open-api.useworktivity.com";
 const MAX_RETRIES = 5;
 
@@ -145,16 +147,28 @@ const SCREENSHOT_MAX_PAGES = 8;
 const SCREENSHOT_DAY_CACHE_MS = 90_000;
 const screenshotDayCache = new Map<string, { at: number; frames: WtScreenshot[] }>();
 
-/** Keeps only frames captured inside the requested UTC day. Exported so the
- * day boundary is unit-tested independently of the provider. */
-export function framesWithinDay<T extends { CaptureDate?: string | null; CreateDate?: string | null }>(frames: T[], date: string): T[] {
-  const start = Date.parse(`${date}T00:00:00.000Z`);
-  const end = Date.parse(`${date}T23:59:59.999Z`);
+/** Keeps only frames captured inside a half-open [start, end) instant range. */
+export function framesWithinBounds<T extends { CaptureDate?: string | null; CreateDate?: string | null }>(
+  frames: T[],
+  bounds: { startIso: string; endIso: string },
+): T[] {
+  const start = Date.parse(bounds.startIso);
+  const end = Date.parse(bounds.endIso);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
   return frames.filter((frame) => {
     const at = Date.parse(frame.CaptureDate || frame.CreateDate || "");
-    return Number.isFinite(at) && at >= start && at <= end;
+    return Number.isFinite(at) && at >= start && at < end;
   });
+}
+
+/** Keeps only frames captured inside the employee's local calendar day.
+ * Exported so the day boundary is unit-tested independently of the provider. */
+export function framesWithinDay<T extends { CaptureDate?: string | null; CreateDate?: string | null }>(
+  frames: T[],
+  date: string,
+  timezone = "UTC",
+): T[] {
+  return framesWithinBounds(frames, localDayBounds(date, timezone));
 }
 
 function shiftIsoDate(date: string, days: number): string {
@@ -166,9 +180,10 @@ function shiftIsoDate(date: string, days: number): string {
 /** Screenshots live on the dedicated /Screenshots/List endpoint — the
  * /ActivityLogs/List Screenshot field stays null for this organization. The
  * provider has ignored narrow filters at page boundaries before, so filter by
- * employee and by day client-side and dedupe by ID. */
-export async function fetchScreenshotsForDay(employeeId: string, date: string): Promise<WtScreenshot[]> {
-  const cacheKey = `${employeeId}:${date}`;
+ * employee and by local day client-side and dedupe by ID. The timezone is part
+ * of the cache key because it defines the day's boundaries. */
+export async function fetchScreenshotsForDay(employeeId: string, date: string, timezone = "UTC"): Promise<WtScreenshot[]> {
+  const cacheKey = `${employeeId}:${date}:${timezone}`;
   const cached = screenshotDayCache.get(cacheKey);
   if (cached && Date.now() - cached.at < SCREENSHOT_DAY_CACHE_MS) return cached.frames;
 
@@ -195,7 +210,7 @@ export async function fetchScreenshotsForDay(employeeId: string, date: string): 
     if (page <= pageCount && page <= SCREENSHOT_MAX_PAGES) await sleep(emptyPages ? 400 : 250);
   } while (page <= pageCount && page <= SCREENSHOT_MAX_PAGES && emptyPages < 2);
 
-  const frames = framesWithinDay([...collected.values()], date).sort((left, right) =>
+  const frames = framesWithinDay([...collected.values()], date, timezone).sort((left, right) =>
     String(left.CaptureDate || left.CreateDate).localeCompare(String(right.CaptureDate || right.CreateDate)));
   screenshotDayCache.set(cacheKey, { at: Date.now(), frames });
   if (screenshotDayCache.size > 40) {

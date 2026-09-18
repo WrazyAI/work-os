@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { INTERPRET_MODEL } from "@/lib/aiInterpret";
 import { db } from "@/lib/work-os-internal";
-import { zonedDateTimeToUtc } from "@/modules/work-os/companion";
+import { personTimezone } from "@/lib/work-os-screenshots";
+import { localDayBounds } from "@/modules/work-os/companion";
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const HOUR_SUMMARY_TIMEOUT_MS = 45_000;
@@ -220,20 +221,12 @@ function fallbackSummary(group: ScreenshotHourGroup): string {
 function localDayUtcBounds(date: string, timezone: string) {
   const nextDate = new Date(new Date(`${date}T12:00:00Z`).getTime() + 24 * 60 * 60_000).toISOString().slice(0, 10);
   try {
-    const start = zonedDateTimeToUtc(date, "00:00:00", timezone || "UTC").toISOString();
-    const end = zonedDateTimeToUtc(nextDate, "00:00:00", timezone || "UTC").toISOString();
-    if (Date.parse(start) < Date.parse(end)) return { start, end };
+    const bounds = localDayBounds(date, timezone || "UTC");
+    if (Date.parse(bounds.startIso) < Date.parse(bounds.endIso)) return { start: bounds.startIso, end: bounds.endIso };
   } catch {
     // fall through to the UTC day
   }
   return { start: `${date}T00:00:00.000Z`, end: `${nextDate}T00:00:00.000Z` };
-}
-
-async function personTimezone(organizationId: string, personId: string) {
-  const { data, error } = await db().from("work_employee_onboarding").select("timezone")
-    .eq("organization_id", organizationId).eq("person_id", personId).maybeSingle();
-  if (error) throw new Error(`load screenshot hour timezone: ${error.message}`);
-  return typeof data?.timezone === "string" && data.timezone ? data.timezone : "UTC";
 }
 
 interface HourCacheRow {
