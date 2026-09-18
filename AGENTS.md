@@ -42,6 +42,14 @@ merges, convergence, and deploys only, and must never hold uncommitted work.
    (`git worktree remove /home/maigreeks/projects/.worktrees/<task-slug>`), or
    keep it only while follow-up work is actively in flight.
 
+**Read the changelog when reconciling.** A rebase or merge can bring in work
+other agents landed before yours. Read `desktop/work-os-companion/CHANGELOG.md`
+(or the latest GitHub release notes when a checkout does not carry it) for what
+changed and why, and skim `git log origin/main` for anything the entries do not
+cover. Reconcile unfamiliar files with that context instead of guessing, and
+call out any interaction with a recent change in the handoff. Add a changelog
+entry when the change is release-facing.
+
 The active Work OS check-in cadence defaults to five minutes. Set
 `WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `1` through `240` to
 override it for a deployment; invalid values fall back to five minutes.
