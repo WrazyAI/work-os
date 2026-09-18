@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.23
+
 - Task lists now open sorted by due date, latest first, with open work above completed work.
 - The Activity sort option is gone; Task, Status, Due, and Priority remain.
 - The dashboard's older-work count no longer includes tasks that are already on today's plan.
