@@ -13,6 +13,35 @@ Before starting each new task or agenda, sync the working branch with the latest
 merge its completed work into `main` before starting another task or agenda.
 Do not carry unmerged completed work into unrelated follow-up work.
 
+### Worktree isolation — hard requirement
+
+Every agent **must** make its changes in a dedicated git worktree branched from
+the latest `main`. Never edit a shared checkout
+(`/home/maigreeks/projects/work-os`, `/home/maigreeks/projects/agent-os-main`,
+or another agent's worktree) — parallel agents editing one checkout is what
+swept files into unrelated commits and raced builds. Shared checkouts are for
+merges, convergence, and deploys only, and must never hold uncommitted work.
+
+1. Create the worktree before the first edit:
+   ```bash
+   git fetch origin
+   git worktree add /home/maigreeks/projects/.worktrees/<task-slug> -b codex/<task-slug> origin/main
+   ```
+2. Link dependencies from an existing worktree instead of installing
+   (`npm install` while a server runs corrupts the Turbopack cache):
+   ```bash
+   ln -s /home/maigreeks/projects/.worktrees/<existing>/node_modules \
+         /home/maigreeks/projects/.worktrees/<task-slug>/node_modules
+   ```
+3. Do all edits, tests, and commits in the worktree.
+4. Rebase on the latest `main` immediately before pushing; push the verified
+   work into `main` (`git push origin HEAD:main`) and converge shared files into
+   the other repository per the cross-repo rules.
+5. Deploy only after the merge, following the deploy section.
+6. Remove the worktree once its work is merged
+   (`git worktree remove /home/maigreeks/projects/.worktrees/<task-slug>`), or
+   keep it only while follow-up work is actively in flight.
+
 The active Work OS check-in cadence defaults to five minutes. Set
 `WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `1` through `240` to
 override it for a deployment; invalid values fall back to five minutes.
