@@ -444,7 +444,9 @@ export async function summarizeWorktivityScreenshots(
         metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
         updated_at: new Date().toISOString(),
       }).eq("id", event.id);
-      await mirrorSummary(access, personId, event.id, log.CreateDate, observation.summary, MODEL, timezone);
+      // The capture instant, not the provider's create date, decides the
+      // evidence day — the same value the evidence event is recorded with.
+      await mirrorSummary(access, personId, event.id, captureAt(log), observation.summary, MODEL, timezone);
       results.push(data);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Screenshot analysis failed";

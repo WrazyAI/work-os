@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { localDayBounds } from "../src/modules/work-os/companion";
+import { localDateForTimezone, localDayBounds } from "../src/modules/work-os/companion";
 import { framesWithinDay } from "../src/lib/worktivity";
 
 const root = new URL("../", import.meta.url);
@@ -33,10 +33,21 @@ test("local day bounds are local-midnight to local-midnight, half-open", () => {
   });
   // Invalid inputs degrade instead of throwing mid-run.
   assert.deepEqual(localDayBounds("not-a-date", "UTC"), { startIso: "", endIso: "" });
+  assert.deepEqual(localDayBounds("2026-02-30", "UTC"), { startIso: "", endIso: "" });
   assert.deepEqual(localDayBounds("2026-09-15", "Not/AZone"), {
     startIso: "2026-09-15T00:00:00.000Z",
     endIso: "2026-09-16T00:00:00.000Z",
   });
+});
+
+test("a DST-skipped local midnight still starts on the requested local day", () => {
+  // Santiago starts DST at 00:00 on 2026-09-06: local midnight does not exist.
+  const bounds = localDayBounds("2026-09-06", "America/Santiago");
+  assert.equal(bounds.startIso, "2026-09-06T04:00:00.000Z", "first valid instant of the local day");
+  assert.ok(Date.parse(bounds.startIso) < Date.parse(bounds.endIso));
+  assert.equal(localDateForTimezone(new Date(bounds.startIso), "America/Santiago"), "2026-09-06");
+  // The previous local day must not leak into the window.
+  assert.equal(localDateForTimezone(new Date(Date.parse(bounds.startIso) - 1), "America/Santiago"), "2026-09-05");
 });
 
 test("frames are kept by local day, so near-midnight frames stay with the workday", () => {
@@ -84,7 +95,7 @@ test("screenshot processing derives every day window from the local bounds", asy
   const eod = await source("src/lib/work-os-eod.ts");
   assert.match(eod, /listEodScreenshots\(access\.organizationId, personId, reportDate, timezone\)/, "the draft gallery resolves the employee's local day");
   assert.match(lib, /const bounds = localDayBounds\(date, timezone \?\? await personTimezone\(organizationId, personId\)\)/);
-  assert.match(lib, /mirrorSummary\(access, personId, event\.id, log\.CreateDate, observation\.summary, MODEL, timezone\)/);
+  assert.match(lib, /mirrorSummary\(access, personId, event\.id, captureAt\(log\), observation\.summary, MODEL, timezone\)/, "the mirror day follows the capture instant, not the provider create date");
   assert.match(lib, /localDateForTimezone\(capturedAt, timezone\)/);
   assert.match(lib, /summarizeWorktivityScreenshots\(access, row\.person_id as string, shiftDate, \{ timezone \}\)/);
   assert.match(lib, /summarizeWorktivityScreenshots\(access, person\.id, localDate, \{ maxScreenshots: cap, timezone \}\)/);

@@ -263,17 +263,35 @@ export function localDateForTimezone(at: Date, timezone: string) {
  * frame captured near local midnight belongs to the employee's workday rather
  * than to whichever UTC date it happens to fall in. */
 export function localDayBounds(date: string, timezone: string): { startIso: string; endIso: string } {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { startIso: "", endIso: "" };
+  if (!isCalendarDate(date)) return { startIso: "", endIso: "" };
   const next = dateOnlyAfter(date);
   try {
-    return {
-      startIso: zonedDateTimeToUtc(date, "00:00", timezone || "UTC").toISOString(),
-      endIso: zonedDateTimeToUtc(next, "00:00", timezone || "UTC").toISOString(),
-    };
+    const start = startOfLocalDay(date, timezone || "UTC");
+    const end = startOfLocalDay(next, timezone || "UTC");
+    if (start.getTime() < end.getTime()) return { startIso: start.toISOString(), endIso: end.toISOString() };
   } catch {
     // An unknown timezone must not fail the run; keep the day usable in UTC.
-    return { startIso: `${date}T00:00:00.000Z`, endIso: `${next}T00:00:00.000Z` };
   }
+  return { startIso: `${date}T00:00:00.000Z`, endIso: `${next}T00:00:00.000Z` };
+}
+
+/** Rejects dates the regex accepts but the calendar does not (2026-02-30). */
+function isCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const at = new Date(Date.UTC(year, month - 1, day));
+  return at.getUTCFullYear() === year && at.getUTCMonth() === month - 1 && at.getUTCDate() === day;
+}
+
+/** The first instant whose local date is `date`. Some zones skip local
+ * midnight on DST-start days (America/Santiago); the naive conversion then
+ * lands on the previous local day, so walk forward to the real boundary. */
+function startOfLocalDay(date: string, timezone: string): Date {
+  let candidate = zonedDateTimeToUtc(date, "00:00", timezone);
+  for (let attempt = 0; attempt < 8 && localDateForTimezone(candidate, timezone) !== date; attempt += 1) {
+    candidate = new Date(candidate.getTime() + 15 * 60_000);
+  }
+  return candidate;
 }
 
 function dateOnlyAfter(date: string) {
