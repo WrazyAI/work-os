@@ -111,6 +111,16 @@ describe("EodComposer review surface", () => {
     expect(markup).toContain("0 screenshot samples analyzed for this day · 6 still analyzing");
   });
 
+  it("explains when the provider has no screenshots for the day", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      screenshotGallery: { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, total: 0, viewable: [] },
+      screenshotNotice: "Worktivity has no retrievable screenshots for this day.",
+    }));
+    expect(markup).toContain("Screenshot context: Worktivity has no retrievable screenshots for this day.");
+    expect(markup).not.toContain("eod-screenshot-context");
+  });
+
   const submitButton = (markup: string) => markup.match(/<button class="primary"[^>]*>Submit EOD<\/button>/)?.[0] ?? "";
 
   it("unlocks Submit when the reason was written in the report draft", () => {
