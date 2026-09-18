@@ -8,9 +8,10 @@ import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay, fetchTaskDetails } from "./workOsQueries";
-import { isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, fileApprovedOperations, partialFilingMessage, toolCallKey, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
+import { BatchApprovalCards } from "./TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
@@ -38,6 +39,7 @@ function proposalFilingTransport() {
   return {
     reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
     readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
+    reviewBatch: (batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown> }> }) => apiRequest(`/api/work-os/proposal-batches/${encodeURIComponent(batchId)}`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) }),
   };
 }
 
@@ -571,17 +573,17 @@ export default function AvatarApp(): React.ReactElement {
       }
       setThinkingTrace({ stages, active: 2, startedAt });
       const mutating = review.operations.map((op, index) => ({ op, index })).filter(({ op }) => isMutatingToolOp(op));
-      const proposals = mutating.length ? await apiRequest<{ proposals: Array<{ id: string; client_operation_index: number }> }>("/api/work-os/me/proposals", {
+      const proposals = mutating.length ? await apiRequest<{ proposals: FiledProposalRow[] }>("/api/work-os/me/proposals", {
         method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit })) }),
-      }) : { proposals: [] };
+        body: JSON.stringify({ input_text: text, operations: mutating.map(({ op }) => ({ op: op.op, statement: op.statement, task_id: op.taskId, task_title: op.taskTitle, task_group_id: op.taskGroupId, limit: op.limit, tasks: op.tasks ?? null })) }),
+      }) : { proposals: [] as FiledProposalRow[] };
       // A filed check-in clears the recorded-update prompt immediately so the
       // banner and the task-context card disappear without waiting for the poll.
       if (review.operations.some((operation) => operation.op === "record_progress" || operation.op === "record_blocker")) {
         setFacts((current) => clearRecordedUpdatePrompt(current));
       }
-      const proposalIdByOriginal = new Map(proposals.proposals.map((proposal) => [mutating[proposal.client_operation_index]?.index, proposal.id]));
-      const operations = review.operations.map((op, index) => ({ ...op, enabled: isMutatingToolOp(op), proposalId: proposalIdByOriginal.get(index) }));
+      const filedByOriginal = filedProposalGroups(proposals.proposals, (clientOperationIndex) => mutating[clientOperationIndex]?.index);
+      const operations = review.operations.map((op, index) => ({ ...attachFiledProposals(op, filedByOriginal.get(index) ?? []), enabled: isMutatingToolOp(op) }));
       // Read-only display tools fetch immediately — viewing tasks mutates
       // nothing, so there is nothing to approve.
       const displayResults: ToolCallResult[] = [];
@@ -617,6 +619,7 @@ export default function AvatarApp(): React.ReactElement {
         approved.length ? fileApprovedOperations(approved.map((op) => ({ ...op, enabled: true })), proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
+            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }) });
             // A 200 is not proof of rejection: the action may already have
@@ -1183,14 +1186,24 @@ export default function AvatarApp(): React.ReactElement {
                               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
                               return null;
                             })}
-                            {entry.operations.some(isMutatingToolOp) ? <ApprovalFlow
-                              operations={entry.operations}
+                            {entry.operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op)) ? <ApprovalFlow
+                              operations={entry.operations.filter((op) => !isBatchToolOp(op))}
                               results={entry.toolResults}
                               context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}
                               busy={filing}
                               onSubmit={(approved, rejected) => void approveOperations(entry.id, approved, rejected)}
                               onRetry={(result) => retryOperation(entry.id, result)}
                             /> : null}
+                            <BatchApprovalCards
+                              operations={entry.operations.filter((op) => isMutatingToolOp(op) && isBatchToolOp(op))}
+                              results={entry.toolResults ?? []}
+                              busy={filing}
+                              context={{ shiftDate: facts.shiftDate || null, personId: facts.personId, promptKind: "optional" }}
+                              collapseWhenInactive={entryIndex < allEntries.length - 1}
+                              onApprove={(op) => void approveOperations(entry.id, [op], [])}
+                              onSkip={(op) => void approveOperations(entry.id, [], [op])}
+                              onRetry={(result) => retryOperation(entry.id, result)}
+                            />
                           </div>
                         ) : null}
                       </ChatTurn>

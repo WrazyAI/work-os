@@ -6717,3 +6717,223 @@ button:not(:disabled):active {
   outline: 2px solid #d4493f;
   outline-offset: 2px;
 }
+
+/* Batch task card: several tasks and steps, one decision. It borrows the plan
+   draft's document language (numbered entries, hairlines, an editable canvas)
+   because it shows the same kind of structured change, but it is its own card:
+   it files through the batches endpoint and approves in two steps. */
+.task-batch-card {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fdfdf9;
+}
+
+.task-batch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-batch-head > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.task-batch-head small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.task-batch-head strong { font-size: 13px; }
+.task-batch-head-actions { display: flex; align-items: center; gap: 6px; }
+.task-batch-collapsed-mark { transform: rotate(-90deg); }
+
+.task-batch-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+.task-batch-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+}
+
+.task-batch-list > li > article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.task-batch-list > li:first-child > article { border-top: 0; padding-top: 2px; }
+.task-batch-list > li > article > div { display: grid; gap: 5px; min-width: 0; }
+.task-batch-list h3 { margin: 0; font-size: 12.5px; line-height: 1.35; }
+.task-batch-list p { margin: 0; color: #55584f; font-size: 11px; line-height: 1.5; }
+
+.task-batch-entry-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.task-batch-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eceada;
+  color: #5f6358;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.task-batch-outcome {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.task-batch-outcome.ok { background: #ddf6bf; color: #34591a; }
+.task-batch-outcome.pending { background: #f6e3b5; color: #6d4d0c; }
+.task-batch-outcome.failed { background: #f7d3cb; color: #8e3a2f; }
+
+.task-batch-title,
+.task-batch-description {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 1px 0;
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
+
+.task-batch-title { font-size: 12.5px; font-weight: 600; }
+.task-batch-description { font-size: 11px; line-height: 1.5; color: #55584f; }
+
+.task-batch-card.is-editing .task-batch-title:hover,
+.task-batch-card.is-editing .task-batch-description:hover { border-bottom-color: #d9d8cc; }
+
+.task-batch-card.is-editing .task-batch-title:focus,
+.task-batch-card.is-editing .task-batch-description:focus { border-bottom-color: var(--signal); outline: none; }
+
+.task-batch-card.is-editing .task-batch-title:focus-visible,
+.task-batch-card.is-editing .task-batch-description:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+.task-batch-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.task-batch-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.task-batch-status select {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 10.5px;
+  color: var(--ink);
+}
+
+.task-batch-entry-message { color: #8e3a2f !important; }
+
+.task-batch-steps {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+}
+
+.task-batch-steps > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid #efeee4;
+}
+
+.task-batch-steps > li > div { display: grid; gap: 4px; min-width: 0; }
+.task-batch-steps strong { font-size: 11.5px; font-weight: 600; }
+.task-batch-step-mark { color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+.task-batch-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #e6c7bd;
+  border-radius: 10px;
+  background: #fdf3ef;
+  color: #5f342c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.task-batch-details { font-size: 10.5px; color: var(--muted); }
+.task-batch-details summary { cursor: pointer; }
+.task-batch-details code { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: #f2f1ea; font-size: 10px; overflow-wrap: anywhere; }
+
+.task-batch-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.task-batch-back-mark { transform: rotate(90deg); }
+
+.task-batch-foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 11.5px;
+}
+
+.task-batch-foot button.primary {
+  border-color: #6ea32c;
+  background: #6ea32c;
+  color: #fff;
+  font-weight: 650;
+}
+
+.task-batch-foot button.secondary { background: #f0efe7; }
+.task-batch-foot button:disabled { opacity: 0.55; }
+
+.task-batch-card.is-filed { background: #fbfbf5; }
+
+@media (max-width: 560px) {
+  .task-batch-list > li > article { grid-template-columns: minmax(0, 1fr); }
+  .task-batch-list > li > article > b { display: none; }
+  .task-batch-foot { justify-content: stretch; }
+  .task-batch-foot button { flex: 1 1 auto; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-batch-collapsed-mark,
+  .task-batch-back-mark { transition: none; }
+}

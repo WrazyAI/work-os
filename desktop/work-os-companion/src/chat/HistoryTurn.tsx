@@ -3,7 +3,8 @@ import { ApprovalFlow, ApprovalResults } from "../ApprovalFlow";
 import { NavigateButton } from "../NavigateButton";
 import { ChatSectionBoundary } from "../ErrorBoundary";
 import type { ApprovedOpContext, ProposedOperation, ToolCallResult } from "../interpretation";
-import { isDisplayToolOp, isMutatingToolOp } from "../interpretation";
+import { isBatchToolOp, isDisplayToolOp, isMutatingToolOp } from "../interpretation";
+import { BatchApprovalCards } from "../TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCardTask } from "../TaskSelectionCard";
 import { ChatTurn } from "./ChatTurn";
 import type { CopyableTurn } from "./turnCopy";
@@ -116,9 +117,9 @@ export function HistoryTurnExtras({
               return null;
             })}
             {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
-            {operations.some(isMutatingToolOp) ? (
+            {operations.some((op) => isMutatingToolOp(op) && !isBatchToolOp(op)) ? (
               <ApprovalFlow
-                operations={operations.filter(isMutatingToolOp)}
+                operations={operations.filter((op) => isMutatingToolOp(op) && !isBatchToolOp(op))}
                 results={results}
                 context={toolContext ?? { shiftDate: null, personId: null, promptKind: "optional" }}
                 busy={busy ?? false}
@@ -126,6 +127,16 @@ export function HistoryTurnExtras({
                 onRetry={onRetryOperation}
               />
             ) : null}
+            <BatchApprovalCards
+              operations={operations.filter((op) => isMutatingToolOp(op) && isBatchToolOp(op) && !op.failure)}
+              results={results}
+              busy={busy ?? false}
+              context={toolContext ?? { shiftDate: null, personId: null, promptKind: "optional" }}
+              collapseWhenInactive={collapseCards}
+              onApprove={(op) => onReviewOperations?.([op], [])}
+              onSkip={(op) => onReviewOperations?.([], [op])}
+              onRetry={onRetryOperation}
+            />
             {unfiled.map((op, index) => <p key={`unfiled-${index}`} className="tool-display-error">{op.taskTitle ? `${op.taskTitle}: ` : ""}{op.failure}</p>)}
           </div>
         ) : null}
