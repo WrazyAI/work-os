@@ -23,6 +23,13 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.26
+
+- Pending task lists now show the newest tasks first, so recent work no longer sits underneath older items.
+- Finished history can no longer crowd the pending list out of view.
+- Checking off a task no longer leaves an empty "No pending tasks" card or repeats the action summary.
+- The Overdue list shows the oldest due dates first again.
+
 ## 0.3.25
 
 - Otto can now archive, delete, log progress on, or hand over several tasks at once, and can import a whole task template in one go.
