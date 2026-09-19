@@ -23,7 +23,7 @@ they change what the employee sees or does.
 
 ## Unreleased
 
-## 0.3.31
+## 0.3.32
 
 - Opening the companion no longer gets stuck behind a copy left over from an earlier session — it clears the dead one and starts.
 - If the app ever fails to open again, it now records the exact stage it stopped at so the cause can be found.
