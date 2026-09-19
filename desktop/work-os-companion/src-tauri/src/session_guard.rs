@@ -12,6 +12,7 @@
 //! older heartbeat, whose process is still around, ends that process before
 //! starting, so a stale instance can never strand the next launch.
 
+use crate::diagnostics::{self, DiagnosticLevel};
 use std::path::PathBuf;
 use tauri::Manager;
 
@@ -53,7 +54,7 @@ pub fn start(app: &tauri::AppHandle) {
                 app,
                 "app.launch.reaped_stale_instance",
                 "Ended a companion process left behind by an earlier run; it had stopped responding and was holding the single-instance lock.",
-                diagnostics::DiagnosticLevel::Warn,
+                DiagnosticLevel::Warn,
             );
         }
     }
