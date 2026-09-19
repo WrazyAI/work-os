@@ -16,6 +16,7 @@ import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, re
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
+import { startInstanceHeartbeat } from "./instanceHeartbeat";
 import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
@@ -2497,6 +2498,14 @@ export default function App() {
         : visibleOnboarding.onboardingRequired ? "boot:onboarding"
           : "boot:workspace_ready";
   useEffect(() => { markBootPhase(bootPhase); }, [bootPhase]);
+
+  // Prove this window is alive so the host can tell a running instance from a
+  // leftover process that died without exiting, which would otherwise swallow
+  // every later launch through the single-instance handoff.
+  useEffect(() => {
+    if (!isTauri()) return;
+    return startInstanceHeartbeat(() => { void invoke("app_heartbeat").catch(() => undefined); });
+  }, []);
 
   if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;

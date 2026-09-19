@@ -1,5 +1,6 @@
 mod debug_window;
 mod diagnostics;
+mod session_guard;
 
 use base64::Engine;
 use rand::RngCore;
@@ -281,6 +282,7 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
+            session_guard::app_heartbeat,
             arm_update_exit_watchdog,
             disarm_update_exit_watchdog,
             notify_focus,
@@ -300,6 +302,11 @@ pub fn run() {
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
             diagnostics::init(app.handle())
                 .map_err(|error| Box::<dyn std::error::Error>::from(error))?;
+            // Reap a predecessor that died without exiting — a tray app left
+            // behind by a shutdown or a hung teardown would otherwise swallow
+            // every later launch through the single-instance handoff — then
+            // record this instance as alive.
+            session_guard::start(app.handle());
             #[cfg(any(target_os = "linux", windows))]
             app.deep_link().register_all()?;
 
@@ -359,11 +366,15 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building Work OS Companion")
-        .run(|_app, event| {
-            // Arm the terminate watchdog when the process begins exiting so a
-            // hung detach (WebView2/COM) can never outlive the exit request.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                arm_exit_watchdog(4);
+        .run(|app, event| {
+            match event {
+                // Arm the terminate watchdog when the process begins exiting so
+                // a hung detach (WebView2/COM) can never outlive the exit
+                // request.
+                tauri::RunEvent::ExitRequested { .. } => arm_exit_watchdog(4),
+                // A clean exit leaves nothing for the next launch to reap.
+                tauri::RunEvent::Exit => session_guard::clear(app),
+                _ => {}
             }
         });
 }
