@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.33
+
+- Checking off a task no longer makes the list jump while it saves: the checkbox spins in place and the finished row leaves in one smooth motion.
+- Adding a task draws it straight into the list without the rows sliding up and down while the server confirms it.
+
 ## 0.3.32
 
 - Opening the companion no longer gets stuck behind a copy left over from an earlier session — it clears the dead one and starts.

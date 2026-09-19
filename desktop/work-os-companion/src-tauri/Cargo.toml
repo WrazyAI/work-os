@@ -1,6 +1,6 @@
 [package]
 name = "work-os-companion"
-version = "0.3.32"
+version = "0.3.33"
 
 description = "WrazyOS employee companion"
 authors = ["Wrazy"]
