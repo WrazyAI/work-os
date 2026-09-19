@@ -1448,6 +1448,17 @@
     align-items: flex-start;
   }
 
+  /* The index circles intentionally disappear at compact widths. Collapse
+     the matching grid column as well, otherwise the entry body remains in the
+     old 30px track and every title/description wraps into a thin strip. */
+  [data-workos-tool-surface="batch"] .task-batch-list > li > article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-workos-tool-surface="batch"] .task-batch-list > li > article > b {
+    display: none;
+  }
+
   [data-workos-tool-surface="batch"] .task-batch-head-actions {
     max-width: 46%;
   }
