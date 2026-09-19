@@ -2014,11 +2014,19 @@ checkbox until the server confirms; every other row stays interactive while the
 write is in flight (the shared busy flag never disables checkboxes). On success
 the row plays a short exit and leaves its list, the rows below shift into place
 instead of jumping, and the change lands without a refresh; on failure the
-checkbox is restored and the row stays with the usual error notice. New tasks
-appear instantly as a pending row, and the add-task composer plays its exit
-before it unmounts so the list shifts behind a closing modal. Every part of
-this motion is removed under `prefers-reduced-motion`, which still removes the
-row and updates the list.
+checkbox is restored and the row stays with the usual error notice.
+
+**List motion is layout-true and single-shot.** A shift measures the rows'
+layout positions (`offsetTop`/`offsetLeft`), never a transform-inclusive
+rectangle, and plays only when the list's row membership actually changes —
+an unrelated render (a spinner, a menu, a cache patch that keeps the same rows)
+must never restart it. A previous shift on a row is cancelled before a new one
+starts, and a row playing its exit is left to that animation. Optimistic adds
+are cache rows from the start: the server record replaces the pending row in
+the same slot, so the list never loses and regains a row around a task that
+never moved. The add-task composer plays its exit before it unmounts. Every
+part of this motion is removed under `prefers-reduced-motion`, which still
+removes the row and updates the list.
 
 **Counts describe their lists.** Every hero number, tab count, chip count, and
 section count derives from the same rendered array it heads, or from the server

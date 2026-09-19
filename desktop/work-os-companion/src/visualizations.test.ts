@@ -15,6 +15,7 @@ const insightMath = readFileSync(resolve(root, "src/insights.ts"), "utf8");
 const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
 const memoryPanel = readFileSync(resolve(root, "src/MemorySettings.tsx"), "utf8");
 const memoryStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
+const listShift = readFileSync(resolve(root, "src/listShift.ts"), "utf8");
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
@@ -122,6 +123,25 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).not.toContain(".progress-ticks");
     expect(workspaceStyles).toContain(".progress-ring-fill");
     expect(workspaceStyles).toContain("transition: stroke-dashoffset");
+  });
+
+  it("measures list shifts from layout positions and plays them once per membership change", () => {
+    // A transform-inclusive rectangle re-records the from-keyframe position at
+    // animation time 0, which made every later render replay the shift.
+    expect(listShift).toContain("element.offsetTop");
+    expect(listShift).toContain("element.offsetLeft");
+    expect(listShift).not.toContain(".getBoundingClientRect(");
+    // Only a real membership change animates; unrelated renders never restart it.
+    expect(listShift).toContain("signature.current !== keys");
+    expect(listShift).toContain("cancelListShift");
+    expect(listShift).toContain('classList.contains("is-leaving")');
+  });
+
+  it("swaps an optimistic task into its slot instead of dropping and re-adding the row", () => {
+    expect(app).toContain("replaceTaskInCaches");
+    expect(app).toContain("insertPendingTaskIntoCaches");
+    expect(app).not.toContain("unstable_batchedUpdates");
+    expect(app).not.toContain("flushSync");
   });
 
   it("animates the composer closed and refreshes the open lists after an add", () => {

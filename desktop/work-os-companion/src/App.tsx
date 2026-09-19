@@ -181,7 +181,7 @@ export default function App() {
   const [eodListOpen, setEodListOpen] = useState(false);
   const [eodDate, setEodDate] = useState<string | null>(null);
   const interpretationTaskOptions = () => {
-    const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true);
+    const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true && !task.pending_status);
     // The interpreter returns Work OS local IDs. Keep that canonical identifier
     // through review and approval so completion proposals are never dropped.
     return rows.map((task) => ({ id: String(task.id), title: String(task.title ?? "Untitled task") }));
@@ -474,6 +474,25 @@ export default function App() {
     });
   }, [queryClient]);
 
+  /** Swap a pending row for the server row in the same slot, so the list
+   * never loses or gains a row while the swap happens. */
+  const replaceTaskInCaches = useCallback((rowId: string, task: Record<string, any>) => {
+    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+      ...current,
+      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.map((row) => taskRowId(row) === rowId ? task : row) })),
+    } : current);
+    for (const variant of ["compact", "details"] as const) {
+      queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
+        ...current,
+        tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
+      } : current);
+    }
+    queryClient.setQueryData<TaskBacklog>(workOsKeys.taskBacklog(), (current) => current ? {
+      ...current,
+      tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
+    } : current);
+  }, [queryClient]);
+
   const insertTaskIntoCaches = useCallback((task: Record<string, any>) => {
     queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => {
       if (!current || !current.pages.length) return current;
@@ -494,6 +513,21 @@ export default function App() {
       return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
     });
   }, [queryClient]);
+  /** Optimistic adds are cache rows like any other, carrying `pending_status`
+   * until the server record replaces them in place. Two commits (one for the
+   * pending row, one for the real row) would move the list down and back up
+   * around a task that never actually moved. */
+  const insertPendingTaskIntoCaches = useCallback((pending: { id: string; title: string; description: string; dueDate?: string | null }) => {
+    insertTaskIntoCaches({
+      id: pending.id,
+      title: pending.title,
+      description: pending.description,
+      completed: false,
+      due_date: pending.dueDate ?? null,
+      pending_status: "syncing",
+    });
+  }, [insertTaskIntoCaches]);
+
   const signedIn = !!session;
   const detailsViews = view === "tasks" || view === "review" || view === "evidence";
 
@@ -1553,18 +1587,10 @@ export default function App() {
   );
   const todayCompletedCount = todayParentTasks.filter((task) => task.completed === true).length;
   // Optimistic adds render instantly as rows with a sync state and retry.
-  const pendingTaskRows = useMemo<TaskRow[]>(() => pendingTasks.map((pending) => ({
-    id: pending.id,
-    title: pending.title,
-    description: pending.description,
-    completed: false,
-    due_date: visibleDay?.shiftDate ?? undefined,
-    pending_status: pending.status,
-    pending_error: pending.error,
-  })), [pendingTasks, visibleDay?.shiftDate]);
   // The hero, its counts, and the tasks workspace all render this exact set, so
-  // no surface can disagree with another about what "today" contains.
-  const visibleTodayTasks = useMemo(() => [...pendingTaskRows, ...todayParentTasks], [pendingTaskRows, todayParentTasks]);
+  // no surface can disagree with another about what "today" contains. Optimistic
+  // adds are cache rows already, so a swap never changes the list's membership.
+  const visibleTodayTasks = todayParentTasks;
   // One lookup for every checkbox surface: "completing" spins, "leaving" shows
   // its check while the row plays its exit.
   const taskFlight = useMemo(() => {
@@ -1621,7 +1647,7 @@ export default function App() {
       return recencyOrder(left) - recencyOrder(right);
     })
     .slice(0, 3);
-  const dashboardTopTasks = [...pendingTaskRows, ...sortedDashboardTasks].slice(0, 3);
+  const dashboardTopTasks = [...openTasks.filter((task) => task.pending_status), ...sortedDashboardTasks].slice(0, 3);
   const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
   const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
 
@@ -1871,7 +1897,9 @@ export default function App() {
   /** Sends one optimistic task; resolves on success and rejects on failure. */
   async function sendPendingTask(pending: { id: string; title: string; description: string; assignees: string[] }) {
     const result = await apiRequest<{ task: Record<string, any>; providerStatus: string; mirrorStatus: string }>("/api/work-os/me/tasks", { method: "POST", body: JSON.stringify({ name: pending.title, description: pending.description || undefined, assignee_person_ids: pending.assignees }) });
-    if (result.task) insertTaskIntoCaches(result.task);
+    // The server row takes the pending row's slot; the list never loses or
+    // gains a row, so nothing slides around a task that never moved.
+    if (result.task) replaceTaskInCaches(pending.id, result.task);
     setPendingTasks((current) => current.filter((item) => item.id !== pending.id));
     // Draw the server record into the open lists without waiting on a manual
     // refresh; the surgical insert above already rendered it instantly.
@@ -1884,6 +1912,7 @@ export default function App() {
     const message = errorMessage(value, "The task could not be added.");
     diagnostics.warn("task.create.failed", "Optimistic task add failed", { id, message });
     setPendingTasks((current) => current.map((item) => item.id === id ? { ...item, status: "failed", error: message } : item));
+    patchTaskCaches(id, { pending_status: "failed", pending_error: message });
   }
 
   function submitTaskFromDesktop() {
@@ -1904,6 +1933,7 @@ export default function App() {
     }
     const pending = { id: `pending-${crypto.randomUUID()}`, title, description, assignees, status: "syncing" as const };
     setPendingTasks((current) => [pending, ...current]);
+    insertPendingTaskIntoCaches({ id: pending.id, title, description, dueDate: visibleDay?.shiftDate ?? null });
     void sendPendingTask(pending).catch((value) => failPendingTask(pending.id, value));
   }
 
@@ -1912,11 +1942,13 @@ export default function App() {
     if (!pending || pending.status === "syncing") return;
     const next = { ...pending, status: "syncing" as const, error: undefined };
     setPendingTasks((current) => current.map((item) => item.id === pending.id ? next : item));
+    patchTaskCaches(pending.id, { pending_status: "syncing", pending_error: null });
     void sendPendingTask(next).catch((value) => failPendingTask(pending.id, value));
   }
 
   function dismissPendingTask(task: TaskRow) {
     setPendingTasks((current) => current.filter((item) => item.id !== String(task.id)));
+    removeTaskFromCaches(String(task.id));
   }
 
   function surfaceTask(task: TaskRow, disposition: "selected" | "deferred" = "selected") {
