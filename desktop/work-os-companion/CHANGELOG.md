@@ -23,6 +23,14 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.29
+
+- Checking off a task now shows a spinner in that checkbox, keeps the rest of the list usable, and removes the task right away — no refresh needed.
+- The task list and the dashboard both drop a finished task the moment it is done; the Completed view keeps its record.
+- Subtask progress is now a small animated ring with its fraction, the same on task rows, dashboard cards, and the day header.
+- Adding a task draws it into the list immediately, and the add-task window closes with a smooth animation.
+- Cleaned up the task rows: the redundant "Open" label is gone and columns line up the same way on every row.
+
 ## 0.3.28
 
 - The task list no longer scrolls or jumps while you write in the update bar.
