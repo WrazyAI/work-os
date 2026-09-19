@@ -1622,6 +1622,27 @@ time with no second confirmation — and every non-batch operation keeps using i
   collapses to one column, the index circles drop out, and footer actions stretch
   to full width; the card adds no motion of its own.
 
+### 25.10.3 Shared tool-call surface frame
+
+All assistant tool artifacts use one shared surface frame in both chat
+delivery surfaces. The frame is a quiet warm-paper surface with one clear
+header, one content region, and one action or receipt region; it does not nest
+another bordered card for every row. The variants are `task-selection`,
+`approval`, `action-results`, `batch`, `navigation`, `thinking`, and
+`tool-call`. Each variant exposes its real lifecycle through a state marker so
+loading, review, filing, queued, recorded, skipped, and failed states can be
+styled and announced without inferring state from color alone.
+
+The frame contract is visual and semantic, not a provider API: task lists keep
+their internal scroll region and truthful empty/degraded states; approvals keep
+the explicit decision barrier; batch cards keep their two-step confirmation and
+per-item receipts; navigation remains approval-free; and thinking traces only
+show stages that actually started. Every action remains keyboard reachable with
+visible focus, touch targets expand at narrow widths, and reduced motion leaves
+the final state and labels intact. The dock and floating companion may vary in
+available width, but they do not invent separate card languages or provider
+outcomes.
+
 ### 25.11 Assistant chat panel and prompt bar
 
 The in-app dock composer and the floating companion panel share one chat

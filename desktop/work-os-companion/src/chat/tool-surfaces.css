@@ -1,0 +1,1477 @@
+/*
+ * Shared tool-call surfaces.
+ *
+ * Every assistant artifact is a decision surface, a read-only receipt, or a
+ * shortcut. This layer gives those states one visual grammar in the dock and
+ * the floating companion without changing the provider contracts underneath.
+ */
+
+:root {
+  --tool-ink: #182018;
+  --tool-muted: #697267;
+  --tool-faint: #6d766b;
+  --tool-paper: #fffdf8;
+  --tool-inset: #f2f5ee;
+  --tool-hover: #eef3e9;
+  --tool-line: #d8ded4;
+  --tool-line-strong: #c2ccc0;
+  --tool-signal: #a8f15b;
+  --tool-signal-strong: #6da52d;
+  --tool-success: #397b37;
+  --tool-success-soft: #e8f4da;
+  --tool-warning: #8a6410;
+  --tool-warning-soft: #fff3d1;
+  --tool-danger: #ad463c;
+  --tool-danger-soft: #f8ded8;
+  --tool-info: #376b8c;
+  --tool-info-soft: #e8f1f7;
+  --tool-radius: 16px;
+  --tool-shadow: 0 1px 2px rgba(20, 30, 18, .04), 0 12px 28px rgba(20, 30, 18, .055);
+  --tool-shadow-hover: 0 2px 4px rgba(20, 30, 18, .05), 0 16px 32px rgba(20, 30, 18, .08);
+}
+
+/* One predictable stack for every artifact attached to a message. */
+.conversation-surface .chat-operations,
+.conversation-surface .interpretation-list {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.conversation-surface .chat-operations > *,
+.conversation-surface .interpretation-list > * {
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+[data-workos-tool-surface] {
+  box-sizing: border-box;
+  min-width: 0;
+  font-family: Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+[data-workos-tool-surface] *,
+[data-workos-tool-surface] *::before,
+[data-workos-tool-surface] *::after {
+  box-sizing: border-box;
+}
+
+[data-workos-tool-surface] button,
+[data-workos-tool-surface] input,
+[data-workos-tool-surface] textarea,
+[data-workos-tool-surface] select {
+  font-family: inherit;
+}
+
+[data-workos-tool-surface] button:focus-visible,
+[data-workos-tool-surface] summary:focus-visible,
+[data-workos-tool-surface] input:focus-visible,
+[data-workos-tool-surface] textarea:focus-visible,
+[data-workos-tool-surface] select:focus-visible {
+  outline: 2px solid var(--tool-signal-strong);
+  outline-offset: 2px;
+}
+
+[data-workos-tool-surface] button:disabled {
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Read-only task lists                                                      */
+/* ------------------------------------------------------------------------- */
+
+[data-workos-tool-surface="task-selection"].chat-task-card {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  background: var(--tool-paper);
+  box-shadow: var(--tool-shadow);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-head {
+  min-height: 56px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--tool-line);
+  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--tool-ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-heading::before {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #dce7d2;
+  border-radius: 9px;
+  background: #edf7df;
+  color: var(--tool-success);
+  content: "✓";
+  font-size: 12px;
+  font-weight: 800;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-heading-text,
+[data-workos-tool-surface="task-selection"] .chat-task-summary {
+  min-width: 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-heading-text {
+  color: var(--tool-ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-summary {
+  color: var(--tool-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-head-actions {
+  gap: 6px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-pill {
+  min-height: 22px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--tool-inset);
+  color: var(--tool-muted);
+  font-size: 9.5px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-pill.is-selected {
+  border-color: #d3e5b8;
+  background: #edf7df;
+  color: #416c24;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-pill.is-proposed {
+  border-color: #e3d7ac;
+  background: #fff6dc;
+  color: var(--tool-warning);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-disclosure {
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-disclosure:hover {
+  border-color: var(--tool-line);
+  background: var(--tool-hover);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-body {
+  min-height: 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-list {
+  max-height: min(var(--chat-task-list-max-height, 320px), 360px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--tool-line-strong) transparent;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-list-rows {
+  padding: 6px 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row {
+  padding: 0 12px;
+  border-bottom: 1px solid #edf0ea;
+  background: transparent;
+  transition: background-color 150ms ease;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row:last-child {
+  border-bottom: 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row:hover {
+  background: var(--tool-hover);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row.is-selected {
+  background: #f1f8e7;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row-main {
+  min-height: 54px;
+  gap: 9px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row-copy strong {
+  color: var(--tool-ink);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row-copy small,
+[data-workos-tool-surface="task-selection"] .chat-task-meta {
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row-copy small {
+  margin-top: 3px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-meta {
+  margin-top: 2px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-check > span,
+[data-workos-tool-surface="task-selection"] .chat-task-check-inner > span {
+  pointer-events: none;
+  width: 18px;
+  height: 18px;
+  border-color: var(--tool-line-strong);
+  border-radius: 6px;
+  box-shadow: 0 1px 1px rgba(20, 30, 18, .03);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-check input:checked + span,
+[data-workos-tool-surface="task-selection"] .chat-task-check-inner input:checked + span {
+  border-color: var(--tool-ink);
+  background: var(--tool-ink);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-card .chat-task-state,
+[data-workos-tool-surface="task-selection"] .chat-task-table-row em {
+  min-height: 21px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--tool-inset);
+  color: var(--tool-muted);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row .chat-task-state {
+  background: #f1f3ee;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-row .chat-task-state.is-overdue,
+[data-workos-tool-surface="task-selection"] .chat-task-table-row em.is-overdue {
+  border-color: #f1c9c2;
+  background: var(--tool-danger-soft);
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-subtasks {
+  margin: 0 0 10px 28px;
+  border: 1px solid #e4ebdf;
+  border-radius: 11px;
+  background: #f7faf4;
+  padding: 8px 10px 7px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-subtask {
+  min-height: 34px;
+  border-bottom: 1px solid #e7eee2;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-subtask:last-child {
+  border-bottom: 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-parent-suggestion {
+  margin-top: 8px;
+  border: 1px solid #d9e9c5;
+  background: #edf7df;
+  color: #4f6c37;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-notice {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tool-line);
+  background: var(--tool-inset);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-notice.is-error {
+  background: #fff5f2;
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-notice.is-receipt {
+  background: #f1f8e7;
+  color: #4e6d36;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-review,
+[data-workos-tool-surface="task-selection"] .chat-task-retry {
+  min-height: 30px;
+  border: 1px solid var(--tool-line);
+  border-radius: 8px;
+  background: var(--tool-paper);
+  color: var(--tool-ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-review:hover,
+[data-workos-tool-surface="task-selection"] .chat-task-retry:hover {
+  border-color: var(--tool-signal-strong);
+  background: #f1f8e7;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-footer {
+  min-height: 60px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--tool-line);
+  background: #fafcf7;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-hint {
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-primary,
+[data-workos-tool-surface="task-selection"] .task-selection-secondary {
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-primary {
+  border: 1px solid var(--tool-ink);
+  background: var(--tool-ink);
+  box-shadow: 0 2px 6px rgba(24, 32, 24, .12);
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-primary:not(:disabled):hover {
+  background: #2a352a;
+  box-shadow: 0 4px 10px rgba(24, 32, 24, .15);
+  transform: translateY(-1px);
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-primary:disabled {
+  border-color: var(--tool-line);
+  background: #e9ede7;
+  color: var(--tool-faint);
+  box-shadow: none;
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-secondary {
+  border: 1px solid var(--tool-line);
+  background: var(--tool-paper);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="task-selection"] .task-selection-secondary:hover {
+  border-color: var(--tool-line-strong);
+  background: var(--tool-hover);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-wrap {
+  padding-bottom: 2px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-filters {
+  gap: 5px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e8ede4;
+  background: #fafcf7;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-filters button {
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-filters button[aria-pressed="true"] {
+  border-color: var(--tool-line);
+  background: var(--tool-paper);
+  color: var(--tool-ink);
+  box-shadow: 0 1px 3px rgba(20, 30, 18, .07);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-head {
+  min-height: 32px;
+  border-bottom: 1px solid var(--tool-line);
+  background: #f5f8f2;
+  color: var(--tool-faint);
+  font-size: 9px;
+  letter-spacing: .07em;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-row {
+  min-height: 52px;
+  border-bottom: 1px solid #edf0ea;
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-row:last-of-type {
+  border-bottom: 0;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-row.is-selected {
+  background: #f1f8e7;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-title strong {
+  color: var(--tool-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-table-title small {
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-blank {
+  min-height: 154px;
+  gap: 7px;
+  padding: 28px 18px;
+  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+}
+
+[data-workos-tool-surface="task-selection"] .chat-task-blank .chat-turn-mark {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 3px;
+  border: 1px solid #dce7d2;
+  background: #edf7df;
+  color: var(--tool-success);
+}
+
+/* ------------------------------------------------------------------------- */
+/* One-at-a-time approvals and action receipts                              */
+/* ------------------------------------------------------------------------- */
+
+[data-workos-tool-surface="approval"].approval-flow,
+[data-workos-tool-surface="action-results"].approval-results {
+  overflow: hidden;
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  background: var(--tool-paper);
+  box-shadow: var(--tool-shadow);
+}
+
+[data-workos-tool-surface="approval"].approval-flow.is-destructive {
+  border-color: #e7b9b0;
+  box-shadow: 0 1px 2px rgba(112, 35, 26, .04), 0 12px 28px rgba(112, 35, 26, .06);
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-title {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-title small,
+[data-workos-tool-surface="action-results"] .approval-results-kicker {
+  color: var(--tool-faint);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-title strong {
+  color: var(--tool-ink);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-progress {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid #dfe7d9;
+  border-radius: 999px;
+  padding: 0 9px;
+  background: #f1f6eb;
+  color: #4d6c38;
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-progressbar {
+  height: 3px;
+  background: #edf1e9;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-progressbar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tool-signal-strong);
+  transition: width 180ms ease;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow > header {
+  min-height: 66px;
+  padding: 13px 15px 11px;
+  border-bottom: 0;
+  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+}
+
+[data-workos-tool-surface="approval"] .approval-flow.is-destructive > header {
+  background: #fff8f6;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body {
+  gap: 12px;
+  padding: 15px;
+}
+
+[data-workos-tool-surface="approval"] .approval-intent-label {
+  color: var(--tool-faint);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body .approval-statement {
+  margin-top: -4px;
+  border: 1px solid #e3e9df;
+  border-radius: 11px;
+  background: #f7faf4;
+  padding: 11px 12px;
+  color: var(--tool-ink);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body .approval-unresolved {
+  border-radius: 10px;
+  background: #fff5f2;
+  padding: 9px 10px;
+  color: var(--tool-danger);
+  font-size: 10.5px;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body details,
+[data-workos-tool-surface="approval"] .approval-flow-body summary {
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body summary {
+  min-height: 30px;
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow-body code,
+[data-workos-tool-surface="batch"] .task-batch-details code,
+[data-workos-tool-surface="tool-call"] code {
+  border: 1px solid #344337;
+  border-radius: 10px;
+  background: #202a21;
+  color: #e7f7ca;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+[data-workos-tool-surface="approval"] .approval-flow > footer {
+  min-height: 62px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--tool-line);
+  background: #fafcf7;
+}
+
+/* The floating companion used to hide these controls at narrow widths. That
+ * made the second action unreachable except by deciding the first one, which
+ * violates the shared back/next review contract. */
+.conversation-surface .avatar-chat [data-workos-tool-surface="approval"] .approval-step-nav {
+  display: flex;
+}
+
+.avatar-chat [data-workos-tool-surface="approval"] .approval-step-nav {
+  display: flex;
+}
+
+[data-workos-tool-surface="approval"] .approval-step-nav button,
+[data-workos-tool-surface="approval"] .approval-actions button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="approval"] .approval-step-nav button {
+  width: 34px;
+  border-color: var(--tool-line);
+  background: var(--tool-paper);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="approval"] .approval-step-nav button:hover:not(:disabled) {
+  border-color: var(--tool-line-strong);
+  background: var(--tool-hover);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="approval"] .approval-actions button {
+  padding: 0 12px;
+  border-color: var(--tool-line);
+  background: var(--tool-paper);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="approval"] .approval-actions button:hover:not(:disabled) {
+  border-color: var(--tool-line-strong);
+  background: var(--tool-hover);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="approval"] .approval-actions .approval-approve {
+  border-color: var(--tool-ink);
+  background: var(--tool-ink);
+  color: #fffdf8;
+  box-shadow: 0 2px 6px rgba(24, 32, 24, .12);
+}
+
+[data-workos-tool-surface="approval"] .approval-actions .approval-approve:hover:not(:disabled) {
+  background: #2a352a;
+  transform: translateY(-1px);
+}
+
+[data-workos-tool-surface="approval"].is-destructive .approval-actions .approval-approve {
+  border-color: var(--tool-danger);
+  background: var(--tool-danger);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-head {
+  border-bottom: 1px solid var(--tool-line);
+  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results:has(.approval-results-body[hidden]) .approval-results-head {
+  border-bottom: 0;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-toggle {
+  min-height: 60px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-toggle > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-toggle strong {
+  overflow: visible;
+  color: var(--tool-ink);
+  font-size: 12px;
+  white-space: normal;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-chevron {
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: 1px solid var(--tool-line);
+  border-radius: 8px;
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results-body {
+  background: #fffefa;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article {
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 9px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e8ede4;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article > span {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #dbe9d0;
+  border-radius: 8px;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article.is-failed > span {
+  border-color: #f0c5bd;
+  background: var(--tool-danger-soft);
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article > div {
+  min-width: 0;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article strong {
+  color: var(--tool-ink);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article p {
+  margin-top: 4px;
+  color: var(--tool-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article em {
+  min-height: 22px;
+  align-items: center;
+  border: 1px solid var(--tool-line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--tool-inset);
+  color: var(--tool-muted);
+  font-size: 9px;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article.is-recorded em {
+  border-color: #dbe9d0;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article.is-failed em {
+  border-color: #f0c5bd;
+  background: var(--tool-danger-soft);
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article .approval-retry {
+  grid-column: 2 / -1;
+  justify-self: start;
+  min-height: 32px;
+  margin-top: 1px;
+  border: 1px solid #d1e5b7;
+  border-radius: 9px;
+  background: #f1f8e7;
+  color: #416c24;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="action-results"] .approval-results article .approval-retry:hover {
+  border-color: var(--tool-signal-strong);
+  background: #e8f4da;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Batch document cards                                                      */
+/* ------------------------------------------------------------------------- */
+
+[data-workos-tool-surface="batch"].task-batch-card {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  background: var(--tool-paper);
+  box-shadow: var(--tool-shadow);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="batch"] > .task-batch-head {
+  min-height: 70px;
+  align-items: center;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--tool-line);
+  background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head > div:first-child {
+  gap: 4px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head small {
+  color: var(--tool-faint);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head strong {
+  color: var(--tool-ink);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head-actions {
+  min-width: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head-actions .planning-icon-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--tool-line);
+  border-radius: 9px;
+  background: var(--tool-paper);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-head-actions .planning-icon-button:hover {
+  border-color: var(--tool-line-strong);
+  background: var(--tool-hover);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-card > div[role="region"] {
+  display: grid;
+  gap: 13px;
+  padding: 14px 15px 15px;
+}
+
+[data-workos-tool-surface="batch"] [hidden] {
+  display: none !important;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-hint {
+  margin: 0;
+  border-left: 3px solid #dce7d2;
+  padding: 2px 0 2px 10px;
+  color: var(--tool-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list {
+  display: grid;
+  gap: 0;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list > li > article {
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 11px;
+  padding: 14px 0;
+  border-top: 1px solid #e7ece3;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list > li:first-child > article {
+  padding-top: 2px;
+  border-top: 0;
+}
+
+[data-workos-tool-surface="batch"] .planning-review-index {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid #d7e7c9;
+  border-radius: 50%;
+  background: #edf7df;
+  color: #4d742c;
+  font-size: 9px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list > li > article > div {
+  gap: 6px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-entry-head {
+  gap: 5px 7px;
+  align-items: center;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list h3 {
+  color: var(--tool-ink);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-list p {
+  color: var(--tool-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill,
+[data-workos-tool-surface="batch"] .task-batch-chip,
+[data-workos-tool-surface="batch"] .task-batch-outcome {
+  min-height: 20px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  line-height: 1;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill.new,
+[data-workos-tool-surface="batch"] .task-batch-outcome.ok {
+  border-color: #d6e8c2;
+  background: var(--tool-success-soft);
+  color: #4d742c;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill.edit {
+  border-color: #d6e2ef;
+  background: var(--tool-info-soft);
+  color: var(--tool-info);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill.status {
+  border-color: #e1d5ec;
+  background: #f4edf9;
+  color: #684882;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill.state,
+[data-workos-tool-surface="batch"] .task-batch-chip,
+[data-workos-tool-surface="batch"] .task-batch-outcome.skipped {
+  border-color: var(--tool-line);
+  background: var(--tool-inset);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-pill.tool {
+  border-color: #e6d5a6;
+  background: var(--tool-warning-soft);
+  color: var(--tool-warning);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-outcome.pending {
+  border-color: #e6d5a6;
+  background: var(--tool-warning-soft);
+  color: var(--tool-warning);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-outcome.failed {
+  border-color: #efc1b9;
+  background: var(--tool-danger-soft);
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-receipt {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--tool-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-steps {
+  margin-top: 3px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-steps > li {
+  gap: 8px;
+  padding: 8px 0 5px;
+  border-top-color: #edf0ea;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-steps strong {
+  color: var(--tool-ink);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-step-mark {
+  color: #8a9b83;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-state {
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-entry-message {
+  border-radius: 9px;
+  background: #fff5f2;
+  padding: 7px 9px;
+  color: var(--tool-danger) !important;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-error {
+  margin: 0;
+  border: 1px solid #efc1b9;
+  border-radius: 10px;
+  background: #fff5f2;
+  color: var(--tool-danger);
+  font-size: 10.5px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-details {
+  padding-top: 2px;
+  border-top: 1px solid #e7ece3;
+  color: var(--tool-faint);
+  font-size: 9.5px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-details summary {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot {
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tool-line);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot button {
+  min-height: 38px;
+  border: 1px solid var(--tool-line);
+  border-radius: 10px;
+  padding: 0 13px;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot button.secondary {
+  background: var(--tool-paper);
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot button.secondary:hover {
+  border-color: var(--tool-line-strong);
+  background: var(--tool-hover);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot button.primary {
+  border-color: var(--tool-ink);
+  background: var(--tool-ink);
+  color: #fffdf8;
+  box-shadow: 0 2px 6px rgba(24, 32, 24, .12);
+}
+
+[data-workos-tool-surface="batch"] .task-batch-foot button.primary:hover:not(:disabled) {
+  background: #2a352a;
+  transform: translateY(-1px);
+}
+
+[data-workos-tool-surface="batch"].is-destructive {
+  border-color: #e7b9b0;
+  background: #fffaf8;
+}
+
+[data-workos-tool-surface="batch"].is-destructive > .task-batch-head {
+  background: #fff8f6;
+}
+
+[data-workos-tool-surface="batch"].is-destructive .task-batch-head small {
+  color: var(--tool-danger);
+}
+
+[data-workos-tool-surface="batch"].is-destructive .task-batch-foot button.primary {
+  border-color: var(--tool-danger);
+  background: var(--tool-danger);
+}
+
+[data-workos-tool-surface="batch"].is-settled {
+  background: #fbfcf8;
+  box-shadow: 0 1px 2px rgba(20, 30, 18, .03), 0 7px 18px rgba(20, 30, 18, .035);
+}
+
+[data-workos-tool-surface="batch"].is-settled > .task-batch-head {
+  min-height: 58px;
+  border-bottom: 0;
+  background: #f6faf1;
+}
+
+[data-workos-tool-surface="batch"].is-skipped > .task-batch-head {
+  background: #f7f8f4;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-import {
+  border: 1px solid #e1e9dc;
+  border-radius: 11px;
+  background: #f7faf4;
+  padding: 12px 13px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-import p {
+  color: var(--tool-ink);
+  font-size: 11px;
+}
+
+[data-workos-tool-surface="batch"] .task-batch-import-note {
+  color: var(--tool-muted);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Navigation shortcuts and thinking trace                                  */
+/* ------------------------------------------------------------------------- */
+
+[data-workos-tool-surface="navigation"].navigate-button {
+  display: grid;
+  width: min(100%, 360px);
+  min-height: 52px;
+  grid-template-columns: 30px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  border: 1px solid #d6e5c4;
+  border-radius: 13px;
+  padding: 6px 10px;
+  background: #f1f8e7;
+  color: var(--tool-ink);
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(20, 30, 18, .03);
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+[data-workos-tool-surface="navigation"].navigate-button:hover {
+  border-color: #b6d590;
+  background: #eaf5dc;
+  box-shadow: var(--tool-shadow);
+  transform: translateY(-1px);
+}
+
+[data-workos-tool-surface="navigation"] .navigate-button-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--tool-ink);
+  color: #f7fbf0;
+}
+
+[data-workos-tool-surface="navigation"] .navigate-button-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+[data-workos-tool-surface="navigation"] .navigate-button-copy small {
+  color: #668151;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+[data-workos-tool-surface="navigation"] .navigate-button-copy span {
+  overflow: hidden;
+  color: var(--tool-ink);
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-workos-tool-surface="navigation"] .navigate-button-arrow {
+  color: #668151;
+}
+
+[data-workos-tool-surface="thinking"].avatar-thinking {
+  overflow: hidden;
+  border: 1px solid var(--tool-line);
+  border-radius: 14px;
+  background: var(--tool-paper);
+  box-shadow: var(--tool-shadow);
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-head {
+  display: grid;
+  min-height: 54px;
+  grid-template-columns: 28px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--tool-ink);
+  text-align: left;
+}
+
+[data-workos-tool-surface="thinking"] .chat-thinking-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #dce7d2;
+  border-radius: 10px;
+  background: #edf7df;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-kicker {
+  color: var(--tool-faint);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-head [role="status"] {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tool-ink);
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-elapsed {
+  min-width: 34px;
+  color: var(--tool-muted);
+  font: 700 10px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-chevron {
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-trace-wrap {
+  border-top: 1px solid var(--tool-line);
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-trace {
+  display: grid;
+  gap: 0;
+  padding: 5px 14px 9px 49px;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-row {
+  display: grid;
+  min-height: 30px;
+  grid-template-columns: 16px minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  color: var(--tool-muted);
+  font-size: 10px;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-check {
+  color: var(--tool-success);
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #dce7d2;
+  border-top-color: var(--tool-signal-strong);
+  border-radius: 50%;
+  animation: tool-surface-spin 700ms linear infinite;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-label {
+  color: var(--tool-ink);
+  font-weight: 700;
+}
+
+[data-workos-tool-surface="thinking"] .avatar-thinking-detail {
+  overflow: hidden;
+  color: var(--tool-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The legacy standalone tool component is kept useful for future call types. */
+[data-workos-tool-surface="tool-call"].tool-approval-card {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  background: var(--tool-paper);
+  box-shadow: var(--tool-shadow);
+  color: var(--tool-ink);
+}
+
+[data-workos-tool-surface="tool-call"] .tool-approval-icon {
+  border: 1px solid #dce7d2;
+  background: #edf7df;
+  color: var(--tool-success);
+}
+
+[data-workos-tool-surface="tool-call"] .tool-approval-action {
+  border: 1px solid #e3e9df;
+  border-radius: 11px;
+  background: #f7faf4;
+  padding: 10px 11px;
+}
+
+[data-workos-tool-surface="tool-call"] .tool-approval-action > span {
+  color: var(--tool-faint);
+}
+
+[data-workos-tool-surface="tool-call"] .tool-approval-action > strong {
+  color: var(--tool-ink);
+  font-size: 11px;
+}
+
+[data-workos-tool-surface="tool-call"] .tool-approval-state {
+  border: 1px solid #dbe9d0;
+  background: var(--tool-success-soft);
+  color: var(--tool-success);
+}
+
+[data-workos-tool-surface="tool-call"] > footer {
+  color: var(--tool-muted);
+}
+
+[data-workos-tool-surface="tool-call"].is-skipped {
+  border-color: var(--tool-line);
+  background: #f7f8f5;
+}
+
+[data-workos-tool-surface="tool-call"].is-skipped .tool-approval-state {
+  border-color: var(--tool-line);
+  background: #eceee8;
+  color: var(--tool-muted);
+}
+
+.conversation-surface .tool-display-error {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  margin: 0;
+  border: 1px solid #efc1b9;
+  border-radius: 10px;
+  background: #fff5f2;
+  padding: 8px 10px;
+  color: var(--tool-danger);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+@keyframes tool-surface-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px) {
+  [data-workos-tool-surface="task-selection"] .chat-task-table {
+    min-width: 0;
+  }
+
+  [data-workos-tool-surface="task-selection"] .chat-task-table-head,
+  [data-workos-tool-surface="task-selection"] .chat-task-table-row {
+    grid-template-columns: 28px minmax(0, 1fr) 68px 78px 78px;
+  }
+}
+
+@media (max-width: 560px) {
+  [data-workos-tool-surface="approval"] .approval-flow > footer,
+  [data-workos-tool-surface="batch"] .task-batch-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-workos-tool-surface="approval"] .approval-step-nav,
+  [data-workos-tool-surface="approval"] .approval-actions,
+  [data-workos-tool-surface="batch"] .task-batch-foot button {
+    width: 100%;
+  }
+
+  [data-workos-tool-surface="approval"] .approval-step-nav button,
+  [data-workos-tool-surface="approval"] .approval-actions button,
+  [data-workos-tool-surface="batch"] .task-batch-foot button {
+    min-height: 40px;
+  }
+
+  [data-workos-tool-surface="approval"] .approval-step-nav {
+    justify-content: space-between;
+  }
+
+  [data-workos-tool-surface="approval"] .approval-step-nav button {
+    flex: 1;
+  }
+
+  [data-workos-tool-surface="approval"] .approval-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  [data-workos-tool-surface="batch"] > .task-batch-head {
+    align-items: flex-start;
+  }
+
+  [data-workos-tool-surface="batch"] .task-batch-head-actions {
+    max-width: 46%;
+  }
+
+  [data-workos-tool-surface="batch"] .task-batch-head-actions .task-batch-receipt {
+    max-width: 100%;
+    order: 3;
+  }
+
+  [data-workos-tool-surface="thinking"] .avatar-thinking-trace {
+    padding-left: 14px;
+  }
+
+  [data-workos-tool-surface="navigation"].navigate-button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-workos-tool-surface],
+  [data-workos-tool-surface] *,
+  [data-workos-tool-surface] *::before,
+  [data-workos-tool-surface] *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

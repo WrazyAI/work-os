@@ -1,4 +1,4 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import type { NavigatePage } from "./interpretation";
 import "./tool-approval-card.css";
 
@@ -20,13 +20,17 @@ export function NavigateButton({ page, statement, onNavigate }: {
 }) {
   return (
     <button
-      type="button"
-      className="navigate-button"
-      title={statement || `Open ${PAGE_LABELS[page]}`}
-      onClick={() => onNavigate(page)}
-    >
-      <ArrowUpRight size={15} aria-hidden="true" />
-      <span>Open {PAGE_LABELS[page]}</span>
+    type="button"
+    className="navigate-button"
+    title={statement || `Open ${PAGE_LABELS[page]}`}
+    aria-label={`Open ${PAGE_LABELS[page]}`}
+    data-workos-tool-surface="navigation"
+    data-workos-tool-state="ready"
+    onClick={() => onNavigate(page)}
+  >
+      <span className="navigate-button-icon" aria-hidden="true"><ArrowUpRight size={15} /></span>
+      <span className="navigate-button-copy"><small>Shortcut</small><span>Open {PAGE_LABELS[page]}</span></span>
+      <ChevronRight size={16} className="navigate-button-arrow" aria-hidden="true" />
     </button>
   );
 }

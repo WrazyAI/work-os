@@ -197,7 +197,7 @@ export function TaskBatchCard({
   const planImport = isPlanImportOp(operation);
   const showToggle = settled || collapseWhenInactive;
 
-  return <section className={`task-batch-card${editing ? " is-editing" : ""}${state === "approved" ? " is-filed is-settled" : ""}${state === "skipped" ? " is-skipped is-settled" : ""}${destructive ? " is-destructive" : ""}`} aria-label={title} data-workos-batch-card={operation.batchId ?? operation.op} data-workos-batch-state={state}>
+  return <section className={`task-batch-card${editing ? " is-editing" : ""}${state === "approved" ? " is-filed is-settled" : ""}${state === "skipped" ? " is-skipped is-settled" : ""}${destructive ? " is-destructive" : ""}`} aria-label={title} data-workos-tool-surface="batch" data-workos-tool-state={state} data-workos-batch-card={operation.batchId ?? operation.op} data-workos-batch-state={state}>
     <header className="task-batch-head">
       <div>
         <small>{headingFor(operation)}</small>

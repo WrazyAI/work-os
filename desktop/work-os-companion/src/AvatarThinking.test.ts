@@ -11,6 +11,7 @@ describe("AvatarThinking", () => {
       createElement(AvatarThinking, { stages, active: 0, startedAt: Date.now() }),
     );
     expect(html).toContain("Thinking");
+    expect(html).toContain('data-workos-tool-surface="thinking"');
     expect(html).toContain("Reading today&#x27;s context");
     expect(html).not.toContain("Matching tasks");
     expect(html).toContain("aria-expanded=\"true\"");

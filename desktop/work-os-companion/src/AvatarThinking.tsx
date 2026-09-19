@@ -42,6 +42,9 @@ export function AvatarThinking({
   const [elapsed, setElapsed] = useState(0);
   const expanded = manualExpanded ?? working;
   const visible = working ? stages.slice(0, Math.min(stages.length, active + 1)) : stages;
+  const spokenStatus = working
+    ? activeLabel
+    : `${settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}${result ? ` · ${result}` : ""}`;
 
   // 100ms ticks keep the 0.1s readout honest. State lives here (not in the
   // chat tree) so each tick re-renders only this trace; the timer itself is
@@ -54,23 +57,32 @@ export function AvatarThinking({
   }, [working, startedAt]);
 
   return (
-    <div className="avatar-thinking">
+    <div
+      className="avatar-thinking"
+      data-workos-tool-surface="thinking"
+      data-workos-tool-state={working ? "working" : "settled"}
+      data-workos-thinking-stage-count={visible.length}
+    >
       <button
         type="button"
         aria-expanded={expanded}
+        aria-busy={working}
         onClick={() => setManualExpanded((current) => !(current ?? working))}
         className="avatar-thinking-head"
       >
         <MascotMark pose={MASCOT.thinkingPose} className="chat-thinking-mark" />
-        <span role="status">
-          {working ? (
-            <span className="avatar-thinking-active">{activeLabel}</span>
-          ) : (
-            <span className="avatar-thinking-done">
-              {settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}
-              {result ? ` · ${result}` : ""}
-            </span>
-          )}
+        <span className="avatar-thinking-copy">
+          <span className="avatar-thinking-kicker">{working ? "Working now" : "Completed"}</span>
+          <span>
+            {working ? (
+              <span className="avatar-thinking-active">{activeLabel}</span>
+            ) : (
+              <span className="avatar-thinking-done">
+                {settledMs !== undefined ? `Thought for ${formatElapsed(settledMs)}` : "Thought"}
+                {result ? ` · ${result}` : ""}
+              </span>
+            )}
+          </span>
         </span>
         {working && (
           <span className="avatar-thinking-elapsed" aria-hidden="true">
@@ -83,6 +95,7 @@ export function AvatarThinking({
           className={`avatar-thinking-chevron ${expanded ? "open" : ""}`}
         />
       </button>
+      <span className="sr-only" role="status" aria-live="polite">{spokenStatus}</span>
       <div
         className="avatar-thinking-trace-wrap"
         style={{ gridTemplateRows: expanded ? "1fr" : "0fr", opacity: expanded ? 1 : 0 }}

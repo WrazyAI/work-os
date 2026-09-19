@@ -58,17 +58,17 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
   const visibleResults = results.filter((result) => !usesGroupedCard(result.op));
   // Accordion, not a full card (design §25.7): the summary line carries the
   // count and anything actionable opens itself so a failure never hides.
-  const resultKey = visibleResults.map((result) => `${result.status}:${result.op.taskTitle ?? ""}`).join("|");
+  const resultKey = visibleResults.map((result, index) => `${operationKey(result.op, index)}:${result.status}:${result.message}`).join("|");
   const [manual, setManual] = useState<boolean | null>(null);
   const failed = visibleResults.filter((result) => result.status === "failed").length;
   const processing = visibleResults.filter((result) => result.status === "processing").length;
   const queued = visibleResults.filter((result) => result.status === "queued").length;
   const skipped = visibleResults.filter((result) => result.status === "denied").length;
   const recorded = visibleResults.length - failed - processing - queued - skipped;
+  const panelId = `action-results-${useId()}`;
   useEffect(() => { setManual(null); }, [resultKey]);
   if (!visibleResults.length) return null;
   const expanded = manual ?? (failed > 0 || processing > 0);
-  const panelId = `action-results-${useId()}`;
   const summary = failed
     ? `${recorded} recorded · ${failed} failed${processing ? ` · ${processing} processing` : ""}${queued ? ` · ${queued} queued` : ""}`
     : processing
@@ -79,7 +79,12 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
       ? `${recorded} recorded · ${queued} queued`
       : `${visibleResults.length} action${visibleResults.length === 1 ? "" : "s"} recorded`;
   return (
-    <section className="approval-results" aria-label="Action results">
+    <section
+      className="approval-results"
+      aria-label="Action results"
+      data-workos-tool-surface="action-results"
+      data-workos-tool-state={failed ? "failed" : processing || queued ? "pending" : skipped ? "skipped" : "recorded"}
+    >
       <header className="approval-results-head">
         <button
           type="button"
@@ -90,7 +95,10 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
           title={expanded ? "Collapse action results" : "Expand action results"}
           onClick={() => setManual(!expanded)}
         >
-          <strong>{summary}</strong>
+          <span>
+            <span className="approval-results-kicker">Action receipt</span>
+            <strong>{summary}</strong>
+          </span>
           <ChevronDown size={15} aria-hidden="true" className={cx("approval-results-chevron", expanded && "is-open")} />
         </button>
       </header>
@@ -163,12 +171,20 @@ export function ApprovalFlow({
   const unresolvedTask = (current.op.op === "complete_task" || current.op.op === "reopen_task") && !current.op.taskId;
 
   return (
-    <section className={`approval-flow${destructive ? " is-destructive" : ""}`} aria-label={`Action ${step + 1} of ${pending.length}`}>
+    <section
+      className={`approval-flow${destructive ? " is-destructive" : ""}`}
+      aria-label={`Action ${step + 1} of ${pending.length}`}
+      aria-busy={busy}
+      data-workos-tool-surface="approval"
+      data-workos-tool-state={busy ? "filing" : "review"}
+    >
       <header>
-        <div><small>Review action</small><strong>{questionFor(current.op)}</strong></div>
-        <span>{step + 1} / {pending.length}</span>
+        <div className="approval-flow-title"><small>Review action</small><strong>{questionFor(current.op)}</strong></div>
+        <span className="approval-flow-progress">{step + 1} of {pending.length}</span>
       </header>
+      <div className="approval-flow-progressbar" aria-hidden="true"><span style={{ width: `${((step + 1) / pending.length) * 100}%` }} /></div>
       <div className="approval-flow-body">
+        <span className="approval-intent-label">Proposed action</span>
         <p className="approval-statement">{current.op.statement}</p>
         {unresolvedTask ? <p className="approval-unresolved" role="status"><CircleAlert size={13} aria-hidden="true" /> This action has no task attached. Skip it, or ask again to rebuild the list.</p> : null}
         <details><summary><ChevronDown size={13} />Technical details</summary><code>{call.command}</code></details>

@@ -72,7 +72,7 @@ export type TaskSelectionCardProps = {
 function statusChipClass(state: string | undefined, proposed: boolean) {
   return cx(
     "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold",
-    proposed ? "bg-accent-tint text-ink-2" : state === "overdue" ? "bg-danger-tint text-danger" : "bg-inset text-ink-2",
+    proposed ? "is-proposed bg-accent-tint text-ink-2" : state === "overdue" ? "is-overdue bg-danger-tint text-danger" : "bg-inset text-ink-2",
   );
 }
 
@@ -491,6 +491,8 @@ export function TaskSelectionCard({
       )}
       aria-labelledby={titleId}
       aria-busy={loading || sending}
+      data-workos-tool-surface="task-selection"
+      data-workos-tool-state={failed ? "error" : loading ? "loading" : sending ? "submitting" : submitState === "sent" ? "receipt" : listedTasks.length === 0 ? "empty" : "ready"}
       style={{ "--chat-task-list-max-height": `${maxHeight}px` } as CSSProperties}
     >
       <header className="chat-task-head">

@@ -14,6 +14,7 @@ describe("TaskSelectionCard", () => {
 
     expect(markup).toContain('aria-label="Select Finish release notes"');
     expect(markup).toContain('aria-label="Select Repair provider sync"');
+    expect(markup).toContain('data-workos-tool-surface="task-selection"');
     expect(markup).toContain("Mark selected done");
     expect(markup).toContain("Overdue");
     expect(markup).toContain("disabled");

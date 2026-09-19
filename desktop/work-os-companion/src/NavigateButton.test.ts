@@ -22,5 +22,7 @@ describe("navigate_to_page", () => {
     const markup = renderToStaticMarkup(createElement(NavigateButton, { page: "review", statement: "EOD due", onNavigate: () => undefined }));
     expect(markup).toContain("Open Review &amp; EOD");
     expect(markup).toContain('class="navigate-button"');
+    expect(markup).toContain('data-workos-tool-surface="navigation"');
+    expect(markup).toContain('aria-label="Open Review &amp; EOD"');
   });
 });

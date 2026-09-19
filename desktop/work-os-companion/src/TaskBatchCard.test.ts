@@ -75,6 +75,7 @@ describe("TaskBatchCard", () => {
     expect(markup).toContain("Circulate for review");
     expect(markup).toContain("Existing task");
     expect(markup).toContain("Review new tasks");
+    expect(markup).toContain('data-workos-tool-surface="batch"');
     // It reads like a document, not a form: no editing fields until the pencil.
     expect(markup).not.toContain("<input");
     expect(markup).not.toContain("<textarea");

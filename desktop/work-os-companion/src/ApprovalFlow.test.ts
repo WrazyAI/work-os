@@ -18,6 +18,7 @@ describe("ApprovalFlow", () => {
     }));
 
     expect(markup).toContain("Action 1 of 2");
+    expect(markup).toContain('data-workos-tool-surface="approval"');
     expect(markup).toContain("Mark “Review launch” done?");
     expect(markup).toContain("Finish the review");
     expect(markup).toContain("Technical details");
@@ -52,6 +53,7 @@ describe("ApprovalFlow", () => {
     const markup = renderToStaticMarkup(createElement(ApprovalResults, { results }));
 
     expect(markup).toContain("Action results");
+    expect(markup).toContain('data-workos-tool-surface="action-results"');
     expect(markup).toContain("Recorded in Nifty.");
     expect(markup).toContain("Provider unavailable.");
     expect(markup).toContain("Failed");
