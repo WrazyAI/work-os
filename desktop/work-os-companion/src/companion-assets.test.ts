@@ -53,7 +53,7 @@ describe("companion launch window", () => {
       center: true,
       resizable: true,
     });
-    expect(avatarWindow).toMatchObject({ width: 164, height: 188, resizable: false });
+    expect(avatarWindow).toMatchObject({ width: 176, height: 176, resizable: false });
   });
 
   it("permits blob and data images so authenticated screenshot previews render", () => {

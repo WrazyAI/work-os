@@ -14,7 +14,9 @@ import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, ChatTurn, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { MascotMark } from "./chat/MascotMark";
+import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested } from "./avatarFixture";
@@ -92,8 +94,8 @@ interface AgendaReview {
   round: number;
 }
 
-const AVATAR_COLLAPSED = { width: 164, height: 188 };
-const AVATAR_EXPANDED = { width: 400, height: 620 };
+const AVATAR_COLLAPSED = { width: 176, height: 176 };
+const AVATAR_EXPANDED = { width: 440, height: 720 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";
@@ -1045,10 +1047,10 @@ export default function AvatarApp(): React.ReactElement {
           </div>
         )}
         {expanded && (
-          <div className="avatar-panel">
-            <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="sleep" /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">Otto</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+          <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
+          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose="sleep" /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
-          </div>
+          </ConversationSurface>
         )}
       </div>
     );
@@ -1077,15 +1079,15 @@ export default function AvatarApp(): React.ReactElement {
         </div>
       )}
       {expanded && (
-        <div className="avatar-panel">
+        <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
           <header className="avatar-head">
             <div className="avatar-head-row">
               <div className="avatar-drag-zone" data-tauri-drag-region>
                 <div className="avatar-title">
-                  <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose={petPose} tone={petTone} /></span>
+                  <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose={petPose} /></span>
                   <div className="avatar-head-copy">
                     <strong title={statusText}>
-                      <span className="avatar-head-name">Otto</span>
+                      <span className="avatar-head-name">{MASCOT.name}</span>
                       <em className={`avatar-live-dot is-${dotClass}`} aria-hidden="true" />
                       <span className="avatar-head-shift">{shiftLabel}</span>
                     </strong>
@@ -1153,14 +1155,15 @@ export default function AvatarApp(): React.ReactElement {
             {
               collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
               const streams = entryIndex === allEntries.length - 1 && entry.role === "assistant" && !entry.operations && !entry.toolResults && !entry.receipt && !entry.id.startsWith("prompt:");
+              const showAssistantMark = entryIndex === 0 || allEntries[entryIndex - 1]?.role !== "assistant";
               // The assistant sometimes returns the same view twice; render one card.
               const seenCards = new Set<string>();
               return (
               <ChatSectionBoundary key={entry.id} label="avatar chat message">
                 {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
                   : entry.role === "system" ? <ChatTurn role="system" text={entry.text} />
-                    : entry.receipt ? <ChatTurn role="assistant" receipt text={entry.receipt} copySource={entry} />
-                      : <ChatTurn role="assistant" text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}>
+                    : entry.receipt ? <ChatTurn role="assistant" showMark={showAssistantMark} receipt text={entry.receipt} copySource={entry} />
+                      : <ChatTurn role="assistant" showMark={showAssistantMark} text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}>
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}
@@ -1220,7 +1223,7 @@ export default function AvatarApp(): React.ReactElement {
               </ChatSectionBoundary>
               );
             })}
-            {thinkingTrace && <ChatTurn role="assistant"><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
+            {thinkingTrace && <ChatTurn role="assistant" showMark={chat.at(-1)?.role !== "assistant"}><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
             {agendaReview && (
               <AgendaReviewCard
                 clarifications={agendaReview.interpretation.clarifications}
@@ -1261,7 +1264,7 @@ export default function AvatarApp(): React.ReactElement {
               Snooze {snoozeCount === 0 ? "10 min" : snoozeCount === 1 ? "20 min" : "(marks missed)"}
             </button>
           )}
-        </div>
+        </ConversationSurface>
       )}
     </div>
   );

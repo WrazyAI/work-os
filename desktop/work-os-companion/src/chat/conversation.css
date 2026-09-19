@@ -1,0 +1,637 @@
+/*
+ * Conversation makeover
+ *
+ * This file is the final visual layer for both delivery surfaces. The legacy
+ * chat selectors remain available to the existing task and approval modules,
+ * while this root owns the new composition, palette, and responsive shells.
+ */
+
+:root {
+  --conversation-paper: #f7f4ec;
+  --conversation-surface: #fffcf6;
+  --conversation-ink: #171a18;
+  --conversation-graphite: #202421;
+  --conversation-signal: #d5ff54;
+  --conversation-muted: #71766f;
+  --conversation-line: #d9dad2;
+  --conversation-danger: #b94343;
+  --conversation-shadow: 0 24px 70px rgba(18, 21, 18, 0.18);
+  --conversation-radius: 24px;
+}
+
+[data-conversation-surface="in-app"].progress-dock {
+  position: fixed;
+  z-index: 90;
+  right: 24px;
+  bottom: 20px;
+  width: min(720px, calc(100vw - 48px));
+  margin: 0 !important;
+  filter: none;
+  pointer-events: none;
+}
+
+[data-conversation-surface="in-app"].progress-dock.open {
+  top: 16px;
+  bottom: 16px;
+  width: min(560px, calc(100vw - 40px));
+}
+
+.conversation-surface {
+  min-width: 0;
+  font-family: Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--conversation-ink);
+}
+
+.conversation-surface * { box-sizing: border-box; }
+
+[data-conversation-surface="in-app"].progress-dock > .chat-surface {
+  width: 100%;
+  pointer-events: auto;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  border-radius: var(--conversation-radius);
+  background: var(--conversation-paper);
+  box-shadow: var(--conversation-shadow);
+}
+
+[data-conversation-surface="in-app"].progress-dock.open > .chat-surface {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-conversation-surface="in-app"] .progress-flyout {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: conversation-panel-in 180ms ease-out both;
+}
+
+[data-conversation-surface="in-app"] .chat-surface.is-open {
+  overflow: hidden;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  border-radius: var(--conversation-radius);
+  background: var(--conversation-paper);
+  box-shadow: var(--conversation-shadow);
+}
+
+[data-conversation-surface="in-app"] .chat-surface.is-open .progress-flyout {
+  position: static;
+  max-height: none;
+  overflow: hidden;
+  overscroll-behavior: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: conversation-panel-in 180ms ease-out both;
+}
+
+[data-conversation-surface="in-app"] .workos-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 68px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--conversation-line);
+  background: var(--conversation-surface);
+}
+
+[data-conversation-surface="in-app"] .conversation-pane-title {
+  color: var(--conversation-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+[data-conversation-surface="in-app"] .workos-chat-head::before {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--conversation-signal);
+  box-shadow: 0 0 0 5px rgba(213, 255, 84, 0.18);
+  content: "";
+}
+
+[data-conversation-surface="in-app"] .workos-chat-head .chat-tabs {
+  flex: 1 1 auto;
+  gap: 4px;
+}
+
+[data-conversation-surface="in-app"] .workos-chat-head .chat-tab {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--conversation-muted);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+[data-conversation-surface="in-app"] .workos-chat-head .chat-tab[aria-selected="true"] {
+  border-color: var(--conversation-ink);
+  background: var(--conversation-ink);
+  color: var(--conversation-surface);
+  opacity: 1;
+}
+
+[data-conversation-surface="in-app"] .progress-header-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+[data-conversation-surface="in-app"] .progress-header-actions button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: var(--conversation-muted);
+}
+
+[data-conversation-surface="in-app"] .progress-header-actions button:hover,
+[data-conversation-surface="in-app"] .progress-header-actions button:focus-visible {
+  border-color: var(--conversation-line);
+  background: var(--conversation-paper);
+  color: var(--conversation-ink);
+}
+
+[data-conversation-surface="in-app"] .workos-chat-sub {
+  margin: 0;
+  padding: 11px 24px 0;
+  color: var(--conversation-muted);
+  font-size: 11px;
+}
+
+[data-conversation-surface="in-app"] .progress-conversation {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  padding: 26px 24px 18px;
+  background: var(--conversation-paper);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(23, 26, 24, 0.24) transparent;
+}
+
+[data-conversation-surface="in-app"] .progress-history {
+  gap: 18px;
+  margin: 0 0 18px;
+}
+
+[data-conversation-surface="in-app"] .progress-input-shell {
+  min-height: 82px;
+  margin: 12px 16px 16px;
+  padding: 10px;
+  border: 1px solid rgba(23, 26, 24, 0.18);
+  border-radius: 20px;
+  background: var(--conversation-surface);
+  box-shadow: 0 10px 30px rgba(23, 26, 24, 0.08);
+}
+
+[data-conversation-surface="in-app"] .chat-surface.is-open .progress-input-shell {
+  min-height: 82px;
+  margin: 12px 16px 16px;
+  padding: 10px;
+  border: 1px solid rgba(23, 26, 24, 0.18);
+  border-radius: 20px;
+  background: var(--conversation-surface);
+  box-shadow: 0 10px 30px rgba(23, 26, 24, 0.08);
+  transform: none;
+}
+
+[data-conversation-surface="in-app"] .progress-input-shell:focus-within {
+  border-color: var(--conversation-ink);
+  box-shadow: 0 0 0 4px rgba(213, 255, 84, 0.32), 0 12px 34px rgba(23, 26, 24, 0.12);
+}
+
+[data-conversation-surface="in-app"] .focus-dock-button {
+  min-height: 34px;
+  border: 1px solid var(--conversation-line);
+  border-radius: 999px;
+  background: var(--conversation-paper);
+  color: var(--conversation-muted);
+}
+
+[data-conversation-surface="in-app"] .focus-dock-button.active {
+  border-color: var(--conversation-ink);
+  background: var(--conversation-ink);
+  color: var(--conversation-surface);
+}
+
+/* Shared message rhythm. */
+.conversation-surface .chat-turn-shell {
+  padding-bottom: 0;
+  margin-bottom: 14px;
+}
+
+.conversation-surface .chat-turn.assistant {
+  gap: 12px;
+}
+
+.conversation-surface .chat-turn-mark {
+  width: 26px;
+  height: 26px;
+  margin-top: 2px;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  background: var(--conversation-surface);
+  box-shadow: 0 2px 7px rgba(23, 26, 24, 0.08);
+}
+
+.conversation-surface .chat-turn-mark.is-hidden {
+  visibility: hidden;
+}
+
+.conversation-surface .chat-turn-user {
+  max-width: min(78%, 520px);
+  padding: 11px 14px;
+  border-radius: 20px 20px 5px 20px;
+  background: var(--conversation-graphite);
+  color: var(--conversation-surface);
+  box-shadow: 0 5px 12px rgba(23, 26, 24, 0.1);
+}
+
+.conversation-surface .chat-turn .chat-markdown p,
+.conversation-surface .chat-turn > div > strong,
+.conversation-surface .chat-turn strong {
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.conversation-surface .chat-turn-user .chat-markdown p {
+  color: var(--conversation-surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.conversation-surface .chat-turn-note {
+  margin-bottom: 5px;
+  color: var(--conversation-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.conversation-surface .chat-copy-row {
+  position: static;
+  display: inline-flex;
+  min-height: 23px;
+  margin-top: 7px;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: rgba(255, 252, 246, 0.78);
+  box-shadow: 0 2px 7px rgba(23, 26, 24, 0.05);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 140ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.conversation-surface .chat-turn-shell:hover .chat-copy-row,
+.conversation-surface .chat-turn-shell:focus-within .chat-copy-row,
+.conversation-surface .chat-copy-row:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.conversation-surface .chat-turn-shell:not(.is-user) .chat-copy-row {
+  margin-left: 38px;
+}
+
+.conversation-surface .chat-turn-shell.is-user {
+  align-items: flex-end;
+}
+
+.conversation-surface .chat-turn-shell.is-user .chat-copy-row {
+  margin-right: 2px;
+}
+
+.conversation-surface .chat-copy-row:hover,
+.conversation-surface .chat-copy-row:focus-visible {
+  border-color: var(--conversation-ink);
+  background: var(--conversation-ink);
+  color: var(--conversation-surface);
+}
+
+.conversation-surface .chat-copy-row.is-copied {
+  border-color: rgba(93, 137, 41, 0.28);
+  background: rgba(213, 255, 84, 0.26);
+  color: #456d18;
+}
+
+.conversation-surface .chat-system-notice {
+  border: 1px solid rgba(185, 67, 67, 0.22);
+  border-radius: 16px;
+  background: rgba(185, 67, 67, 0.07);
+  color: var(--conversation-ink);
+}
+
+.conversation-surface .chat-receipt {
+  border: 0;
+  border-left: 3px solid var(--conversation-signal);
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 0 4px 12px;
+}
+
+.conversation-surface .chat-receipt p { color: var(--conversation-muted); }
+
+.conversation-surface .chat-kind-options button {
+  min-height: 36px;
+  border: 1px solid var(--conversation-line);
+  border-radius: 999px;
+  background: var(--conversation-surface);
+  color: var(--conversation-ink);
+}
+
+.conversation-surface .chat-kind-options button:hover,
+.conversation-surface .chat-kind-options button:focus-visible {
+  border-color: var(--conversation-ink);
+  background: var(--conversation-ink);
+  color: var(--conversation-surface);
+}
+
+/* Markdown hierarchy. */
+.conversation-surface .chat-markdown h2,
+.conversation-surface .chat-markdown h3,
+.conversation-surface .chat-markdown h4 {
+  margin: 14px 0 6px;
+  color: var(--conversation-ink);
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.conversation-surface .chat-markdown h2 { font-size: 18px; }
+.conversation-surface .chat-markdown h3 { font-size: 15px; }
+.conversation-surface .chat-markdown h4 { font-size: 14px; }
+.conversation-surface .chat-markdown ul,
+.conversation-surface .chat-markdown ol { margin: 9px 0; padding-left: 22px; }
+.conversation-surface .chat-markdown li + li { margin-top: 5px; }
+.conversation-surface .chat-markdown a { color: #385c85; text-decoration: underline; text-underline-offset: 3px; }
+.conversation-surface .chat-markdown blockquote { margin: 12px 0; border-left: 3px solid var(--conversation-line); padding-left: 14px; color: var(--conversation-muted); }
+.conversation-surface .chat-markdown blockquote p { margin: 0; }
+.conversation-surface .chat-markdown-code {
+  overflow-x: auto;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(23, 26, 24, 0.13);
+  border-radius: 14px;
+  background: var(--conversation-graphite);
+  color: #f5f1e8;
+  font: 12px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.conversation-surface .chat-markdown-code code { padding: 0; background: transparent; color: inherit; }
+.conversation-surface .chat-markdown-table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--conversation-line); border-radius: 14px; }
+.conversation-surface .chat-markdown-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.conversation-surface .chat-markdown-table th,
+.conversation-surface .chat-markdown-table td { padding: 9px 11px; border-bottom: 1px solid var(--conversation-line); text-align: left; vertical-align: top; }
+.conversation-surface .chat-markdown-table th { background: rgba(23, 26, 24, 0.04); font-size: 11px; font-weight: 750; }
+.conversation-surface .chat-markdown-table tr:last-child td { border-bottom: 0; }
+
+/* Artifacts become quiet message-attached work surfaces. */
+.conversation-surface .chat-operations,
+.conversation-surface .interpretation-list { gap: 12px; }
+
+.conversation-surface .chat-task-card,
+.conversation-surface .approval-flow,
+.conversation-surface .approval-results,
+.conversation-surface .task-batch-card {
+  border: 1px solid rgba(23, 26, 24, 0.14);
+  border-radius: 18px;
+  background: var(--conversation-surface);
+  box-shadow: 0 6px 20px rgba(23, 26, 24, 0.06);
+}
+
+.conversation-surface .chat-task-head,
+.conversation-surface .approval-flow > header,
+.conversation-surface .approval-results > header {
+  min-height: 48px;
+  padding: 11px 14px;
+  border-bottom-color: var(--conversation-line);
+  background: transparent;
+}
+
+.conversation-surface .chat-task-row,
+.conversation-surface .approval-step {
+  min-height: 54px;
+  border-bottom-color: var(--conversation-line);
+}
+
+.conversation-surface .approval-flow > footer,
+.conversation-surface .approval-results > footer {
+  padding: 11px 14px;
+  border-top-color: var(--conversation-line);
+  background: rgba(23, 26, 24, 0.025);
+}
+
+.conversation-surface .approval-submit,
+.conversation-surface .task-selection-primary:not(:disabled) {
+  border-radius: 999px;
+  background: var(--conversation-graphite);
+  color: var(--conversation-surface);
+}
+
+.conversation-surface .tool-display-error { color: var(--conversation-danger); }
+
+/* Floating Otto shell. */
+.conversation-surface-floating.avatar-panel {
+  gap: 0;
+  padding: 0;
+  border: 1px solid rgba(23, 26, 24, 0.14);
+  border-radius: 16px;
+  background: var(--conversation-surface);
+  box-shadow: 0 18px 48px rgba(13, 15, 12, 0.24);
+}
+
+.conversation-surface-floating .avatar-head {
+  border: 0;
+  border-bottom: 1px solid var(--conversation-line);
+  border-radius: 15px 15px 0 0;
+  background: var(--conversation-surface);
+  color: var(--conversation-ink);
+}
+
+.conversation-surface-floating .avatar-head-row { min-height: 58px; padding: 9px 12px 8px; }
+.conversation-surface-floating .avatar-head-name,
+.conversation-surface-floating .avatar-head strong { color: var(--conversation-ink); }
+.conversation-surface-floating .avatar-head-shift,
+.conversation-surface-floating .avatar-head small { color: var(--conversation-muted); }
+.conversation-surface-floating .avatar-head-mark.avatar-otto-mark { border-color: var(--conversation-line); background: var(--conversation-paper); }
+.conversation-surface-floating .avatar-head-mark .chat-mascot-mark,
+.conversation-surface-floating .avatar-head-mark .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.conversation-surface-floating .avatar-head-actions .avatar-icon { color: var(--conversation-muted); }
+.conversation-surface-floating .avatar-head-actions .avatar-icon:hover,
+.conversation-surface-floating .avatar-head-actions .avatar-icon:focus-visible { background: var(--conversation-paper); color: var(--conversation-ink); }
+
+.conversation-surface-floating .avatar-nav {
+  padding: 0 12px 10px;
+  border: 0;
+  background: var(--conversation-surface);
+}
+
+.conversation-surface-floating .avatar-tabs .workos-chat-tabs,
+.conversation-surface-floating .avatar-nav .chat-tabs { gap: 5px; }
+.conversation-surface-floating .avatar-nav .chat-tab,
+.conversation-surface-floating .avatar-tabs .workos-chat-tabs button { color: var(--conversation-muted); }
+.conversation-surface-floating .avatar-nav .chat-tab[aria-selected="true"],
+.conversation-surface-floating .avatar-tabs .workos-chat-tabs button.active { background: var(--conversation-ink); color: var(--conversation-surface); }
+
+.conversation-surface-floating .avatar-chat {
+  min-height: 0;
+  padding: 20px 16px;
+  gap: 18px;
+  border-radius: 0;
+  background: var(--conversation-paper);
+  scrollbar-color: rgba(23, 26, 24, 0.24) transparent;
+}
+
+.conversation-surface-floating .avatar-context {
+  border-color: rgba(23, 26, 24, 0.14);
+  border-radius: 16px;
+  background: var(--conversation-surface);
+  box-shadow: none;
+}
+
+.conversation-surface-floating .avatar-context.eod { background: #fff4df; }
+.conversation-surface-floating .avatar-task-context { margin: 0; }
+.conversation-surface-floating .chat-turn-user { max-width: 82%; }
+.conversation-surface-floating .chat-turn .chat-markdown p { font-size: 13px; }
+.conversation-surface-floating .chat-turn-user .chat-markdown p { font-size: 12px; }
+
+.conversation-surface-floating .avatar-composer-v2 {
+  padding: 12px 10px 10px;
+  border: 0;
+  background: var(--conversation-paper);
+  backdrop-filter: none;
+}
+
+.conversation-surface-floating .avatar-composer-v2 .chat-composer {
+  border-color: rgba(23, 26, 24, 0.18);
+  border-radius: 19px;
+  background: var(--conversation-surface);
+  box-shadow: 0 8px 24px rgba(23, 26, 24, 0.08);
+}
+
+.conversation-surface-floating .avatar-composer-v2 .chat-composer:focus-within {
+  border-color: var(--conversation-ink);
+  box-shadow: 0 0 0 4px rgba(213, 255, 84, 0.28), 0 8px 24px rgba(23, 26, 24, 0.1);
+}
+
+.conversation-surface-floating .chat-task-card .chat-task-list {
+  max-height: min(var(--chat-task-list-max-height, 250px), 210px);
+}
+
+.conversation-surface-floating .chat-task-row {
+  padding-inline: 8px;
+}
+
+.conversation-surface-floating .chat-task-row-main {
+  min-height: 48px;
+}
+
+.conversation-surface-floating .chat-task-footer {
+  padding: 10px;
+}
+
+.conversation-surface-floating .avatar-snooze {
+  padding: 7px 12px 2px;
+  border: 0;
+  background: var(--conversation-paper);
+  color: var(--conversation-muted);
+}
+
+/* Collapsed Otto is a clean signal object, not a tiny dashboard. */
+.avatar-compact {
+  width: 176px;
+  height: 176px;
+}
+
+.avatar-orb {
+  width: 124px;
+  height: 124px;
+  margin: 35px 26px 12px;
+  border: 1px solid rgba(213, 255, 84, 0.38);
+  outline: 0;
+  border-radius: 50%;
+  background: var(--conversation-graphite);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.avatar-orb:hover { box-shadow: 0 24px 58px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(213, 255, 84, 0.12); }
+.avatar-orb .avatar-ring { inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); }
+.avatar-orb .ring-track { stroke: rgba(255, 252, 246, 0.14); }
+.avatar-orb .ring-fill { stroke: var(--conversation-signal); filter: none; }
+.avatar-pet.otto { width: 100px; height: 100px; margin-top: -7px; }
+.avatar-orb-state { bottom: 15px; color: rgba(255, 252, 246, 0.78); font-size: 8px; }
+.avatar-day-time { bottom: -1px; border: 0; background: var(--conversation-surface); color: var(--conversation-ink); box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16); }
+.avatar-drag-surface { top: 9px; left: 64px; width: 48px; height: 20px; border: 0; background: transparent; color: rgba(255, 252, 246, 0.52); box-shadow: none; }
+.avatar-prompt-bubble { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
+.avatar-prompt-bubble::after { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
+
+@keyframes conversation-panel-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 1024px) {
+  [data-conversation-surface="in-app"].progress-dock.open {
+    inset: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  [data-conversation-surface="in-app"].progress-dock {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+
+  [data-conversation-surface="in-app"].progress-dock.open {
+    inset: 0;
+    width: 100vw;
+  }
+
+  [data-conversation-surface="in-app"] .chat-surface { border-radius: 0; }
+  [data-conversation-surface="in-app"] .workos-chat-head { min-height: 62px; padding: 11px 14px; }
+  [data-conversation-surface="in-app"] .progress-conversation { padding: 20px 14px 14px; }
+  [data-conversation-surface="in-app"] .progress-input-shell { margin: 10px 10px 12px; }
+  .conversation-surface .chat-turn-user { max-width: 88%; }
+  .conversation-surface .chat-turn .chat-markdown p { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-surface *,
+  .conversation-surface *::before,
+  .conversation-surface *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (hover: none) {
+  .conversation-surface .chat-copy-row {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+}

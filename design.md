@@ -591,7 +591,7 @@ Task lists are structured rows, not a stack of large cards. A task row should pr
 4. Status.
 5. Disclosure affordance.
 
-Completed tasks use subdued text and a clear completed control. Do not make them disappear immediately unless the active filter explicitly excludes completed work.
+Completed tasks use subdued text and a clear completed control. A view whose filter is open work — `My day`, the dashboard day list, and the dashboard cards — removes the row the moment it is checked off, with the exit and shift described in 27.3; the `Completed` chip keeps the record. No other list hides a completed row without saying so. Rows state only what the row does not already say: the status pill appears for overdue and completed records, never for plain open work.
 
 Long titles truncate in dense lists but remain available in task details or accessible text. Metadata should collapse gracefully on narrow screens.
 
@@ -1996,6 +1996,30 @@ Tasks `Unfinished` view render from the same open backlog with today's
 day-scoped work excluded, so a task can never count as both `My day` and older
 unfinished work.
 
+**My day is open work only.** A task checked off anywhere — the dashboard list,
+a dashboard card, or the Tasks workspace — leaves `My day` immediately; the
+`Completed` chip is where its record lives. The chip count follows the list it
+heads, so `My day` counts open work only while the hero ring and the KPI strip
+keep counting the day's completed work.
+
+**Progress is one animated ring.** Subtask progress on rows, dashboard cards,
+and the task-detail header is the same small SVG ring with a tabular `3/5`
+beside it; the day hero uses the same component at its larger size with the
+count inside. The stroke offset transitions, so progress interpolates instead
+of jumping, and the ring never masks its center with a surface color — it must
+read correctly on plain, hovered, and selected surfaces.
+
+**Completion is a flight, not a freeze.** Checking a task spins that row's
+checkbox until the server confirms; every other row stays interactive while the
+write is in flight (the shared busy flag never disables checkboxes). On success
+the row plays a short exit and leaves its list, the rows below shift into place
+instead of jumping, and the change lands without a refresh; on failure the
+checkbox is restored and the row stays with the usual error notice. New tasks
+appear instantly as a pending row, and the add-task composer plays its exit
+before it unmounts so the list shifts behind a closing modal. Every part of
+this motion is removed under `prefers-reduced-motion`, which still removes the
+row and updates the list.
+
 **Counts describe their lists.** Every hero number, tab count, chip count, and
 section count derives from the same rendered array it heads, or from the server
 total with an explicit `Showing N of M` note when the list is paginated. The
@@ -2092,6 +2116,14 @@ lookalike input bars.
   accessible hidden label at very narrow widths.
 - Send control: 36px square, 11px radius, dark ink when enabled.
 - Reserve page bottom padding so the dock never obscures the last task or footer.
+- Clearance for focus and programmatic reveals is `scroll-margin-bottom` on the
+  content targets, never `scroll-padding-bottom` on the scroller. The composer is
+  pinned `16px` above the fold, so a scroller-level bottom padding can never be
+  satisfied on its behalf and the browser re-scrolls the page on every keystroke
+  to reveal the caret. A target-level margin keeps keyboard/Tab reveals clear of
+  the dock without touching the composer's own caret geometry.
+- Typing must not move the page: growing the draft, opening the flyout, or
+  revealing a thread must leave the content the reader is looking at in place.
 
 ### 28.2 Modes and outcomes
 

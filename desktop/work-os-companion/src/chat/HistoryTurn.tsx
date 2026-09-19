@@ -169,6 +169,7 @@ export function HistoryTurn(props: {
   onReviewSelection?: () => void;
   collapseCards?: boolean;
   renderTrace?: () => ReactNode;
+  showMark?: boolean;
 }) {
   const { turn, ...extras } = props;
   const isReceipt = !turn.text.trim() && typeof turn.receipt === "string" && turn.receipt.trim().length > 0;
@@ -178,6 +179,7 @@ export function HistoryTurn(props: {
       text={isReceipt ? turn.receipt ?? undefined : turn.text}
       meta={turn.meta}
       receipt={isReceipt}
+      showMark={props.showMark}
       copySource={turn}
     >
       <HistoryTurnExtras turn={turn} {...extras} />

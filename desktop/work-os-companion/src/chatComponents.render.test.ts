@@ -94,6 +94,10 @@ describe("ChatTurn copy and mascot", () => {
     expect(assistant).toContain("chat-copy-row");
     expect(assistant).toContain("chat-mascot-mark");
     expect(assistant).not.toContain("lucide-sparkles");
+
+    const clustered = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", text: "A follow-up.", showMark: false }));
+    expect(clustered).toContain("chat-turn-mark is-hidden");
+    expect(clustered).not.toContain("chat-mascot-mark");
   });
 
   it("copies card summaries for card-only turns and skips system notices", () => {

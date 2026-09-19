@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, RefreshCw } from "lucide-react";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { cx } from "./cx";
-import { prefersReducedMotion } from "./glimm";
 
 const WORD_MS = 32;
 const MAX_STREAM_TOKENS = 240;
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
 
 function tokenize(text: string): string[] {
   return text.split(/(\s+)/).filter((token) => token.length > 0);
