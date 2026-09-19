@@ -19,9 +19,14 @@ export interface ProposedBatchSubtask {
 export interface ProposedBatchTask {
   clientId: string;
   taskId?: string;
+  /** A title explicitly proposed by the assistant or typed on the card. */
   title?: string;
+  /** The current title shown for an id-only target. Never filed as a rename. */
+  displayTitle?: string;
   description?: string;
   taskGroupId?: string;
+  /** True only when the employee deliberately removed a proposed status. */
+  clearTaskGroupId?: boolean;
   completed?: boolean;
   assigneePersonId?: string;
   dueDate?: string;
@@ -128,7 +133,7 @@ export function isDisplayToolOp(op: Pick<ProposedOperation, "op">): boolean {
 export function batchItemCount(op: Pick<ProposedOperation, "op" | "tasks">): number {
   return (op.tasks ?? []).reduce((total, task) => {
     if (op.op === "multi_task_edit") {
-      const wording = task.title !== undefined || task.description !== undefined || task.taskGroupId !== undefined ? 1 : 0;
+      const wording = task.title !== undefined || task.description !== undefined || task.taskGroupId !== undefined || task.clearTaskGroupId === true ? 1 : 0;
       const completion = task.completed !== undefined ? 1 : 0;
       return total + wording + completion + task.subtasks.length;
     }
@@ -271,7 +276,9 @@ function normalizeBatchTasks(
     const statedTitle = typeof entry.title === "string" && entry.title.trim() ? safeTaskText(entry.title, "").slice(0, 240) || undefined : undefined;
     // A tool that names its target only by id (log, archive, delete, reassign)
     // still shows the real task title, taken from the same list the employee sees.
-    const title = statedTitle ?? (taskId ? allowed.get(taskId) : undefined);
+    // Keep that display-only value separate: an id-only edit must never send the
+    // current task title back as a rename when the employee only changed status.
+    const displayTitle = taskId ? allowed.get(taskId) : undefined;
     const description = typeof entry.description === "string" && entry.description.trim() ? entry.description.trim().slice(0, 2000) : undefined;
     const taskGroupId = typeof entry.taskGroupId === "string" && entry.taskGroupId.trim() ? entry.taskGroupId.trim().slice(0, 160) : undefined;
     const completed = typeof entry.completed === "boolean" ? entry.completed : undefined;
@@ -298,9 +305,9 @@ function normalizeBatchTasks(
     const rawDue = typeof entry.dueDate === "string" ? entry.dueDate.trim().slice(0, 10) : "";
     const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? rawDue : undefined;
     if (op === "multi_task_add") {
-      if (!taskId && !title) continue;
+      if (!taskId && !statedTitle) continue;
     } else if (op === "multi_task_edit") {
-      if (!taskId || (!title && !description && !taskGroupId && completed === undefined)) continue;
+      if (!taskId || (!statedTitle && !description && !taskGroupId && completed === undefined)) continue;
     } else if (op === "multi_task_log") {
       if (!taskId || !description) continue;
     } else if (!taskId) {
@@ -309,7 +316,8 @@ function normalizeBatchTasks(
     tasks.push({
       clientId: typeof entry.clientId === "string" && entry.clientId.trim() ? entry.clientId.trim().slice(0, 80) : `t${tasks.length + 1}`,
       ...(taskId ? { taskId } : {}),
-      ...(title ? { title } : {}),
+      ...(statedTitle ? { title: statedTitle } : {}),
+      ...(displayTitle ? { displayTitle } : {}),
       ...(description ? { description } : {}),
       ...(taskGroupId ? { taskGroupId } : {}),
       ...(completed === undefined ? {} : { completed }),
@@ -475,7 +483,7 @@ export interface ApprovalTransport {
   /** Owner-scoped readback for reconciling an interrupted approval. */
   readProposal?(proposalId: string): Promise<unknown>;
   /** One decision for a whole batch, with the employee's per-item edits. */
-  reviewBatch?(batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown> }> }): Promise<unknown>;
+  reviewBatch?(batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown>; clear_fields?: string[] }> }): Promise<unknown>;
 }
 
 export interface ApprovalOutcome {
@@ -562,7 +570,7 @@ export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalR
       });
     }
   }
-  const withIds = <T extends { clientId: string; title?: string; fromStatus?: string; toStatus?: string }>(entry: T): T => {
+  const withIds = <T extends { clientId: string; title?: string; displayTitle?: string; fromStatus?: string; toStatus?: string }>(entry: T): T => {
     const ids = idsByClientId.get(entry.clientId);
     const title = titleByClientId.get(entry.clientId);
     const status = statusByClientId.get(entry.clientId);
@@ -570,7 +578,7 @@ export function attachFiledProposals(op: ProposedOperation, rows: FiledProposalR
       ...entry,
       // A tool that named its target only by id gets the real task title here,
       // so the card never shows a note as if it were the task name.
-      ...(entry.title === undefined && title ? { title } : {}),
+      ...(entry.displayTitle === undefined && entry.title === undefined && title ? { displayTitle: title } : {}),
       ...(status ? { ...(entry.fromStatus === undefined && status.fromStatus ? { fromStatus: status.fromStatus } : {}), ...(entry.toStatus === undefined ? { toStatus: status.toStatus } : {}) } : {}),
       ...(ids ? { proposalIds: ids } : {}),
     };
@@ -609,15 +617,15 @@ export function batchEntryOutcome(results: readonly BatchReviewResult[] | undefi
     const failed = mine.find((item) => item.status === "failed" || item.status === "needs_review")!;
     return { tone: "failed", label: "Needs attention", message: failed.message };
   }
+  if (mine.some((item) => ["queued", "pending", "applying", "processing"].includes(item.status))) {
+    return { tone: "pending", label: "Filing", message: "The server is still applying this item." };
+  }
   if (mine.some((item) => item.status === "skipped")) {
     return { tone: "skipped", label: "Skipped", message: "Its task was not created, so this step was left alone." };
   }
   // A rejected or stale item was deliberately not filed.
   if (mine.some((item) => item.status === "rejected" || item.status === "stale")) {
     return { tone: "skipped", label: "Skipped", message: "" };
-  }
-  if (mine.some((item) => item.status === "applying" || item.status === "processing")) {
-    return { tone: "pending", label: "Filing", message: "The server is still applying this item." };
   }
   if (mine.every((item) => item.status === "applied")) return { tone: "ok", label: "Filed", message: "" };
   return { tone: "pending", label: "Pending", message: "" };
@@ -633,14 +641,39 @@ export interface BatchReviewResponse {
   outcome: string;
 }
 
+export interface BatchResultSummary {
+  total: number;
+  applied: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+}
+
+/** Collapses the server's per-proposal statuses into the state the grouped
+ * card needs. Rejected and stale rows are terminal skips, not failures. */
+export function summarizeBatchResults(results: readonly BatchReviewResult[] | undefined): BatchResultSummary {
+  const items = results ?? [];
+  return {
+    total: items.length,
+    applied: items.filter((item) => item.status === "applied").length,
+    failed: items.filter((item) => item.status === "failed" || item.status === "needs_review").length,
+    pending: items.filter((item) => ["queued", "pending", "processing", "applying"].includes(item.status)).length,
+    skipped: items.filter((item) => ["skipped", "rejected", "stale"].includes(item.status)).length,
+  };
+}
+
 /** The editable fields of a batch entry, omitted when untouched so an approval
  * can never clear a value the employee did not change. */
-function batchEntryEdits(task: ProposedBatchTask): Record<string, unknown> | undefined {
+function batchEntryDecision(task: ProposedBatchTask): { edits?: Record<string, unknown>; clear_fields?: string[] } {
   const edits: Record<string, unknown> = {};
   if (task.title !== undefined) edits.name = task.title;
   if (task.description !== undefined) edits.description = task.description;
   if (task.taskGroupId !== undefined) edits.task_group_id = task.taskGroupId;
-  return Object.keys(edits).length ? edits : undefined;
+  const clearFields = task.clearTaskGroupId ? ["task_group_id"] : undefined;
+  return {
+    ...(Object.keys(edits).length ? { edits } : {}),
+    ...(clearFields ? { clear_fields: clearFields } : {}),
+  };
 }
 
 function batchStepEdits(subtask: ProposedBatchSubtask): Record<string, unknown> | undefined {
@@ -672,13 +705,40 @@ export async function fileApprovedOperations(
           // Keep the server's per-item response so a skipped card can say which
           // entries were rejected and which steps were left alone.
           const response = await transport.reviewBatch(batchId, { decision: "reject", decisions: [] });
-          outcome.results.push({ op, status: "denied", message: "Skipped. Nothing from this batch was recorded.", data: { batch: response } });
+          if (!response || !Array.isArray((response as BatchReviewResponse).results)) {
+            const message = "The server did not confirm the skip. Check Review before trying again.";
+            outcome.failed.push({ op, message });
+            outcome.results.push({ op, status: "failed", message, retryable: true });
+            continue;
+          }
+          const items = Array.isArray((response as BatchReviewResponse | undefined)?.results)
+            ? (response as BatchReviewResponse).results
+            : [];
+          const summary = summarizeBatchResults(items);
+          if (summary.failed) {
+            const message = `The skip was not fully confirmed. ${summary.failed} change${summary.failed === 1 ? "" : "s"} still need${summary.failed === 1 ? "s" : ""} attention.`;
+            outcome.failed.push({ op, message });
+            outcome.results.push({ op, status: "failed", message, retryable: true, data: { batch: response } });
+            continue;
+          }
+          if (summary.pending) {
+            outcome.processing += 1;
+            const message = summary.applied
+              ? `Skipped the remaining changes. ${summary.applied} change${summary.applied === 1 ? " was" : "s were"} already filed; ${summary.pending} still processing.`
+              : "The skip is still being processed. Check Review again before retrying.";
+            outcome.results.push({ op, status: "processing", message, data: { batch: response } });
+            continue;
+          }
+          const message = summary.applied
+            ? `Skipped the remaining changes. ${summary.applied} change${summary.applied === 1 ? " was" : "s were"} already filed.`
+            : "Skipped. Nothing from this batch was recorded.";
+          outcome.results.push({ op, status: "denied", message, data: { batch: response } });
           continue;
         }
-        const decisions: Array<{ proposal_id: string; edits?: Record<string, unknown> }> = [];
+        const decisions: Array<{ proposal_id: string; edits?: Record<string, unknown>; clear_fields?: string[] }> = [];
         for (const task of op.tasks ?? []) {
-          const edits = batchEntryEdits(task);
-          for (const proposalId of task.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...(edits ? { edits } : {}) });
+          const decision = batchEntryDecision(task);
+          for (const proposalId of task.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...decision });
           for (const subtask of task.subtasks) {
             const subtaskEdits = batchStepEdits(subtask);
             for (const proposalId of subtask.proposalIds ?? []) decisions.push({ proposal_id: proposalId, ...(subtaskEdits ? { edits: subtaskEdits } : {}) });
@@ -690,18 +750,34 @@ export async function fileApprovedOperations(
           throw new Error("This update has no server-side batch items. Interpret it again before filing.");
         }
         const response = await transport.reviewBatch(batchId, { decision: "accept", decisions }) as BatchReviewResponse | undefined;
-        const items = Array.isArray(response?.results) ? response.results : [];
-        const recorded = items.filter((item) => item.status === "applied").length;
-        const attention = items.filter((item) => item.status === "failed" || item.status === "needs_review" || item.status === "skipped");
-        if (!items.length) {
-          outcome.recorded += 1;
-          outcome.results.push({ op, status: "recorded", message: "Recorded.", data: { batch: response } });
+        if (!response || !Array.isArray(response.results)) {
+          const message = "The server did not return batch results. Check Review before trying again.";
+          outcome.failed.push({ op, message });
+          outcome.results.push({ op, status: "failed", message, retryable: true });
           continue;
         }
-        if (attention.length) {
+        const items = Array.isArray(response?.results) ? response.results : [];
+        const recorded = items.filter((item) => item.status === "applied").length;
+        const summary = summarizeBatchResults(items);
+        const attention = items.filter((item) => item.status !== "applied");
+        if (!items.length) {
+          const message = "The server returned no batch items. Check Review before trying again.";
+          outcome.failed.push({ op, message });
+          outcome.results.push({ op, status: "failed", message, retryable: true, data: { batch: response } });
+          continue;
+        }
+        if (summary.pending && !summary.failed) {
+          outcome.processing += 1;
+          const message = summary.applied
+            ? `Filed ${summary.applied} change${summary.applied === 1 ? "" : "s"}; ${summary.pending} still processing.`
+            : "The batch is still being filed. Check Review again before retrying.";
+          outcome.results.push({ op, status: "processing", message, data: { batch: response } });
+          continue;
+        }
+        if (summary.failed) {
           const message = attention.length === items.length
             ? "Nothing was filed. The batch needs attention before it can be approved."
-            : `${recorded} of ${items.length} changes were filed. ${attention.length === 1 ? "One still needs" : `${attention.length} still need`} attention.`;
+            : `${recorded} of ${items.length} changes were filed. ${summary.failed === 1 ? "One still needs" : `${summary.failed} still need`} attention.`;
           outcome.failed.push({ op, message });
           outcome.results.push({
             op,
@@ -713,8 +789,12 @@ export async function fileApprovedOperations(
           });
           continue;
         }
+        if (!summary.applied && summary.skipped === summary.total) {
+          outcome.results.push({ op, status: "denied", message: "Nothing was filed. The batch entries were already skipped.", data: { batch: response } });
+          continue;
+        }
         outcome.recorded += recorded;
-        outcome.results.push({ op, status: "recorded", message: `Filed ${recorded} change${recorded === 1 ? "" : "s"}.`, data: { batch: response } });
+        outcome.results.push({ op, status: "recorded", message: summary.skipped ? `Filed ${recorded} change${recorded === 1 ? "" : "s"}; skipped ${summary.skipped}.` : `Filed ${recorded} change${recorded === 1 ? "" : "s"}.`, data: { batch: response } });
         continue;
       }
       if (!op.proposalId) throw new Error("This update no longer has a server-side approval record. Interpret it again before filing.");

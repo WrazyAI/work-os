@@ -3,7 +3,7 @@ import { ApprovalFlow, ApprovalResults } from "../ApprovalFlow";
 import { NavigateButton } from "../NavigateButton";
 import { ChatSectionBoundary } from "../ErrorBoundary";
 import type { ApprovedOpContext, ProposedOperation, ToolCallResult } from "../interpretation";
-import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp } from "../interpretation";
+import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, usesGroupedCard } from "../interpretation";
 import { BatchApprovalCards } from "../TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCardTask } from "../TaskSelectionCard";
 import { ChatTurn } from "./ChatTurn";
@@ -102,15 +102,14 @@ export function HistoryTurnExtras({
       />,
     ];
   });
-  const mutationResults = results.filter((result) => isMutatingToolOp(result.op));
+  const mutationResults = results.filter((result) => isMutatingToolOp(result.op) && !usesGroupedCard(result.op));
   // A mutating operation is only pending until a result settles it. Without
   // this gate `ApprovalFlow` (which falls back to `ApprovalResults` when
   // nothing is pending) doubled the recorded summary line after every
   // decision. `AssistantOperations` already gates the same way.
   const hasPendingMutations = operations.some((operation) =>
     isMutatingToolOp(operation)
-    && !isBatchToolOp(operation)
-    && !isPlanImportOp(operation)
+        && !usesGroupedCard(operation)
     && !operation.failure
     && !results.some((result) => result.op === operation || (operation.proposalId !== undefined && result.op.proposalId === operation.proposalId)),
   );
@@ -131,7 +130,7 @@ export function HistoryTurnExtras({
             {mutationResults.length ? <ApprovalResults results={mutationResults} onRetry={onRetryOperation} /> : null}
             {hasPendingMutations ? (
               <ApprovalFlow
-                operations={operations.filter((op) => isMutatingToolOp(op) && !isBatchToolOp(op) && !isPlanImportOp(op))}
+                operations={operations.filter((op) => isMutatingToolOp(op) && !usesGroupedCard(op))}
                 results={results}
                 context={toolContext ?? { shiftDate: null, personId: null, promptKind: "optional" }}
                 busy={busy ?? false}

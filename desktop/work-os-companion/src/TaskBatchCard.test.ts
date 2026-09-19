@@ -6,6 +6,7 @@ import {
   attachFiledProposals,
   batchEntryOutcome,
   batchItemCount,
+  fileApprovedOperations,
   filedProposalGroups,
   isBatchToolOp,
   isDestructiveBatchOp,
@@ -103,6 +104,17 @@ describe("TaskBatchCard", () => {
     expect(markup).toContain("Approve all 2 changes");
   });
 
+  it("uses explicit action pills and separates an old and new status", () => {
+    const markup = render({
+      ...editBatch,
+      tasks: [{ clientId: "t1", taskId: "t-1", title: "Ship the debugger fix (final)", taskGroupId: "col-done", fromStatus: "In review", toStatus: "Done", subtasks: [] }],
+    });
+    expect(markup).toContain(">EDIT<");
+    expect(markup).toContain(">In review<");
+    expect(markup).toContain("task-batch-status-arrow");
+    expect(markup).toContain(">Done<");
+  });
+
   it("reports each entry after filing and stops offering edits", () => {
     const result: ToolCallResult = {
       op: addBatch,
@@ -132,7 +144,7 @@ describe("TaskBatchCard", () => {
   it("offers a retry when the batch itself failed", () => {
     const result: ToolCallResult = { op: addBatch, status: "failed", message: "Nothing was filed. The batch needs attention.", retryable: true };
     const markup = render(addBatch, result);
-    expect(markup).toContain("Some items could not be filed. Nothing else was changed.");
+    expect(markup).toContain("Nothing was filed. The batch needs attention.");
     expect(markup).toContain("Retry");
     expect(markup).toContain("Skip");
   });
@@ -228,6 +240,64 @@ describe("batch filing helpers", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.batchId).toBe("batch-1");
     expect(calls[0]?.body).toMatchObject({ decision: "reject", decisions: [] });
+  });
+
+  it("keeps a skip in processing when the server has not settled every item", async () => {
+    const transport: ApprovalTransport = {
+      reviewProposal: async () => ({}),
+      reviewBatch: async (batchId, body) => ({
+        batch_id: batchId,
+        decision: body.decision,
+        results: [
+          { proposal_id: "p1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "processing", outcome: "processing", message: "Still processing." },
+          { proposal_id: "p2", client_id: "s1", parent_client_id: "t1", operation: "add_subtask", status: "skipped", outcome: "skipped", message: "Skipped." },
+        ],
+        accepted: 0,
+        failed: 0,
+        skipped: 1,
+        outcome: "processing",
+      }),
+    };
+    const result = await skipBatchOperation(addBatch, transport);
+    expect(result.status).toBe("processing");
+    expect(result.message).toContain("still being processed");
+  });
+
+  it("keeps a failed skip retryable instead of calling it skipped", async () => {
+    const transport: ApprovalTransport = {
+      reviewProposal: async () => ({}),
+      reviewBatch: async (batchId, body) => ({
+        batch_id: batchId,
+        decision: body.decision,
+        results: [{ proposal_id: "p1", client_id: "t1", parent_client_id: null, operation: "create_task", status: "failed", outcome: "failed", message: "Provider unavailable." }],
+        accepted: 0,
+        failed: 1,
+        skipped: 0,
+        outcome: "failed",
+      }),
+    };
+    const result = await skipBatchOperation(addBatch, transport);
+    expect(result.status).toBe("failed");
+    expect(result.retryable).toBe(true);
+  });
+
+  it("carries an explicit status clear without sending the display title", async () => {
+    const calls: Array<{ batchId: string; body: unknown }> = [];
+    const operation: ProposedOperation = {
+      ...editBatch,
+      tasks: [{ clientId: "t1", taskId: "t-1", displayTitle: "Ship the debugger fix", clearTaskGroupId: true, subtasks: [], proposalIds: ["p3"] }],
+    };
+    const transport: ApprovalTransport = {
+      reviewProposal: async () => ({}),
+      reviewBatch: async (batchId, body) => {
+        calls.push({ batchId, body });
+        return { batch_id: batchId, decision: "accept", results: [{ proposal_id: "p3", client_id: "t1", parent_client_id: null, operation: "update_task", status: "applied", outcome: "applied", message: "Recorded." }], accepted: 1, failed: 0, skipped: 0, outcome: "applied" };
+      },
+    };
+    const outcome = await fileApprovedOperations([operation], transport);
+    expect(outcome.recorded).toBe(1);
+    expect(calls[0]?.body).toMatchObject({ decisions: [{ proposal_id: "p3", clear_fields: ["task_group_id"] }] });
+    expect(JSON.stringify(calls[0]?.body)).not.toContain("Ship the debugger fix");
   });
 });
 
@@ -365,10 +435,20 @@ describe("batch entry titles", () => {
     ]);
     const tasks = review?.operations[0]?.tasks ?? [];
     // The log names only ids, so the card takes the real titles from the list.
-    expect(tasks[0]?.title).toBe("Ship the debugger fix");
+    expect(tasks[0]?.displayTitle).toBe("Ship the debugger fix");
     // A stated title wins over the list title.
     expect(tasks[1]?.title).toBe("Package the Windows build");
     expect(tasks[0]?.description).toBe("Shipped the schema.");
+  });
+
+  it("does not turn an id-only status edit into a title edit", () => {
+    const review = normalizeInterpretation({
+      operations: [{ op: "multi_task_edit", statement: "Move the task to done.", tasks: [{ taskId: "t-1", taskGroupId: "col-done" }] }],
+    }, "move it", [{ id: "t-1", title: "Ship the debugger fix" }]);
+    const task = review?.operations[0]?.tasks?.[0];
+    expect(task?.title).toBeUndefined();
+    expect(task?.displayTitle).toBe("Ship the debugger fix");
+    expect(batchItemCount(review?.operations[0] ?? { op: "multi_task_edit", tasks: [] })).toBe(1);
   });
 
   it("drops an id-only entry whose task is not in the list", () => {

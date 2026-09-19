@@ -7070,6 +7070,20 @@ button:not(:disabled):active {
 /* A skipped item is deliberately quiet, never a failure and never a success. */
 .task-batch-outcome.skipped { background: #eceada; color: #5f6358; }
 
+.task-batch-receipt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.task-batch-status-arrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
 /* Settled cards read as a record, not a form: the surface flattens, the heading
    quiets, and nothing inside invites another action. */
 .task-batch-card.is-settled { background: #fbfbf5; }

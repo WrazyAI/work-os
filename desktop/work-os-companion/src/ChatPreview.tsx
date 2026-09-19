@@ -13,7 +13,7 @@ import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { Otto } from "./Otto";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
-import type { ToolCallResult } from "./interpretation";
+import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
 import { TaskBatchCard } from "./TaskBatchCard";
 
@@ -530,6 +530,8 @@ function AvatarSection() {
  * after a partial failure, and after every item filed. Used for the visual and
  * interaction review of the multi-task tools (design §25.10.2). */
 function BatchSection() {
+  const [liveResult, setLiveResult] = useState<ToolCallResult | undefined>();
+  const [liveMessage, setLiveMessage] = useState("");
   const context = { shiftDate: "2026-09-18", personId: "person-1", promptKind: "optional" };
   const addBatch = {
     op: "multi_task_add" as const,
@@ -546,7 +548,7 @@ function BatchSection() {
           { clientId: "s2", title: "Circulate the draft for review", description: "Two working days ahead." },
         ],
       },
-      { clientId: "t2", taskId: "t-1", subtasks: [{ clientId: "s3", title: "Verify the debug window fixture" }] },
+      { clientId: "t2", taskId: "t-1", displayTitle: "Ship the debug window fixture", subtasks: [{ clientId: "s3", title: "Verify the debug window fixture" }] },
     ],
   };
   const editBatch = {
@@ -563,7 +565,7 @@ function BatchSection() {
   const partial = {
     op: addBatch,
     status: "failed" as const,
-    message: "1 of 2 changes were filed. 1 still needs attention.",
+    message: "3 of 4 changes were filed. 1 still needs attention.",
     retryable: true,
     data: {
       batch: {
@@ -616,6 +618,36 @@ function BatchSection() {
       },
     },
   };
+  const settlePreview = (operation: ProposedOperation, status: "recorded" | "denied") => {
+    const skippedParent = status === "denied";
+    const items = (operation.tasks ?? []).flatMap((task) => [
+      ...(operation.op === "multi_task_add" && task.taskId ? [] : [{
+        proposal_id: `${task.clientId}-proposal`,
+        client_id: task.clientId,
+        parent_client_id: null,
+        operation: operation.op === "multi_task_add" ? "create_task" : "update_task",
+        status: skippedParent ? "rejected" : "applied",
+        outcome: skippedParent ? "rejected" : "applied",
+        message: skippedParent ? "Rejected." : "Recorded.",
+      }]),
+      ...task.subtasks.map((subtask) => ({
+        proposal_id: `${subtask.clientId}-proposal`,
+        client_id: subtask.clientId,
+        parent_client_id: task.clientId,
+        operation: "add_subtask",
+        status: skippedParent ? "skipped" : "applied",
+        outcome: skippedParent ? null : "applied",
+        message: skippedParent ? "Its task was not created, so this step was left alone." : "Recorded.",
+      })),
+    ]);
+    setLiveResult({
+      op: operation,
+      status,
+      message: skippedParent ? "Skipped. Nothing from this batch was recorded." : `Filed ${items.length} changes.`,
+      data: { batch: { results: items } },
+    });
+    setLiveMessage(skippedParent ? "The batch was skipped." : "The batch was filed and is now a receipt.");
+  };
   const filed = {
     op: editBatch,
     status: "recorded" as const,
@@ -631,6 +663,10 @@ function BatchSection() {
     },
   };
   return <>
+    <section aria-label="Interactive batch card"><strong style={{ fontSize: 12 }}>Interactive batch card</strong>
+      <TaskBatchCard operation={addBatch} result={liveResult} context={context} onApprove={(operation) => settlePreview(operation, "recorded")} onSkip={(operation) => settlePreview(operation, "denied")} onRetry={() => undefined} />
+      {liveMessage ? <p role="status" style={{ margin: 0, fontSize: 12 }}>{liveMessage}</p> : null}
+    </section>
     <section><strong style={{ fontSize: 12 }}>Awaiting a decision</strong>
       <TaskBatchCard operation={addBatch} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
     </section>

@@ -91,6 +91,7 @@ export async function reviewWorkOsProposalBatch(access: WorkOsAccess, batchId: s
     const item = decisions.get(proposalId) ?? {};
     const itemDecision = text(item.decision) ?? decision;
     const edits = item.edits ?? undefined;
+    const clearFields = Array.isArray(item.clear_fields) ? item.clear_fields : undefined;
     const result = (status: string, message: string, outcome: string | null, extra?: Partial<BatchReviewResult>): BatchReviewResult => ({
       proposal_id: proposalId,
       client_id: (row.client_id as string | null) ?? null,
@@ -141,6 +142,7 @@ export async function reviewWorkOsProposalBatch(access: WorkOsAccess, batchId: s
       const reviewed = await reviewWorkOsProposal(access, proposalId, {
         decision: itemDecision,
         ...(edits ? { edits } : {}),
+        ...(clearFields?.length ? { clear_fields: clearFields } : {}),
         ...(decisionKey ? { decision_idempotency_key: `${decisionKey}:${proposalId}` } : {}),
       });
       const settled = reviewed as unknown as WorkOsProposalRow;
@@ -164,7 +166,7 @@ export async function reviewWorkOsProposalBatch(access: WorkOsAccess, batchId: s
 
   const accepted = results.filter((entry) => entry.status === "applied").length;
   const failed = results.filter((entry) => entry.status === "failed").length;
-  const skipped = results.filter((entry) => entry.status === "skipped").length;
+  const skipped = results.filter((entry) => ["skipped", "rejected", "stale"].includes(entry.status)).length;
   await audit(access, "proposal.batch_reviewed", "task_proposal_batch", batchId, { decision: decision ?? null, accepted, failed, skipped });
   return {
     batch_id: batchId,
@@ -189,6 +191,7 @@ function statusMessage(status: string, row: WorkOsProposalRow): string {
   const failure = text(row.failure_reason);
   if (status === "applied") return "Recorded.";
   if (status === "rejected") return "Rejected.";
+  if (status === "stale") return "Skipped because the task changed after this batch was drafted.";
   if (status === "queued") return "Queued for the next sync.";
   if (status === "processing") return "Still being filed.";
   if (failure) return failure;

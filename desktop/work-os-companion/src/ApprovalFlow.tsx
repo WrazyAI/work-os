@@ -5,6 +5,7 @@ import {
   isMutatingToolOp,
   operationLabel,
   operationToolCall,
+  usesGroupedCard,
   type ApprovedOpContext,
   type ProposedOperation,
   type ToolCallResult,
@@ -54,22 +55,29 @@ function statusLabel(result: ToolCallResult): string {
 }
 
 export function ApprovalResults({ results, onRetry }: { results: readonly ToolCallResult[]; onRetry?: (result: ToolCallResult) => void }) {
+  const visibleResults = results.filter((result) => !usesGroupedCard(result.op));
   // Accordion, not a full card (design §25.7): the summary line carries the
   // count and anything actionable opens itself so a failure never hides.
-  const resultKey = results.map((result) => `${result.status}:${result.op.taskTitle ?? ""}`).join("|");
+  const resultKey = visibleResults.map((result) => `${result.status}:${result.op.taskTitle ?? ""}`).join("|");
   const [manual, setManual] = useState<boolean | null>(null);
-  const failed = results.filter((result) => result.status === "failed").length;
-  const processing = results.filter((result) => result.status === "processing").length;
-  const recorded = results.length - failed - processing;
+  const failed = visibleResults.filter((result) => result.status === "failed").length;
+  const processing = visibleResults.filter((result) => result.status === "processing").length;
+  const queued = visibleResults.filter((result) => result.status === "queued").length;
+  const skipped = visibleResults.filter((result) => result.status === "denied").length;
+  const recorded = visibleResults.length - failed - processing - queued - skipped;
   useEffect(() => { setManual(null); }, [resultKey]);
-  if (!results.length) return null;
+  if (!visibleResults.length) return null;
   const expanded = manual ?? (failed > 0 || processing > 0);
   const panelId = `action-results-${useId()}`;
   const summary = failed
-    ? `${recorded} recorded · ${failed} failed${processing ? ` · ${processing} processing` : ""}`
+    ? `${recorded} recorded · ${failed} failed${processing ? ` · ${processing} processing` : ""}${queued ? ` · ${queued} queued` : ""}`
     : processing
-      ? `${results.length} action${results.length === 1 ? "" : "s"} · ${processing} processing`
-      : `${results.length} action${results.length === 1 ? "" : "s"} recorded`;
+      ? `${recorded} recorded · ${processing} processing${queued ? ` · ${queued} queued` : ""}`
+    : skipped
+      ? `${recorded} recorded · ${skipped} skipped${queued ? ` · ${queued} queued` : ""}`
+    : queued
+      ? `${recorded} recorded · ${queued} queued`
+      : `${visibleResults.length} action${visibleResults.length === 1 ? "" : "s"} recorded`;
   return (
     <section className="approval-results" aria-label="Action results">
       <header className="approval-results-head">
@@ -87,7 +95,7 @@ export function ApprovalResults({ results, onRetry }: { results: readonly ToolCa
         </button>
       </header>
       <div id={panelId} className="approval-results-body" role="region" aria-label="Action results detail" hidden={!expanded}>
-        {results.map((result, index) => (
+        {visibleResults.map((result, index) => (
           <article key={operationKey(result.op, index)} className={`is-${result.status}`}>
             <span aria-hidden="true">{result.status === "failed" ? <CircleAlert size={14} /> : result.status === "processing" ? <Loader size={14} /> : <Check size={14} />}</span>
             <div><strong>{operationLabel(result.op.op)} {result.op.taskTitle ?? "update"}</strong><p>{result.message}</p></div>
@@ -131,7 +139,7 @@ export function ApprovalFlow({
     setSubmitted(false);
   }, [signature]);
 
-  if (!pending.length) return <ApprovalResults results={results.filter((result) => isMutatingToolOp(result.op))} onRetry={onRetry} />;
+  if (!pending.length) return <ApprovalResults results={results.filter((result) => isMutatingToolOp(result.op) && !usesGroupedCard(result.op))} onRetry={onRetry} />;
 
   const decide = (decision: ApprovalDecision) => {
     if (submitted) return;

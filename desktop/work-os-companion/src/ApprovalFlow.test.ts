@@ -59,6 +59,16 @@ describe("ApprovalFlow", () => {
     expect(markup).toContain("Still processing");
   });
 
+  it("does not count queued actions as recorded", () => {
+    const queued: ToolCallResult = { op: operations[0]!, status: "queued", message: "Queued locally." };
+    const markup = renderToStaticMarkup(createElement(ApprovalResults, {
+      results: [queued, { op: operations[1]!, status: "recorded", message: "Recorded in Nifty." }],
+    }));
+
+    expect(markup).toContain("1 recorded · 1 queued");
+    expect(markup).not.toContain("2 actions recorded");
+  });
+
   it("collapses to an action-count summary and opens itself when something failed", () => {
     const recorded: ToolCallResult[] = [
       { op: operations[0]!, status: "recorded", message: "Recorded in Nifty." },

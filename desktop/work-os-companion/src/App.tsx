@@ -33,7 +33,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -135,7 +135,7 @@ function proposalFilingTransport() {
   return {
     reviewProposal: (proposalId: string, options?: { providerCreateResolution?: "no_task_created" }) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "accept", ...(options?.providerCreateResolution ? { provider_create_resolution: options.providerCreateResolution } : {}) }), signal: AbortSignal.timeout(60_000) }),
     readProposal: (proposalId: string) => apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`),
-    reviewBatch: (batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown> }> }) => apiRequest(`/api/work-os/proposal-batches/${encodeURIComponent(batchId)}`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) }),
+    reviewBatch: (batchId: string, body: { decision: "accept" | "reject"; decisions: Array<{ proposal_id: string; decision?: "accept" | "reject"; edits?: Record<string, unknown>; clear_fields?: string[] }> }) => apiRequest(`/api/work-os/proposal-batches/${encodeURIComponent(batchId)}`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) }),
   };
 }
 
@@ -2340,7 +2340,7 @@ export default function App() {
 
   function retryInterpretationOperation(result: ToolCallResult) {
     const op = { ...result.op, enabled: true };
-    if (!op.proposalId || busy) return;
+    if ((!op.proposalId && !op.batchId) || busy) return;
     const review = interpretation;
     setBusy(true); setError("");
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
@@ -2393,7 +2393,7 @@ export default function App() {
         enabled.length ? fileApprovedOperations(enabled, proposalFilingTransport()) : Promise.resolve({ recorded: 0, queued: 0, processing: 0, failed: [], results: [] as ToolCallResult[] }),
         Promise.all(rejected.map(async (op): Promise<ToolCallResult> => {
           try {
-            if (isBatchToolOp(op)) return await skipBatchOperation(op, proposalFilingTransport());
+            if (usesGroupedCard(op)) return await skipBatchOperation(op, proposalFilingTransport());
             if (!op.proposalId) throw new Error("This proposal is no longer available. Interpret it again before dismissing it.");
             const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(op.proposalId)}`, { method: "PATCH", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ decision: "reject" }), signal: AbortSignal.timeout(60_000) });
             if (row?.outcome === "rejected" || !row?.outcome) return { op, status: "denied", message: "Skipped. This action did not run." };
@@ -3006,9 +3006,10 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   const mutating = interpretation.operations.filter(isMutatingToolOp);
   const actionable = mutating.filter((op) => !op.failure);
   const unfiled = mutating.filter((op) => !!op.failure);
-  const mutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
-  const hasResults = mutationResults.length > 0;
-  const hasPendingMutations = actionable.some((op) => !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
+  const allMutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
+  const mutationResults = allMutationResults.filter((result) => !usesGroupedCard(result.op));
+  const hasResults = allMutationResults.length > 0;
+  const hasPendingMutations = actionable.some((op) => !usesGroupedCard(op) && !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
   const proposedTaskIds = interpretation.operations
     .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
     .map((op) => op.taskId)

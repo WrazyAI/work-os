@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { INTERPRET_RESPONSE_SCHEMA, parseInterpretation } from "../src/lib/aiInterpret";
 import { annotateBatchStatusNames, type BatchLabelEntry } from "../src/lib/aiBatchLabels";
-import { interpretedOperations, prepareProposals, proposalDecisionEdits } from "../src/lib/work-os-proposals";
+import { interpretedOperations, prepareProposals, proposalDecisionClearFields, proposalDecisionEdits } from "../src/lib/work-os-proposals";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -170,6 +170,12 @@ test("narrows employee edits to the fields the operation owns", () => {
   assert.equal(capped.name.length, 240);
 });
 
+test("only an explicit batch clear removes a proposed status", () => {
+  assert.deepEqual(proposalDecisionClearFields("update_task", ["task_group_id", "unknown", "task_group_id"]), ["task_group_id"]);
+  assert.deepEqual(proposalDecisionClearFields("create_task", ["task_group_id"]), []);
+  assert.deepEqual(proposalDecisionClearFields("update_task", "task_group_id"), []);
+});
+
 test("the strict schema carries the batch payload but keeps every field required", () => {
   const schema = INTERPRET_RESPONSE_SCHEMA.schema as unknown as { properties: { operations: { items: { properties: Record<string, unknown>; required: readonly string[] } } } };
   const items = schema.properties.operations.items;
@@ -219,7 +225,8 @@ test("the batch review owns ordering, parent resolution, and per-item outcomes",
 test("employee edits are validated per operation and never overwrite the agent's proposal", () => {
   const proposals = read("src/lib/work-os-proposals.ts");
   assert.match(proposals, /proposalDecisionEdits/);
-  assert.match(proposals, /decided_change: decisionEdits/);
+  assert.match(proposals, /decided_change: decidedChange/);
+  assert.match(proposals, /clear_fields/);
   assert.match(proposals, /already approved with different edits/);
   assert.match(proposals, /requireInInput: false/);
 });

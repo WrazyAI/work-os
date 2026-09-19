@@ -741,6 +741,15 @@ export function proposalDecisionEdits(operation: string, value: unknown): Json |
   return Object.keys(narrowed).length ? narrowed : null;
 }
 
+/** Batch cards can deliberately remove a proposed optional field. Keep this
+ * separate from `edits`: an omitted field means "leave the proposal as-is",
+ * while `clear_fields` means the employee explicitly took it back. */
+export function proposalDecisionClearFields(operation: string, value: unknown): string[] {
+  if (operation !== "update_task" || !Array.isArray(value)) return [];
+  const allowed = new Set(["description", "task_group_id"]);
+  return [...new Set(value.filter((field): field is string => typeof field === "string" && allowed.has(field)))];
+}
+
 /** The human name of a status column, read from any task already sitting in it.
  * Used only for display on the review card; an unresolvable name stays null. */
 async function resolveTaskGroupName(ownerId: string, task: Json, taskGroupId: string): Promise<string | null> {
@@ -1043,6 +1052,11 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   // Employee edits made on the review card, validated against the operation
   // they belong to. The agent's original proposed_change is never overwritten.
   const decisionEdits = proposalDecisionEdits(String(proposal.operation), body.edits);
+  const clearFields = proposalDecisionClearFields(String(proposal.operation), body.clear_fields);
+  if (decision === "reject" && clearFields.length) throw new Error("clear_fields only applies to an accept decision");
+  const decidedChange: Json | null = decisionEdits || clearFields.length
+    ? { ...(decisionEdits ?? {}), ...(clearFields.length ? { clear_fields: clearFields } : {}) }
+    : null;
   if (proposal.status === "applying") {
     const applyingSince = new Date(proposal.updated_at as string).getTime();
     if (Date.now() - applyingSince <= 5 * 60_000) return withOutcome(proposal);
@@ -1065,7 +1079,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   if (decisionKey && proposal.decision_idempotency_key === decisionKey && !["pending", "failed", "needs_review", "stale"].includes(proposal.status)) {
     // A replay must carry the same edits. An approval that already settled is
     // never silently rewritten by a different card state.
-    if (decisionEdits && proposal.decided_change && JSON.stringify(proposal.decided_change) !== JSON.stringify(decisionEdits)) {
+    if (JSON.stringify(proposal.decided_change ?? null) !== JSON.stringify(decidedChange)) {
       throw new Error("This update was already approved with different edits. Refresh to see the approved version.");
     }
     return withOutcome(proposal);
@@ -1094,11 +1108,21 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
   }
   if (!["pending", "failed", "needs_review"].includes(proposal.status)) return withOutcome(proposal);
   const proposedChange = proposal.proposed_change as Json;
-  const appliedChange: Json = decisionEdits ? { ...proposedChange, ...decisionEdits } : proposedChange;
+  const appliedChange: Json = { ...proposedChange };
+  for (const field of clearFields) {
+    delete appliedChange[field];
+    // These are display-only metadata written alongside a status proposal; if
+    // the status move is taken back, do not carry its labels into the apply.
+    if (field === "task_group_id") {
+      delete appliedChange.from_status;
+      delete appliedChange.to_status;
+    }
+  }
+  if (decisionEdits) Object.assign(appliedChange, decisionEdits);
   // An employee-chosen status column is validated against the project here;
   // unlike the drafted path, it need not appear verbatim in the input text
   // (the employee picked it from the card, the model did not invent it).
-  if (decisionEdits && text(appliedChange.task_group_id) !== text(proposedChange.task_group_id)) {
+  if ((decisionEdits || clearFields.length) && text(appliedChange.task_group_id) !== text(proposedChange.task_group_id) && text(appliedChange.task_group_id)) {
     const ownerId = await organizationOwnerId(access.organizationId);
     const target = await getTaskByLocalOrProviderId(ownerId, (proposal.task_id as string) ?? "");
     await assertKnownTaskGroup(ownerId, target, text(appliedChange.task_group_id), "", { requireInInput: false });
@@ -1161,7 +1185,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
     status: "applying",
     apply_attempt: applyAttempt,
     proposed_change: proposedChange,
-    decided_change: decisionEdits,
+    decided_change: decidedChange,
     decided_by: access.ctx.user.id,
     decided_at: new Date().toISOString(),
     decision_idempotency_key: decisionKey,
@@ -1185,7 +1209,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       access,
       // Apply the employee's agreed values while proposed_change keeps the
       // agent's original wording for the audit trail.
-      (decisionEdits ? { ...(applying as Json), proposed_change: appliedChange } : applying) as Json,
+      (decisionEdits || clearFields.length ? { ...(applying as Json), proposed_change: appliedChange } : applying) as Json,
       applyAttempt,
       { firstAttempt, confirmedNoTaskCreated },
     );

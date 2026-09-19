@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Batch task cards now show live filed, skipped, and needs-attention results, keep edits safe, and collapse into a clear receipt after approval.
+
 ## 0.3.33
 
 - Checking off a task no longer makes the list jump while it saves: the checkbox spins in place and the finished row leaves in one smooth motion.
