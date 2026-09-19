@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { AlertTriangle, Check, ChevronDown, CircleAlert, ListChecks, RefreshCw } from "lucide-react";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText } from "./taskWorkspace";
@@ -491,6 +491,7 @@ export function TaskSelectionCard({
       )}
       aria-labelledby={titleId}
       aria-busy={loading || sending}
+      style={{ "--chat-task-list-max-height": `${maxHeight}px` } as CSSProperties}
     >
       <header className="chat-task-head">
         <h2 id={titleId} title={title} className="chat-task-heading">

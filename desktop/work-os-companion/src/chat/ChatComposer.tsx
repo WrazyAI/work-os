@@ -8,7 +8,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, Plus } from "lucide-react";
-import { createChatSweep } from "./glimm";
 import { GlideMenu, type GlideRow } from "./GlideMenu";
 import {
   WORK_OS_CHAT_SOURCES,
@@ -38,6 +37,7 @@ export function ChatComposer({
   commands = [],
   footerLeft = null,
   onFocus,
+  onPlus,
   sendLabel = "Send",
   plusLabel = "Add Work OS context and commands",
   sweepSignal = 0,
@@ -56,6 +56,8 @@ export function ChatComposer({
   commands?: WorkOsChatCommand[];
   footerLeft?: ReactNode;
   onFocus?: () => void;
+  /** Open the owning surface before revealing the context menu. */
+  onPlus?: () => void;
   sendLabel?: string;
   plusLabel?: string;
   /** Increment to replay the sweep (e.g. when a reply settles). */
@@ -70,8 +72,6 @@ export function ChatComposer({
   const rootRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sweepRef = useRef<ReturnType<typeof createChatSweep> | null>(null);
 
   const token = dismissed ? null : parseChatToken(value);
   const menu: "at" | "slash" | null = plusOpen ? "at" : (token?.kind ?? null);
@@ -97,28 +97,6 @@ export function ChatComposer({
     setActive(0);
     setEngaged(false);
   }, [menu, query]);
-
-  /* Glimm shader lives inside the composer, invisible at rest. */
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    sweepRef.current = createChatSweep(canvas);
-    return () => {
-      sweepRef.current?.dispose();
-      sweepRef.current = null;
-    };
-  }, []);
-
-  const playSweep = () => sweepRef.current?.play();
-
-  // Replay when the parent reports a settled reply.
-  const lastSignal = useRef(sweepSignal);
-  useEffect(() => {
-    if (sweepSignal !== lastSignal.current) {
-      lastSignal.current = sweepSignal;
-      if (sweepSignal > 0) playSweep();
-    }
-  }, [sweepSignal]);
 
   /* The field grows with content to a maximum. */
   useLayoutEffect(() => {
@@ -215,7 +193,6 @@ export function ChatComposer({
   const send = () => {
     if (!canSend || busy) return;
     closeMenus();
-    playSweep();
     onSend();
   };
 
@@ -265,7 +242,9 @@ export function ChatComposer({
             width: anchor.width,
             bottom: window.innerHeight - anchor.top + 8,
             maxHeight: Math.max(180, Math.min(264, anchor.top - 16)),
-            zIndex: 60,
+            /* The in-app dock owns z-index 90; the detached menu must sit
+               above that surface or its rows can look visible but lose clicks. */
+            zIndex: 120,
           }}
           emptyText={`No matches for “${query}”`}
           footText={menu === "at" ? "Type to filter Work OS context" : "Type to filter commands"}
@@ -282,13 +261,8 @@ export function ChatComposer({
         className={`chat-composer relative isolate flex flex-col overflow-hidden border border-line bg-white shadow-card transition-[border-color,border-radius] duration-150 focus-within:border-line-strong ${
           wide ? "gap-2.5 rounded-[18px] p-3" : "gap-1.5 rounded-[16px] p-1.5"
         }`}
+        data-sweep-signal={sweepSignal}
       >
-        <canvas
-          ref={canvasRef}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 h-full w-full"
-          style={{ borderRadius: "inherit" }}
-        />
         <div
           className={`grid items-end gap-x-1 gap-y-1.5 ${
             wide && hasFooter
@@ -301,6 +275,7 @@ export function ChatComposer({
             aria-label={plusLabel}
             aria-expanded={plusOpen}
             onClick={() => {
+              if (!plusOpen) onPlus?.();
               setDismissed(false);
               setPlusOpen((current) => !current);
               inputRef.current?.focus();

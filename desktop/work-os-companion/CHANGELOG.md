@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.30
+
+- Chat now uses one calmer, roomier layout in the app and floating companion, with clearer copy controls and Otto markers.
+- The plus menu now opens reliably in the app and lets you add Work OS context just like the floating companion.
+
 ## 0.3.29
 
 - Checking off a task now shows a spinner in that checkbox, keeps the rest of the list usable, and removes the task right away — no refresh needed.

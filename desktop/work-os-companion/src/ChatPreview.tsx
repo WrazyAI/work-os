@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Minus, SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
-import { ChatTabs, ChatTurn, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
@@ -11,6 +11,8 @@ import { displayUpdateVersion } from "./updater";
 import { changelogHistory, updateInstalledCopy } from "./whatsNew";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { Otto } from "./Otto";
+import { MascotMark } from "./chat/MascotMark";
+import { MASCOT } from "./mascot";
 import type { ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
 import { TaskBatchCard } from "./TaskBatchCard";
@@ -162,7 +164,7 @@ function HistorySection() {
           {params.has("prompt") ? <button className="avatar-prompt-bubble"><strong>Quick check-in</strong><span>What changed since your last update?</span></button> : null}
           <span className="avatar-drag-surface" aria-hidden="true">•••</span>
           <button className="avatar-hide" aria-label="Hide companion"><X size={13} /></button>
-          <button className={`avatar-orb ${params.has("prompt") ? "due pulse" : "live"}`} aria-label="Open Otto companion">
+          <button className={`avatar-orb ${params.has("prompt") ? "due pulse" : "live"}`} aria-label={`Open ${MASCOT.name} companion`}>
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /><circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={44} /></svg>
             <Otto pose="focus" className="avatar-pet" />
             <span className="avatar-orb-state">{params.has("prompt") ? "Check in" : "Focused"}</span>
@@ -184,6 +186,7 @@ function HistorySection() {
 
 function InAppSection() {
   const [input, setInput] = useState("");
+  const [open, setOpen] = useState(() => !new URLSearchParams(window.location.search).has("collapsed"));
   const [panel, setPanel] = useState<"update" | "goal">("update");
   const [goal, setGoal] = useState("Ship a clear, dependable workday experience.");
   const [history, setHistory] = useState<WorkOsConversationTurn[]>([
@@ -204,7 +207,7 @@ function InAppSection() {
       <div aria-hidden="true" style={{ height: 200 }} />
       <ProgressComposer
         input={input}
-        open
+        open={open}
         panel={panel}
         pending={pending}
         receipt={receipt}
@@ -221,9 +224,12 @@ function InAppSection() {
         goalSuggestion={null}
         saveState="saved"
         onInput={setInput}
-        onOpen={() => setPanel("update")}
+        onOpen={() => {
+          setPanel("update");
+          setOpen(true);
+        }}
         onOpenGoal={() => setPanel("goal")}
-        onClose={() => undefined}
+        onClose={() => setOpen(false)}
         onSubmit={() => {
           const text = input.trim();
           if (!text) return;
@@ -413,15 +419,15 @@ function AvatarSection() {
   return (
     <section aria-label="Avatar panel preview" style={{ display: "grid", gap: 12 }}>
       <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>
-      <div className="avatar-panel" style={{ width: "min(400px, 100%)", height: 560 }}>
+      <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion preview`} className="avatar-panel" style={{ width: "min(440px, 100%)", height: 720 }}>
         <header className="avatar-head">
           <div className="avatar-head-row">
             <div className="avatar-drag-zone">
               <div className="avatar-title">
-                <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><Otto pose="focus" /></span>
+                <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose="focus" /></span>
                 <div className="avatar-head-copy">
                   <strong title="On shift · September 7">
-                    <span className="avatar-head-name">Otto</span>
+                    <span className="avatar-head-name">{MASCOT.name}</span>
                     <em className="avatar-live-dot is-live" aria-hidden="true" />
                     <span className="avatar-head-shift">On shift · 2h 14m</span>
                   </strong>
@@ -515,7 +521,7 @@ function AvatarSection() {
             sendLabel="Send update"
           />
         </footer>
-      </div>
+      </ConversationSurface>
     </section>
   );
 }

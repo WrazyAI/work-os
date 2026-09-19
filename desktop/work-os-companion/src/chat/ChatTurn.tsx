@@ -19,6 +19,7 @@ export function ChatTurn({
   onSettled,
   onRetry,
   className,
+  showMark = true,
   children,
   copySource,
 }: {
@@ -30,6 +31,8 @@ export function ChatTurn({
   onSettled?: () => void;
   onRetry?: () => void;
   className?: string;
+  /** Keep the message rhythm while showing the mascot once per assistant cluster. */
+  showMark?: boolean;
   children?: ReactNode;
   /** Turn data for the copy payload when the visible content includes cards. */
   copySource?: CopyableTurn;
@@ -57,8 +60,8 @@ export function ChatTurn({
   return (
     <div className={cx("chat-turn-shell", "chat-enter", className)}>
       <div className={receipt ? "chat-receipt" : "chat-turn assistant"}>
-        <span className="chat-turn-mark" aria-hidden="true">
-          {receipt ? <CheckCircle2 size={14} /> : <MascotMark />}
+        <span className={cx("chat-turn-mark", !showMark && "is-hidden")} aria-hidden="true">
+          {showMark ? (receipt ? <CheckCircle2 size={14} /> : <MascotMark />) : null}
         </span>
         <div className="chat-turn-body">
           {meta ? <small className="chat-turn-note">{meta}</small> : null}

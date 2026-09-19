@@ -9,6 +9,7 @@ export { ChatTabs } from "./chat/ChatTabs";
 export { ChatComposer as WorkOsPromptBar } from "./chat/ChatComposer";
 export { ChatSection, StreamingText } from "./chat/StreamingText";
 export { ChatTurn, type ChatTurnRole } from "./chat/ChatTurn";
+export { ConversationSurface, type ConversationSurfaceKind } from "./chat/ConversationSurface";
 export { GlideMenu, type GlideRow } from "./chat/GlideMenu";
 export {
   WORK_OS_CHAT_SOURCES,
