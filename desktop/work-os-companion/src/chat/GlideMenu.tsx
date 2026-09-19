@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { cx } from "./cx";
 
 export interface GlideRow {
@@ -16,6 +16,9 @@ export function GlideMenu({
   active,
   engaged,
   label,
+  id,
+  optionIdPrefix,
+  menuRef,
   className,
   style,
   emptyText,
@@ -27,6 +30,9 @@ export function GlideMenu({
   active: number;
   engaged: boolean;
   label: string;
+  id?: string;
+  optionIdPrefix?: string;
+  menuRef?: RefObject<HTMLDivElement | null>;
   className?: string;
   style?: CSSProperties;
   emptyText?: string;
@@ -44,7 +50,7 @@ export function GlideMenu({
   }, [active, rows.length, engaged]);
 
   return (
-    <div className={cx("chat-glide-menu", className)} style={style} role="listbox" aria-label={label} data-workos-chat-menu>
+    <div id={id} ref={menuRef} className={cx("chat-glide-menu", className)} style={style} role="listbox" aria-label={label} data-workos-chat-menu>
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-1 rounded-[6px] bg-hover"
@@ -63,6 +69,7 @@ export function GlideMenu({
             rowRefs.current[index] = el;
           }}
           type="button"
+          id={optionIdPrefix ? `${optionIdPrefix}-${index}` : undefined}
           role="option"
           aria-selected={index === active}
           onMouseDown={(event) => event.preventDefault()}

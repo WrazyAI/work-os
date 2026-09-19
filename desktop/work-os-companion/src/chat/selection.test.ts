@@ -16,6 +16,10 @@ describe("taskSelectionFromResult", () => {
   });
 
   it("ignores the provider row attached to a recorded mutation", () => {
+    expect(taskSelectionFromResult({
+      op: { op: "complete_task" },
+      data: { provider_result: { view: "pending", tasks: [{ id: "provider-task", title: "Do not render me" }] } },
+    })).toBeNull();
     // work_task_proposals.provider_result is jsonb default '{}' and reaches the
     // client on every recorded result: it must never render a task card.
     expect(taskSelectionFromResult({

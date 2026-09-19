@@ -16,7 +16,15 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 
-@source "../";
+@source "./";
+@source "../App.tsx";
+@source "../AvatarApp.tsx";
+@source "../ApprovalFlow.tsx";
+@source "../ChatMarkdown.tsx";
+@source "../ErrorBoundary.tsx";
+@source "../NavigateButton.tsx";
+@source "../TaskBatchCard.tsx";
+@source "../TaskSelectionCard.tsx";
 
 @layer base {
   /* One 4px-based scale for every chat surface, in-app and floating, so the
@@ -128,9 +136,28 @@
   50% { transform: scaleY(1); }
 }
 
+@keyframes chat-composer-sweep {
+  from { opacity: 0; transform: translateX(-120%); }
+  20% { opacity: 1; }
+  to { opacity: 0; transform: translateX(120%); }
+}
+
+.chat-composer-sweep {
+  position: absolute;
+  inset: -20% 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 20%, rgba(168, 241, 91, 0.24) 48%, rgba(255, 255, 255, 0.42) 52%, transparent 80%);
+  animation: chat-composer-sweep 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-composer-sweep { animation-duration: 1ms; }
+}
+
 /* ── Primitive component classes (used alongside utilities) ─────────────── */
 
 @layer components {
+  .chat-glide-menu { position: relative; }
   .chat-card-pad { padding: 14px 16px; }
   .chat-card-footer {
     display: flex;

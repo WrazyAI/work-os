@@ -33,6 +33,7 @@ describe("StreamingText", () => {
     );
     expect(markup).toContain("Hello there friend");
     expect(markup).toContain('aria-live="polite"');
+    expect(markup).not.toContain("Copy reply");
   });
 
   it("renders the full reply inline when streaming is off", () => {
@@ -60,6 +61,24 @@ describe("GlideMenu", () => {
     expect(markup).toContain("No matches");
     expect(markup).toContain("Type to filter");
     expect(markup).toContain('role="listbox"');
+  });
+
+  it("connects listbox options to the combobox active descendant", () => {
+    const markup = renderToStaticMarkup(
+      createElement(GlideMenu, {
+        id: "command-menu",
+        optionIdPrefix: "command-option",
+        rows: [{ key: "focus", name: "/focus", desc: "Open focus" }],
+        active: 0,
+        engaged: true,
+        label: "Commands",
+        onHoverRow: noop,
+        onPick: noop,
+      }),
+    );
+    expect(markup).toContain('id="command-menu"');
+    expect(markup).toContain('id="command-option-0"');
+    expect(markup).toContain('role="option"');
   });
 });
 

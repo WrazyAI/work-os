@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, partialFilingMessage, pendingApprovalCount, proposalApprovalCommand, toolCallKey } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, partialFilingMessage, pendingApprovalCount, proposalApprovalCommand, sameToolCall, toolCallKey } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -346,6 +346,12 @@ describe("toolCallKey", () => {
     expect(toolCallKey(a)).not.toBe(toolCallKey(c));
   });
 
+  it("matches rehydrated operation copies by stable identity", () => {
+    const operation = { op: "complete_task", statement: "Done.", taskId: "t-1" } as const;
+    expect(sameToolCall(operation, { ...operation })).toBe(true);
+    expect(sameToolCall(operation, { ...operation, taskId: "t-2" })).toBe(false);
+  });
+
   it("merges filed results by stable key with incoming wins", () => {
     const op = { op: "complete_task", statement: "Done.", taskId: "t-1", proposalId: "p-1", enabled: true } as const;
     const display = { op: "display_pending_tasks", statement: "Show.", enabled: false } as const;
@@ -370,7 +376,7 @@ describe("pendingApprovalCount", () => {
   });
   it("drops proposals that already have a matching result", () => {
     const operations = [op({ proposalId: "p-1" })];
-    const results = [{ op: operations[0], status: "recorded", message: "Recorded." }] as never;
+    const results = [{ op: { op: "complete_task", statement: "Done.", proposalId: "p-1" }, status: "recorded", message: "Recorded." }] as never;
     expect(pendingApprovalCount(operations, results)).toBe(0);
     expect(pendingApprovalCount(operations)).toBe(1);
   });

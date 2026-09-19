@@ -3,6 +3,7 @@ import { cx } from "./chat/cx";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Loader, SkipForward } from "lucide-react";
 import {
   isMutatingToolOp,
+  sameToolCall,
   operationLabel,
   operationToolCall,
   usesGroupedCard,
@@ -135,7 +136,7 @@ export function ApprovalFlow({
   onRetry?: (result: ToolCallResult) => void;
 }) {
   const pending = useMemo(() => operations.map((op, index) => ({ op, index })).filter(({ op }) =>
-    isMutatingToolOp(op) && !op.failure && !results.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId))), [operations, results]);
+    isMutatingToolOp(op) && !op.failure && !results.some((result) => sameToolCall(result.op, op))), [operations, results]);
   const signature = pending.map(({ op, index }) => operationKey(op, index)).join("|");
   const [step, setStep] = useState(0);
   const [decisions, setDecisions] = useState<Record<string, ApprovalDecision>>({});

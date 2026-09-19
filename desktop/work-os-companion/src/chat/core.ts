@@ -105,19 +105,26 @@ export interface CollapsibleTurn {
   toolResults?: unknown;
 }
 
-/** Stable identity of the cards a turn rendered: the operations and the tool
- * results, in a form that ignores object identity and array order. */
+/** Stable serialization for JSON-shaped chat payloads. Object keys do not
+ * carry identity, but array order does: two task views with the same titles
+ * can still be different views when their result payloads differ. */
+function stableValueSignature(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "undefined") return "undefined";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `[${value.map(stableValueSignature).join(",")}]`;
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableValueSignature(record[key])}`).join(",")}}`;
+  }
+  return String(value);
+}
+
+/** Stable identity of the cards a turn rendered. Include the full JSON-shaped
+ * payload so different task lists are never collapsed as duplicate prose. */
 function cardSignature(turn: CollapsibleTurn): string {
-  const read = (value: unknown) => (Array.isArray(value) ? value : []);
-  const operations = read(turn.operations).map((op) => {
-    const item = (op ?? {}) as { op?: unknown; taskId?: unknown; taskTitle?: unknown; proposalId?: unknown };
-    return `${String(item.op ?? "")}:${String(item.taskId ?? item.taskTitle ?? "")}:${String(item.proposalId ?? "")}`;
-  }).sort();
-  const results = read(turn.toolResults).map((result) => {
-    const item = (result ?? {}) as { status?: unknown; message?: unknown; op?: { op?: unknown; taskId?: unknown; taskTitle?: unknown } };
-    return `${String(item.status ?? "")}:${String(item.op?.op ?? "")}:${String(item.op?.taskId ?? item.op?.taskTitle ?? "")}:${String(item.message ?? "")}`;
-  }).sort();
-  return `${operations.join("|")}::${results.join("|")}`;
+  return `${stableValueSignature(turn.operations ?? [])}::${stableValueSignature(turn.toolResults ?? [])}`;
 }
 
 /** Collapse consecutive duplicate assistant turns at render. Dupes reach the

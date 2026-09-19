@@ -12,7 +12,10 @@ export interface TaskSelectionPayload {
   tasks: Array<Record<string, unknown>>;
 }
 
-export function taskSelectionFromResult(result: { data?: unknown } | null | undefined): TaskSelectionPayload | null {
+export function taskSelectionFromResult(result: { op?: { op?: unknown }; data?: unknown } | null | undefined): TaskSelectionPayload | null {
+  // Mutation payloads can also contain a provider task array. Only the two
+  // explicit read-only operations are allowed to become an inline task card.
+  if (result?.op && result.op.op !== "display_pending_tasks" && result.op.op !== "display_overdue_tasks") return null;
   const provider = (result?.data as { provider_result?: { view?: unknown; tasks?: unknown } } | undefined)?.provider_result;
   if (!provider || !Array.isArray(provider.tasks)) return null;
   return {

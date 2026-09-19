@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { cx } from "./cx";
 
@@ -32,7 +32,6 @@ export function StreamingText({
   const tokens = useMemo(() => tokenize(text), [text]);
   const canStream = stream && tokens.length <= MAX_STREAM_TOKENS && !prefersReducedMotion();
   const [count, setCount] = useState(() => (canStream ? 0 : tokens.length));
-  const [copied, setCopied] = useState(false);
   const settledRef = useRef(false);
 
   useEffect(() => {
@@ -63,12 +62,6 @@ export function StreamingText({
   const progress = tokens.length ? count / tokens.length : 1;
   const blur = done ? 0 : Math.max(0, (1 - progress) * 2.2);
 
-  const copy = () => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    }).catch(() => undefined);
-  };
 
   return (
     <div className="chat-stream w-full min-w-0">
@@ -79,18 +72,13 @@ export function StreamingText({
           <span className="ml-0.5 inline-block h-3 w-0.5 translate-y-0.5 animate-pulse rounded-full bg-ink align-middle" />
         )}
       </div>
-      {done && (
+      {done && onRetry && (
         <div
           className="chat-stream-actions chat-enter-fast mt-1.5 flex items-center gap-0.5"
         >
-          <button type="button" className="chat-icon-button size-6" aria-label="Copy reply" onClick={copy}>
-            {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+          <button type="button" className="chat-icon-button size-6" aria-label="Resend" onClick={onRetry}>
+            <RefreshCw size={14} aria-hidden="true" />
           </button>
-          {onRetry && (
-            <button type="button" className="chat-icon-button size-6" aria-label="Resend" onClick={onRetry}>
-              <RefreshCw size={14} aria-hidden="true" />
-            </button>
-          )}
         </div>
       )}
     </div>

@@ -117,6 +117,20 @@ describe("collapseConsecutiveAssistantDuplicates", () => {
     // card signature now collapses the repeat.
     expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(1);
   });
+
+  it("keeps same prose when the rendered card payload differs", () => {
+    const operations = [{ op: "display_pending_tasks", statement: "Show." }];
+    const makeResult = (id: string) => [{
+      op: { op: "display_pending_tasks", statement: "Show." },
+      status: "recorded",
+      data: { provider_result: { view: "pending", tasks: [{ id, title: "Same title" }] } },
+    }];
+    const turns = [
+      { role: "assistant" as const, text: "Review these", operations, toolResults: makeResult("t-1") },
+      { role: "assistant" as const, text: "Review these", operations, toolResults: makeResult("t-2") },
+    ];
+    expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(2);
+  });
 });
 
 describe("ChatTabs", () => {
@@ -190,5 +204,16 @@ describe("WorkOsPromptBar", () => {
     expect(markup).toContain("focus-dock-button");
     // The labeled footer takes the roomy two-row grid.
     expect(markup).toContain("grid-cols-[36px_auto_minmax(0,1fr)_36px]");
+  });
+
+  it("exposes combobox semantics and a replayable settle sweep", () => {
+    const markup = renderToStaticMarkup(createElement(WorkOsPromptBar, { ...base, value: "/f" }));
+    expect(markup).toContain('role="combobox"');
+    expect(markup).toContain('aria-autocomplete="list"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("aria-controls=");
+
+    const swept = renderToStaticMarkup(createElement(WorkOsPromptBar, { ...base, sweepSignal: 2 }));
+    expect(swept).toContain("chat-composer-sweep");
   });
 });

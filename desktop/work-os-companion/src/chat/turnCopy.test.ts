@@ -52,6 +52,29 @@ describe("turnCopyText", () => {
     expect(text).toContain("- Work Memory P3 — Failed: Not filed. Safe to retry.");
   });
 
+  it("copies unresolved mutations without inventing a task card", () => {
+    const text = turnCopyText({
+      role: "assistant",
+      operations: [{ op: "complete_task", taskTitle: "Repair provider sync" }],
+    });
+    expect(text).toBe("Actions recorded:\n- Repair provider sync — Awaiting review");
+  });
+
+  it("does not turn a mutation provider payload into a task list", () => {
+    const text = turnCopyText({
+      role: "assistant",
+      toolResults: [{
+        op: { op: "complete_task", taskTitle: "Repair provider sync" },
+        status: "recorded",
+        message: "Recorded.",
+        data: { provider_result: { view: "pending", tasks: [{ id: "t-1", title: "Provider row" }] } },
+      }],
+    });
+    expect(text).toContain("Actions recorded:");
+    expect(text).not.toContain("Pending tasks:");
+    expect(text).not.toContain("Provider row");
+  });
+
   it("keeps a card-only turn copyable without prose", () => {
     const text = turnCopyText({
       role: "assistant",

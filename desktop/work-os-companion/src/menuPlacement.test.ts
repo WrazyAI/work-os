@@ -45,6 +45,16 @@ describe("computeMenuPlacement", () => {
     expect(result.left + 300).toBeLessThanOrEqual(viewport.width - 8);
   });
 
+  it("clamps an oversized menu inside the viewport", () => {
+    const result = computeMenuPlacement({
+      trigger: { top: 100, bottom: 130, left: 100, right: 130 },
+      menu: { width: 240, height: 850 },
+      viewport,
+    });
+    expect(result.top).toBe(50);
+    expect(result.top + 850).toBeLessThanOrEqual(viewport.height);
+  });
+
   it("aligns right when the trigger sits at the right edge", () => {
     const result = computeMenuPlacement({
       trigger: { top: 100, bottom: 130, left: 1380, right: 1410 },

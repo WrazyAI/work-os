@@ -8,7 +8,7 @@ import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay, fetchTaskDetails } from "./workOsQueries";
-import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, skipBatchOperation, toolCallKey } from "./interpretation";
+import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
@@ -1193,7 +1193,7 @@ export default function AvatarApp(): React.ReactElement {
                         {entry.operations?.length ? (
                           <div className="chat-operations">
                             {entry.operations.map((op, index) => {
-                              const result = entry.toolResults?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId));
+                              const result = entry.toolResults?.find((item) => sameToolCall(item.op, op));
                               if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={index} page={op.page} statement={op.statement} onNavigate={(page) => void navigateToPage(page)} />;
                               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
                               return null;

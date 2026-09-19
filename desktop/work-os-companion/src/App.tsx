@@ -33,7 +33,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, simulateAiEod, stripBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, simulateAiEod, stripBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -3011,9 +3011,9 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   const allMutationResults = (interpretation.results ?? []).filter((result) => isMutatingToolOp(result.op));
   const mutationResults = allMutationResults.filter((result) => !usesGroupedCard(result.op));
   const hasResults = allMutationResults.length > 0;
-  const hasPendingMutations = actionable.some((op) => !usesGroupedCard(op) && !mutationResults.some((result) => result.op === op || (op.proposalId && result.op.proposalId === op.proposalId)));
+  const hasPendingMutations = actionable.some((op) => !usesGroupedCard(op) && !mutationResults.some((result) => sameToolCall(result.op, op)));
   const proposedTaskIds = interpretation.operations
-    .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)))
+    .filter((op) => op.op === "complete_task" && !op.failure && !mutationResults.some((result) => sameToolCall(result.op, op)))
     .map((op) => op.taskId)
     .filter((id): id is string => !!id);
   // The assistant sometimes returns the same view twice; render one card.
@@ -3025,7 +3025,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
     <ChatSectionBoundary label="assistant actions">
       <div className="interpretation-list">
         {interpretation.operations.map((op, index) => {
-          const result = interpretation.results?.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId));
+          const result = interpretation.results?.find((item) => sameToolCall(item.op, op));
           if (isMutatingToolOp(op)) return null;
           if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={`${op.op}-${index}`} page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} />;
           if (!isDisplayToolOp(op)) return null;

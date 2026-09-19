@@ -3,7 +3,7 @@ import { ApprovalFlow, ApprovalResults } from "../ApprovalFlow";
 import { NavigateButton } from "../NavigateButton";
 import { ChatSectionBoundary } from "../ErrorBoundary";
 import type { ApprovedOpContext, ProposedOperation, ToolCallResult } from "../interpretation";
-import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, usesGroupedCard } from "../interpretation";
+import { isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, sameToolCall, usesGroupedCard } from "../interpretation";
 import { BatchApprovalCards } from "../TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCardTask } from "../TaskSelectionCard";
 import { ChatTurn } from "./ChatTurn";
@@ -111,9 +111,9 @@ export function HistoryTurnExtras({
     isMutatingToolOp(operation)
         && !usesGroupedCard(operation)
     && !operation.failure
-    && !results.some((result) => result.op === operation || (operation.proposalId !== undefined && result.op.proposalId === operation.proposalId)),
+    && !results.some((result) => sameToolCall(result.op, operation)),
   );
-  const unfiled = operations.filter((operation) => !!operation.failure && !results.some((result) => result.op === operation));
+  const unfiled = operations.filter((operation) => !!operation.failure && !results.some((result) => sameToolCall(result.op, operation)));
   return (
     <ChatSectionBoundary label="chat turn actions">
       <>
@@ -122,7 +122,7 @@ export function HistoryTurnExtras({
         {operations.length ? (
           <div className="chat-operations">
             {operations.map((op, index) => {
-              const result = results.find((item) => item.op === op || (op.proposalId !== undefined && item.op.proposalId === op.proposalId));
+              const result = results.find((item) => sameToolCall(item.op, op));
               if (op.op === "navigate_to_page" && op.page) return <NavigateButton key={index} page={op.page} statement={op.statement} onNavigate={(page) => onNavigateView?.(page)} />;
               if (isDisplayToolOp(op)) return result?.status === "failed" ? <p key={index} className="tool-display-error">{result.message}</p> : null;
               return null;

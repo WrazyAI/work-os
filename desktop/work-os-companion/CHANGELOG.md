@@ -28,6 +28,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Chat now keeps task cards truthful after saving, gives one clear copy action, and keeps the context menu usable near the edge of the window.
+
 ## 0.3.34
 
 - New tasks now use Work OS directly, so assignee choices and task saves no longer depend on Nifty.

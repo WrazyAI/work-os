@@ -182,7 +182,7 @@ export function pendingApprovalCount(
   return operations.filter((op) =>
     isMutatingToolOp(op) &&
     op.enabled &&
-    !results?.some((result) => result.op === op || (op.proposalId !== undefined && result.op.proposalId === op.proposalId)),
+    !results?.some((result) => sameToolCall(result.op, op)),
   ).length;
 }
 
@@ -892,12 +892,24 @@ export function filingFailureMessage(error: unknown): string {
 
 /** Stable identity for a tool call across windows. Server proposals carry an
  * id; immediate display results fall back to their content coordinates. */
-export function toolCallKey(op: Pick<ProposedOperation, "proposalId" | "batchId" | "op" | "taskId" | "statement">): string {
+export function toolCallKey(op: {
+  proposalId?: string;
+  batchId?: string;
+  op: ProposedOperation["op"];
+  taskId?: string;
+  statement?: string;
+}): string {
   // A batch never receives a proposalId, so its batch id is the stable identity:
   // it survives the `{...op}` copies the chat surfaces make when they file, and it
   // survives a reload of the persisted turn. Without it, an approved card looked
   // unapproved again — and clickable — as soon as its operation object changed.
-  return op.proposalId ?? op.batchId ?? `${op.op}|${op.taskId ?? ""}|${op.statement}`;
+  return op.proposalId ?? op.batchId ?? `${op.op}|${op.taskId ?? ""}|${op.statement ?? ""}`;
+}
+
+/** Results are persisted and rehydrated as new objects. Compare their stable
+ * operation identity instead of relying on object reference equality. */
+export function sameToolCall(left: Parameters<typeof toolCallKey>[0], right: Parameters<typeof toolCallKey>[0]): boolean {
+  return toolCallKey(left) === toolCallKey(right);
 }
 
 /** One pending review shared between the main window and the avatar so a

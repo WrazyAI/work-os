@@ -5,12 +5,23 @@
  * is only a task list or a set of action results is still copyable. Everything
  * here is derived from the same data the cards render — nothing is invented. */
 
+import { isDisplayToolOp, isMutatingToolOp, sameToolCall, type ProposedOperation } from "../interpretation";
 import { taskSelectionFromResult } from "./selection";
+
+export interface CopyableOperation {
+  op: ProposedOperation["op"];
+  taskId?: string;
+  taskTitle?: string;
+  statement?: string;
+  proposalId?: string;
+  batchId?: string;
+  failure?: string;
+}
 
 export interface CopyableTurnResult {
   status: string;
   message?: string | null;
-  op: { op: string; taskTitle?: string | null; statement?: string | null };
+  op: CopyableOperation;
   data?: unknown;
 }
 
@@ -18,7 +29,7 @@ export interface CopyableTurn {
   role: "user" | "assistant" | "system";
   text?: string | null;
   receipt?: string | null;
-  operations?: Array<{ op: string; taskTitle?: string | null; statement?: string | null }>;
+  operations?: readonly CopyableOperation[];
   toolResults?: readonly CopyableTurnResult[];
 }
 
@@ -43,11 +54,24 @@ function taskLines(result: CopyableTurnResult): string[] {
   return [`${view}:`, ...lines];
 }
 
+function operationTitle(operation: CopyableOperation): string {
+  return operation.taskTitle ?? operation.statement ?? "update";
+}
+
+function actionLine(title: string, status: string, detail = ""): string {
+  return `- ${title} — ${status}${detail}`;
+}
+
 function actionLines(result: CopyableTurnResult): string[] {
-  const title = result.op.taskTitle ?? result.op.statement ?? "update";
   const status = STATUS_LABEL[result.status] ?? result.status;
   const detail = result.status === "failed" && result.message ? `: ${result.message}` : "";
-  return [`- ${title} — ${status}${detail}`];
+  return [actionLine(operationTitle(result.op), status, detail)];
+}
+
+function pendingActionLines(operations: readonly CopyableOperation[], results: readonly CopyableTurnResult[]): string[] {
+  return operations
+    .filter((operation) => isMutatingToolOp(operation) && !results.some((result) => sameToolCall(result.op, operation)))
+    .map((operation) => actionLine(operationTitle(operation), operation.failure ? "Failed" : "Awaiting review", operation.failure ? `: ${operation.failure}` : ""));
 }
 
 /** Returns the copy text, or null when the turn has nothing worth copying. */
@@ -60,14 +84,16 @@ export function turnCopyText(turn: CopyableTurn): string | null {
   if (prose) sections.push(prose);
 
   const results = turn.toolResults ?? [];
-  const displayed = results.filter((result) => taskLines(result).length > 0);
-  if (displayed.length) {
-    const blocks = displayed.map((result) => taskLines(result).join("\n"));
-    sections.push(blocks.join("\n\n"));
+  const displayResults = results.filter((result) => isDisplayToolOp(result.op));
+  const displayBlocks = displayResults.map((result) => ({ result, lines: taskLines(result) })).filter(({ lines }) => lines.length > 0);
+  if (displayBlocks.length) {
+    sections.push(displayBlocks.map(({ lines }) => lines.join("\n")).join("\n\n"));
   }
-  const actions = results.filter((result) => taskLines(result).length === 0);
-  if (actions.length) {
-    sections.push(["Actions recorded:", ...actions.flatMap((result) => actionLines(result))].join("\n"));
+  const actions = [...results.filter((result) => !isDisplayToolOp(result.op)), ...displayResults.filter((result) => taskLines(result).length === 0)];
+  const pending = pendingActionLines(turn.operations ?? [], results);
+  const actionCopy = [...actions.flatMap((result) => actionLines(result)), ...pending];
+  if (actionCopy.length) {
+    sections.push(["Actions recorded:", ...actionCopy].join("\n"));
   }
   const text = sections.join("\n\n").trim();
   return text.length ? text : null;

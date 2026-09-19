@@ -1,13 +1,16 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, Plus } from "lucide-react";
+import { computeMenuPlacement } from "../menuPlacement";
 import { GlideMenu, type GlideRow } from "./GlideMenu";
 import {
   WORK_OS_CHAT_SOURCES,
@@ -64,13 +67,16 @@ export function ChatComposer({
   sweepSignal?: number;
   className?: string;
 }) {
+  const menuId = useId();
   const [plusOpen, setPlusOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(0);
   const [engaged, setEngaged] = useState(false);
   const [fitKey, setFitKey] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number; width: number } | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<CSSProperties | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const token = dismissed ? null : parseChatToken(value);
@@ -128,13 +134,15 @@ export function ChatComposer({
   useLayoutEffect(() => {
     if (!menu) {
       setAnchor(null);
+      setMenuPlacement(null);
       return;
     }
     const update = () => {
       const root = rootRef.current;
       if (!root) return;
       const rect = root.getBoundingClientRect();
-      setAnchor({ left: rect.left, top: rect.top, width: rect.width });
+      const next = { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width };
+      setAnchor((current) => current && current.left === next.left && current.top === next.top && current.bottom === next.bottom && current.width === next.width ? current : next);
     };
     update();
     window.addEventListener("resize", update);
@@ -144,6 +152,39 @@ export function ChatComposer({
       window.removeEventListener("scroll", update, true);
     };
   }, [menu]);
+
+  useLayoutEffect(() => {
+    if (!menu || !anchor) return;
+    const update = () => {
+      const element = menuRef.current;
+      if (!element) return;
+      const width = Math.min(anchor.width, Math.max(0, window.innerWidth - 16));
+      const placement = computeMenuPlacement({
+        trigger: { top: anchor.top, bottom: anchor.bottom, left: anchor.left, right: anchor.left + anchor.width },
+        menu: { width, height: element.offsetHeight },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+      });
+      const availableHeight = placement.placement === "up"
+        ? anchor.top - 16
+        : window.innerHeight - anchor.bottom - 16;
+      setMenuPlacement({
+        position: "fixed",
+        top: placement.top,
+        left: placement.left,
+        width,
+        maxHeight: Math.max(0, Math.min(264, availableHeight)),
+        visibility: "visible",
+        zIndex: 120,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchor, menu, rows.length]);
 
   /* Clicking outside the composer closes the open menus. The menu itself is
      portaled to the body, so it is exempt alongside the promptbar. */
@@ -226,6 +267,7 @@ export function ChatComposer({
   const wide = isWideDraft(value, !!footerLeft);
   const hasFooter = !!footerLeft;
   const menuLabel = menu === "at" ? "Work OS context" : "Work OS commands";
+  const activeOptionId = menu && rows[active] ? `${menuId}-option-${active}` : undefined;
 
   return (
     <div ref={rootRef} data-workos-promptbar className={`relative w-full min-w-0 ${className ?? ""}`}>
@@ -235,16 +277,21 @@ export function ChatComposer({
           active={active}
           engaged={engaged}
           label={menuLabel}
+          id={menuId}
+          optionIdPrefix={`${menuId}-option`}
+          menuRef={menuRef}
           className="overflow-y-auto rounded-[10px] border border-line bg-white p-1 shadow-raised"
           style={{
             position: "fixed",
             left: anchor.left,
-            width: anchor.width,
-            bottom: window.innerHeight - anchor.top + 8,
-            maxHeight: Math.max(180, Math.min(264, anchor.top - 16)),
+            top: Math.max(8, anchor.top - 272),
+            width: Math.min(anchor.width, Math.max(0, window.innerWidth - 16)),
+            maxHeight: 264,
+            visibility: "hidden",
             /* The in-app dock owns z-index 90; the detached menu must sit
                above that surface or its rows can look visible but lose clicks. */
             zIndex: 120,
+            ...menuPlacement,
           }}
           emptyText={`No matches for “${query}”`}
           footText={menu === "at" ? "Type to filter Work OS context" : "Type to filter commands"}
@@ -263,8 +310,9 @@ export function ChatComposer({
         }`}
         data-sweep-signal={sweepSignal}
       >
+        {sweepSignal > 0 ? <span key={sweepSignal} className="chat-composer-sweep" aria-hidden="true" /> : null}
         <div
-          className={`grid items-end gap-x-1 gap-y-1.5 ${
+          className={`relative z-10 grid items-end gap-x-1 gap-y-1.5 ${
             wide && hasFooter
               ? "grid-cols-[36px_auto_minmax(0,1fr)_36px]"
               : "grid-cols-[36px_minmax(0,1fr)_36px]"
@@ -302,6 +350,12 @@ export function ChatComposer({
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             aria-label={ariaLabel}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={Boolean(menu)}
+            aria-controls={menuId}
+            aria-activedescendant={activeOptionId}
             className={`min-h-9 min-w-0 w-full resize-none bg-transparent px-1 py-[7px] text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-3 [overflow-wrap:anywhere] ${
               wide ? "col-span-full col-start-1 row-start-1" : "col-start-2 row-start-1"
             }`}
