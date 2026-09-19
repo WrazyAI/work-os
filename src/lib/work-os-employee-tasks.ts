@@ -2,7 +2,6 @@ import {
   archiveTask,
   compareTaskRecency,
   completeTask,
-  createTask,
   deleteTask,
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,
@@ -10,10 +9,10 @@ import {
   listEvidence,
   listPersonTasks,
   moveTaskToParent,
-  niftyTaskEventIdempotencyKey,
   syncNiftyTask,
   updateTask,
 } from "@/lib/work-os";
+import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
@@ -21,25 +20,20 @@ import { audit, dateOnly, db, loadShiftData, nonEmptyString as text, organizatio
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
-const DEFAULT_NIFTY_TASK_PROJECT_ID = "czFZk9928z";
-const DEFAULT_NIFTY_TASK_GROUP_ID = "PDp!eGkwR5";
-
 export async function getWorkOsTaskCreationOptions(access: WorkOsAccess) {
   const [peopleResult, adminResult] = await Promise.all([
-    db().from("work_people").select("id,display_name,email,nifty_member_id").eq("organization_id", access.organizationId).eq("active", true).not("nifty_member_id", "is", null).order("display_name"),
+    db().from("work_people").select("id,display_name,email").eq("organization_id", access.organizationId).eq("active", true).order("display_name"),
     db().from("work_org_members").select("person_id").eq("organization_id", access.organizationId).eq("role", "admin").eq("active", true).not("person_id", "is", null),
   ]);
   if (peopleResult.error) throw new Error(`load assignable task people: ${peopleResult.error.message}`);
   if (adminResult.error) throw new Error(`load task administrators: ${adminResult.error.message}`);
   const adminPersonIds = new Set((adminResult.data ?? []).map((item: any) => String(item.person_id)));
+  const people = (peopleResult.data ?? []).map((person: Record<string, unknown>) => ({ ...person, id: String(person.id) }));
+  const assignable = access.role === "admin" ? people : filterAssignableTaskPeople(people, adminPersonIds, access.personId);
   return {
-    people: (filterAssignableTaskPeople(
-      (peopleResult.data ?? []).map((person: Record<string, unknown>) => ({ ...person, id: String(person.id) })),
-      adminPersonIds,
-      access.personId,
-    ) as Array<Record<string, unknown> & { id: string }>).map((person) => ({
+    people: (assignable as Array<Record<string, unknown> & { id: string }>).map((person) => ({
       id: person.id as string,
-      displayName: person.display_name as string,
+      displayName: (person.display_name as string | null)?.trim() || "Organization member",
       email: person.email as string | null,
     })),
   };
@@ -71,7 +65,7 @@ const TASK_DETAIL_MIRROR_FRESH_MS = 2 * 60_000;
 
 export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId: string) {
   const { ownerId, task, niftyMemberId } = await employeeTaskContext(access, taskId);
-  const providerTaskId = task.provider_task_id as string;
+  const providerTaskId = String(task.provider_task_id ?? task.id);
   const syncedAtMs = task.synced_at ? Date.parse(String(task.synced_at)) : 0;
   let currentTask = task;
   // The mirror is authoritative enough within the freshness window. Outside
@@ -86,28 +80,37 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
       console.warn("[work-os] task detail provider refresh skipped", { taskId, message: error instanceof Error ? error.message : String(error) });
     }
   }
-  const { data: subtasks, error } = await db().from("work_tasks")
+  let subtasksQuery = db().from("work_tasks")
     .select("*, project:work_projects(id,name,provider_project_id)")
     .eq("organization_id", access.organizationId)
-    .eq("parent_provider_task_id", providerTaskId)
     .not("status", "in", "(archived,deleted)")
     .order("completed", { ascending: true })
     .order("provider_created_at", { ascending: true });
+  subtasksQuery = task.provider === "local"
+    ? subtasksQuery.eq("parent_task_id", task.id as string)
+    : subtasksQuery.eq("parent_provider_task_id", providerTaskId);
+  const { data: subtasks, error } = await subtasksQuery;
   if (error) throw new Error(`load task subtasks: ${error.message}`);
   // Move targets are a bounded same-project parent set; attribution is filtered
   // in JS exactly like listPersonTasks did, without its per-task embed fan-out.
-  const { data: moveRows, error: moveError } = await db().from("work_tasks")
-    .select("id,provider_task_id,title,assignee_person_ids,raw")
+  let moveQuery = db().from("work_tasks")
+    .select("id,provider_task_id,title,assignee_person_ids,raw,provider,project_id,provider_project_id,parent_task_id,parent_provider_task_id")
     .eq("organization_id", access.organizationId)
-    .eq("provider_project_id", (currentTask.provider_project_id as string) ?? "")
-    .is("parent_provider_task_id", null)
     .eq("completed", false)
     .not("status", "in", "(archived,deleted)")
     .order("provider_created_at", { ascending: false })
     .limit(200);
+  if (currentTask.provider === "local") {
+    moveQuery = (currentTask.project_id
+      ? moveQuery.eq("project_id", currentTask.project_id as string)
+      : moveQuery.is("project_id", null)).is("parent_task_id", null);
+  } else {
+    moveQuery = moveQuery.eq("provider_project_id", (currentTask.provider_project_id as string) ?? "").is("parent_provider_task_id", null);
+  }
+  const { data: moveRows, error: moveError } = await moveQuery;
   if (moveError) throw new Error(`load task move targets: ${moveError.message}`);
   const moveTargets = (moveRows ?? []).filter((candidate: Record<string, unknown>) => {
-    if (candidate.provider_task_id === providerTaskId) return false;
+    if (String(candidate.provider_task_id ?? candidate.id) === providerTaskId) return false;
     const assignedToPerson = Array.isArray(candidate.assignee_person_ids) && candidate.assignee_person_ids.includes(access.personId as string);
     return assignedToPerson || isNiftyTaskAttributableToMember(candidate, niftyMemberId);
   }).slice(0, 50).map((candidate: Record<string, unknown>) => ({
@@ -126,13 +129,16 @@ export async function moveWorkOsEmployeeSubtask(access: WorkOsAccess, taskId: st
     employeeTaskContext(access, taskId),
     employeeTaskContext(access, targetId),
   ]);
-  if (!task.parent_provider_task_id) throw new Error("Only subtasks can be moved");
-  const moved = await moveTaskToParent(ownerId, task.provider_task_id as string, parent.provider_task_id as string);
-  await audit(access, "task.subtask_moved", "nifty_task", task.provider_task_id as string, {
+  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved");
+  const moved = await moveTaskToParent(ownerId, String(task.provider_task_id ?? task.id), String(parent.provider_task_id ?? parent.id));
+  const local = String(task.provider ?? "") === "local";
+  await audit(access, "task.subtask_moved", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
+    fromParentTaskId: task.parent_task_id,
     fromParentProviderTaskId: task.parent_provider_task_id,
+    toParentTaskId: parent.id,
     toParentProviderTaskId: parent.provider_task_id,
   });
-  return { task: moved, providerStatus: "nifty_confirmed" };
+  return { task: moved, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: string, body: Json) {
@@ -142,22 +148,37 @@ export async function updateWorkOsEmployeeTask(access: WorkOsAccess, taskId: str
   if (!name) throw new Error("Task title is required");
   if (name.length > 240) throw new Error("Task title must be 240 characters or fewer");
   if (description && description.length > 20_000) throw new Error("Task description must be 20000 characters or fewer");
-  const updated = await updateTask(ownerId, task.provider_task_id as string, { name, ...(description !== undefined ? { description } : {}) });
-  await audit(access, "task.updated", "nifty_task", task.provider_task_id as string, { fields: description === undefined ? ["name"] : ["name", "description"] });
-  return { task: updated, providerStatus: "nifty_confirmed" };
+  const assigneePersonIds = Array.isArray(body.assignee_person_ids)
+    ? [...new Set(body.assignee_person_ids.filter((value): value is string => typeof value === "string" && !!value.trim()))]
+    : undefined;
+  if (assigneePersonIds) {
+    const options = await getWorkOsTaskCreationOptions(access);
+    const allowed = new Set(options.people.map((person) => person.id));
+    if (assigneePersonIds.some((personId) => !allowed.has(personId))) throw new Error("Assignees must be active Work OS organization members");
+  }
+  const updated = await updateTask(ownerId, String(task.provider_task_id ?? task.id), {
+    name,
+    ...(description !== undefined ? { description } : {}),
+    ...(assigneePersonIds ? { assignee_person_ids: assigneePersonIds } : {}),
+  });
+  const local = String(task.provider ?? "") === "local";
+  await audit(access, "task.updated", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
+    fields: ["name", ...(description === undefined ? [] : ["description"]), ...(assigneePersonIds ? ["assignee_person_ids"] : [])],
+  });
+  return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, taskId: string, completed: boolean) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const updated = await completeTask(ownerId, task.provider_task_id as string, completed);
+  const updated = await completeTask(ownerId, String(task.provider_task_id ?? task.id), completed);
   const exactAt = (completed ? text((updated as Json).completed_at) : text((updated as Json).provider_updated_at)) ?? new Date().toISOString();
   await recordTaskDayEvent(access, updated as Json, completed ? "completed" : "reopened", {
-    idempotencyKey: niftyTaskEventIdempotencyKey(completed ? "completed" : "reopened", task.provider_task_id as string, exactAt),
+    idempotencyKey: `${task.provider === "local" ? "local" : "nifty"}:${completed ? "completed" : "reopened"}:${String(task.provider_task_id ?? task.id)}:${exactAt}`,
     exactAt,
     provenance: "employee_explicit",
   });
   const local = String(task.provider ?? "") === "local";
-  await audit(access, completed ? "task.completed" : "task.reopened", local ? "work_os_task" : "nifty_task", task.provider_task_id as string, {
+  await audit(access, completed ? "task.completed" : "task.reopened", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
     source: "employee_explicit",
   });
   return { task: updated, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
@@ -193,25 +214,37 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
   // Attach child progress for the same page so a parent row can show `2/5` and
   // offer its subtasks without a per-row round trip (design §25.7).
   const parentProviderIds = selected
-    .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
+    .filter((task) => !task.parent_task_id && !task.parent_provider_task_id && task.provider_task_id)
     .map((task) => String(task.provider_task_id));
-  const childrenResult = parentProviderIds.length
-    ? await db().from("work_tasks").select("parent_provider_task_id,completed")
-      .eq("organization_id", access.organizationId)
-      .not("status", "in", "(archived,deleted)")
-      .in("parent_provider_task_id", parentProviderIds)
-    : { data: [], error: null };
-  if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
+  const parentLocalIds = selected
+    .filter((task) => !task.parent_task_id && !task.parent_provider_task_id && task.provider === "local")
+    .map((task) => String(task.id));
+  const [providerChildren, localChildren] = await Promise.all([
+    parentProviderIds.length
+      ? db().from("work_tasks").select("parent_provider_task_id,completed")
+        .eq("organization_id", access.organizationId)
+        .not("status", "in", "(archived,deleted)")
+        .in("parent_provider_task_id", parentProviderIds)
+      : Promise.resolve({ data: [], error: null }),
+    parentLocalIds.length
+      ? db().from("work_tasks").select("parent_task_id,completed")
+        .eq("organization_id", access.organizationId)
+        .not("status", "in", "(archived,deleted)")
+        .in("parent_task_id", parentLocalIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (providerChildren.error) throw new Error(`load task subtask progress: ${providerChildren.error.message}`);
+  if (localChildren.error) throw new Error(`load local task subtask progress: ${localChildren.error.message}`);
   const progress = new Map<string, { total: number; completed: number }>();
-  for (const child of childrenResult.data ?? []) {
-    const parentId = String(child.parent_provider_task_id);
+  for (const child of [...(providerChildren.data ?? []), ...(localChildren.data ?? [])]) {
+    const parentId = String(child.parent_provider_task_id ?? child.parent_task_id);
     const current = progress.get(parentId) ?? { total: 0, completed: 0 };
     current.total += 1;
     if (child.completed === true) current.completed += 1;
     progress.set(parentId, current);
   }
   const withProgress = selected.map((task) => {
-    const counts = progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 };
+    const counts = progress.get(String(task.provider_task_id)) ?? progress.get(String(task.id)) ?? { total: 0, completed: 0 };
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
   return { view, currentDate, tasks: withProgress };
@@ -219,28 +252,36 @@ export async function listWorkOsEmployeeTaskSelection(access: WorkOsAccess, view
 
 export async function archiveWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
+  let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
-    .eq("parent_provider_task_id", task.provider_task_id as string)
     .not("status", "in", "(archived,deleted)");
+  childrenQuery = task.provider === "local"
+    ? childrenQuery.eq("parent_task_id", task.id as string)
+    : childrenQuery.eq("parent_provider_task_id", task.provider_task_id as string);
+  const { data: children, error } = await childrenQuery;
   if (error) throw new Error(`load task children for removal: ${error.message}`);
-  for (const child of children ?? []) await archiveTask(ownerId, child.provider_task_id as string);
-  const archived = await archiveTask(ownerId, task.provider_task_id as string);
-  await audit(access, "task.archived", "nifty_task", task.provider_task_id as string, { archivedSubtasks: children?.length ?? 0 });
-  return { task: archived, archivedSubtasks: children?.length ?? 0, providerStatus: "nifty_confirmed" };
+  for (const child of children ?? []) await archiveTask(ownerId, String(child.provider_task_id ?? child.id));
+  const archived = await archiveTask(ownerId, String(task.provider_task_id ?? task.id));
+  const local = String(task.provider ?? "") === "local";
+  await audit(access, "task.archived", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), { archivedSubtasks: children?.length ?? 0 });
+  return { task: archived, archivedSubtasks: children?.length ?? 0, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 export async function deleteWorkOsEmployeeTask(access: WorkOsAccess, taskId: string) {
   const { ownerId, task } = await employeeTaskContext(access, taskId);
-  const { data: children, error } = await db().from("work_tasks").select("provider_task_id")
+  let childrenQuery = db().from("work_tasks").select("provider_task_id,id")
     .eq("organization_id", access.organizationId)
-    .eq("parent_provider_task_id", task.provider_task_id as string)
     .not("status", "in", "(archived,deleted)");
+  childrenQuery = task.provider === "local"
+    ? childrenQuery.eq("parent_task_id", task.id as string)
+    : childrenQuery.eq("parent_provider_task_id", task.provider_task_id as string);
+  const { data: children, error } = await childrenQuery;
   if (error) throw new Error(`load task children for permanent deletion: ${error.message}`);
-  for (const child of children ?? []) await deleteTask(ownerId, child.provider_task_id as string);
-  const deleted = await deleteTask(ownerId, task.provider_task_id as string);
-  await audit(access, "task.deleted", "nifty_task", task.provider_task_id as string, { deletedSubtasks: children?.length ?? 0 });
-  return { task: deleted, deletedSubtasks: children?.length ?? 0, providerStatus: "nifty_confirmed" };
+  for (const child of children ?? []) await deleteTask(ownerId, String(child.provider_task_id ?? child.id));
+  const deleted = await deleteTask(ownerId, String(task.provider_task_id ?? task.id));
+  const local = String(task.provider ?? "") === "local";
+  await audit(access, "task.deleted", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), { deletedSubtasks: children?.length ?? 0 });
+  return { task: deleted, deletedSubtasks: children?.length ?? 0, providerStatus: local ? "work_os_confirmed" : "nifty_confirmed" };
 }
 
 export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json) {
@@ -256,39 +297,32 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   const options = await getWorkOsTaskCreationOptions(access);
   const allowedPeople = new Map(options.people.map((person) => [person.id, person]));
   const invalidPersonId = requestedPersonIds.find((personId) => !allowedPeople.has(personId));
-  if (invalidPersonId) throw new Error("Assignees must be active, Nifty-mapped organization members; administrators may assign only their own worker profile");
-  let assignees: string[] = [];
-  if (requestedPersonIds.length) {
-    const { data, error } = await db().from("work_people").select("id,nifty_member_id").eq("organization_id", access.organizationId).in("id", requestedPersonIds);
-    if (error) throw new Error(`resolve Nifty task assignees: ${error.message}`);
-    assignees = (data ?? []).map((person: any) => String(person.nifty_member_id)).filter(Boolean);
-    if (assignees.length !== requestedPersonIds.length) throw new Error("Every assignee must have a Nifty member mapping");
-  }
-
-  const ownerId = await organizationOwnerId(access.organizationId);
-  const projectId = process.env.WORK_OS_NIFTY_LEDGER_PROJECT_ID?.trim() || DEFAULT_NIFTY_TASK_PROJECT_ID;
-  const defaultTaskGroupId = process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || DEFAULT_NIFTY_TASK_GROUP_ID;
   const parentId = text(body.parent_task_id);
   let parent: Json | null = null;
   if (parentId) {
     parent = (await employeeTaskContext(access, parentId)).task;
   }
-  const task = await createTask(ownerId, {
-    name: title,
-    description: description ?? undefined,
-    project_id: text(parent?.provider_project_id) ?? projectId,
-    task_group_id: text(parent?.task_group_id) ?? defaultTaskGroupId,
-    task_id: text(parent?.provider_task_id) ?? undefined,
-    assignees,
+  if (invalidPersonId) throw new Error("Assignees must be active Work OS organization members");
+  const task = await createLocalWorkOsTask(access, {
+    title,
+    description,
+    assigneePersonIds: requestedPersonIds,
+    dueDate: text(body.due_date),
+    startDate: text(body.start_date),
+    priority: text(body.priority),
+    labels: Array.isArray(body.labels) ? body.labels.filter((value): value is string => typeof value === "string") : [],
+    storyPoints: typeof body.story_points === "number" ? body.story_points : null,
+    expectedOutcome: text(body.expected_outcome),
+    definitionOfDone: text(body.definition_of_done),
+    taskGroupId: text(body.task_group_id),
+    projectId: text(body.project_id),
+    providerProjectId: text(parent?.provider_project_id),
+    parent,
+    raw: text(body.local_proposal_id) ? { proposalId: text(body.local_proposal_id), source: "work_os_proposal" } : undefined,
   });
   const taskRecord = task as Json;
-  const createdAt = text(taskRecord.provider_created_at) ?? text(taskRecord.created_at) ?? new Date().toISOString();
-  await recordTaskDayEvent(access, taskRecord, "creation_observed", {
-    idempotencyKey: `nifty:created:${taskRecord.provider_task_id ?? taskRecord.id}:${createdAt}`,
-    exactAt: createdAt,
-    provenance: "provider_observed",
-  });
-  await audit(access, parent ? "task.subtask_created" : "task.created", "nifty_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
+  await audit(access, parent ? "task.subtask_created" : "task.created", "work_os_task", String((task as Json).provider_task_id ?? (task as Json).id ?? "unknown"), {
+    parentTaskId: text(parent?.id),
     parentProviderTaskId: text(parent?.provider_task_id),
     assigneePersonIds: requestedPersonIds,
   });

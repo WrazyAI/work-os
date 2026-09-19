@@ -356,7 +356,7 @@ export default function WorkOsHome() {
     onSuccess: (result) => {
       setTaskTitle("");
       setTaskDescription(""); setTaskParentId(""); setTaskStartDate(""); setTaskDueDate(""); setTaskPriority(""); setTaskLabels(""); setTaskStoryPoints(""); setTaskExpectedOutcome(""); setTaskDefinitionOfDone("");
-      setTaskProviderStatus(`Nifty confirmed · mirror ${result.mirrorStatus}`);
+       setTaskProviderStatus(`Work OS confirmed · ${result.mirrorStatus}`);
       refresh();
     },
   });

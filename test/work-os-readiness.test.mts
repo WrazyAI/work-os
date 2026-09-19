@@ -62,9 +62,8 @@ test("pilot readiness identifies setup gaps and blocks missing runtime prerequis
   const report = evaluateWorkOsReadiness(input);
   const codes = new Set(report.issues.map((issue) => issue.code));
   assert.equal(report.status, "blocked");
-  assert.ok(codes.has("provider.nifty.unavailable"));
   assert.ok(codes.has("runtime.openai_missing"));
-  assert.ok(codes.has("people.nifty_mapping_missing"));
+  assert.ok(!codes.has("people.nifty_mapping_missing"));
   assert.ok(codes.has("people.schedule_missing"));
 });
 

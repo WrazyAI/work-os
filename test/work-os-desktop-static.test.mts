@@ -319,15 +319,15 @@ assert.match(companionServer, /syncing: options\.refreshNifty \|\| providerRefre
 assert.doesNotMatch(companionServer, /const result = await syncNifty\(ownerId\)/);
 assert.doesNotMatch(companionServer, /await niftySyncPromise/);
 assert.match(companionServer, /role", "admin"/);
-assert.match(companionServer, /administrators may assign only their own worker profile/);
-assert.match(taskSurfaces, /No assignable Nifty-mapped members were found/);
+assert.match(companionServer, /Assignees must be active Work OS organization members/);
+assert.match(taskSurfaces, /No active organization members were found/);
 assert.match(companionServer, /getWorkOsEmployeeTaskDetails/);
 assert.match(companionServer, /archiveWorkOsEmployeeTask/);
 assert.match(companionServer, /moveWorkOsEmployeeSubtask/);
 assert.match(companionServer, /task\.subtask_moved/);
 assert.match(companionServer, /task\.archived/);
 assert.match(companionServer, /setWorkOsEmployeeTaskCompletion/);
-assert.match(companionServer, /niftyTaskEventIdempotencyKey\(completed \? "completed" : "reopened"/);
+assert.match(companionServer, /\$\{task\.provider === "local" \? "local" : "nifty"\}/);
 assert.match(companionServer, /source: "employee_explicit"/);
 
 const api = read("src/api.ts");

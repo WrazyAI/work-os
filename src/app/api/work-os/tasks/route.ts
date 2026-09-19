@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createTask, listPersonTasks, listTasks } from "@/lib/work-os";
+import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
+import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -38,8 +39,26 @@ export async function POST(req: Request) {
   if ("response" in auth) return auth.response;
   try {
     const ownerId = workOsOrganizationOwnerId(auth.access);
-  const task = await createTask(ownerId, await req.json());
-    return NextResponse.json({ task, providerStatus: "nifty_confirmed", mirrorStatus: "mirrored" }, { status: 201 });
+    const body = await req.json() as Record<string, any>;
+    const parent = typeof body.parent_task_id === "string" && body.parent_task_id.trim()
+      ? await getTaskByLocalOrProviderId(ownerId, body.parent_task_id.trim())
+      : null;
+    const task = await createLocalWorkOsTask(auth.access, {
+      title: String(body.name ?? ""),
+      description: typeof body.description === "string" ? body.description : null,
+      dueDate: typeof body.due_date === "string" ? body.due_date : null,
+      startDate: typeof body.start_date === "string" ? body.start_date : null,
+      priority: typeof body.priority === "string" ? body.priority : null,
+      labels: Array.isArray(body.labels) ? body.labels.filter((value: unknown): value is string => typeof value === "string") : [],
+      storyPoints: typeof body.story_points === "number" ? body.story_points : null,
+      expectedOutcome: typeof body.expected_outcome === "string" ? body.expected_outcome : null,
+      definitionOfDone: typeof body.definition_of_done === "string" ? body.definition_of_done : null,
+      projectId: typeof body.project_id === "string" ? body.project_id : null,
+      assigneePersonIds: Array.isArray(body.assignee_person_ids) ? body.assignee_person_ids.filter((value: unknown): value is string => typeof value === "string") : [],
+      parent,
+      raw: { source: "work_os_admin" },
+    });
+    return NextResponse.json({ task, providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
   } catch (err) {
     return jsonError(err, 502);
   }

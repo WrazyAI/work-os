@@ -133,8 +133,7 @@ export function moveMenuFocus(event: KeyboardEvent) {
 
 type AnyTask = Record<string, any>;
 
-/** Truthful source label: planner-created tasks live in Work OS itself; all
- * other rows are Nifty mirrors until the local-first migration completes. */
+/** Historical Nifty mirrors remain identifiable; new tasks are Work OS records. */
 export function taskSourceLabel(task: AnyTask): string {
   return String(task?.provider ?? "") === "local" ? "Work OS" : "Nifty";
 }
@@ -154,8 +153,8 @@ export function TaskComposerModal({ busy, closing = false, title, description, a
         <fieldset><legend><UserRound size={14} /> Assignees <em>optional</em></legend>
           {optionsLoading ? <div className="assignee-skeleton">{[0, 1, 2].map((index) => <Skeleton key={index} className="skeleton-assignee" />)}</div> : options.length ? <div className="assignee-grid">{options.map((person) => {
             const selected = assignees.includes(person.id);
-            return <label className={selected ? "selected" : ""} key={person.id}><input type="checkbox" checked={selected} onChange={() => onToggleAssignee(person.id)} /><span><strong>{person.displayName}</strong><small>{person.email || "Nifty member"}</small></span><Check size={14} /></label>;
-          })}</div> : <p>No assignable Nifty-mapped members were found. You can still create this task unassigned.</p>}
+             return <label className={selected ? "selected" : ""} key={person.id}><input type="checkbox" checked={selected} onChange={() => onToggleAssignee(person.id)} /><span><strong>{person.displayName}</strong><small>{person.email || "Organization member"}</small></span><Check size={14} /></label>;
+          })}</div> : <p>No active organization members were found. You can still create this task unassigned.</p>}
         </fieldset>
       </div>
       <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>{busy ? <><FadeArc size={14} /> Creating…</> : "Create task"}</button></footer>

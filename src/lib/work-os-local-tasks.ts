@@ -40,6 +40,24 @@ export type PlanTaskEntry = {
   linkedTaskId: string | null;
 };
 
+export type CreateLocalWorkOsTaskInput = {
+  title: string;
+  description?: string | null;
+  dueDate?: string | null;
+  startDate?: string | null;
+  priority?: string | null;
+  labels?: string[];
+  storyPoints?: number | null;
+  expectedOutcome?: string | null;
+  definitionOfDone?: string | null;
+  taskGroupId?: string | null;
+  projectId?: string | null;
+  providerProjectId?: string | null;
+  assigneePersonIds?: string[];
+  parent?: Json | null;
+  raw?: Json;
+};
+
 /** Stable dedup marker. Re-confirming the same plan never duplicates tasks:
  * the marker is plan-scoped and derived from the normalized content. */
 export function planTaskMarker(...parts: string[]) {
@@ -102,6 +120,61 @@ async function findReusableLocalTask(access: WorkOsAccess, title: string, planDa
   return null;
 }
 
+async function validateLocalTaskAssignees(access: WorkOsAccess, personIds: string[]) {
+  const uniqueIds = [...new Set(personIds.filter((personId) => personId.trim()))];
+  if (!uniqueIds.length) return [];
+  const result = await db().from("work_people").select("id")
+    .eq("organization_id", access.organizationId)
+    .eq("active", true)
+    .in("id", uniqueIds);
+  if (result.error) throw new Error(`validate Work OS task assignees: ${result.error.message}`);
+  const activeIds = new Set((result.data ?? []).map((person) => String(person.id)));
+  const invalid = uniqueIds.find((personId) => !activeIds.has(personId));
+  if (invalid) throw new Error("Assignees must be active Work OS organization members");
+  return uniqueIds;
+}
+
+export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateLocalWorkOsTaskInput) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Task title is required");
+  if (title.length > MAX_TITLE) throw new Error("Task title must be 240 characters or fewer");
+  const description = input.description?.trim() || null;
+  if (description && description.length > MAX_DESCRIPTION) throw new Error("Task description must be 20000 characters or fewer");
+  const assigneePersonIds = await validateLocalTaskAssignees(access, input.assigneePersonIds ?? []);
+  const now = new Date().toISOString();
+  const result = await db().from("work_tasks").insert({
+    organization_id: access.organizationId,
+    user_id: await organizationOwnerId(access.organizationId),
+    provider: LOCAL_TASK_PROVIDER,
+    provider_task_id: `local-${randomUUID()}`,
+    provider_project_id: input.providerProjectId ?? input.parent?.provider_project_id ?? null,
+    project_id: input.projectId ?? input.parent?.project_id ?? null,
+    title: title.slice(0, MAX_TITLE),
+    description: description ? description.slice(0, MAX_DESCRIPTION) : null,
+    task_group_id: input.taskGroupId ?? null,
+    priority: input.priority ?? null,
+    labels: input.labels ?? [],
+    story_points: input.storyPoints ?? null,
+    expected_outcome: input.expectedOutcome ?? null,
+    definition_of_done: input.definitionOfDone ?? null,
+    status: "open",
+    completed: false,
+    assignee_person_ids: assigneePersonIds,
+    due_date: input.dueDate ?? null,
+    start_date: input.startDate ?? null,
+    parent_task_id: input.parent ? String(input.parent.id) : null,
+    parent_provider_task_id: input.parent?.provider_task_id ? String(input.parent.provider_task_id) : null,
+    raw: { source: "work_os", ...(input.raw ?? {}) },
+    synced_at: now,
+    created_at: now,
+    updated_at: now,
+  }).select("*").single();
+  if (result.error) throw new Error(`create Work OS task: ${result.error.message}`);
+  const row = result.data as Json;
+  await recordLocalTaskCreationEvent(access, row, input.dueDate ?? null, now);
+  return row;
+}
+
 async function createLocalTaskRow(access: WorkOsAccess, input: {
   title: string;
   description: string | null;
@@ -109,41 +182,26 @@ async function createLocalTaskRow(access: WorkOsAccess, input: {
   parent: Json | null;
   marker: string;
 }) {
-  const now = new Date().toISOString();
-  const result = await db().from("work_tasks").insert({
-    organization_id: access.organizationId,
-    user_id: await organizationOwnerId(access.organizationId),
-    provider: LOCAL_TASK_PROVIDER,
-    provider_task_id: `local-${randomUUID()}`,
-    title: input.title.slice(0, MAX_TITLE),
-    description: input.description ? input.description.slice(0, MAX_DESCRIPTION) : null,
-    status: "open",
-    completed: false,
-    assignee_person_ids: access.personId ? [access.personId] : [],
-    due_date: input.dueDate,
-    parent_task_id: input.parent ? String(input.parent.id) : null,
-    parent_provider_task_id: input.parent ? String(input.parent.provider_task_id) : null,
+  return createLocalWorkOsTask(access, {
+    title: input.title,
+    description: input.description,
+    dueDate: input.dueDate,
+    parent: input.parent,
+    assigneePersonIds: access.personId ? [access.personId] : [],
     raw: { source: "work_os_plan", planMarker: input.marker, createdFromPlan: true },
-    synced_at: now,
-    created_at: now,
-    updated_at: now,
-  }).select("*").single();
-  if (result.error) throw new Error(`create Work OS plan task: ${result.error.message}`);
-  const row = result.data as Json;
-  await recordLocalTaskCreationEvent(access, row, input.dueDate, now);
-  return row;
+  });
 }
 
 /** Day-event attribution is best-effort (idempotent upsert): a missing event
  * only affects day surfacing, never the task itself, and re-running the flow
  * heals it. */
-async function recordLocalTaskCreationEvent(access: WorkOsAccess, task: Json, dueDate: string, exactAt: string) {
+async function recordLocalTaskCreationEvent(access: WorkOsAccess, task: Json, dueDate: string | null, exactAt: string) {
   try {
     await recordTaskDayEvent(access, task, "creation_observed", {
       idempotencyKey: `local:created:${String(task.provider_task_id)}`,
       exactAt,
       provenance: "employee_explicit",
-      localDate: dueDate,
+      ...(dueDate ? { localDate: dueDate } : {}),
     });
   } catch (error) {
     console.error("[plan-materialize] day event failed:", error instanceof Error ? error.message : error);

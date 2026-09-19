@@ -25,6 +25,10 @@ they change what the employee sees or does.
 
 - Batch task cards now show live filed, skipped, and needs-attention results, keep edits safe, and collapse into a clear receipt after approval.
 
+## 0.3.34
+
+- New tasks now use Work OS directly, so assignee choices and task saves no longer depend on Nifty.
+
 ## 0.3.33
 
 - Checking off a task no longer makes the list jump while it saves: the checkbox spins in place and the finished row leaves in one smooth motion.

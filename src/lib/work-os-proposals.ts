@@ -232,7 +232,7 @@ function singleOperationChange(operation: InterpretedOperationEntry): Json {
     return {
       name: operation.taskTitle ?? operation.statement.slice(0, 240),
       description: operation.statement,
-      task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5",
+      task_authority: "work_os",
     };
   }
   if (operation.op === "record_progress") return { summary: operation.statement };
@@ -291,7 +291,7 @@ export function prepareProposals(operations: InterpretedOperationEntry[]): Prepa
           continue;
         }
         if (kind === "multi_task_reassign") {
-          // The Nifty member id is resolved in the filing loop, where the
+          // local person id is resolved in the filing loop, where the
           // caller's allowed people are already loaded.
           prepared.push({
             providerOperation: "update_task",
@@ -325,7 +325,7 @@ export function prepareProposals(operations: InterpretedOperationEntry[]): Prepa
               name: task.title,
               ...(task.description ? { description: task.description } : {}),
               ...(task.dueDate ? { due_date: task.dueDate } : {}),
-              task_group_id: process.env.WORK_OS_NIFTY_DEFAULT_TASK_GROUP_ID?.trim() || "PDp!eGkwR5",
+              task_authority: "work_os",
             },
           });
           for (const subtask of task.subtasks) {
@@ -489,6 +489,22 @@ async function applyProposal(
     return listWorkOsEmployeeTaskSelection(access, change.view === "overdue" ? "overdue" : "pending", change.limit);
   }
   if (operation === "create_task") {
+    if (change.task_authority === "work_os") {
+      const marker = `Work OS proposal: ${proposal.id}`;
+      const { data: existing, error: existingError } = await db().from("work_tasks").select("*")
+        .eq("organization_id", access.organizationId)
+        .eq("provider", "local")
+        .contains("raw", { proposalId: proposal.id })
+        .maybeSingle();
+      if (existingError) throw new Error(`reconcile Work OS task proposal: ${existingError.message}`);
+      if (existing) return existing;
+      return createWorkOsEmployeeTask(access, {
+        ...change,
+        description: [text(change.description), marker].filter(Boolean).join("\n\n"),
+        assignee_person_ids: access.personId ? [access.personId] : [],
+        local_proposal_id: proposal.id,
+      });
+    }
     if (!text(change.task_group_id)) throw new Error("task_group_id is required before this Nifty task can be created");
     const marker = `Work OS proposal: ${proposal.id}`;
     const body = {
@@ -773,19 +789,14 @@ async function assertKnownTaskGroup(ownerId: string, task: Json, taskGroupId: st
   if (!data?.length) throw new Error("A status move requires an existing status column for this project.");
 }
 
-/** Resolves the person a batch reassignment names, scoped to the people this
- * caller may assign to (themselves, or anyone when they are an administrator). */
+/** Resolves the local person a batch reassignment names, scoped to the people
+ * this caller may assign to (themselves, or anyone when they are an administrator). */
 async function resolveBatchAssignee(access: WorkOsAccess, personId: string): Promise<string> {
   const options = await getWorkOsTaskCreationOptions(access);
   if (!options.people.some((person) => person.id === personId)) {
     throw new Error("You can only assign work to yourself unless you are an administrator.");
   }
-  const { data, error } = await db().from("work_people").select("nifty_member_id")
-    .eq("organization_id", access.organizationId).eq("id", personId).maybeSingle();
-  if (error) throw new Error(`resolve assignee: ${error.message}`);
-  const memberId = text(data?.nifty_member_id);
-  if (!memberId) throw new Error("That person has no Nifty member mapping.");
-  return memberId;
+  return personId;
 }
 
 /** Turns a plan_import into the same add-batch payload the assistant uses for
@@ -901,6 +912,8 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
         due_date: task.due_date,
         start_date: task.start_date,
         task_group_id: task.task_group_id,
+        assignee_person_ids: task.assignee_person_ids,
+        parent_task_id: task.parent_task_id,
         parent_provider_task_id: task.parent_provider_task_id,
       } : {};
       // A status move records both names so a filed (or reloaded) card can keep
@@ -911,7 +924,7 @@ export async function proposeInterpretedWorkUpdate(access: WorkOsAccess, body: J
       const proposedChange: Json = {
         ...item.change,
         ...statusNames,
-        ...(item.assigneePersonId ? { assignees: [await resolveBatchAssignee(access, item.assigneePersonId)] } : {}),
+        ...(item.assigneePersonId ? { assignee_person_ids: [await resolveBatchAssignee(access, item.assigneePersonId)] } : {}),
       };
       const { data: proposal, error: proposalError } = await db().from("work_task_proposals").insert({
         organization_id: access.organizationId,
@@ -1156,7 +1169,7 @@ export async function reviewWorkOsProposal(access: WorkOsAccess, proposalId: str
       }
       const current = await getTaskByLocalOrProviderId(ownerId, proposal.task_id as string);
       const before = (proposal.before_state ?? {}) as Json;
-      const keys = ["title", "description", "status", "completed", "due_date", "start_date", "task_group_id", "parent_provider_task_id"];
+       const keys = ["title", "description", "status", "completed", "due_date", "start_date", "task_group_id", "assignee_person_ids", "parent_task_id", "parent_provider_task_id"];
       if (keys.some((key) => JSON.stringify(before[key] ?? null) !== JSON.stringify(current[key] ?? null))) {
         const { data: stale, error: staleError } = await db().from("work_task_proposals").update({
           status: "stale", failure_reason: "The task changed after this proposal was drafted. Create a new proposal from the current task state.",

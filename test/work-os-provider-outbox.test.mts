@@ -24,7 +24,10 @@ test("migration anchors the provider task id on the proposal", () => {
 test("create_task adopts a recorded provider id before any provider work", () => {
   const branchAt = proposals.indexOf('if (operation === "create_task")');
   assert.ok(branchAt > 0);
-  const branch = proposals.slice(branchAt, proposals.indexOf("if (!taskId)"));
+  const localAt = proposals.indexOf('if (change.task_authority === "work_os")', branchAt);
+  assert.ok(localAt > branchAt, "new proposals use the local authority path");
+  const legacyAt = proposals.indexOf('if (!text(change.task_group_id)', localAt);
+  const branch = proposals.slice(legacyAt, proposals.indexOf("if (!taskId)", legacyAt));
   const adoptAt = branch.indexOf("adoptProviderTask(ownerId, recordedProviderId, body)");
   const mirrorAt = branch.indexOf('.from("work_tasks")');
   const listAt = branch.indexOf("findNiftyTaskByMarker(ownerId");

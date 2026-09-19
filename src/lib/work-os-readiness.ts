@@ -223,7 +223,6 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   addIssue("feature.desktop_companion_disabled", "needs_setup", features.desktop_companion ? 0 : 1, "Desktop Companion is disabled for this organization.");
   addIssue("people.none", "needs_setup", peopleChecks.active ? 0 : 1, "No active Work OS people are configured.");
   addIssue("people.work_os_account_missing", "needs_setup", peopleChecks.withoutWorkOsAccount, "Active employees need a WrazyOS account mapping and active membership.");
-  addIssue("people.nifty_mapping_missing", "needs_setup", peopleChecks.withoutNiftyMapping, "Active employees need a Nifty member mapping.");
   addIssue("people.worktivity_mapping_missing", "needs_setup", peopleChecks.withoutWorktivityMapping, "Active employees need a Worktivity employee mapping for activity evidence.");
   addIssue("people.role_profile_missing", "needs_setup", peopleChecks.withoutRoleProfile, "Active employees need a role profile before the pilot can define expected outputs.");
   addIssue("people.team_missing", "needs_setup", peopleChecks.withoutTeam, "Active employees need an active team assignment.");
@@ -231,7 +230,6 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   addIssue("people.manager_missing", "needs_setup", peopleChecks.employeesWithoutManager, "Employees need a team with an assigned manager/reviewer.");
 
   const requiredProviders: WorkOsProvider[] = [];
-  if (features.employee_companion || taskChecks.open > 0) requiredProviders.push("nifty");
   if (features.screenshot_summaries || employeePeople.some((person) => nonEmpty(person.worktivityEmployeeId))) requiredProviders.push("worktivity");
   if (features.github_evidence) requiredProviders.push("github");
   if (features.ghl_evidence) requiredProviders.push("ghl");

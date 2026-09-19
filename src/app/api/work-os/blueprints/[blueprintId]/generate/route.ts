@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateBlueprintTasks } from "@/lib/work-os";
-import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { jsonError, requireWorkOsAdmin } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +10,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ bluepri
   if ("response" in auth) return auth.response;
   try {
     const { blueprintId } = await params;
-    const ownerId = workOsOrganizationOwnerId(auth.access);
-    const result = await generateBlueprintTasks(ownerId, blueprintId, await req.json());
+    const result = await generateBlueprintTasks(auth.access, blueprintId, await req.json());
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     return jsonError(err, 502);

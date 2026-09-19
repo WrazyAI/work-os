@@ -120,9 +120,9 @@ test("expands an add batch into ordered proposals that share one batch id", () =
   const batchIds = new Set(prepared.map((item) => item.batch?.id));
   assert.equal(batchIds.size, 1);
   assert.equal(prepared[0]?.clientOperationIndex, 0);
-  const change = prepared[0]?.change as { name?: string; task_group_id?: string };
+  const change = prepared[0]?.change as { name?: string; task_authority?: string };
   assert.equal(change.name, "Draft the launch plan");
-  assert.ok(change.task_group_id, "a created task carries the default status column");
+  assert.equal(change.task_authority, "work_os");
 });
 
 test("expands an edit batch into a wording item plus a completion item", () => {
@@ -365,7 +365,7 @@ test("reassignments resolve the person through the assignable-people guard", () 
   assert.match(proposals, /async function resolveBatchAssignee/);
   assert.match(proposals, /getWorkOsTaskCreationOptions/);
   assert.match(proposals, /only assign work to yourself unless you are an administrator/);
-  assert.match(proposals, /assignees: \[await resolveBatchAssignee/);
+  assert.match(proposals, /assignee_person_ids: \[await resolveBatchAssignee/);
 });
 
 test("the prompt teaches the extra tools and the blueprint list", () => {

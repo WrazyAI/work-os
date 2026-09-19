@@ -149,7 +149,7 @@ export async function apiRequestBlob(path: string): Promise<Blob> {
 }
 
 type TaskCompletionResponse = {
-  task: { completed?: boolean };
+  task: { completed?: boolean; provider?: string };
   providerStatus?: string;
   reconciled?: boolean;
 };
@@ -178,7 +178,7 @@ export async function updateTaskCompletion(taskId: string, completed: boolean): 
           taskId,
           completed,
         });
-        return { ...readback, providerStatus: "nifty_confirmed", reconciled: true };
+        return { ...readback, providerStatus: readback.task?.provider === "local" ? "work_os_confirmed" : "nifty_confirmed", reconciled: true };
       }
     } catch {
       // Preserve the mutation failure; it is the actionable error for the user.

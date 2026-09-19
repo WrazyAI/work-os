@@ -104,6 +104,19 @@ function stringValues(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+async function resolveActiveTaskPeople(organizationId: string, value: unknown) {
+  const personIds = [...new Set(stringValues(value))];
+  if (!personIds.length) return [];
+  const result = await db().from("work_people").select("id,nifty_member_id")
+    .eq("organization_id", organizationId)
+    .eq("active", true)
+    .in("id", personIds);
+  if (result.error) throw new Error(`resolve Work OS task assignees: ${result.error.message}`);
+  const byId = new Map((result.data ?? []).map((person) => [String(person.id), person]));
+  if (personIds.some((personId) => !byId.has(personId))) throw new Error("Assignees must be active Work OS organization members");
+  return personIds.map((personId) => byId.get(personId)!);
+}
+
 /** One attribution rule for every task surface: the local person id, the
  * Nifty assignee mapping, or Nifty creator/subscriber metadata. */
 export function isTaskAttributableToPerson(task: Record<string, any>, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
@@ -427,9 +440,17 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
     const row: Json = {};
     if ("name" in patch) row.title = nonEmptyString(patch.name) ?? task.title;
     if ("description" in patch) row.description = nonEmptyString(patch.description);
-    if ("due_date" in patch) row.due_date = nonEmptyString(patch.due_date);
+    for (const key of ["due_date", "start_date", "priority", "expected_outcome", "definition_of_done", "blocked_reason"]) {
+      if (key in patch) row[key] = nonEmptyString(patch[key]);
+    }
+    for (const key of ["labels", "story_points", "blocked"]) {
+      if (key in patch) row[key] = patch[key];
+    }
+    if ("assignee_person_ids" in patch) {
+      const people = await resolveActiveTaskPeople(task.organization_id as string, patch.assignee_person_ids);
+      row.assignee_person_ids = people.map((person) => String(person.id));
+    }
     if ("blocked" in patch) row.blocked = patch.blocked === true;
-    if ("blocked_reason" in patch) row.blocked_reason = nonEmptyString(patch.blocked_reason);
     if ("completed" in patch) {
       row.completed = patch.completed === true;
       row.status = row.completed ? "completed" : "open";
@@ -444,6 +465,12 @@ export async function updateTask(userId: string, taskId: string, patch: Json) {
   const allowed: Json = {};
   for (const key of ["name", "description", "milestone_id", "due_date", "start_date", "task_group_id", "assignees", "labels", "story_points", "priority", "dependencies"]) {
     if (key in patch) allowed[key] = patch[key];
+  }
+  if ("assignee_person_ids" in patch) {
+    const people = await resolveActiveTaskPeople(task.organization_id as string, patch.assignee_person_ids);
+    const providerIds = people.map((person) => nonEmptyString(person.nifty_member_id));
+    if (providerIds.some((providerId) => !providerId)) throw new Error("Historical Nifty tasks require mapped Nifty assignees");
+    allowed.assignees = providerIds;
   }
   if ("expected_outcome" in patch || "definition_of_done" in patch) {
     const structuredMappings = await mappedSemanticFields(userId, ["expected_outcome", "definition_of_done"]);
@@ -580,8 +607,8 @@ export async function moveTaskToParent(userId: string, taskId: string, parentTas
     getTaskByLocalOrProviderId(userId, parentTaskId),
   ]);
   if (task.id === parent.id) throw new Error("A task cannot be its own parent");
-  if (!task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
-  if (parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
+  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
+  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
   if (task.organization_id !== parent.organization_id) throw new Error("Subtasks can only be moved between tasks in the same project");
   const localMove = task.provider === "local" || parent.provider === "local";
   if (localMove) {
@@ -589,11 +616,13 @@ export async function moveTaskToParent(userId: string, taskId: string, parentTas
     if (task.provider === "local" && parent.provider === "nifty" && task.provider_project_id && parent.provider_project_id && task.provider_project_id !== parent.provider_project_id) {
       throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
     }
-    if (task.parent_provider_task_id === parent.provider_task_id) return task;
+    if (task.parent_task_id === parent.id || (parent.provider_task_id && task.parent_provider_task_id === parent.provider_task_id)) return task;
     return selectFirst(
       db().from("work_tasks").update({
         parent_task_id: parent.id,
-        parent_provider_task_id: parent.provider_task_id,
+        parent_provider_task_id: parent.provider_task_id ?? null,
+        project_id: parent.project_id ?? task.project_id ?? null,
+        provider_project_id: parent.provider_project_id ?? task.provider_project_id ?? null,
         synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).eq("user_id", userId).eq("id", task.id).select("*"),

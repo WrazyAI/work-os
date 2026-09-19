@@ -1905,7 +1905,7 @@ export default function App() {
     // refresh; the surgical insert above already rendered it instantly.
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
-    if (result.providerStatus !== "nifty_confirmed") notifications.info(`Task submitted · ${result.mirrorStatus}`, "Provider confirmation pending");
+    if (result.providerStatus !== "work_os_confirmed" && result.providerStatus !== "nifty_confirmed") notifications.info(`Task submitted · ${result.mirrorStatus}`, "Task processing");
   }
 
   function failPendingTask(id: string, value: unknown) {
@@ -2547,9 +2547,11 @@ export default function App() {
           queued,
           message: queued
             ? `“${title}” is queued as a task and workday update. It will be confirmed after reconnection.`
-            : taskResult.providerStatus === "nifty_confirmed"
-              ? `Added “${title}” to today’s Nifty tasks and recorded the update.`
-              : `Recorded “${title}”; Nifty confirmation is still pending.`,
+             : taskResult.providerStatus === "work_os_confirmed"
+               ? `Added “${title}” to today’s Work OS tasks and recorded the update.`
+               : taskResult.providerStatus === "nifty_confirmed"
+                 ? `Added “${title}” to today’s historical Nifty tasks and recorded the update.`
+                 : `Recorded “${title}”; task confirmation is still pending.`,
         });
       } else {
         const result = await sendOrQueue("/api/work-os/check-ins", "POST", {

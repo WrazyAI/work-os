@@ -117,7 +117,7 @@ Do not visually or linguistically collapse different evidence classes:
 - Worktivity observation.
 - Employee-authored progress.
 - AI-proposed interpretation.
-- Nifty task state.
+- Work OS task state, with historical Nifty provider state kept distinct.
 - Output evidence.
 - Review or approval state.
 
@@ -762,7 +762,7 @@ Empty states should be specific:
 
 Errors should state what failed and what the user can do. Do not expose raw credentials, provider payloads, or stack traces.
 
-Success should confirm the persisted outcome. Avoid claiming `Task created` until Nifty or the authoritative provider confirms it. If queued offline, say so.
+Success should confirm the persisted outcome. New tasks say `Work OS task saved` only after the local row is persisted; historical Nifty rows may say so only after Nifty confirms. If queued offline, say so.
 
 ## 16. Copy and content design
 
@@ -774,7 +774,7 @@ Preferred:
 
 - `Recorded this as progress for today.`
 - `Added this to today's tasks.`
-- `Nifty sync is delayed.`
+- `Historical Nifty sync is delayed.`
 
 Avoid:
 
@@ -884,7 +884,7 @@ On shift:
 - Keep task lifecycle actions consistent between Today and Tasks. Viewing and completion remain direct; editing, archiving, and permanent deletion live in the task’s contextual menu, with explicit confirmation for destructive actions.
 - Use a focused task-detail modal for deeper editing and subtasks.
 - Clearly distinguish historical read-only views.
-- Make Nifty sync state visible but not dominant.
+- Make historical Nifty sync state visible but not dominant; new Work OS tasks do not depend on provider sync.
 
 ### 19.3 Review
 
@@ -1134,7 +1134,7 @@ Desktop and web share the same product model:
 - The same task-first state hierarchy.
 - The same task lifecycle actions and confirmation rules.
 - The same separation between Work OS session state, Worktivity observation,
-  Nifty provider state, employee claims, AI proposals, and output evidence.
+  historical Nifty provider state, Work OS task state, employee claims, AI proposals, and output evidence.
 - The same loading, empty, degraded, success, and error language.
 
 Platform differences are limited to delivery constraints:
@@ -1145,7 +1145,7 @@ Platform differences are limited to delivery constraints:
 | Density | Pointer-first compact controls | Pointer and touch-aware; slightly larger controls where needed |
 | Composer | Sticky dock above the window edge | Sticky dock or page-local sticky action surface that never covers navigation |
 | Overlays | Constrained to the Tauri window | Constrained to the browser viewport and safe areas |
-| Provider state | May include local queue/offline state | Must distinguish browser request state from provider confirmation |
+| Provider state | May include local queue/offline state | Must distinguish local Work OS persistence from historical provider confirmation |
 | Admin workflows | Rare and secondary | May use denser master-detail and table layouts |
 
 Do not create a visually separate “web design system.” Tailwind utilities, CSS
@@ -1367,7 +1367,7 @@ task data when a parent workflow needs explicit batch-completion intent. Rows us
 native checkboxes, title, one quiet metadata line, and a text status; overdue rows
 carry the danger status chip. The footer action is `Mark selected done`, disabled
 until at least one item is selected, and passes only the selected IDs to its
-parent callback. The card itself never mutates a task or claims Nifty
+parent callback. The card itself never mutates a task or claims Work OS or Nifty
 confirmation. It defines loading skeletons, a specific empty state, a recoverable
 error with optional retry, a degraded last-known-data notice, and dense rows. At
 narrow widths, status labels may hide, metadata wraps, and the footer action
@@ -1454,7 +1454,7 @@ Contract:
   render the reusable task selection card. Failures render a short inline
   error, never an approval card and never a blank region.
 - The card lists open work only, so a long completed history can never crowd
-  its window. Pending lists the newest activity first — Nifty's own activity
+  its window. Pending lists the newest activity first — historical Nifty's own activity
   timestamp when the mirror has it, then provider creation, then the local
   row; the mirror's bulk-sync `updated_at` must never make an old task look
   recent. Overdue keeps oldest-due-first (design §27.3).
@@ -1896,7 +1896,7 @@ cards. Its vertical anatomy is fixed:
    25–36px focus statement, provenance, `Update focus`, and exactly two metrics.
 3. **Task toolbar:** Today, Previous day, Other days, and `Add task`.
 4. **Task list:** at least enough reserved height to avoid collapse while loading.
-5. **54px minimum footer:** truthful Nifty sync sentence and link to full Tasks.
+5. **54px minimum footer:** truthful Work OS task state, with historical Nifty sync only where applicable, and a link to full Tasks.
 6. **Sticky composer:** visually attached to the workflow but layered above the
    page edge.
 
@@ -1949,7 +1949,7 @@ Do not restore a permanently editable focus textarea above the task list.
 When a mirrored task is tombstoned (archived or deleted) — at tombstone time and
 on every mirror sync — its open daily-plan items are marked `removed` so no list
 surface keeps rendering them. A plan item whose task row can no longer be
-resolved must never present live work: no "Awaiting Nifty sync" chip, no
+resolved must never present live work: no "Awaiting provider sync" chip, no
 clickable detail, and no completion control for a task that no longer exists.
 Truthful removal, not a permanent dead row, is the required end state.
 
@@ -2057,8 +2057,8 @@ wherever they drive ordering. Creation dates live in the task-detail view, not t
 row.
 
 Malformed provider titles/descriptions, HTML error bodies, `[object Object]`, and
-fetch exception text never render as task content. Use `Untitled Nifty task`, `No
-description added.`, `Nifty details unavailable`, or another deliberate fallback.
+fetch exception text never render as task content. Use `Untitled task`, `No
+description added.`, `Task details unavailable`, or another deliberate fallback.
 Invalid timestamps never reach a formatter that can throw.
 
 ### 27.4 Task row anatomy
@@ -2159,7 +2159,7 @@ Review is a decision workspace, not an activity feed. Its wide composition is:
 
 1. Page introduction and compact pending count.
 2. One short control-flow strip showing `Your update → Structured draft → Your
-   decision → Nifty write-back`.
+   decision → Work OS save (or historical Nifty write-back)`.
 3. Proposal cards ordered oldest decision-needed first unless product urgency
    explicitly overrides age.
 
@@ -2177,7 +2177,8 @@ The original employee statement is visually quoted and never rewritten. Proposed
 fields use a compact definition list rather than prose. Stale proposals lose
 mutation actions and explain why they need regeneration. Approval remains a
 primary local action only while the proposal is actionable; a successful browser
-request is not displayed as Nifty write-back until provider confirmation exists.
+request is not displayed as Work OS saved or Nifty write-back until the relevant
+authoritative persistence is confirmed.
 
 ### 29.1a EOD draft refinement
 
@@ -2362,7 +2363,7 @@ upgrades an `http` scheme to `https` before any fetch.
 Insights follows summary → comparison → exact record:
 
 1. Page intro, Day / 7 days / 30 days range control, and a freshness chip row
-   (Nifty synced, Worktivity observed, and a red-led chip when sync is delayed).
+    (Work OS task state, historical Nifty sync when present, Worktivity observed, and a red-led chip when a provider sync is delayed).
 2. AI synthesis card: the assistant writes three short grounded paragraphs
    (highlight, attention, focus) under bold section labels. Every figure it
    writes must appear in the exact record below; decimal numbers are rejected
@@ -2756,7 +2757,7 @@ applicable cells:
 | Filtered empty | Says no records match and offers clear/reset |
 | Dense | Long titles, many rows, counts, and metadata remain aligned |
 | Partial provider data | Deliberate fallback copy and source/freshness label |
-| Offline/queued | Says queued locally; never says Nifty confirmed |
+| Offline/queued | Says queued locally; never says Work OS or Nifty confirmed |
 | Recoverable error | Local notice, retry, and preserved user input |
 | Blocking error | Clear failed boundary and recovery route; no raw stack/payload |
 | Optimistic mutation | Visually pending until authoritative confirmation |

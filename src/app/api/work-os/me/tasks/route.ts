@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     const auth = await access(req);
     if (auth.response) return auth.response;
     const task = await createWorkOsEmployeeTask(auth.access, await req.json());
-    return NextResponse.json({ task, providerStatus: "nifty_confirmed", mirrorStatus: "mirrored" }, { status: 201 });
+    return NextResponse.json({ task, providerStatus: "work_os_confirmed", mirrorStatus: "local" }, { status: 201 });
   } catch (error) {
     return jsonError(error, 502);
   }
