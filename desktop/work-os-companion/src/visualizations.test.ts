@@ -91,7 +91,45 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-state { grid-column: 5;");
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-due { grid-column: 4;");
     expect(workspaceStyles).toContain(".task-records .workspace-task > .workspace-task-menu { grid-column: 6;");
-    expect(styles).toContain("grid-template-columns: 24px minmax(0, 1fr) 64px 104px 76px 30px !important");
+    expect(styles).toContain("grid-template-columns: 24px minmax(0, 1fr) 56px max-content auto 30px !important");
+  });
+
+  it("spins the clicked checkbox and drops the row without freezing the list", () => {
+    expect(app).toContain("completingTaskIds");
+    expect(app).toContain("leavingTaskIds");
+    expect(app).toContain('className={`task-check${flight === "completing" ? " is-completing" : ""}`}');
+    expect(app).toContain('aria-busy={flight === "completing"}');
+    // The old global freeze: no checkbox may gate on the shared busy flag.
+    expect(app).not.toContain("disabled={busy || pendingStatus !== null}");
+    expect(app).not.toContain("disabled={busy || historical || pendingStatus !== null}");
+    expect(workspaceStyles).toContain(".task-check.is-completing");
+    expect(workspaceStyles).toContain("task-row-leave");
+    expect(workspaceStyles).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("keeps My day open-only and states its counts from the rendered list", () => {
+    expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
+    expect(app).toContain("Today <em>{openToday.length}</em>");
+    expect(app).toContain("count: myDayTasks.filter((task) => task.completed !== true).length");
+    expect(app).toContain("My day is open work only");
+  });
+
+  it("draws one animated SVG progress ring everywhere instead of conic rings and tick meters", () => {
+    expect(app).not.toContain("conic-gradient(var(--signal) var(--progress)");
+    expect(styles).not.toContain(".completion-ring");
+    expect(styles).not.toContain(".progress-ticks");
+    expect(workspaceStyles).not.toContain(".completion-ring");
+    expect(workspaceStyles).not.toContain(".progress-ticks");
+    expect(workspaceStyles).toContain(".progress-ring-fill");
+    expect(workspaceStyles).toContain("transition: stroke-dashoffset");
+  });
+
+  it("animates the composer closed and refreshes the open lists after an add", () => {
+    expect(app).toContain("function closeTaskComposer");
+    expect(app).toContain("closing={taskComposerClosing}");
+    expect(styles).toContain(".task-modal-backdrop.is-closing");
+    expect(app).toContain("void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });");
+    expect(app).toContain("void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });");
   });
 
   it("keeps focus contextual and task lifecycle actions consistent", () => {
@@ -99,7 +137,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("agenda-strip-chip");
     expect(app).toContain("Review unfinished work");
     expect(app).toContain("function DashboardTaskCard");
-    expect(app).toContain('className="task-check"');
+    expect(app).toContain('className={`task-check card-check');
     expect(app).toContain("onEditFocus={openPlanningSession}");
     expect(app).not.toContain('className="panel daily-goal-card"');
     expect(app).toContain("function TaskLifecycleMenu");

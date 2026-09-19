@@ -7,6 +7,7 @@ import { BOTTLENECK_QUESTION, composeEodMarkdown, extractBottleneckAnswer, hasBo
 import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
+import { ProgressRing } from "./ProgressRing";
 import { Otto } from "./Otto";
 import { SelectionAnnotator, type SelectionRect } from "./SelectionAnnotator";
 import { isAnnotationCommentValid, sanitizeComment } from "./planningAnnotations";
@@ -138,13 +139,13 @@ export function taskSourceLabel(task: AnyTask): string {
   return String(task?.provider ?? "") === "local" ? "Work OS" : "Nifty";
 }
 
-export function TaskComposerModal({ busy, title, description, assignees, options, optionsLoading, onTitle, onDescription, onToggleAssignee, onClose, onSubmit }: {
-  busy: boolean; title: string; description: string; assignees: string[];
+export function TaskComposerModal({ busy, closing = false, title, description, assignees, options, optionsLoading, onTitle, onDescription, onToggleAssignee, onClose, onSubmit }: {
+  busy: boolean; closing?: boolean; title: string; description: string; assignees: string[];
   options: Array<{ id: string; displayName: string; email: string | null }>; optionsLoading: boolean;
   onTitle: (value: string) => void; onDescription: (value: string) => void; onToggleAssignee: (id: string) => void;
   onClose: () => void; onSubmit: () => void;
 }) {
-  return <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
+  return <div className={`task-modal-backdrop${closing ? " is-closing" : ""}`} onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
     <section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
       <header><div><span>New task</span><h2 id="task-modal-title">What needs to get done?</h2></div><button aria-label="Close task composer" disabled={busy} onClick={onClose}><X size={18} /></button></header>
       <div className="task-modal-body">
@@ -214,7 +215,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
         {loading ? <TaskDetailSkeleton /> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
           <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, taskSourceLabel(task))}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <CompletionRingInline completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} />}</header>
+          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <ProgressRing size={16} stroke={2} completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} label="subtasks" />}</header>
             {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
@@ -268,11 +269,12 @@ export function TaskEditModal({ kind, title, description, busy, localTask = fals
   </section></div>;
 }
 
-export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTaskCompletion, onOpenDay }: {
+export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTaskCompletion, onOpenDay, taskFlight }: {
   groups: Array<{ date: string; label: string; items: Array<{ task: TaskRow; attribution: { date: string | null; reason: string } }> }>;
   busy: boolean; onClose: () => void;
   onSurfaceTask: (task: TaskRow, disposition?: "selected" | "deferred") => void;
   onTaskCompletion: (task: TaskRow, completed: boolean) => void; onOpenDay: (date: string) => void;
+  taskFlight?: ReadonlyMap<string, "completing" | "leaving">;
 }) {
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
   return <div className="carry-flyout-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
@@ -280,7 +282,7 @@ export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTa
       <header><div><span>From previous days</span><h2>Review unfinished work.</h2><small>{total} unfinished task{total === 1 ? "" : "s"} across {groups.length} workday{groups.length === 1 ? "" : "s"}. Decide what moves forward.</small></div><button aria-label="Close unfinished work" onClick={onClose}><X size={18} /></button></header>
       <div>{groups.length ? groups.map((group) => <section key={group.date}><h3>{group.label}</h3>{group.items.map(({ task, attribution }) => <article key={task.id}>
         <div className="carry-row-copy"><strong>{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div>
-        <div className="carry-row-actions"><button disabled={busy} onClick={() => onSurfaceTask(task)}><Plus size={13} /> Add to today</button><button disabled={busy} onClick={() => onTaskCompletion(task, true)}><Check size={13} /> Complete</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button onClick={() => onOpenDay(attribution.date!)}>Open day</button></div>
+        <div className="carry-row-actions"><button disabled={busy} onClick={() => onSurfaceTask(task)}><Plus size={13} /> Add to today</button><button disabled={busy || taskFlight?.has(String(task.provider_task_id || task.id))} onClick={() => onTaskCompletion(task, true)}>{taskFlight?.get(String(task.provider_task_id || task.id)) === "completing" ? <FadeArc size={13} /> : <Check size={13} />} Complete</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button onClick={() => onOpenDay(attribution.date!)}>Open day</button></div>
       </article>)}</section>) : <div className="carry-empty"><Check size={20} /><strong>Nothing left behind</strong><span>Earlier work is complete or carried forward.</span></div>}</div>
       <footer><small>Nothing changes in Nifty until you act.</small><button onClick={onClose}>Close</button></footer>
     </aside>
@@ -302,10 +304,6 @@ export function SyncChip({ task }: { task: AnyTask }) {
   if (task.sync_error) return <span className="sync-chip degraded">Nifty details unavailable</span>;
   if (task.synced_at) return <span className="sync-chip synced">Nifty synced</span>;
   return <span className="sync-chip awaiting">Awaiting Nifty sync</span>;
-}
-
-export function CompletionRingInline({ completed, total }: { completed: number; total: number }) {
-  return <span className="subtask-count-ring" role="img" aria-label={`${completed} of ${total} subtasks complete`}>{completed}/{total}</span>;
 }
 
 export { sentence, taskKind };
