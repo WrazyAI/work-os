@@ -21,10 +21,12 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
-## Unreleased
+## 0.3.35
 
 - Batch task cards now show live filed, skipped, and needs-attention results, keep edits safe, and collapse into a clear receipt after approval.
 - Batch cards now use the full compact width in the floating companion instead of squeezing titles and steps into a narrow strip.
+
+## Unreleased
 
 ## 0.3.34
 
