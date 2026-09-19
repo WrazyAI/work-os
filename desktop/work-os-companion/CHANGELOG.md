@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.31
+
+- Opening the companion no longer gets stuck behind a copy left over from an earlier session — it clears the dead one and starts.
+- If the app ever fails to open again, it now records the exact stage it stopped at so the cause can be found.
+
 ## 0.3.30
 
 - Chat now uses one calmer, roomier layout in the app and floating companion, with clearer copy controls and Otto markers.
