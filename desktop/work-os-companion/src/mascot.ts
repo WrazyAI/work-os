@@ -29,8 +29,8 @@ export const MASCOT = {
   Pet: SignalSpirit,
   /** Bundled art for surfaces that need a raster or file reference. */
   assets: {
-    mark: "/work-os-mark.svg",
-    companion: "/work-os-companion.png",
+    mark: "/signal-spirit-mark.svg",
+    companion: "/signal-spirit.svg",
   },
 } as const;
 
