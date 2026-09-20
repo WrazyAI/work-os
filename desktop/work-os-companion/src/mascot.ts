@@ -1,4 +1,4 @@
-import { Otto, type OttoCrop, type OttoPose } from "./Otto";
+import { Otto, type OttoCrop, type OttoPose, type OttoTone } from "./Otto";
 
 /** The agent's identity and art, in one place.
  *
@@ -22,8 +22,10 @@ export const MASCOT = {
   thinkingPose: "think" as OttoPose,
   /** Pose for idle or welcome surfaces. */
   idlePose: "idle" as OttoPose,
-  /** The one component every surface renders. */
+  /** Compact identity renderer for chat turns, badges, and tiny surfaces. */
   Mark: Otto,
+  /** Full-figure renderer used by behavior-aware MascotPet surfaces. */
+  Pet: Otto,
   /** Bundled art for surfaces that need a raster or file reference. */
   assets: {
     mark: "/work-os-mark.svg",
@@ -32,3 +34,6 @@ export const MASCOT = {
 } as const;
 
 export type MascotConfig = typeof MASCOT;
+export type MascotPose = OttoPose;
+export type MascotCrop = OttoCrop;
+export type MascotTone = OttoTone;
