@@ -99,7 +99,7 @@
 }
 
 /* The floating orb sits on a dark face — brighten the red there. */
-.avatar-pet.otto[data-tone="late"] {
+.avatar-pet .otto[data-tone="late"] {
   --otto-signal: #e2604f;
 }
 
@@ -111,12 +111,74 @@
   stroke-linejoin: round;
 }
 
-.avatar-pet.otto[data-tone="late"] .otto-late-mark {
+.avatar-pet .otto[data-tone="late"] .otto-late-mark {
   stroke: #e2604f;
 }
 
 .otto-figure {
   transform-origin: 48px 80px;
+}
+
+/* Behavior-aware pet motion ------------------------------------------------ */
+
+.mascot-pet {
+  display: inline-grid;
+  place-items: center;
+  transform-origin: 50% 82%;
+  will-change: transform;
+}
+
+.mascot-pet-art {
+  display: block;
+}
+
+.mascot-pet[data-activity="idle"] {
+  animation: mascot-idle-drift 5.2s ease-in-out infinite;
+}
+
+.mascot-pet[data-activity="working"] {
+  animation: mascot-working-hover 1.55s ease-in-out infinite;
+}
+
+.mascot-pet[data-activity="needs-input"] {
+  animation: mascot-needs-input 720ms cubic-bezier(.2, .85, .25, 1) 1;
+}
+
+.mascot-pet[data-activity="ready"] {
+  animation: mascot-ready-pop 820ms cubic-bezier(.18, .9, .25, 1.15) 1;
+}
+
+.mascot-pet[data-activity="blocked"] {
+  animation: mascot-blocked-settle 520ms ease-out 1;
+}
+
+@keyframes mascot-idle-drift {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1.5px) rotate(.4deg); }
+}
+
+@keyframes mascot-working-hover {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2.5px) scale(1.015); }
+}
+
+@keyframes mascot-needs-input {
+  0% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(-5px) scale(1.035); }
+  64% { transform: translateY(1px) scale(.995); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes mascot-ready-pop {
+  0% { transform: translateY(0) scale(1); }
+  34% { transform: translateY(-7px) scale(1.055) rotate(2deg); }
+  68% { transform: translateY(1px) scale(.99) rotate(-1deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes mascot-blocked-settle {
+  from { transform: translateY(-1px) rotate(0); }
+  to { transform: translateY(2px) rotate(-3deg); }
 }
 
 /* Pose motion -------------------------------------------------------------- */
@@ -295,36 +357,37 @@
   height: 40px;
 }
 
-.otto-hero {
+.mascot-hero-art {
   width: 100%;
   max-width: 200px;
   height: auto;
   filter: drop-shadow(0 16px 28px rgba(24, 32, 24, 0.12));
 }
 
-.otto-connect {
+.mascot-connect-art {
   --otto-ink: #f3f1e9;
   width: clamp(180px, 22vw, 260px);
   height: auto;
   filter: drop-shadow(0 24px 44px rgba(0, 0, 0, 0.35));
 }
 
-.otto-connect .otto-bulb,
-.otto-connect .otto-eye {
+.mascot-connect-art .otto-bulb,
+.mascot-connect-art .otto-eye {
   filter: drop-shadow(0 0 7px rgba(168, 241, 91, 0.55));
 }
 
-.otto-celebrate {
+.mascot-celebrate-art {
   width: 64px;
   height: 64px;
 }
 
-.avatar-pet.otto {
+.avatar-pet .avatar-pet-art.otto {
   width: 44px;
   height: 44px;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .mascot-pet,
   .otto .otto-figure,
   .otto .otto-eye,
   .otto .otto-ring,
@@ -380,4 +443,104 @@
 
 .otto-preview-dark .card-title span {
   color: #f3f1e9;
+}
+
+
+/* Mascot Lab --------------------------------------------------------------- */
+
+.mascot-lab {
+  display: grid;
+  gap: 16px;
+}
+
+.mascot-lab-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.mascot-lab-controls button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink);
+  padding: 7px 10px;
+  font: 650 11px/1 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+
+.mascot-lab-controls button[aria-pressed="true"] {
+  border-color: #9bcf68;
+  background: #edf8e4;
+  box-shadow: inset 0 0 0 1px rgba(124, 201, 54, .18);
+}
+
+.mascot-lab-live {
+  display: grid;
+  min-height: 230px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fbfcf8;
+}
+
+.mascot-lab-live.dark {
+  background: #171914;
+  border-color: #2a2d26;
+}
+
+.mascot-lab-live .mascot-pet-art {
+  width: 120px;
+  height: 120px;
+}
+
+.mascot-lab-live.scale-2 .mascot-pet-art {
+  width: 200px;
+  height: 200px;
+}
+
+.mascot-lab-state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mascot-lab-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 126px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.mascot-lab-state .mascot-pet-art {
+  width: 74px;
+  height: 74px;
+}
+
+.mascot-lab-state.dark {
+  background: #171914;
+  border-color: #2a2d26;
+  color: #f3f1e9;
+}
+
+.mascot-lab.reduced-motion .mascot-pet,
+.mascot-lab.reduced-motion .otto .otto-figure,
+.mascot-lab.reduced-motion .otto .otto-eye,
+.mascot-lab.reduced-motion .otto .otto-ring,
+.mascot-lab.reduced-motion .otto .otto-dot,
+.mascot-lab.reduced-motion .otto .otto-bulb,
+.mascot-lab.reduced-motion .otto .otto-sparkles {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (max-width: 860px) {
+  .mascot-lab-state-grid,
+  .otto-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
