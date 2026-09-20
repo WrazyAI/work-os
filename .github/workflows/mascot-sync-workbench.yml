@@ -1,0 +1,31 @@
+name: Mascot integration workbench
+on:
+  push:
+    branches: [codex/mascot-sync-workbench]
+    paths: [.github/workflows/mascot-sync-workbench.yml]
+permissions:
+  contents: read
+jobs:
+  workspace:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare tracked source and companion dependencies
+        run: |
+          mkdir -p /tmp/mascot-source
+          git archive b4ac70ba075621193579fefd8321c5ba095138e5 | tar -xf - -C /tmp/mascot-source
+          cd /tmp/mascot-source/desktop/work-os-companion
+          npm ci
+          cd /tmp/mascot-source
+          tar -czf /tmp/mascot-workspace.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mascot-workspace
+          path: /tmp/mascot-workspace.tgz
+          retention-days: 1
