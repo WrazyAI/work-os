@@ -177,7 +177,7 @@ export interface DayData {
   plan: DailyPlan | null;
   attendance?: AttendanceProjection;
   breakPolicy?: { worktivityAuthoritative: boolean };
-  access?: { organizationId: string; role: string; personId: string; featureFlags?: Record<string, boolean> };
+  access?: { organizationId: string; role: string; personId: string; displayName?: string | null; featureFlags?: Record<string, boolean> };
 }
 
 export interface AttendanceProjection {

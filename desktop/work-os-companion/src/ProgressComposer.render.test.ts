@@ -72,6 +72,7 @@ describe("ProgressComposer post-approve state", () => {
 describe("ProgressComposer simplified chrome", () => {
   const base = {
     input: "", open: true, panel: "update" as const, pending: "", receipt: null, history: [],
+    displayName: "David Zahemen",
     busy: false, required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
     onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
     onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
@@ -83,7 +84,9 @@ describe("ProgressComposer simplified chrome", () => {
     expect(markup).not.toContain("Clear conversation");
     expect(markup).not.toContain("workos-chat-sub");
     expect(markup).not.toContain("Continue the conversation below.");
-    expect(markup).toContain("What would you like to record?");
+    expect(markup).toContain("chat-welcome-hero");
+    expect(markup).toContain("David");
+    expect(markup).not.toContain("chat-mascot-mark");
   });
 
   it("renders a compact launcher instead of mounting the full composer when closed", () => {

@@ -14,7 +14,7 @@ import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
@@ -1149,9 +1149,9 @@ export default function AvatarApp(): React.ReactElement {
               />
             </div>
           )}
-            {!chat.length && !attentionDue && (
-              <ChatTurn role="assistant" text={contextualPrompt.kind === "agenda" ? contextualPrompt.body : "Share an update, or tell me to create, complete, or block tasks."} />
-            )}
+             {!chat.length && !attentionDue && (
+               <ChatWelcome displayName={facts.displayName} mode={contextualPrompt.kind === "agenda" ? "agenda" : "update"} seed={`floating:${facts.shiftDate || "today"}`} />
+             )}
             {
               collapseConsecutiveAssistantDuplicates(chat).map((entry, entryIndex, allEntries) => {
               const streams = entryIndex === allEntries.length - 1 && entry.role === "assistant" && !entry.operations && !entry.toolResults && !entry.receipt && !entry.id.startsWith("prompt:");

@@ -282,9 +282,41 @@
       focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong;
   }
 
-  .chat-welcome { @apply flex items-start gap-2.5 text-ink; }
-  .chat-welcome strong { @apply text-[13px] font-semibold; }
-  .chat-welcome p { @apply mt-0.5 text-[12px] leading-[1.5] text-ink-2; }
+  .chat-welcome { @apply flex items-start text-ink; }
+  .chat-welcome-hero {
+    display: block;
+    padding: 14px 2px 8px;
+    animation: workos-fade-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .chat-welcome-content { @apply min-w-0; }
+  .chat-welcome-kicker {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--color-ink-3);
+    font-size: 9px;
+    font-weight: 750;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .chat-welcome-hero strong {
+    display: block;
+    max-width: 34rem;
+    color: var(--color-ink);
+    font-size: clamp(16px, 2.6vw, 22px);
+    font-weight: 720;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+    text-wrap: balance;
+  }
+  .chat-welcome-hero p {
+    max-width: 34rem;
+    margin: 8px 0 0;
+    color: var(--color-ink-2);
+    font-size: 12.5px;
+    line-height: 1.55;
+    text-wrap: pretty;
+  }
 
   .chat-dock {
     @apply relative z-20 w-full;

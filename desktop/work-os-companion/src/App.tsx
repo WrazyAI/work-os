@@ -28,8 +28,7 @@ import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, ChatTurn, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
-import { MascotMark } from "./chat/MascotMark";
+import { ChatTabs, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
@@ -2942,6 +2941,7 @@ export default function App() {
       )}
       {dockVisible && <ProgressComposer
         mode={sessionActive && view === "day" ? "progress" : "agenda"}
+        displayName={visibleOnboarding.profile.displayName}
         input={input}
         open={progressComposerOpen}
         panel={progressPanel}
@@ -3250,8 +3250,8 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
-  mode?: ComposerMode;
+export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onGoal, onAcceptSuggestion, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
+  mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onGoal: (value: string) => void; onAcceptSuggestion: () => void;
@@ -3352,7 +3352,7 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
        : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
-  : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><MascotMark pose={MASCOT.idlePose} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
+   : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div>}
     </section>
     <div className="progress-input-shell">
       <WorkOsPromptBar autoFocus={open && panel === "update"} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update, a blocker, or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" />

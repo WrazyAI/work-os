@@ -47,8 +47,7 @@ assert.match(thinking, /import \{ MascotMark \} from "\.\/chat\/MascotMark"/);
 assert.doesNotMatch(thinking, /Sparkles/, "the thinking trace represents the agent and must use the mascot");
 
 const app = read("App.tsx");
-assert.match(app, /import \{ MascotMark \} from "\.\/chat\/MascotMark"/);
-assert.match(app, /<MascotMark pose=\{MASCOT\.idlePose\} \/>/, "the composer welcome must greet with the mascot");
+assert.doesNotMatch(app, /<MascotMark pose=\{MASCOT\.idlePose\} \/>/, "the empty composer hero is intentionally text-only");
 
 const avatar = read("AvatarApp.tsx");
 assert.match(avatar, /import \{ Otto \} from "\.\/Otto"/);

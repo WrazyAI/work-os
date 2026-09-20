@@ -334,6 +334,7 @@
   .workos-plus svg,
   .workos-send,
   .workos-chat-tabs button,
+  .chat-welcome-hero,
   .workos-thread .workos-resolving {
     animation: none;
     transition: none;

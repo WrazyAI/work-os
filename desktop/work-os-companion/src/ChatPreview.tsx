@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Minus, SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
-import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { TaskSelectionCard } from "./TaskSelectionCard";
@@ -189,7 +189,8 @@ function InAppSection() {
   const [open, setOpen] = useState(() => !new URLSearchParams(window.location.search).has("collapsed"));
   const [panel, setPanel] = useState<"update" | "goal">("update");
   const [goal, setGoal] = useState("Ship a clear, dependable workday experience.");
-  const [history, setHistory] = useState<WorkOsConversationTurn[]>([
+  const empty = new URLSearchParams(window.location.search).has("empty");
+  const [history, setHistory] = useState<WorkOsConversationTurn[]>(() => empty ? [] : [
     { id: "preview-1", role: "user", text: "Finished the chat revamp draft and started verification.", createdAt: "2026-09-08T00:30:00Z" },
     { id: "preview-2", role: "assistant", text: "Nice — share what is left and I will turn it into records.", meta: "recorded", createdAt: "2026-09-08T00:31:00Z" },
   ]);
@@ -206,6 +207,7 @@ function InAppSection() {
           viewport-anchored launcher waits in the lower corner. */}
       <div aria-hidden="true" style={{ height: 200 }} />
       <ProgressComposer
+        displayName="David Zahemen"
         input={input}
         open={open}
         panel={panel}
@@ -416,6 +418,7 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
   const [tab, setTab] = useState<"chat" | "tasks">("chat");
   const [input, setInput] = useState("");
   const [entries, setEntries] = useState<Array<{ id: string; text: string }>>([]);
+  const empty = new URLSearchParams(window.location.search).has("empty");
   return (
     <section aria-label="Avatar panel preview" style={{ display: "grid", gap: standalone ? 0 : 12, width: standalone ? "100%" : undefined, height: standalone ? "100%" : undefined }}>
       {!standalone && <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>}
@@ -470,36 +473,38 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
           </div>
         ) : (
           <div className="avatar-chat workos-thread">
-            <section className="avatar-context check_in" aria-label="Check-in due">
-              <strong>Check-in due</strong>
-              <small>Your last recorded update was at 3:06 PM. What's changed since then?</small>
-            </section>
-            <ChatTurn role="assistant" text="Share an update, or tell me to create, complete, or block tasks." />
-            <ChatTurn role="user" text="Show my pending tasks" />
-            <ChatTurn role="assistant" text="Here are your open tasks. Viewing never needs approval.">
-                <TaskSelectionCard
-                  title="Pending tasks"
-                  tasks={AVATAR_TASKS}
-                  onMarkSelectedDone={() => undefined}
-                  maxHeight={250}
-                  emptyTitle="No pending tasks"
-                  emptyMessage="Tasks waiting to be completed will appear here."
-                />
-                <div className="chat-operations">
-                  <ApprovalFlow
-                    operations={[
-                      { op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "preview-approval-1", enabled: true },
-                      { op: "record_progress", statement: "Documented release evidence.", taskId: "t-open", taskTitle: "Document release evidence", proposalId: "preview-approval-2", enabled: true },
-                    ]}
-                    context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
-                    onSubmit={() => undefined}
+            {empty ? <ChatWelcome displayName="David Zahemen" seed="floating:2026-09-07" /> : <>
+              <section className="avatar-context check_in" aria-label="Check-in due">
+                <strong>Check-in due</strong>
+                <small>Your last recorded update was at 3:06 PM. What's changed since then?</small>
+              </section>
+              <ChatTurn role="assistant" text="Share an update, or tell me to create, complete, or block tasks." />
+              <ChatTurn role="user" text="Show my pending tasks" />
+              <ChatTurn role="assistant" text="Here are your open tasks. Viewing never needs approval.">
+                  <TaskSelectionCard
+                    title="Pending tasks"
+                    tasks={AVATAR_TASKS}
+                    onMarkSelectedDone={() => undefined}
+                    maxHeight={250}
+                    emptyTitle="No pending tasks"
+                    emptyMessage="Tasks waiting to be completed will appear here."
                   />
-                  <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />
-                </div>
-            </ChatTurn>
-            {entries.map((entry) => (
-              <ChatTurn key={entry.id} role="user" text={entry.text} />
-            ))}
+                  <div className="chat-operations">
+                    <ApprovalFlow
+                      operations={[
+                        { op: "complete_task", statement: "Finished the sync repair.", taskId: "t-overdue", taskTitle: "Repair provider sync", proposalId: "preview-approval-1", enabled: true },
+                        { op: "record_progress", statement: "Documented release evidence.", taskId: "t-open", taskTitle: "Document release evidence", proposalId: "preview-approval-2", enabled: true },
+                      ]}
+                      context={{ shiftDate: "2026-09-07", personId: null, promptKind: "optional" }}
+                      onSubmit={() => undefined}
+                    />
+                    <NavigateButton page="review" statement="Your EOD draft is due at 8 PM." onNavigate={() => undefined} />
+                  </div>
+              </ChatTurn>
+              {entries.map((entry) => (
+                <ChatTurn key={entry.id} role="user" text={entry.text} />
+              ))}
+            </>}
           </div>
         )}
         <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">

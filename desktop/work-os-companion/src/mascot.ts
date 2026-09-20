@@ -2,8 +2,8 @@ import { Otto, type OttoCrop, type OttoPose } from "./Otto";
 
 /** The agent's identity and art, in one place.
  *
- * Change the mascot here and every surface follows: chat turns, the composer
- * welcome, the thinking trace, and the floating companion. Never hardcode
+ * Change the mascot here and every surface follows: chat turns, the thinking
+ * trace, and the floating companion. Never hardcode
  * mascot art, its name, or a generic sparkle where the agent is speaking — a
  * feature icon (Insights synthesis, onboarding suggestions) is not an agent
  * identity. `test/work-os-companion-mascot.test.mts` fails the build on drift. */
