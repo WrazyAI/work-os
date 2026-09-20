@@ -27,6 +27,18 @@
   --spirit-rim: #ef9d86;
 }
 
+.signal-spirit[data-crop="head"] .signal-spirit-aura {
+  display: none;
+}
+
+.signal-spirit[data-crop="head"] .signal-spirit-body {
+  filter: none;
+}
+
+.signal-spirit[data-crop="head"] .signal-spirit-expression {
+  filter: none;
+}
+
 .signal-spirit-shadow {
   fill: rgba(12, 18, 13, .18);
   transform-origin: 57px 99px;
