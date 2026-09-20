@@ -31,11 +31,11 @@ they change what the employee sees or does.
 - The Today view now separates readiness, active time, observed activity, and task flow into a clearer workday command center.
 - Tasks now use a calmer, denser workspace with truthful counts, overdue grouping, row-level progress, and a focused detail drawer.
 
- ## 0.3.36
+## 0.3.36
 
 - The in-app chat now rests as a compact Otto launcher and opens into a bounded sheet without covering your task list.
- - The floating companion now fits its window, keeps the composer growing with your draft, and opens context menus reliably.
- - Chat review cards keep one clear copy action and remain usable near the window edge.
+- The floating companion now fits its window, keeps the composer growing with your draft, and opens context menus reliably.
+- Chat review cards keep one clear copy action and remain usable near the window edge.
 
 ## 0.3.34
 
