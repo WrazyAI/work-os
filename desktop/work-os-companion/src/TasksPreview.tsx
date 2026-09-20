@@ -1,5 +1,6 @@
 import { useState } from "react";
-import SidebarNav, { SIDEBAR_PREVIEW_CHATS } from "./SidebarNav";
+import SidebarNav from "./SidebarNav";
+import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 import { ProgressComposer, TasksWorkspace } from "./App";
 import { TaskComposerModal, TaskDetailsModal, TaskEditModal, TaskRemovalConfirmation, TaskCarryOverFlyout } from "./taskSurfaces";
 import { TaskSelectionCard } from "./TaskSelectionCard";

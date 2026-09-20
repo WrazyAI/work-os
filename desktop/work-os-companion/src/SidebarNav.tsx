@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -66,14 +66,6 @@ const DESTINATIONS: Destination[] = [
 
 const PRIMARY_DESTINATION_IDS = new Set<SidebarView>(["day", "tasks", "review"]);
 const CONTEXT_DESTINATION_IDS = new Set<SidebarView>(["insights", "evidence"]);
-
-/** Stable fixture content used only by visual preview shells. Production passes
- * real conversation-derived rows instead of inventing history. */
-export const SIDEBAR_PREVIEW_CHATS: SidebarChat[] = [
-  { id: "supplier-records", label: "Supplier records" },
-  { id: "workload-summary", label: "Workload summary" },
-  { id: "release-review", label: "Desktop release review" },
-];
 
 const menuWidth = 228;
 
@@ -399,9 +391,3 @@ export default function SidebarNav({
     </aside>
   );
 }
-
-export function sidebarWidth(collapsed: boolean) {
-  return collapsed ? 68 : 208;
-}
-
-export const sidebarStyleVars = { "--sidebar-expanded-width": "208px", "--sidebar-collapsed-width": "68px" } as CSSProperties;

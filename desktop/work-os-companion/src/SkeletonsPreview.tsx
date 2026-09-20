@@ -1,6 +1,7 @@
 import { DashboardSkeleton, InsightsSkeleton, TaskDetailSkeleton, TaskListSkeleton } from "./LoadingUi";
 import { ListChecks } from "lucide-react";
-import SidebarNav, { SIDEBAR_PREVIEW_CHATS } from "./SidebarNav";
+import SidebarNav from "./SidebarNav";
+import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 
 /** Visual review states for every skeleton in the loading language. */
 export default function SkeletonsPreview() {

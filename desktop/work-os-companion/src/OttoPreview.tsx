@@ -1,5 +1,6 @@
 import { Otto, type OttoPose } from "./Otto";
-import SidebarNav, { SIDEBAR_PREVIEW_CHATS } from "./SidebarNav";
+import SidebarNav from "./SidebarNav";
+import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 
 const POSES: OttoPose[] = ["idle", "sleep", "focus", "alert", "rest", "think", "celebrate", "recover"];
 const SIZES = [16, 24, 36, 64] as const;
