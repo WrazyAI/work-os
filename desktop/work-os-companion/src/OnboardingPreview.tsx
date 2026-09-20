@@ -12,6 +12,7 @@ const PREVIEW_DATA: OnboardingData = {
   profile: {
     displayName: "Jamie Mensah",
     email: "jamie@wrazy.com",
+    avatarUrl: null,
     timezone: "Africa/Accra",
     language: "en",
     weekStart: 1,

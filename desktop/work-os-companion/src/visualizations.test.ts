@@ -18,6 +18,7 @@ const insightCharts = readFileSync(resolve(root, "src/InsightCharts.tsx"), "utf8
 const insightMath = readFileSync(resolve(root, "src/insights.ts"), "utf8");
 const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
 const memoryPanel = readFileSync(resolve(root, "src/MemorySettings.tsx"), "utf8");
+const profileSettings = readFileSync(resolve(root, "src/ProfileSettings.tsx"), "utf8");
 const memoryStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
 const listShift = readFileSync(resolve(root, "src/listShift.ts"), "utf8");
 
@@ -73,6 +74,22 @@ describe("operational visualizations", () => {
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");
+  });
+
+  it("makes the account surface reachable from both the masthead and Settings", () => {
+    expect(app).toContain('title="Open profile settings"');
+    expect(app).toContain('setProfileOpen(true)');
+    expect(app).toContain('mode="modal"');
+    expect(app).toContain('mode="page"');
+    expect(profileSettings).toContain("Display name");
+    expect(profileSettings).toContain("Account email");
+    expect(profileSettings).toContain("Sensitive app or domain exclusions");
+    expect(profileSettings).toContain("Screenshot analysis consent");
+    expect(app).toContain("new FormData()");
+    expect(styles).toContain(".profile-modal");
+    expect(styles).toContain(".task-modal-backdrop.profile-backdrop");
+    expect(app).toContain('aria-describedby="profile-settings-description"');
+    expect(styles).toContain(".profile-editor-actions");
   });
 
   it("keeps agenda planning available independently of attendance", () => {

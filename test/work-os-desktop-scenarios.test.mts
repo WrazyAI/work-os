@@ -25,7 +25,7 @@ assert.equal(onboarding.employeeRequirements.consentProvided, true, "debug overr
 const invalidated = applyOnboardingScenario({
   ...onboarding,
   profile: {
-    displayName: "Jamie", email: "jamie@example.com", timezone: "Africa/Accra", language: "en", weekStart: 1, timeFormat: "24h",
+    displayName: "Jamie", email: "jamie@example.com", avatarUrl: null, timezone: "Africa/Accra", language: "en", weekStart: 1, timeFormat: "24h",
     schedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [] },
     notifications: { desktopEnabled: true }, privacy: { screenshotAnalysisConsent: true, sensitiveAppExclusions: ["private.example"] },
     workPreferences: {

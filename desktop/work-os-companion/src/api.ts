@@ -99,7 +99,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
         headers: {
           Authorization: `Bearer ${session.token}`,
           "X-Work-OS-Organization-Id": session.organizationId,
-          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(init.body && !(typeof FormData !== "undefined" && init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
           ...init.headers,
         },
       });
@@ -120,7 +120,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 }
 
 /** Authenticated binary fetch for protected media such as screenshot previews. */
-export async function apiRequestBlob(path: string): Promise<Blob> {
+export async function apiRequestBlob(path: string, label = "Media"): Promise<Blob> {
   return diagnostics.withSpan("api.requestBlob", async () => {
     if (syncBypassActive) throw new SyncBypassError();
     const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
@@ -142,7 +142,7 @@ export async function apiRequestBlob(path: string): Promise<Blob> {
       throw new ApiRequestError(failure.message, null, true);
     }
     if (!response.ok) {
-      throw new ApiRequestError(`Screenshot preview failed (${response.status})`, response.status, RETRYABLE_STATUS.has(response.status));
+      throw new ApiRequestError(`${label} failed (${response.status})`, response.status, RETRYABLE_STATUS.has(response.status));
     }
     return response.blob();
   }, { path, method: "GET", statusHint: "blob" }, "sync");

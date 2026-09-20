@@ -81,6 +81,30 @@ async function policyScheduleProposal(organizationId: string, value: unknown) {
   return await worktivityAuthoritativeBreaks(organizationId) ? { ...proposal, breaks: [] } : proposal;
 }
 
+function mergeWorkPreferences(currentWork: Json, input: Json) {
+  const archetypeId = input.archetypeId ?? currentWork.archetypeId;
+  const specialtyIds = input.specialtyIds ?? currentWork.specialtyIds;
+  if (archetypeId) {
+    const selection = validateArchetypeSelection(archetypeId, specialtyIds);
+    const items = normalizeProfileItems(input.items ?? currentWork.items);
+    const customRoleTitle = selection.archetype.id === "custom" ? text(input.customRoleTitle ?? currentWork.customRoleTitle, 120) : null;
+    if (selection.archetype.id === "custom" && !customRoleTitle) throw new Error("Describe your custom work role.");
+    return {
+      ...currentWork,
+      archetypeId: selection.archetype.id,
+      specialtyIds: selection.specialtyIds,
+      customRoleTitle,
+      items,
+      responsibilities: items.filter((item) => item.kind === "responsibility").map((item) => item.label),
+      outputTypes: items.filter((item) => item.kind === "deliverable").map((item) => item.label),
+      evidenceSources: items.filter((item) => item.kind === "evidence").map((item) => item.label),
+      voiceUpdatesEnabled: typeof input.voiceUpdatesEnabled === "boolean" ? input.voiceUpdatesEnabled : currentWork.voiceUpdatesEnabled === true,
+    } satisfies Json;
+  }
+  if (typeof input.voiceUpdatesEnabled === "boolean") return { ...currentWork, voiceUpdatesEnabled: input.voiceUpdatesEnabled };
+  return currentWork;
+}
+
 export function shouldPromoteSubmittedSchedule(role: WorkOsAccess["role"]) {
   return role === "admin";
 }
@@ -149,7 +173,8 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
   if (!access.personId) throw new Error("Work OS person mapping required");
   const supabase = db();
   const today = new Date().toISOString().slice(0, 10);
-  const [personResult, onboardingResult, consentResult, screenshotConsentResult, scheduleResult, teamResult] = await Promise.all([
+  const [profileResult, personResult, onboardingResult, consentResult, screenshotConsentResult, scheduleResult, teamResult] = await Promise.all([
+    supabase.from("profiles").select("id,email,display_name,avatar_url,role,created_at").eq("id", access.ctx.user.id).single(),
     supabase.from("work_people").select("id,display_name,email,role_profile_id,nifty_member_id,worktivity_employee_id,github_username,work_profile,raw,role_profile:work_role_profiles(id,slug,name)")
       .eq("organization_id", access.organizationId).eq("id", access.personId).single(),
     supabase.from("work_employee_onboarding").select("*").eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle(),
@@ -161,6 +186,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
       .lte("effective_from", today).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("work_team_members").select("team_id,is_manager,team:work_teams(id,name,active)").eq("person_id", access.personId),
   ]);
+  if (profileResult.error) throw new Error(`load account profile: ${profileResult.error.message}`);
   if (personResult.error) throw new Error(`load onboarding person: ${personResult.error.message}`);
   if (onboardingResult.error) throw new Error(`load employee onboarding: ${onboardingResult.error.message}`);
   if (consentResult.error) throw new Error(`load employee consent: ${consentResult.error.message}`);
@@ -169,6 +195,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
   if (teamResult.error) throw new Error(`load employee teams: ${teamResult.error.message}`);
   const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
 
+  const profile = profileResult.data as Json;
   const person = personResult.data as Json;
   const onboarding = onboardingResult.data as Json | null;
   const raw = person.raw && typeof person.raw === "object" ? person.raw as Json : {};
@@ -238,8 +265,9 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     employeeRequirements,
     managerRequirements,
     profile: {
-      displayName: onboarding?.preferred_name ?? person.display_name,
-      email: onboarding?.confirmed_email ?? person.email,
+      displayName: profile.display_name ?? onboarding?.preferred_name ?? person.display_name,
+      email: profile.email ?? onboarding?.confirmed_email ?? person.email,
+      avatarUrl: profile.avatar_url ?? null,
       timezone: onboarding?.timezone ?? officialSchedule?.timezone ?? nifty.tz_iana ?? "UTC",
       language: onboarding?.language ?? nifty.language ?? "en",
       weekStart: nifty.week_start ?? 1,
@@ -286,6 +314,115 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     screenshotPolicy: WORK_OS_SCREENSHOT_POLICY,
     catalog: workProfileCatalog(),
   };
+}
+
+export async function saveEmployeeAccountSettings(access: WorkOsAccess, body: Json) {
+  if (!access.personId) throw new Error("Work OS person mapping required");
+  const supabase = db();
+  const [{ data: existing, error: existingError }, { data: person, error: personError }] = await Promise.all([
+    supabase.from("work_employee_onboarding").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle(),
+    supabase.from("work_people").select("raw,github_username")
+      .eq("organization_id", access.organizationId).eq("id", access.personId).single(),
+  ]);
+  if (existingError) throw new Error(`load account settings: ${existingError.message}`);
+  if (personError) throw new Error(`load account settings person: ${personError.message}`);
+
+  const currentRevision = Number(existing?.draft_revision ?? 0);
+  const expectedRevision = body.revision == null ? currentRevision : Number(body.revision);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error("A valid account settings revision is required.");
+  if (expectedRevision !== currentRevision) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
+  const mutationKey = text(body.clientMutationKey, 160) ?? crypto.randomUUID();
+  if (existing?.draft_client_mutation_key === mutationKey) return getEmployeeOnboarding(access);
+
+  const now = new Date().toISOString();
+  const updates: Json = {
+    draft_step: existing?.draft_step ?? "profile",
+    draft_updated_at: now,
+    draft_revision: currentRevision + 1,
+    draft_client_mutation_key: mutationKey,
+    updated_at: now,
+  };
+  let changed = false;
+
+  if (body.timezone !== undefined) {
+    updates.timezone = validateWorkOsTimezone(body.timezone);
+    changed = true;
+  }
+  if (body.language !== undefined) {
+    updates.language = text(body.language, 20) ?? "en";
+    changed = true;
+  }
+  if (body.schedule !== undefined) {
+    updates.schedule_proposal = await policyScheduleProposal(access.organizationId, body.schedule);
+    changed = true;
+  }
+  if (body.notifications && typeof body.notifications === "object") {
+    const notifications = body.notifications as Json;
+    if (typeof notifications.desktopEnabled !== "boolean") throw new Error("Desktop notification preference must be true or false.");
+    updates.notification_preferences = { desktopEnabled: notifications.desktopEnabled };
+    changed = true;
+  }
+  if (body.privacy && typeof body.privacy === "object") {
+    const privacy = body.privacy as Json;
+    if ("screenshotAnalysisConsent" in privacy) throw new Error("Screenshot consent can only be changed during final onboarding submission.");
+    const currentPrivacy = existing?.privacy_preferences && typeof existing.privacy_preferences === "object" ? existing.privacy_preferences as Json : {};
+    updates.privacy_preferences = {
+      ...currentPrivacy,
+      sensitiveAppExclusions: Array.isArray(privacy.sensitiveAppExclusions)
+        ? privacy.sensitiveAppExclusions.map((entry) => text(entry, 100)).filter(Boolean).slice(0, 30)
+        : [],
+    };
+    changed = true;
+  }
+
+  const personUpdate: Json = {};
+  const raw = person.raw && typeof person.raw === "object" ? person.raw as Json : {};
+  const nifty = raw.nifty && typeof raw.nifty === "object" ? raw.nifty as Json : {};
+  if (body.weekStart !== undefined) {
+    const weekStart = Number(body.weekStart);
+    if (!Number.isInteger(weekStart) || weekStart < 0 || weekStart > 6) throw new Error("Week start must be a day from Sunday through Saturday.");
+    personUpdate.raw = { ...raw, nifty: { ...nifty, week_start: weekStart } };
+    changed = true;
+  }
+  if (body.timeFormat !== undefined) {
+    if (body.timeFormat !== null && body.timeFormat !== "12h" && body.timeFormat !== "24h") throw new Error("Time format must be 12h or 24h.");
+    const currentRaw = personUpdate.raw && typeof personUpdate.raw === "object" ? personUpdate.raw as Json : raw;
+    const currentNifty = currentRaw.nifty && typeof currentRaw.nifty === "object" ? currentRaw.nifty as Json : nifty;
+    personUpdate.raw = { ...currentRaw, nifty: { ...currentNifty, time_format: body.timeFormat } };
+    changed = true;
+  }
+
+  if (body.workPreferences && typeof body.workPreferences === "object") {
+    const currentWork = existing?.work_preferences && typeof existing.work_preferences === "object" ? existing.work_preferences as Json : {};
+    updates.work_preferences = mergeWorkPreferences(currentWork, body.workPreferences as Json);
+    const workInput = body.workPreferences as Json;
+    if (workInput.githubUsername !== undefined) {
+      personUpdate.github_username = text(workInput.githubUsername, 120) ?? "";
+      changed = true;
+    }
+    changed = true;
+  }
+
+  if (!changed) throw new Error("at least one account setting is required");
+  const saved = existing
+    ? await supabase.from("work_employee_onboarding").update(updates)
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId).eq("draft_revision", currentRevision)
+      .select("id").maybeSingle()
+    : await supabase.from("work_employee_onboarding").insert({
+      organization_id: access.organizationId,
+      person_id: access.personId,
+      status: "not_started",
+      ...updates,
+    }).select("id").maybeSingle();
+  if (saved.error) throw new Error(`save account settings: ${saved.error.message}`);
+  if (!saved.data) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
+  if (Object.keys(personUpdate).length) {
+    const { error } = await supabase.from("work_people").update({ ...personUpdate, updated_at: now })
+      .eq("organization_id", access.organizationId).eq("id", access.personId);
+    if (error) throw new Error(`save account settings person: ${error.message}`);
+  }
+  return getEmployeeOnboarding(access);
 }
 
 export async function saveEmployeeOnboardingDraft(access: WorkOsAccess, body: Json) {
@@ -434,6 +571,11 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
     if (/another device|40001/i.test(error.message)) throw new WorkOsConflictError("This onboarding draft changed on another device. Refresh before submitting again.");
     throw new Error(`submit employee onboarding atomically: ${error.message}`);
   }
+  const { error: profileError } = await db().from("profiles").update({
+    display_name: preferredName,
+    updated_at: new Date().toISOString(),
+  }).eq("id", access.ctx.user.id);
+  if (profileError) throw new Error(`save onboarding profile identity: ${profileError.message}`);
   // A dual-role admin is authorized to make their submitted schedule official.
   // Employee and manager memberships still create a proposal only.
   await promoteSubmittedAdminSchedule(access, proposedSchedule, timezone);

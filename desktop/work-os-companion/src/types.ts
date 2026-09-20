@@ -240,6 +240,7 @@ export interface OnboardingData {
   profile: {
     displayName: string;
     email: string;
+    avatarUrl: string | null;
     timezone: string;
     language: string;
     weekStart: number;

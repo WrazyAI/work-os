@@ -56,6 +56,7 @@ import { PlanningSession, type PlanningInterpretation } from "./PlanningSession"
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { MemorySettings } from "./MemorySettings";
 import { SettingsSwitch } from "./SettingsSwitch";
+import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
@@ -229,6 +230,7 @@ export default function App() {
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskHistoryCursor, setTaskHistoryCursor] = useState<number | null>(null);
@@ -292,7 +294,7 @@ export default function App() {
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen || !!whatsNew;
+  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen;
 
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
     const message = errorMessage(value, fallback);
@@ -320,8 +322,9 @@ export default function App() {
     if (taskComposerOpen) { closeTaskComposer(); return; }
     if (planningSessionOpen) { setPlanningSessionOpen(false); return; }
     if (carryOverOpen) { setCarryOverOpen(false); return; }
+    if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -1388,7 +1391,7 @@ export default function App() {
     } finally {
       await secureState.clearAccount();
       queryClient.clear();
-      setSession(null); setDay(null); setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day");
+      setSession(null); setDay(null); setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }
   }
@@ -1409,6 +1412,42 @@ export default function App() {
     } catch (value) {
       showError(value, "Onboarding could not be reset.", "Reset failed");
     } finally { setBusy(false); }
+  }
+
+  async function saveProfileSettings(patch: ProfileSettingsPatch, avatar: File | null, removeAvatar: boolean) {
+    if (debugRef.current.enabled) {
+      setOnboarding((current) => current ? {
+        ...current,
+        profile: {
+          ...current.profile,
+          displayName: patch.displayName,
+          timezone: patch.timezone,
+          language: patch.language,
+          weekStart: patch.weekStart,
+          timeFormat: patch.timeFormat,
+          schedule: patch.schedule,
+          notifications: patch.notifications,
+          privacy: { ...current.profile.privacy, ...patch.privacy },
+          workPreferences: {
+            ...current.profile.workPreferences,
+            ...patch.workPreferences,
+            responsibilities: patch.workPreferences.items.filter((item) => item.kind === "responsibility").map((item) => item.label),
+            outputTypes: patch.workPreferences.items.filter((item) => item.kind === "deliverable").map((item) => item.label),
+            evidenceSources: patch.workPreferences.items.filter((item) => item.kind === "evidence").map((item) => item.label),
+          },
+        },
+      } : current);
+      void avatar;
+      void removeAvatar;
+      return;
+    }
+    const form = new FormData();
+    form.append("settings", JSON.stringify(patch));
+    if (avatar) form.append("avatar", avatar, avatar.name);
+    if (removeAvatar) form.append("removeAvatar", "true");
+    const next = await apiRequest<OnboardingData>("/api/work-os/me/profile", { method: "PATCH", body: form });
+    queryClient.setQueryData(workOsKeys.onboarding(), next);
+    setOnboarding(next);
   }
 
   const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
@@ -2672,7 +2711,7 @@ export default function App() {
         onClose={() => setEodListOpen(false)}
         onSelect={(day: OutstandingEodDay) => { setEodListOpen(false); setEodDate(day.date); setView("review"); }}
         onRetry={() => void outstandingQuery.refetch()}
-      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
+      />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
       {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <OffShiftDashboard
         model={dashboardModel}
@@ -2846,9 +2885,10 @@ export default function App() {
       </main>}
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
-      {view === "settings" && (
+       {view === "settings" && (
         <main className="page">
-          <PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
+          <PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage your profile and work preferences first, then control launch behavior, local sync, privacy context, updates, and diagnostics." />
+          <ProfileSettings data={visibleOnboarding} mode="page" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} />
           <section className="settings-group" aria-labelledby="settings-device-title">
             <header className="settings-group-head"><h3 id="settings-device-title">This device</h3><small>How the companion starts and updates itself.</small></header>
             <section className="settings-panel">
@@ -2942,7 +2982,8 @@ export default function App() {
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
-    <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
+      {profileOpen && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Account settings</span><h2 id="profile-settings-title">A workspace that fits you.</h2><p id="profile-settings-description">Edit your identity, rhythm, preferences, and boundaries in one place.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
+     <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}

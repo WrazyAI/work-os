@@ -75,7 +75,7 @@ function onboardingFixture(): OnboardingData {
     },
     managerRequirements: { roleAssigned: true, teamAssigned: true, managerAssigned: true, officialScheduleConfigured: true },
     profile: {
-      displayName: "David Z", email: "david@example.com", timezone: "Atlantic/Reykjavik", language: "en", weekStart: 1, timeFormat: "24h",
+      displayName: "David Z", email: "david@example.com", avatarUrl: null, timezone: "Atlantic/Reykjavik", language: "en", weekStart: 1, timeFormat: "24h",
       schedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [{ start: "12:30", end: "13:00" }] },
       notifications: { desktopEnabled: true }, privacy: { screenshotAnalysisConsent: false, sensitiveAppExclusions: [] },
       workPreferences: {
