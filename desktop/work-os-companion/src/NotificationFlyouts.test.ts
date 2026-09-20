@@ -63,7 +63,8 @@ describe("application notification flyouts", () => {
     expect(sidebar).toContain("aria-label={label}");
     expect(sidebar).toContain('aria-current={active ? "page" : undefined}');
     expect(sidebar).toContain("title={label}");
-    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}');
+    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).not.toContain('aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}');
   });
 
   it("renders download progress as an accessible bar without a dismiss while locked", () => {

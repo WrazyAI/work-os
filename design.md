@@ -226,8 +226,16 @@ and earn its space without weakening the work-navigation hierarchy.
 Icon-only destinations require an accessible name and tooltip. The companion
 also owns a workspace identity control, New chat, and a chat-entry affordance;
 any production chat rows must be backed by real conversation history rather than
-invented threads or workspace actions. Settings and connection/session status
-live in a quiet footer separated by a rule; they are not dark inset cards.
+invented threads or workspace actions. Settings lives in a quiet footer
+separated by a rule; connection/session status is intentionally not repeated in
+the sidebar. Evidence remains a routed view but its sidebar destination is
+temporarily hidden until that surface is ready for daily use.
+
+When the companion sidebar is collapsed, the workspace mark is the expand
+control. Hovering the mark or any non-navigation surface reveals the expand
+affordance, and clicking empty sidebar space expands it; navigation rows remain
+clickable without expanding the rail. The icon column uses one shared slot so
+the mark, rows, and footer remain aligned in both states.
 
 ## 5. Dashboard blueprint
 

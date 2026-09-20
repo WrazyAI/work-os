@@ -5,7 +5,7 @@ import SidebarNav from "./SidebarNav";
 /** Visual review states for every skeleton in the loading language. */
 export default function SkeletonsPreview() {
   return <div className="workspace preview-workspace">
-    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} status={{ label: "Loading", detail: "Syncing", tone: "loading" }} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
+    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
       <main className="page"><div className="card-title"><span><ListChecks size={17} /> Dashboard skeleton</span></div></main>
       <DashboardSkeleton />

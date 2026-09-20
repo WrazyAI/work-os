@@ -88,6 +88,28 @@ describe("operational visualizations", () => {
     expect(sidebarStyles).toContain(".sidebar-footer");
   });
 
+  it("uses the logo and non-navigation surface as the collapsed expand affordance", () => {
+    expect(sidebar).toContain("data-sidebar-nav-option");
+    expect(sidebar).toContain("data-sidebar-surface-hover");
+    expect(sidebar).toContain('if (collapsed) {\n                setCollapsedState(false);');
+    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}');
+    expect(sidebar).not.toContain("<PanelLeftOpen size={18}");
+    expect(sidebarStyles).toContain(".sidebar-workspace-expand-icon");
+    expect(sidebarStyles).toContain('[data-sidebar-surface-hover="true"]');
+    expect(sidebarStyles).toContain("width: 28px;");
+    expect(sidebarStyles).toContain("padding: 0 8px;");
+  });
+
+  it("hides the temporary evidence and shift-status surfaces", () => {
+    expect(sidebar).not.toContain('label: "Evidence"');
+    expect(sidebar).not.toContain("evidenceEnabled");
+    expect(sidebar).not.toContain("sidebar-status");
+    expect(sidebarStyles).not.toContain(".sidebar-status");
+    expect(app).not.toContain("evidenceEnabled={FEATURES.evidence}");
+    expect(app).not.toContain("sidebarStatus");
+    expect(sidebarStyles).toContain(".sidebar-footer {\n  flex: 0 0 auto;\n  margin-top: auto;");
+  });
+
   it("makes the account surface reachable from both the masthead and Settings", () => {
     expect(app).toContain('title="Open profile settings"');
     expect(app).toContain('setProfileOpen(true)');

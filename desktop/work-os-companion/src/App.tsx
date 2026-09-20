@@ -64,7 +64,7 @@ import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, Met
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
-import SidebarNav, { type SidebarStatus, type SidebarView } from "./SidebarNav";
+import SidebarNav, { type SidebarView } from "./SidebarNav";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
 import "./plan-insights.css";
@@ -2675,11 +2675,6 @@ export default function App() {
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
-  const sidebarStatus: SidebarStatus = {
-    label: observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift",
-    detail: queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline",
-    tone: observedOnly ? paused ? "paused" : "observed" : active ? paused ? "paused" : "live" : navigator.onLine ? "idle" : "offline",
-  };
   const startNewChat = () => {
     clearComposerChat();
     setView("day");
@@ -2699,8 +2694,6 @@ export default function App() {
       onNewChat={startNewChat}
       onSignOut={() => { void logout(); }}
       reviewCount={visibleDay?.proposals.length ?? 0}
-      evidenceEnabled={FEATURES.evidence}
-      status={sidebarStatus}
     />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell

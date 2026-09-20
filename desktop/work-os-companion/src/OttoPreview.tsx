@@ -7,7 +7,7 @@ const SIZES = [16, 24, 36, 64] as const;
 /** Visual review for Otto: every pose, at favicon through hero sizes, on light and dark. */
 export default function OttoPreview() {
   return <div className="workspace preview-workspace">
-    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} status={{ label: "On shift", detail: "Synced", tone: "live" }} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
+    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
       <main className="page">
         <section className="panel otto-preview-panel">

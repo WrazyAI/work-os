@@ -25,7 +25,7 @@ const otherTasks: TaskRow[] = [
 
 function PreviewRail({ onShift = true }: { onShift?: boolean }) {
   const expanded = new URLSearchParams(window.location.search).get("sidebar") === "expanded";
-  return <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} status={{ label: onShift ? "On shift" : "Off shift", detail: "Synced", tone: onShift ? "live" : "idle" }} initiallyCollapsed={!expanded} />;
+  return <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={!expanded} />;
 }
 
 export default function TodayPreview() {

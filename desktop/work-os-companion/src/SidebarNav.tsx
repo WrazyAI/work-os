@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -12,7 +12,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  ShieldCheck,
   SquarePen,
   type LucideIcon,
 } from "lucide-react";
@@ -20,22 +19,12 @@ import wordmark from "./assets/work-os-mark.png";
 
 export type SidebarView = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 
-export type SidebarStatusTone = "live" | "observed" | "paused" | "idle" | "offline" | "loading";
-
-export type SidebarStatus = {
-  label: string;
-  detail: string;
-  tone: SidebarStatusTone;
-};
-
 export type SidebarNavProps = {
   activeView: SidebarView;
   onNavigate: (view: SidebarView) => void;
   onNewChat: () => void;
   onSignOut?: () => void;
   reviewCount?: number;
-  evidenceEnabled?: boolean;
-  status: SidebarStatus;
   initiallyCollapsed?: boolean;
 };
 
@@ -50,18 +39,13 @@ const DESTINATIONS: Destination[] = [
   { id: "tasks", label: "Tasks", icon: ListChecks },
   { id: "review", label: "EOD Review", icon: MessageSquareText },
   { id: "insights", label: "Insights", icon: Gauge },
-  { id: "evidence", label: "Evidence", icon: ShieldCheck },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
 const PRIMARY_DESTINATION_IDS = new Set<SidebarView>(["day", "tasks", "review"]);
-const CONTEXT_DESTINATION_IDS = new Set<SidebarView>(["insights", "evidence"]);
+const CONTEXT_DESTINATION_IDS = new Set<SidebarView>(["insights"]);
 
 const menuWidth = 228;
-
-function statusClass(tone: SidebarStatusTone) {
-  return tone === "live" ? "live" : tone === "observed" ? "observed" : tone === "paused" ? "paused" : tone === "loading" ? "loading" : tone === "offline" ? "offline" : "idle";
-}
 
 function SidebarGlideGroup({ children, className = "" }: { children: ReactNode; className?: string }) {
   const groupRef = useRef<HTMLDivElement | null>(null);
@@ -119,6 +103,7 @@ function SidebarRow({
     <button
       type="button"
       data-sidebar-row
+      data-sidebar-nav-option
       data-label={label}
       title={label}
       aria-label={label}
@@ -223,29 +208,52 @@ export default function SidebarNav({
   onNewChat,
   onSignOut,
   reviewCount = 0,
-  evidenceEnabled = true,
-  status,
   initiallyCollapsed = true,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [collapsedSurfaceHover, setCollapsedSurfaceHover] = useState(false);
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null);
-  const visibleDestinations = useMemo(() => DESTINATIONS.filter((item) => item.id !== "evidence" || evidenceEnabled), [evidenceEnabled]);
 
   const setCollapsedState = (next: boolean) => {
     setCollapsed(next);
+    setCollapsedSurfaceHover(false);
     setWorkspaceOpen(false);
   };
 
-  const primary = visibleDestinations.filter(({ id }) => PRIMARY_DESTINATION_IDS.has(id));
-  const context = visibleDestinations.filter(({ id }) => CONTEXT_DESTINATION_IDS.has(id));
-  const settings = visibleDestinations.filter(({ id }) => id === "settings");
+  const primary = DESTINATIONS.filter(({ id }) => PRIMARY_DESTINATION_IDS.has(id));
+  const context = DESTINATIONS.filter(({ id }) => CONTEXT_DESTINATION_IDS.has(id));
+  const settings = DESTINATIONS.filter(({ id }) => id === "settings");
+
+  const updateCollapsedSurfaceHover = (target: EventTarget | null) => {
+    if (!collapsed || !(target instanceof Element)) {
+      setCollapsedSurfaceHover(false);
+      return;
+    }
+    setCollapsedSurfaceHover(
+      !target.closest("[data-sidebar-nav-option]") && !target.closest("[data-sidebar-workspace-trigger]"),
+    );
+  };
+
+  const handleSidebarPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    updateCollapsedSurfaceHover(event.target);
+  };
+
+  const handleSidebarClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!collapsed || !(event.target instanceof Element)) return;
+    if (event.target.closest("[data-sidebar-nav-option]") || event.target.closest("[data-sidebar-workspace-trigger]")) return;
+    setCollapsedState(false);
+  };
 
   return (
     <aside
       className="sidebar-nav"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
+      data-sidebar-surface-hover={collapsed && collapsedSurfaceHover ? "true" : "false"}
       aria-label="Workspace navigation"
+      onPointerMove={handleSidebarPointerMove}
+      onPointerLeave={() => setCollapsedSurfaceHover(false)}
+      onClick={handleSidebarClick}
     >
       <div className="sidebar-shell">
         <div className="sidebar-header">
@@ -254,30 +262,41 @@ export default function SidebarNav({
             type="button"
             data-sidebar-workspace-trigger
             className="sidebar-workspace-trigger"
-            aria-label="Work OS workspace menu"
-            title="Work OS workspace menu"
-            aria-haspopup="menu"
-            aria-expanded={workspaceOpen}
-            onClick={() => setWorkspaceOpen((current) => !current)}
+            aria-label={collapsed ? "Expand sidebar" : "Work OS workspace menu"}
+            title={collapsed ? "Expand sidebar" : "Work OS workspace menu"}
+            aria-haspopup={collapsed ? undefined : "menu"}
+            aria-expanded={collapsed ? undefined : workspaceOpen}
+            onClick={() => {
+              if (collapsed) {
+                setCollapsedState(false);
+                return;
+              }
+              setWorkspaceOpen((current) => !current);
+            }}
           >
-            <span className="sidebar-workspace-mark"><img src={wordmark} alt="" /></span>
+            <span className="sidebar-workspace-mark">
+              <img src={wordmark} alt="" />
+              <PanelLeftOpen className="sidebar-workspace-expand-icon" size={18} aria-hidden="true" />
+            </span>
             <span className="sidebar-workspace-copy"><strong>Work OS</strong><small>Workspace</small></span>
             <ChevronDown className="sidebar-workspace-chevron" size={16} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className="sidebar-collapse-control"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsedState(!collapsed)}
-          >
-            {collapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
-          </button>
+          {!collapsed && (
+            <button
+              type="button"
+              className="sidebar-collapse-control"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              aria-expanded="true"
+              onClick={() => setCollapsedState(true)}
+            >
+              <PanelLeftClose size={18} aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         <div className="sidebar-new-chat-wrap">
-          <button type="button" data-sidebar-row data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
+          <button type="button" data-sidebar-row data-sidebar-nav-option data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
             <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
             <span className="sidebar-row-copy">New chat</span>
           </button>
@@ -302,10 +321,6 @@ export default function SidebarNav({
               <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
             ))}
           </SidebarGlideGroup>
-          <div className="sidebar-status" data-label={`${status.label} · ${status.detail}`} title={`${status.label} · ${status.detail}`} aria-label={`${status.label}. ${status.detail}`}>
-            <span className={`presence ${statusClass(status.tone)}`} aria-hidden="true" />
-            <span className="sidebar-status-copy"><strong>{status.label}</strong><small>{status.detail}</small></span>
-          </div>
         </div>
       </div>
 
