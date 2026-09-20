@@ -108,13 +108,14 @@ body.avatar-window {
 .avatar-orb.due .ring-fill { stroke: #ff9d5c; }
 .avatar-orb.late .ring-fill { stroke: #e2604f; }
 
-.avatar-pet { position: relative; z-index: 1; width: 86px; height: 86px; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
-.avatar-pet .pet-body, .avatar-pet .pet-ear { fill: #344b36; stroke: #d6f4b8; stroke-width: 2.2; stroke-linejoin: round; }
-.avatar-pet .pet-screen { fill: #c6f28e; stroke: #d6f4b8; stroke-width: 2.2; }
-.avatar-pet .pet-panel { fill: #203220; stroke: #d6f4b8; stroke-width: 1.6; }
-.avatar-pet .pet-arm, .avatar-pet .pet-tail, .avatar-pet .pet-badge { fill: none; stroke: #d6f4b8; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.avatar-pet .pet-face { fill: none; stroke: #182018; stroke-width: 2.4; stroke-linecap: round; }
-.avatar-pet .pet-face circle { fill: #182018; }
+.avatar-pet {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+}
 
 .avatar-drag-surface {
   position: absolute;
@@ -634,7 +635,7 @@ body.avatar-window {
 
 .avatar-empty { padding: 14px; font-size: 12px; color: #6a6d64; }
 
-/* Expanded Otto companion. It shares the in-app conversation primitives but
+/* Expanded Work OS companion. It shares the in-app conversation primitives but
  * keeps a denser, task-forward shell for the 400px always-on-top window. */
 .avatar-panel {
   background:
@@ -650,8 +651,8 @@ body.avatar-window {
 .avatar-nav { padding: 0 8px 7px; }
 .avatar-nav .workos-tab-count { background: #edf0ea; font-size: 9px; }
 .avatar-title { gap: 10px; }
-.avatar-head-mark.avatar-otto-mark { width: 36px; height: 36px; overflow: hidden; border-color: #cbd4c5; border-radius: 11px; background: #eef3e9; color: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7); }
-.avatar-otto-mark .otto { width: 34px; height: 34px; transform: translateY(3px); }
+.avatar-head-mark.avatar-mascot-mark { width: 36px; height: 36px; overflow: hidden; border-color: #cbd4c5; border-radius: 11px; background: #eef3e9; color: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .7); }
+.avatar-mascot-mark .chat-mascot-art { width: 34px; height: 34px; transform: none; }
 .avatar-head strong { display: flex; align-items: center; gap: 5px; font-size: 12.5px; letter-spacing: 0; }
 .avatar-head strong > span { overflow: hidden; color: #626a61; font-size: 10.5px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .avatar-head small { display: block; margin-top: 2px; font-size: 9.5px; }
@@ -706,41 +707,70 @@ body.avatar-window {
 .avatar-composer-v2 .workos-prompt-shell { box-shadow: 0 7px 22px rgba(20, 30, 18, .08), 0 1px 2px rgba(20, 30, 18, .07); }
 .avatar-snooze { width: 100%; padding: 7px 12px 10px; border-top: 1px solid rgba(24, 32, 24, .06); background: rgba(251, 252, 248, .94); font-size: 10px; text-align: center; }
 
-/* Collapsed Otto is a status object, not a miniature app window. The large
+/* Collapsed mascot is a status object, not a miniature app window. The large
  * silhouette carries identity while the ring and label carry workday state. */
 .avatar-orb {
-  width: 108px;
-  height: 116px;
-  margin: 38px 28px 12px;
+  width: 116px;
+  height: 122px;
+  margin: 36px 24px 12px;
   overflow: visible;
-  border: 1px solid #536451;
-  outline: 1px solid rgba(215, 244, 184, .2);
-  outline-offset: -7px;
-  border-radius: 36px 36px 31px 31px;
-  background:
-    radial-gradient(circle at 50% 32%, rgba(168, 241, 91, .2), transparent 36%),
-    linear-gradient(155deg, #303c30 0%, #182219 72%);
-  box-shadow: 0 16px 34px rgba(13, 18, 12, .32), inset 0 1px 0 rgba(255, 255, 255, .1);
+  border: 0;
+  outline: 0;
+  border-radius: 42px;
+  background: transparent;
+  box-shadow: none;
 }
-.avatar-orb:hover { transform: translateY(-2px); box-shadow: 0 20px 42px rgba(13, 18, 12, .36), inset 0 1px 0 rgba(255, 255, 255, .11); }
+.avatar-orb::before {
+  content: "";
+  position: absolute;
+  inset: 14px 13px 18px;
+  z-index: 0;
+  border-radius: 38px;
+  background: radial-gradient(circle at 50% 38%, rgba(168, 241, 91, .2), rgba(24, 34, 25, .08) 58%, transparent 74%);
+  filter: blur(.2px);
+  pointer-events: none;
+}
+.avatar-orb:hover { transform: translateY(-2px); box-shadow: none; }
 .avatar-orb:focus-visible { outline: 2px solid #a8f15b; outline-offset: 3px; }
-.avatar-orb .avatar-ring { inset: 4px 0 auto 0; width: 108px; height: 108px; }
-.avatar-orb .avatar-ring circle { stroke-width: 2.4; }
-.avatar-orb .ring-track { stroke: rgba(255, 255, 255, .11); }
-.avatar-orb .ring-fill { filter: drop-shadow(0 0 3px rgba(168, 241, 91, .45)); }
-.avatar-pet.otto {
-  z-index: 1;
-  width: 94px;
-  height: 94px;
-  margin-top: -9px;
-  --otto-ink: #dbe8d4;
-  --otto-paper: #eef4e9;
-  --otto-visor: #101710;
-  --otto-signal: #a8f15b;
-  filter: drop-shadow(0 7px 9px rgba(0, 0, 0, .3));
+.avatar-orb .avatar-ring { inset: 3px 4px auto; width: 108px; height: 108px; }
+.avatar-orb .avatar-ring circle { stroke-width: 2.2; }
+.avatar-orb .ring-track { stroke: rgba(76, 101, 73, .2); }
+.avatar-orb .ring-fill { filter: drop-shadow(0 0 3px rgba(168, 241, 91, .38)); }
+.avatar-pet {
+  width: 100px;
+  height: 100px;
+  margin: -7px auto 0;
 }
-.avatar-pet .otto-shadow { fill: rgba(0, 0, 0, .24); }
-.avatar-orb-state { position: absolute; right: 18px; bottom: 10px; left: 18px; z-index: 2; overflow: hidden; color: rgba(231, 247, 202, .82); font: 750 8px/1 Manrope, Inter, sans-serif; letter-spacing: .1em; text-align: center; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.avatar-pet .avatar-pet-art {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 12px rgba(13, 18, 12, .18));
+}
+.avatar-pet .signal-spirit {
+  --spirit-signal: #8fd648;
+  --spirit-signal-rgb: 143, 214, 72;
+}
+.avatar-pet .signal-spirit-shadow { fill: rgba(24, 32, 24, .14); }
+.avatar-orb-state {
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  left: 16px;
+  z-index: 2;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid rgba(83, 100, 81, .24);
+  border-radius: 999px;
+  background: rgba(251, 252, 248, .94);
+  color: #3f513d;
+  box-shadow: 0 4px 12px rgba(13, 18, 12, .1);
+  font: 750 8px/1 Manrope, Inter, sans-serif;
+  letter-spacing: .08em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 .avatar-drag-surface { top: 5px; left: 55px; width: 54px; height: 23px; border-color: rgba(83, 100, 81, .22); border-radius: 999px; background: rgba(251, 252, 248, .92); color: #778174; font: 800 8px/1 Manrope, Inter, sans-serif; letter-spacing: .12em; box-shadow: 0 4px 12px rgba(13, 18, 12, .12); }
 .avatar-prompt-bubble + .avatar-drag-surface { top: 62px; left: 56px; width: 52px; height: 20px; color: rgba(231, 247, 202, .72); }
 .avatar-prompt-bubble ~ .avatar-orb { margin-top: 68px; }

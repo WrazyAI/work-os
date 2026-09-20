@@ -11,7 +11,7 @@ describe("Otto, the Work OS companion", () => {
     for (const pose of POSES) {
       const markup = renderToStaticMarkup(createElement(Otto, { pose }));
       expect(markup).toContain(`data-pose="${pose}"`);
-      expect(markup).toContain(`Otto, the Work OS companion, ${pose}`);
+      expect(markup).toContain(`Work OS mascot, ${pose}`);
       renderings.add(markup);
     }
     expect(renderings.size).toBe(POSES.length);

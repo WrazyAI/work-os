@@ -10,11 +10,16 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -32,3 +37,29 @@ jobs:
 
       - name: Tests
         run: npm run work-os:test
+
+
+  companion:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: desktop/work-os-companion
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/work-os-companion/package-lock.json
+
+      - name: Install companion dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Companion tests
+        run: npm test
+
+      - name: Companion typecheck and build
+        run: npm run build

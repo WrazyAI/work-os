@@ -1,4 +1,5 @@
-import { Otto, type OttoCrop, type OttoPose } from "./Otto";
+import { StudioOtto } from "./StudioOtto";
+import type { MascotCrop, MascotPose } from "./mascotTypes";
 
 /** The agent's identity and art, in one place.
  *
@@ -15,20 +16,23 @@ export const MASCOT = {
   /** Plain-language role used in accessible names. */
   role: "Work OS companion",
   /** Pose while answering in chat. */
-  chatPose: "focus" as OttoPose,
+  chatPose: "focus" as MascotPose,
   /** Crop used for the chat identity mark (the head fills a small badge). */
-  chatCrop: "head" as OttoCrop,
+  chatCrop: "head" as MascotCrop,
   /** Pose while the agent is working (thinking trace). */
-  thinkingPose: "think" as OttoPose,
+  thinkingPose: "think" as MascotPose,
   /** Pose for idle or welcome surfaces. */
-  idlePose: "idle" as OttoPose,
-  /** The one component every surface renders. */
-  Mark: Otto,
+  idlePose: "idle" as MascotPose,
+  /** Compact identity renderer for chat turns, badges, and tiny surfaces. */
+  Mark: StudioOtto,
+  /** Full-figure renderer used by behavior-aware MascotPet surfaces. */
+  Pet: StudioOtto,
   /** Bundled art for surfaces that need a raster or file reference. */
   assets: {
-    mark: "/work-os-mark.svg",
-    companion: "/work-os-companion.png",
+    mark: "/studio-otto-mark.svg",
+    companion: "/studio-otto.svg",
   },
 } as const;
 
 export type MascotConfig = typeof MASCOT;
+export type { MascotCrop, MascotPose, MascotTone } from "./mascotTypes";

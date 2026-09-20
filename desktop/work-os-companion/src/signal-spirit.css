@@ -1,0 +1,389 @@
+/* Signal Spirit -------------------------------------------------------------
+ * Digital-organic Work OS companion. This is the visual-development renderer
+ * for the eventual Rive asset, so animation semantics mirror the Rive handoff.
+ */
+
+.signal-spirit {
+  --spirit-signal: #9df35b;
+  --spirit-signal-rgb: 157, 243, 91;
+  --spirit-highlight: #f7fff1;
+  --spirit-body: #dff4d8;
+  --spirit-body-edge: #9bc8a2;
+  --spirit-rim-hot: #f3ffe9;
+  --spirit-rim: #a9e08c;
+  --spirit-rim-cool: #6e9d79;
+  --spirit-face: #0d140f;
+  --spirit-face-hi: #17221a;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  isolation: isolate;
+}
+
+.signal-spirit[data-tone="late"] {
+  --spirit-signal: #ff665c;
+  --spirit-signal-rgb: 255, 102, 92;
+  --spirit-rim: #ef9d86;
+}
+
+.signal-spirit[data-crop="head"] .signal-spirit-aura {
+  display: none;
+}
+
+.signal-spirit[data-crop="head"] .signal-spirit-body {
+  filter: none;
+}
+
+.signal-spirit[data-crop="head"] .signal-spirit-expression {
+  filter: none;
+  transform: none;
+  transition: none;
+}
+
+.signal-spirit-shadow {
+  fill: rgba(12, 18, 13, .18);
+  transform-origin: 57px 99px;
+}
+
+.signal-spirit-aura {
+  fill: rgba(var(--spirit-signal-rgb), .19);
+  opacity: .78;
+  pointer-events: none;
+}
+
+.signal-spirit-figure {
+  transform-box: fill-box;
+  transform-origin: 50% 72%;
+}
+
+.signal-spirit-body {
+  stroke-width: 1.5;
+  filter: drop-shadow(0 8px 10px rgba(15, 28, 17, .13));
+}
+
+.signal-spirit-body-shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, .82);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: .72;
+}
+
+.signal-spirit-face {
+  stroke: rgba(var(--spirit-signal-rgb), .35);
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 5px rgba(var(--spirit-signal-rgb), .16));
+}
+
+.signal-spirit-face-rim {
+  fill: none;
+  stroke: rgba(255, 255, 255, .08);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.signal-spirit-eye,
+.signal-spirit-mouth,
+.signal-spirit-alert-dot {
+  fill: none;
+  stroke: var(--spirit-signal);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.signal-spirit-alert-dot {
+  fill: var(--spirit-signal);
+  stroke: none;
+}
+
+.signal-spirit-expression {
+  color: var(--spirit-signal);
+  transform: translate(var(--mascot-look-x, 0px), var(--mascot-look-y, 0px));
+  transform-origin: 56px 57px;
+  transition: transform 130ms ease-out;
+}
+
+.signal-spirit-stem,
+.signal-spirit-arm,
+.signal-spirit-tail,
+.signal-spirit-tail-glow {
+  fill: none;
+  stroke: var(--spirit-signal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.signal-spirit-stem {
+  stroke-width: 2.2;
+  opacity: .9;
+}
+
+.signal-spirit-beacon-ring {
+  fill: rgba(var(--spirit-signal-rgb), .15);
+  stroke: var(--spirit-signal);
+  stroke-width: 1.3;
+}
+
+.signal-spirit-beacon-core,
+.signal-spirit-core-dot {
+  fill: var(--spirit-signal);
+}
+
+.signal-spirit-arm {
+  stroke-width: 4.6;
+  opacity: .5;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.signal-spirit-tail,
+.signal-spirit-tail-glow {
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: 35px 82px;
+}
+
+.signal-spirit-tail-glow {
+  stroke-width: 7;
+  opacity: .12;
+}
+
+.signal-spirit-core-ring {
+  fill: rgba(var(--spirit-signal-rgb), .08);
+  stroke: var(--spirit-signal);
+  stroke-width: 1.3;
+  opacity: .72;
+}
+
+.signal-spirit-core {
+  transform-origin: 57px 82px;
+}
+
+.signal-spirit-thought,
+.signal-spirit-sparks {
+  fill: var(--spirit-signal);
+}
+
+.signal-spirit-ping {
+  fill: none;
+  stroke: var(--spirit-signal);
+  stroke-width: 1.2;
+  opacity: 0;
+}
+
+.signal-spirit-late circle {
+  fill: #1a120f;
+  stroke: var(--spirit-signal);
+  stroke-width: 1.5;
+}
+
+.signal-spirit-late path {
+  fill: none;
+  stroke: var(--spirit-signal);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.signal-spirit[data-pose="idle"] .signal-spirit-figure,
+.signal-spirit[data-pose="focus"] .signal-spirit-figure {
+  animation: spirit-breathe 4.8s cubic-bezier(.44, .05, .55, .95) infinite;
+}
+
+.signal-spirit[data-pose="idle"] .signal-spirit-eye,
+.signal-spirit[data-pose="focus"] .signal-spirit-eye {
+  animation: spirit-blink 5.7s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.signal-spirit[data-pose="think"] .signal-spirit-figure {
+  animation: spirit-work 1.65s ease-in-out infinite;
+}
+
+.signal-spirit[data-pose="think"] .signal-spirit-tail,
+.signal-spirit[data-pose="think"] .signal-spirit-tail-glow {
+  animation: spirit-tail-work 1.25s ease-in-out infinite alternate;
+}
+
+.signal-spirit[data-pose="think"] .signal-spirit-beacon-core {
+  animation: spirit-beacon-work .86s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.signal-spirit[data-pose="think"] .thought-1 { animation: spirit-thought 1.4s ease-in-out infinite 0s; }
+.signal-spirit[data-pose="think"] .thought-2 { animation: spirit-thought 1.4s ease-in-out infinite .18s; }
+.signal-spirit[data-pose="think"] .thought-3 { animation: spirit-thought 1.4s ease-in-out infinite .36s; }
+
+.signal-spirit[data-pose="alert"] .signal-spirit-figure {
+  animation: spirit-attention .72s cubic-bezier(.2, .82, .25, 1) 1;
+}
+
+.signal-spirit[data-pose="alert"] .signal-spirit-ping {
+  animation: spirit-ping 1.5s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.signal-spirit[data-pose="celebrate"] .signal-spirit-figure {
+  animation: spirit-celebrate .86s cubic-bezier(.2, .9, .24, 1.15) 1;
+}
+
+.signal-spirit[data-pose="celebrate"] .spark-1 { animation: spirit-spark .75s ease-out both .04s; transform-origin: 20px 39px; }
+.signal-spirit[data-pose="celebrate"] .spark-2 { animation: spirit-spark .75s ease-out both .12s; transform-origin: 91px 44px; }
+.signal-spirit[data-pose="celebrate"] .spark-3 { animation: spirit-spark .75s ease-out both .2s; transform-origin: 84px 20px; }
+
+.signal-spirit[data-pose="sleep"] .signal-spirit-figure {
+  animation: spirit-sleep 5.2s ease-in-out infinite;
+  opacity: .88;
+}
+
+.signal-spirit[data-pose="sleep"] .signal-spirit-beacon {
+  opacity: .42;
+}
+
+.signal-spirit[data-pose="rest"] .signal-spirit-figure {
+  animation: spirit-rest 4.6s ease-in-out infinite;
+}
+
+.signal-spirit[data-pose="recover"] .signal-spirit-figure {
+  transform: translateY(3px) rotate(-2deg) scale(.98);
+}
+
+.signal-spirit[data-pose="recover"] .signal-spirit-beacon {
+  opacity: .58;
+}
+
+.signal-spirit[data-pose="focus"] .signal-spirit-core {
+  animation: spirit-core 1.8s ease-in-out infinite;
+}
+
+.signal-spirit[data-tone="late"] .signal-spirit-late {
+  animation: spirit-late .9s ease-in-out infinite alternate;
+}
+
+.mascot-pet:hover .signal-spirit[data-pose="idle"] .signal-spirit-figure,
+.mascot-pet:focus-within .signal-spirit[data-pose="idle"] .signal-spirit-figure {
+  animation: spirit-notice .48s cubic-bezier(.2, .82, .25, 1) both;
+}
+
+.mascot-pet:hover .signal-spirit-tail,
+.mascot-pet:hover .signal-spirit-tail-glow {
+  animation: spirit-tail-notice .5s ease-out both;
+}
+
+.mascot-pet:hover .signal-spirit-beacon-ring {
+  stroke-width: 2;
+}
+
+@keyframes spirit-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  48% { transform: translateY(-1.4px) scale(1.008, .994); }
+}
+
+@keyframes spirit-blink {
+  0%, 43%, 47%, 100% { transform: scaleY(1); }
+  45% { transform: scaleY(.08); }
+}
+
+@keyframes spirit-work {
+  0%, 100% { transform: translateY(0) rotate(-.5deg); }
+  50% { transform: translateY(-3px) rotate(.7deg); }
+}
+
+@keyframes spirit-tail-work {
+  from { transform: rotate(-3deg) translateX(0); }
+  to { transform: rotate(7deg) translateX(-1px); }
+}
+
+@keyframes spirit-beacon-work {
+  from { transform: scale(.86); opacity: .62; }
+  to { transform: scale(1.18); opacity: 1; }
+}
+
+@keyframes spirit-thought {
+  0%, 100% { opacity: .18; transform: translateY(2px) scale(.7); }
+  50% { opacity: .95; transform: translateY(-1px) scale(1); }
+}
+
+@keyframes spirit-attention {
+  0% { transform: translateY(0) scale(1); }
+  34% { transform: translateY(-7px) scale(1.045, .96); }
+  67% { transform: translateY(1px) scale(.99, 1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes spirit-ping {
+  0% { opacity: .72; transform: scale(.52); }
+  72%, 100% { opacity: 0; transform: scale(1.28); }
+}
+
+@keyframes spirit-celebrate {
+  0% { transform: translateY(0) rotate(0) scale(1); }
+  32% { transform: translateY(-8px) rotate(4deg) scale(1.055, .96); }
+  64% { transform: translateY(1px) rotate(-2deg) scale(.99, 1.015); }
+  100% { transform: translateY(0) rotate(0) scale(1); }
+}
+
+@keyframes spirit-spark {
+  0% { opacity: 0; transform: scale(.25) rotate(-18deg); }
+  45% { opacity: 1; transform: scale(1.15) rotate(5deg); }
+  100% { opacity: .15; transform: scale(.72) rotate(16deg); }
+}
+
+@keyframes spirit-sleep {
+  0%, 100% { transform: translateY(2px) scale(1, .985); }
+  50% { transform: translateY(3px) scale(1.006, .976); }
+}
+
+@keyframes spirit-rest {
+  0%, 100% { transform: translateY(1px) rotate(-1deg); }
+  50% { transform: translateY(-1px) rotate(1deg); }
+}
+
+@keyframes spirit-core {
+  0%, 100% { transform: scale(.9); opacity: .68; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@keyframes spirit-late {
+  from { opacity: .64; }
+  to { opacity: 1; }
+}
+
+@keyframes spirit-notice {
+  0% { transform: translateY(0) rotate(0) scale(1); }
+  46% { transform: translateY(-3px) rotate(2.5deg) scale(1.025); }
+  100% { transform: translateY(-1px) rotate(1deg) scale(1.01); }
+}
+
+@keyframes spirit-tail-notice {
+  0% { transform: rotate(0); }
+  55% { transform: rotate(11deg); }
+  100% { transform: rotate(5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-spirit *,
+  .signal-spirit,
+  .mascot-pet .signal-spirit {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .mascot-pet .signal-spirit-expression {
+    transform: none !important;
+  }
+}
+
+.mascot-lab.reduced-motion .signal-spirit *,
+.mascot-lab.reduced-motion .signal-spirit {
+  animation: none !important;
+  transition: none !important;
+}
+
+.mascot-lab.reduced-motion .signal-spirit-expression {
+  transform: none !important;
+}

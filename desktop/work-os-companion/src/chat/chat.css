@@ -869,8 +869,8 @@
 }
 
 /* The badge owns the mascot's geometry: the art fills the mark exactly, with
-   the head crop from mascot.ts. Unlayered so legacy `.otto` sizing (48px, built
-   for the avatar window) can never spill the art over the message text. */
+   the head crop from mascot.ts. Keep renderer-specific desktop sizing from
+   spilling the identity mark over message text. */
 .chat-turn-mark {
   background: var(--color-surface, #fbfcf8);
   box-shadow: inset 0 0 0 1px var(--color-line, #d9ded5);

@@ -30,6 +30,7 @@ import "./sidebar.css";
 import "./task-design-gallery.css";
 import "./loading.css";
 import "./otto.css";
+import "./signal-spirit.css";
 import "./work-os-chat.css";
 import "./chat/chat.css";
 import "./avatar.css";
@@ -54,7 +55,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
         : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
           : import.meta.env.DEV && params.has("preview-loading") ? LoadingPreview
               : import.meta.env.DEV && params.has("preview-skeletons") ? SkeletonsPreview
-                : import.meta.env.DEV && params.has("preview-otto") ? OttoPreview
+                : import.meta.env.DEV && (params.has("preview-otto") || params.has("preview-mascot") || params.has("preview-signal-spirit")) ? OttoPreview
                 : import.meta.env.DEV && params.has("preview-memory") ? MemoryPreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview

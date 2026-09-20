@@ -17,13 +17,13 @@ describe("companion artwork", () => {
     expect(pngColorType(resolve(root, "public/work-os-companion.png"))).toBe(6);
   });
 
-  it("composites Otto over dark UI without screen blending", () => {
+  it("composites the mascot over dark UI without screen blending", () => {
     const css = readFileSync(resolve(root, "src/otto.css"), "utf8");
-    expect(css).toMatch(/\.otto-connect\s*\{/);
+    expect(css).toMatch(/\.mascot-connect\s*\{/);
     expect(css).not.toMatch(/mix-blend-mode:\s*screen/);
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toContain('from "./Otto"');
-    expect(app).toContain('className="otto-connect"');
+    expect(app).toContain('from "./MascotPet"');
+    expect(app).toContain('className="mascot-connect"');
     expect(app).not.toContain("work-os-task-stack");
   });
 

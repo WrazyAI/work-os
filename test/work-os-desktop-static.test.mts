@@ -389,9 +389,9 @@ const planItemsModule = read("src/planItems.ts");
 assert.match(planItemsModule, /export function buildPlanItemsFromInterpretation/);
 assert.match(planItemsModule, /item_kind: "outcome"/);
 
-// ── Late-start reason: red Otto until the reason is recorded ──
+// ── Late-start reason: the mascot state layer owns the late tone ──
 const otto = read("src/Otto.tsx");
-assert.match(otto, /export type OttoTone = "signal" \| "late";/);
+assert.match(otto, /export type OttoTone = MascotTone;/);
 assert.match(otto, /data-tone=\{tone\}/);
 assert.match(otto, /late start needs a reason/);
 assert.match(otto, /className="otto-late-mark"/);
@@ -400,8 +400,10 @@ assert.match(ottoStyles, /\.otto\[data-tone="late"\]/);
 assert.match(ottoStyles, /\.otto-late-mark/);
 
 assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/);
-assert.match(avatar, /const petTone = facts\.lateReasonRequired \? "late" : "signal";/);
-assert.match(avatar, /<Otto pose=\{petPose\} tone=\{petTone\} className="avatar-pet" \/>/);
+assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
+assert.match(avatar, /const workdayState: MascotWorkdayState =/);
+assert.match(avatar, /const mascotVisual = deriveMascotVisualState\(\{ agent: agentActivity, workday: workdayState \}\);/);
+assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" \/>/);
 assert.match(avatar, /Late start — add a reason/);
 
 assert.match(app, /const lateReasonMissing = lateReasonRequired\(visibleDay\?\.session\);/);
