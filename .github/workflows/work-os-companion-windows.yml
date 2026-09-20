@@ -23,6 +23,11 @@ on:
         description: "When publishing, enter exactly: UNSIGNED INTERNAL"
         required: false
         type: string
+      skip_workflow_artifact_upload:
+        description: "Skip the redundant Actions artifact copy when GitHub storage quota is stale"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -233,6 +238,7 @@ jobs:
           "stage=$stage" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload verified internal workflow artifact
+        if: inputs.skip_workflow_artifact_upload != true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: work-os-companion-${{ steps.release.outputs.version }}-unsigned-internal
