@@ -328,12 +328,12 @@ export async function saveEmployeeAccountSettings(access: WorkOsAccess, body: Js
   if (existingError) throw new Error(`load account settings: ${existingError.message}`);
   if (personError) throw new Error(`load account settings person: ${personError.message}`);
 
+  const mutationKey = text(body.clientMutationKey, 160) ?? crypto.randomUUID();
+  if (existing?.draft_client_mutation_key === mutationKey) return getEmployeeOnboarding(access);
   const currentRevision = Number(existing?.draft_revision ?? 0);
   const expectedRevision = body.revision == null ? currentRevision : Number(body.revision);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error("A valid account settings revision is required.");
   if (expectedRevision !== currentRevision) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
-  const mutationKey = text(body.clientMutationKey, 160) ?? crypto.randomUUID();
-  if (existing?.draft_client_mutation_key === mutationKey) return getEmployeeOnboarding(access);
 
   const now = new Date().toISOString();
   const updates: Json = {
@@ -405,23 +405,19 @@ export async function saveEmployeeAccountSettings(access: WorkOsAccess, body: Js
   }
 
   if (!changed) throw new Error("at least one account setting is required");
-  const saved = existing
-    ? await supabase.from("work_employee_onboarding").update(updates)
-      .eq("organization_id", access.organizationId).eq("person_id", access.personId).eq("draft_revision", currentRevision)
-      .select("id").maybeSingle()
-    : await supabase.from("work_employee_onboarding").insert({
-      organization_id: access.organizationId,
-      person_id: access.personId,
-      status: "not_started",
-      ...updates,
-    }).select("id").maybeSingle();
-  if (saved.error) throw new Error(`save account settings: ${saved.error.message}`);
-  if (!saved.data) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
-  if (Object.keys(personUpdate).length) {
-    const { error } = await supabase.from("work_people").update({ ...personUpdate, updated_at: now })
-      .eq("organization_id", access.organizationId).eq("id", access.personId);
-    if (error) throw new Error(`save account settings person: ${error.message}`);
+  const { data: saved, error: saveError } = await supabase.rpc("work_save_employee_account_settings", {
+    p_organization_id: access.organizationId,
+    p_person_id: access.personId,
+    p_expected_revision: expectedRevision,
+    p_mutation_key: mutationKey,
+    p_onboarding_patch: updates,
+    p_person_patch: personUpdate,
+  }).single();
+  if (saveError) {
+    if (/another device|40001/i.test(saveError.message)) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
+    throw new Error(`save account settings atomically: ${saveError.message}`);
   }
+  if (!saved) throw new WorkOsConflictError("These account settings changed on another device. Refresh before saving again.");
   return getEmployeeOnboarding(access);
 }
 
@@ -571,11 +567,6 @@ export async function submitEmployeeOnboarding(access: WorkOsAccess, body: Json)
     if (/another device|40001/i.test(error.message)) throw new WorkOsConflictError("This onboarding draft changed on another device. Refresh before submitting again.");
     throw new Error(`submit employee onboarding atomically: ${error.message}`);
   }
-  const { error: profileError } = await db().from("profiles").update({
-    display_name: preferredName,
-    updated_at: new Date().toISOString(),
-  }).eq("id", access.ctx.user.id);
-  if (profileError) throw new Error(`save onboarding profile identity: ${profileError.message}`);
   // A dual-role admin is authorized to make their submitted schedule official.
   // Employee and manager memberships still create a proposal only.
   await promoteSubmittedAdminSchedule(access, proposedSchedule, timezone);

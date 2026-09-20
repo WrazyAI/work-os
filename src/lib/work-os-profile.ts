@@ -48,6 +48,31 @@ function db() {
   return createAdminClient();
 }
 
+function isMissingAvatarError(message: string) {
+  return /does not exist|not found/i.test(message);
+}
+
+async function readAvatar(userId: string) {
+  const result = await getStorageBackend().download(PROFILE_AVATAR_BUCKET, profileAvatarObjectPath(userId));
+  if (!result.error) return new Uint8Array(result.data!.arrayBuffer);
+  if (isMissingAvatarError(result.error.message)) return null;
+  throw new Error(`load profile avatar: ${result.error.message}`);
+}
+
+async function restoreAvatar(userId: string, previous: Uint8Array | null) {
+  const storage = getStorageBackend();
+  if (previous) {
+    const result = await storage.upload(PROFILE_AVATAR_BUCKET, profileAvatarObjectPath(userId), Buffer.from(previous), {
+      contentType: "image/webp",
+      upsert: true,
+    });
+    if (result.error) throw new Error(result.error.message);
+    return;
+  }
+  const result = await storage.remove(PROFILE_AVATAR_BUCKET, [profileAvatarObjectPath(userId)]);
+  if (result.error && !isMissingAvatarError(result.error.message)) throw new Error(result.error.message);
+}
+
 async function storeAvatar(userId: string, bytes: Uint8Array, contentType: string) {
   validateAvatarUpload(contentType, bytes.byteLength);
   const normalized = await sharp(Buffer.from(bytes))
@@ -84,17 +109,33 @@ export async function updateWorkOsProfile(access: WorkOsAccess, input: WorkOsPro
 
   const profileUpdate: Json = {};
   if (hasDisplayName) profileUpdate.display_name = validateProfileDisplayName(input.displayName);
+  let previousAvatar: Uint8Array | null = null;
+  let avatarChanged = false;
   if (hasAvatar) {
+    previousAvatar = await readAvatar(access.ctx.user.id);
     await storeAvatar(access.ctx.user.id, input.avatarBytes!, input.avatarContentType ?? "");
     profileUpdate.avatar_url = profileAvatarUrl();
+    avatarChanged = true;
   } else if (shouldRemoveAvatar) {
+    previousAvatar = await readAvatar(access.ctx.user.id);
     await removeAvatar(access.ctx.user.id);
     profileUpdate.avatar_url = null;
+    avatarChanged = true;
   }
 
   if (Object.keys(profileUpdate).length) {
     const { error } = await db().from("profiles").update({ ...profileUpdate, updated_at: new Date().toISOString() }).eq("id", access.ctx.user.id);
-    if (error) throw new Error(`save profile: ${error.message}`);
+    if (error) {
+      if (avatarChanged) {
+        try {
+          await restoreAvatar(access.ctx.user.id, previousAvatar);
+        } catch (rollbackError) {
+          const detail = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(`save profile: ${error.message}; avatar rollback failed: ${detail}`);
+        }
+      }
+      throw new Error(`save profile: ${error.message}`);
+    }
   }
 
   return getEmployeeOnboarding(access);

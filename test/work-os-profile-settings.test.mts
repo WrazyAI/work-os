@@ -36,10 +36,13 @@ test("profile routes require Work OS access and expose only authenticated media"
   assert.match(profileRoute, /export async function PATCH/);
   assert.match(profileRoute, /updateWorkOsProfile/);
   assert.match(profileService, /saveEmployeeAccountSettings/);
+  assert.match(profileService, /restoreAvatar/);
   assert.match(avatarRoute, /requireWorkOsAccess/);
   assert.match(avatarRoute, /getStorageBackend/);
   assert.match(avatarRoute, /profileAvatarObjectPath/);
   assert.match(onboarding, /export async function saveEmployeeAccountSettings/);
   assert.match(onboarding, /draft_revision/);
   assert.match(onboarding, /work_employee_onboarding/);
+  assert.match(onboarding, /mutationKey[\s\S]*currentRevision/);
+  assert.match(onboarding, /work_save_employee_account_settings/);
 });

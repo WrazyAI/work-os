@@ -37,6 +37,7 @@ const migrations = [
     "neon/migrations/0036_work_os_query_indexes.sql",
     "neon/migrations/0038_work_reports_daily_eod_unique.sql",
     "neon/migrations/0039_work_screenshot_schedule.sql",
+    "supabase/migrations/0050_work_os_profile_atomicity.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -142,6 +143,10 @@ test("Work OS companion migration is complete and idempotent", async () => {
   assert.equal(hardeningColumns.rows.length, 5);
   const onboardingRpc = await db.query(`select proname from pg_proc where proname='work_submit_employee_onboarding'`);
   assert.equal(onboardingRpc.rows.length, 1);
+  const accountSettingsRpc = await db.query(`select proname from pg_proc where proname='work_save_employee_account_settings'`);
+  assert.equal(accountSettingsRpc.rows.length, 1);
+  const profileUpdatedAt = await db.query(`select column_name from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='updated_at'`);
+  assert.equal(profileUpdatedAt.rows.length, 1);
 
   const users = await db.query(`
     insert into auth.users(email) values ('owner-a@test.invalid'),('employee-a@test.invalid'),('employee-b@test.invalid') returning id,email
