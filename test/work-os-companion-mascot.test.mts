@@ -35,7 +35,7 @@ assert.match(mascotPet, /data-activity=\{visual\.activity\}/);
 assert.doesNotMatch(mascotPet, /from "\.\/Otto"/);
 
 const state = read("mascotState.ts");
-assert.match(state, /export function deriveMascotVisualState/);
+assert.match(state, /export function deriveMascotVisualState/);\nassert.doesNotMatch(state, /from "\\.\\/Otto"/);
 assert.match(state, /agent === "working"/);
 assert.match(state, /agent === "needs-input"/);
 assert.match(state, /agent === "ready"/);
