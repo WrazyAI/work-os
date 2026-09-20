@@ -61,6 +61,8 @@ import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
 import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
+import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
+import { buildWorkdayDashboardModel } from "./dashboardModel";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -1649,6 +1651,23 @@ export default function App() {
     .slice(0, 3);
   const dashboardTopTasks = [...openTasks.filter((task) => task.pending_status), ...sortedDashboardTasks].slice(0, 3);
   const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
+  const dashboardModel = useMemo(() => buildWorkdayDashboardModel({
+    active,
+    paused,
+    observedOnly,
+    currentDate: visibleDay?.shiftDate ?? "",
+    shift: visibleDay?.shift ?? null,
+    attendance: visibleDay?.attendance ?? null,
+    pulse,
+    tasks: visibleTodayTasks,
+    carryover: unfinishedCarryOver.map(({ task }) => task),
+    reviews: visibleDay?.proposals?.length ?? 0,
+    focus: planIntent || goalSuggestion?.text || "Your open tasks define today’s work.",
+    focusSource: planIntent
+      ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
+      : goalSuggestion ? "Suggested from today’s tasks" : "Task record",
+    niftySync: visibleDay?.niftySync,
+  }), [active, paused, observedOnly, visibleDay?.shiftDate, visibleDay?.shift, visibleDay?.attendance, pulse, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
   const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
@@ -2618,11 +2637,56 @@ export default function App() {
         onRetry={() => void outstandingQuery.refetch()}
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`}>{initials(visibleOnboarding.profile.displayName)}</button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
-      {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <main className="day-grid off-shift-day">
+      {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <OffShiftDashboard
+        model={dashboardModel}
+        tasks={visibleTodayTasks}
+        currentDate={visibleDay.shiftDate}
+        busy={busy}
+        canClockIn={gate.canClockIn}
+        goalSaveState={planSaveState}
+        onClockIn={clockIn}
+        onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
+        onOpenReviews={() => setView("review")}
+        onOpenCarryover={() => { setCarryOverOpen(true); setView("tasks"); }}
+        onOpenFocus={openGoalComposer}
+        onOpenTask={(task) => void openTaskDetails(task)}
+        onToggleTask={setTaskCompletion}
+        taskFlight={taskFlight}
+        onRetryPendingTask={retryPendingTask}
+        onDismissPendingTask={dismissPendingTask}
+      /> : <ActiveWorkdayDashboard
+        model={dashboardModel}
+        tasks={visibleTodayTasks}
+        previousTasks={unfinishedCarryOver.filter((item) => item.attribution.date === moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
+        otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
+        currentDate={visibleDay.shiftDate}
+        busy={busy}
+        canPause={sessionActive && !visibleDay.breakPolicy?.worktivityAuthoritative}
+        canClockOut={sessionActive}
+        observedOnly={observedOnly}
+        goalSaveState={planSaveState}
+        onRetryGoalSave={() => setPlanDirty(true)}
+        onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
+        onOpenReviews={() => setView("review")}
+        onOpenCarryover={() => { setCarryOverOpen(true); setTaskView("unfinished"); setView("tasks"); }}
+        onOpenFocus={openPlanningSession}
+        onOpenTask={(task) => void openTaskDetails(task)}
+        onToggleTask={setTaskCompletion}
+        onPause={() => {
+          if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" as const : "paused" as const, paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
+          void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
+        }}
+        onClockOut={() => setClockOutConfirmation(true)}
+        onAddTask={() => void openTaskComposer()}
+        taskFlight={taskFlight}
+        onRetryPendingTask={retryPendingTask}
+        onDismissPendingTask={dismissPendingTask}
+      />)}
+      {false && view === "day" && visibleDay && (!active ? <main className="day-grid off-shift-day">
         <section className="hero-card">
-          <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay.shift.startsAt, visibleDay.shift.timezone)}–${formatTime(visibleDay.shift.endsAt, visibleDay.shift.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
+          <div className="hero-copy"><span className="kicker">{gate.worktivitySynced ? "Worktivity connected" : "Ready when you are"}</span><h2>{gate.worktivitySynced ? "Ready to start." : "Ready when Worktivity is."}</h2><p>{visibleDay?.shift ? `Scheduled ${formatTime(visibleDay?.shift?.startsAt, visibleDay?.shift?.timezone)}–${formatTime(visibleDay?.shift?.endsAt, visibleDay?.shift?.timezone)}.` : "Worktivity will start a synchronized workday when activity begins."}</p>
             <div className="hero-actions"><button className="primary" disabled={busy || !gate.canClockIn} onClick={clockIn}><CirclePlay size={17} /> Clock in</button></div>
-            {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay.attendance.message}</small>}
+            {visibleDay?.attendance && <small className="attendance-context">Observed context: {visibleDay?.attendance?.message}</small>}
             <div className="hero-focus-line"><small>Today’s focus</small><button onClick={openGoalComposer} aria-label="Update today’s focus"><span>{planIntent || goalSuggestion?.text || "Your open tasks define today’s work."}</span></button>{planSaveState === "saving" ? <FadeArc size={13} /> : planSaveState === "offline" || planSaveState === "conflict" ? <button type="button" className="goal-retry" title={planSaveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => setPlanDirty(true)}><RefreshCw size={13} /></button> : null}<em>{planIntent ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name} · tap to update` : goalProvenance === "accepted_suggestion" ? "Derived from your tasks · tap to update" : "Written by you · tap to update" : goalSuggestion ? "Suggested from your tasks" : "Task record · tap to set a focus"}</em></div>
           </div><div className="hero-companion-art"><Otto pose="sleep" className="otto-hero" /></div>
         </section>

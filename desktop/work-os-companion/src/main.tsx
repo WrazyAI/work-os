@@ -24,6 +24,7 @@ import { restoreWorkOsQueryCache, startWorkOsQueryPersistence, workOsQueryClient
 import "./styles.css";
 import "./sessionGate.css";
 import "./workspace-redesign.css";
+import "./dashboard-overhaul.css";
 import "./loading.css";
 import "./otto.css";
 import "./work-os-chat.css";
