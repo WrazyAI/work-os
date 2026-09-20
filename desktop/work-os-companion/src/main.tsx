@@ -55,7 +55,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
         : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
           : import.meta.env.DEV && params.has("preview-loading") ? LoadingPreview
               : import.meta.env.DEV && params.has("preview-skeletons") ? SkeletonsPreview
-                : import.meta.env.DEV && params.has("preview-otto") ? OttoPreview
+                : import.meta.env.DEV && (params.has("preview-otto") || params.has("preview-mascot") || params.has("preview-signal-spirit")) ? OttoPreview
                 : import.meta.env.DEV && params.has("preview-memory") ? MemoryPreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview
