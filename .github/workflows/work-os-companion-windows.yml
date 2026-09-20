@@ -244,7 +244,7 @@ jobs:
           name: work-os-companion-${{ steps.release.outputs.version }}-unsigned-internal
           path: ${{ steps.assets.outputs.stage }}/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
           compression-level: 0
 
       - name: Create or update draft internal GitHub Release

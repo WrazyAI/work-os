@@ -1,0 +1,43 @@
+name: Cleanup Work OS Companion artifacts
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: "Number of distinct recent deployments to retain"
+        required: true
+        default: "10"
+        type: string
+      dry_run:
+        description: "Preview stale artifacts without deleting them"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: work-os-companion-artifact-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Retain the newest companion deployments
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      WORK_OS_COMPANION_ARTIFACT_KEEP_COUNT: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_count || '10' }}
+      WORK_OS_COMPANION_ARTIFACT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - name: Check out cleanup script
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Remove stale companion artifacts
+        run: bash scripts/cleanup-work-os-companion-artifacts.sh
