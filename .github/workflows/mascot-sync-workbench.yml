@@ -4,36 +4,62 @@ on:
     branches: [codex/mascot-sync-workbench]
     paths: [.github/workflows/mascot-sync-workbench.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
   workspace:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - name: Inspect integration seams (no runtime or user data)
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare isolated product worktree
         run: |
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-          root = Path('desktop/work-os-companion/src')
-          targets = {
-            'App.tsx': r'const visibleSession|const gate|debug-scenario|debug-request|debugRef.current =|setProgressReceipt|notifications.success|leavingTaskIds|return <div className="workspace',
-            'AvatarApp.tsx': r'const lastEntry|readyPulse|const agentActivity|const workdayState|const mascotVisual|catch \(|setError|receipt:|niftySyncError|<MascotPet',
-            'types.ts': r'interface DebugScenario|type DebugDayState|interface DesktopSession',
-            'dashboard-overhaul.css': r'dashboard-otto|dashboard-art-orbit|active-status-heading',
-            'debug-main.tsx': r'.',
-          }
-          for filename, pattern in targets.items():
-            file = root / filename
-            if not file.exists(): continue
-            lines = file.read_text().splitlines()
-            indexes = set()
-            for i, line in enumerate(lines):
-              if re.search(pattern,line):
-                indexes.update(range(max(0,i-2),min(len(lines),i+10)))
-            print('\nFILE', filename, 'LINES',len(lines))
-            for i in sorted(indexes): print(str(i+1)+': '+lines[i])
-          PY
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = b4ac70ba075621193579fefd8321c5ba095138e5
+          git worktree add /tmp/otto-product -b codex/fix-studio-otto-scenario-sync b4ac70ba075621193579fefd8321c5ba095138e5
+          python3 mascot-sync-workbench/tools/apply.py /tmp/otto-product
+          cd /tmp/otto-product
+          git diff --check
+          git diff --stat
+      - name: Companion tests and production build
+        working-directory: /tmp/otto-product/desktop/work-os-companion
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run build
+      - name: Root quality gates
+        working-directory: /tmp/otto-product
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npm run work-os:typecheck
+          npm run work-os:test
+      - name: Actual app browser verification
+        run: |
+          npm install --prefix /tmp/otto-browser playwright --no-audit --no-fund
+          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium
+          cd /tmp/otto-product/desktop/work-os-companion
+          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/otto-vite.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break || sleep 1; done
+          cd "$GITHUB_WORKSPACE"
+          node mascot-sync-workbench/tools/browser.cjs
+      - name: Publish verified product branch only
+        run: |
+          cd /tmp/otto-product
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = b4ac70ba075621193579fefd8321c5ba095138e5
+          git add desktop/work-os-companion/src desktop/work-os-companion/CHANGELOG.md test/work-os-companion-mascot.test.mts test/work-os-desktop-static.test.mts
+          git diff --cached --check
+          git config user.name 'ChatGPT'
+          git config user.email 'chatgpt@users.noreply.github.com'
+          git commit -m 'fix(companion): synchronize Studio Otto with dashboard and scenario debugger'
+          git push origin HEAD:refs/heads/codex/fix-studio-otto-scenario-sync
+          git log -1 --oneline
+      - name: Troubleshooting context
+        if: failure()
+        run: |
+          test ! -f /tmp/otto-vite.log || tail -40 /tmp/otto-vite.log
