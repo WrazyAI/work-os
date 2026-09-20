@@ -1,4 +1,4 @@
-import type { MascotPose, MascotTone } from "./mascot";
+import type { MascotPose, MascotTone } from "./mascotTypes";
 
 export type MascotAgentActivity = "idle" | "working" | "needs-input" | "ready" | "blocked";
 export type MascotWorkdayState =
