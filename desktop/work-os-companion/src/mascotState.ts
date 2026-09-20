@@ -1,4 +1,4 @@
-import type { OttoPose, OttoTone } from "./Otto";
+import type { MascotPose, MascotTone } from "./mascot";
 
 export type MascotAgentActivity = "idle" | "working" | "needs-input" | "ready" | "blocked";
 export type MascotWorkdayState =
@@ -18,14 +18,14 @@ export interface MascotVisualInput {
 export interface MascotVisualState {
   activity: MascotAgentActivity;
   workday: MascotWorkdayState;
-  pose: OttoPose;
-  tone: OttoTone;
+  pose: MascotPose;
+  tone: MascotTone;
   label: string;
   attention: boolean;
   transient: boolean;
 }
 
-const WORKDAY_IDLE_POSE: Record<MascotWorkdayState, OttoPose> = {
+const WORKDAY_IDLE_POSE: Record<MascotWorkdayState, MascotPose> = {
   disconnected: "idle",
   "off-shift": "sleep",
   active: "focus",
@@ -52,7 +52,7 @@ const WORKDAY_LABEL: Record<MascotWorkdayState, string> = {
  * forcing every product state to invent its own animation.
  */
 export function deriveMascotVisualState({ agent, workday }: MascotVisualInput): MascotVisualState {
-  const tone: OttoTone = workday === "late" ? "late" : "signal";
+  const tone: MascotTone = workday === "late" ? "late" : "signal";
 
   if (agent === "blocked") {
     return { activity: agent, workday, pose: "recover", tone, label: "Blocked", attention: true, transient: false };
