@@ -27,7 +27,8 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
-import { Otto } from "./Otto";
+import { MascotPet } from "./MascotPet";
+import { deriveMascotVisualState, type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import {
   agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
@@ -978,9 +979,25 @@ export default function AvatarApp(): React.ReactElement {
   // the banner, the orb pulse, and the composer carry that instead.
   const dotClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : "live";
   const shiftLabel = onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift";
-  const petPose = attentionDue ? "alert" : !onShift ? "sleep" : facts.sessionState === "paused" ? "rest" : "focus";
-  const petTone = facts.lateReasonRequired ? "late" : "signal";
   const lastEntry = chat[chat.length - 1];
+  const [readyPulse, setReadyPulse] = useState(false);
+  useEffect(() => {
+    if (!lastEntry?.receipt) return;
+    setReadyPulse(true);
+    const timer = window.setTimeout(() => setReadyPulse(false), 1_450);
+    return () => window.clearTimeout(timer);
+  }, [lastEntry?.id, lastEntry?.receipt]);
+  const agentActivity: MascotAgentActivity =
+    thinking || filing ? "working" : attentionDue ? "needs-input" : readyPulse ? "ready" : "idle";
+  const workdayState: MascotWorkdayState =
+    !facts.loaded ? "disconnected"
+      : !onShift ? "off-shift"
+        : facts.lateReasonRequired ? "late"
+          : facts.sessionState === "paused" ? "paused"
+            : contextualPrompt.kind === "eod" ? "eod-due"
+              : attentionDue ? "check-in-due"
+                : "active";
+  const mascotVisual = deriveMascotVisualState({ agent: agentActivity, workday: workdayState });
   const statusText = facts.lateReasonRequired
     ? "Late start — add a reason"
     : !facts.loaded
@@ -1041,14 +1058,14 @@ export default function AvatarApp(): React.ReactElement {
           <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
           <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
-            <Otto pose="sleep" className="avatar-pet" />
+            <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
             <span className="avatar-orb-state">Connect</span>
           </button>
           </div>
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose="sleep" /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </ConversationSurface>
         )}
@@ -1071,8 +1088,8 @@ export default function AvatarApp(): React.ReactElement {
             <circle cx="24" cy="24" r="22" className="ring-track" />
             <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
           </svg>
-          <Otto pose={petPose} tone={petTone} className="avatar-pet" />
-          <span className="avatar-orb-state">{attentionDue ? "Check in" : !onShift ? "Resting" : facts.sessionState === "paused" ? "Paused" : "Focused"}</span>
+          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" />
+          <span className="avatar-orb-state">{mascotVisual.label}</span>
           {showBadge && <span className="avatar-badge" />}
         </button>
         {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
@@ -1084,7 +1101,7 @@ export default function AvatarApp(): React.ReactElement {
             <div className="avatar-head-row">
               <div className="avatar-drag-zone" data-tauri-drag-region>
                 <div className="avatar-title">
-                  <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose={petPose} /></span>
+                  <span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark pose={mascotVisual.pose} tone={mascotVisual.tone} /></span>
                   <div className="avatar-head-copy">
                     <strong title={statusText}>
                       <span className="avatar-head-name">{MASCOT.name}</span>
