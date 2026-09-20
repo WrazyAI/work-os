@@ -80,7 +80,9 @@ describe("operational visualizations", () => {
     expect(app).toContain('title="Open profile settings"');
     expect(app).toContain('setProfileOpen(true)');
     expect(app).toContain('mode="modal"');
-    expect(app).toContain('mode="page"');
+    expect(app).toContain('<span>Workspace settings</span>');
+    expect(app).toContain('Open profile settings');
+    expect(app).not.toContain('mode="page"');
     expect(profileSettings).toContain("Display name");
     expect(profileSettings).toContain("Account email");
     expect(profileSettings).toContain("Sensitive app or domain exclusions");
