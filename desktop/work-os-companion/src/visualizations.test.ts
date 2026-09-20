@@ -139,9 +139,9 @@ describe("operational visualizations", () => {
     expect(app).toContain("Added from the Work OS daily composer.");
     expect(app).toContain("Share an update, a blocker, or add a task…");
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
-    expect(app).toContain("otto-hero");
-    expect(app).toContain("otto-connect");
-    expect(app).toContain("otto-celebrate");
+    expect(app).toContain("mascot-hero");
+    expect(app).toContain("mascot-connect");
+    expect(app).toContain("mascot-celebrate");
     expect(app).not.toContain("CompanionPet");
     expect(workspaceStyles).toContain(".kpi-strip");
     expect(workspaceStyles).toContain(".kpi-card em.kpi-attention");

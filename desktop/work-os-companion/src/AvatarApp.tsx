@@ -985,7 +985,11 @@ export default function AvatarApp(): React.ReactElement {
   const lastEntry = chat[chat.length - 1];
   const [readyPulse, setReadyPulse] = useState(false);
   useEffect(() => {
-    if (!lastEntry?.receipt || readyReceiptRef.current === lastEntry.id) return;
+    if (!lastEntry?.receipt) {
+      setReadyPulse(false);
+      return;
+    }
+    if (readyReceiptRef.current === lastEntry.id) return;
     readyReceiptRef.current = lastEntry.id;
     setReadyPulse(true);
     const timer = window.setTimeout(() => setReadyPulse(false), 1_450);
