@@ -12,21 +12,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 4
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Prepare tracked source and companion dependencies
+      - name: Inspect integration seams (no runtime or user data)
         run: |
-          mkdir -p /tmp/mascot-source
-          git archive b4ac70ba075621193579fefd8321c5ba095138e5 | tar -xf - -C /tmp/mascot-source
-          cd /tmp/mascot-source/desktop/work-os-companion
-          npm ci
-          cd /tmp/mascot-source
-          tar -czf /tmp/mascot-workspace.tgz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mascot-workspace
-          path: /tmp/mascot-workspace.tgz
-          retention-days: 1
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          root = Path('desktop/work-os-companion/src')
+          targets = {
+            'App.tsx': r'const visibleSession|const gate|debug-scenario|debug-request|debugRef.current =|setProgressReceipt|notifications.success|leavingTaskIds|return <div className="workspace',
+            'AvatarApp.tsx': r'const lastEntry|readyPulse|const agentActivity|const workdayState|const mascotVisual|catch \(|setError|receipt:|niftySyncError|<MascotPet',
+            'types.ts': r'interface DebugScenario|type DebugDayState|interface DesktopSession',
+            'dashboard-overhaul.css': r'dashboard-otto|dashboard-art-orbit|active-status-heading',
+            'debug-main.tsx': r'.',
+          }
+          for filename, pattern in targets.items():
+            file = root / filename
+            if not file.exists(): continue
+            lines = file.read_text().splitlines()
+            indexes = set()
+            for i, line in enumerate(lines):
+              if re.search(pattern,line):
+                indexes.update(range(max(0,i-2),min(len(lines),i+10)))
+            print('\nFILE', filename, 'LINES',len(lines))
+            for i in sorted(indexes): print(str(i+1)+': '+lines[i])
+          PY
