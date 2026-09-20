@@ -218,9 +218,14 @@ and a visible focus ring. A narrow marker is allowed only for the primary
 navigation rail itself; it is not allowed beside content rows, task rows, cards,
 or selected records.
 
+The companion sidebar intentionally does not render a persistent Chats section
+or an empty recent-chat placeholder. Chat remains available through New chat and
+the shared launcher; a future history surface must use real conversation data
+and earn its space without weakening the work-navigation hierarchy.
+
 Icon-only destinations require an accessible name and tooltip. The companion
-also owns a workspace identity control, New chat, and a chat-history affordance;
-production chat rows must be backed by real conversation history rather than
+also owns a workspace identity control, New chat, and a chat-entry affordance;
+any production chat rows must be backed by real conversation history rather than
 invented threads or workspace actions. Settings and connection/session status
 live in a quiet footer separated by a rule; they are not dark inset cards.
 

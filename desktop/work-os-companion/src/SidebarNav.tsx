@@ -11,11 +11,9 @@ import {
   MessageSquareText,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
   Settings,
   ShieldCheck,
   SquarePen,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import wordmark from "./assets/work-os-mark.png";
@@ -30,22 +28,14 @@ export type SidebarStatus = {
   tone: SidebarStatusTone;
 };
 
-export type SidebarChat = {
-  id: string;
-  label: string;
-  active?: boolean;
-};
-
 export type SidebarNavProps = {
   activeView: SidebarView;
   onNavigate: (view: SidebarView) => void;
   onNewChat: () => void;
-  onSelectChat?: (id: string) => void;
   onSignOut?: () => void;
   reviewCount?: number;
   evidenceEnabled?: boolean;
   status: SidebarStatus;
-  chats?: SidebarChat[];
   initiallyCollapsed?: boolean;
 };
 
@@ -231,32 +221,20 @@ export default function SidebarNav({
   activeView,
   onNavigate,
   onNewChat,
-  onSelectChat,
   onSignOut,
   reviewCount = 0,
   evidenceEnabled = true,
   status,
-  chats = [],
   initiallyCollapsed = true,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null);
   const visibleDestinations = useMemo(() => DESTINATIONS.filter((item) => item.id !== "evidence" || evidenceEnabled), [evidenceEnabled]);
-  const visibleChats = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return normalized ? chats.filter((chat) => chat.label.toLowerCase().includes(normalized)) : chats;
-  }, [chats, query]);
 
   const setCollapsedState = (next: boolean) => {
     setCollapsed(next);
     setWorkspaceOpen(false);
-    if (next) {
-      setSearchOpen(false);
-      setQuery("");
-    }
   };
 
   const primary = visibleDestinations.filter(({ id }) => PRIMARY_DESTINATION_IDS.has(id));
@@ -265,7 +243,7 @@ export default function SidebarNav({
 
   return (
     <aside
-      className="rail sidebar-nav"
+      className="sidebar-nav"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
       aria-label="Workspace navigation"
     >
@@ -318,62 +296,13 @@ export default function SidebarNav({
           </SidebarGlideGroup>
         </nav>
 
-        <section className="sidebar-chats" aria-label="Recent chats">
-          <div className="sidebar-chats-heading">
-            <div className="sidebar-chats-label"><ChevronDown size={15} aria-hidden="true" /><span>Chats</span></div>
-            <button
-              type="button"
-              className="sidebar-search-trigger"
-              aria-label={searchOpen ? "Close chat search" : "Search chats"}
-              title={searchOpen ? "Close chat search" : "Search chats"}
-              aria-expanded={searchOpen}
-              onClick={() => {
-                if (collapsed) {
-                  setCollapsedState(false);
-                  setSearchOpen(true);
-                  return;
-                }
-                setSearchOpen((current) => !current);
-                if (searchOpen) setQuery("");
-              }}
-            >
-              {searchOpen ? <X size={16} aria-hidden="true" /> : <Search size={16} aria-hidden="true" />}
-            </button>
-          </div>
-          {searchOpen && (
-            <label className="sidebar-search-field">
-              <Search size={14} aria-hidden="true" />
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search chats" aria-label="Search chats" />
-              {query && <button type="button" aria-label="Clear chat search" onClick={() => setQuery("")}><X size={14} /></button>}
-            </label>
-          )}
-          <SidebarGlideGroup className="sidebar-chat-list">
-            {visibleChats.map((chat) => (
-              <button
-                key={chat.id}
-                type="button"
-                data-sidebar-row
-                data-label={chat.label}
-                title={chat.label}
-                aria-label={chat.label}
-                aria-current={chat.active ? "page" : undefined}
-                className={`sidebar-row sidebar-chat-row ${chat.active ? "active" : ""}`}
-                onClick={() => onSelectChat?.(chat.id)}
-              >
-                <span className="sidebar-row-copy">{chat.label}</span>
-              </button>
-            ))}
-            {visibleChats.length === 0 && <span className="sidebar-chat-empty">{query ? "No chats found" : "No recent chats"}</span>}
-          </SidebarGlideGroup>
-        </section>
-
         <div className="sidebar-footer">
           <SidebarGlideGroup className="nav-group nav-settings">
             {settings.map(({ id, label, icon: Icon }) => (
               <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
             ))}
           </SidebarGlideGroup>
-          <div className="rail-foot sidebar-status" data-label={`${status.label} · ${status.detail}`} title={`${status.label} · ${status.detail}`} aria-label={`${status.label}. ${status.detail}`}>
+          <div className="sidebar-status" data-label={`${status.label} · ${status.detail}`} title={`${status.label} · ${status.detail}`} aria-label={`${status.label}. ${status.detail}`}>
             <span className={`presence ${statusClass(status.tone)}`} aria-hidden="true" />
             <span className="sidebar-status-copy"><strong>{status.label}</strong><small>{status.detail}</small></span>
           </div>

@@ -1,6 +1,5 @@
 import { Otto, type OttoPose } from "./Otto";
 import SidebarNav from "./SidebarNav";
-import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 
 const POSES: OttoPose[] = ["idle", "sleep", "focus", "alert", "rest", "think", "celebrate", "recover"];
 const SIZES = [16, 24, 36, 64] as const;
@@ -8,7 +7,7 @@ const SIZES = [16, 24, 36, 64] as const;
 /** Visual review for Otto: every pose, at favicon through hero sizes, on light and dark. */
 export default function OttoPreview() {
   return <div className="workspace preview-workspace">
-    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} onSelectChat={() => undefined} status={{ label: "On shift", detail: "Synced", tone: "live" }} chats={SIDEBAR_PREVIEW_CHATS} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
+    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} status={{ label: "On shift", detail: "Synced", tone: "live" }} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
       <main className="page">
         <section className="panel otto-preview-panel">

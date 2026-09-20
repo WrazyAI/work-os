@@ -64,7 +64,7 @@ import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, Met
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
-import SidebarNav, { type SidebarChat, type SidebarStatus, type SidebarView } from "./SidebarNav";
+import SidebarNav, { type SidebarStatus, type SidebarView } from "./SidebarNav";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
 import "./plan-insights.css";
@@ -1505,13 +1505,6 @@ export default function App() {
   const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId && visibleDay.shiftDate
     ? `workday:${visibleSession.organizationId}:${visibleDay.access.personId}:${visibleDay.shiftDate}`
     : null;
-  const sidebarChats = useMemo<SidebarChat[]>(() => {
-    if (!composerHistory.length) return [];
-    const firstUserTurn = composerHistory.find((turn) => turn.role === "user");
-    const source = firstUserTurn?.text.trim().replace(/\s+/g, " ") || "Current workday chat";
-    const label = source.length > 42 ? `${source.slice(0, 41).trimEnd()}…` : source;
-    return [{ id: composerConversationScope ?? "current-workday", label, active: progressComposerOpen }];
-  }, [composerConversationScope, composerHistory, progressComposerOpen]);
   useEffect(() => {
     let cancelled = false;
     composerConversationSignature.current = "";
@@ -2699,22 +2692,15 @@ export default function App() {
     setAiUnavailable(null);
     setComposerThinking(null);
   };
-  const openSidebarChat = () => {
-    setView("day");
-    setProgressPanel("update");
-    setProgressComposerOpen(true);
-  };
   return <div className="workspace">
     <SidebarNav
       activeView={view}
       onNavigate={(nextView) => setView(nextView)}
       onNewChat={startNewChat}
-      onSelectChat={openSidebarChat}
       onSignOut={() => { void logout(); }}
       reviewCount={visibleDay?.proposals.length ?? 0}
       evidenceEnabled={FEATURES.evidence}
       status={sidebarStatus}
-      chats={sidebarChats}
     />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell

@@ -22,7 +22,7 @@
   grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);
 }
 
-.rail.sidebar-nav {
+.sidebar-nav {
   width: var(--sidebar-collapsed-width);
   padding: 16px 12px 18px;
   align-items: stretch;
@@ -34,7 +34,7 @@
   transition: width 280ms var(--sidebar-ease), padding 280ms var(--sidebar-ease), background-color 180ms ease;
 }
 
-.rail.sidebar-nav[data-sidebar-collapsed="false"] {
+.sidebar-nav[data-sidebar-collapsed="false"] {
   width: var(--sidebar-expanded-width);
   padding: 18px 16px 20px;
 }
@@ -191,6 +191,7 @@
 }
 
 .sidebar-row {
+  min-width: 0;
   position: relative;
   z-index: 1;
   display: flex;
@@ -348,154 +349,9 @@
   border-top: 1px solid var(--sidebar-line);
 }
 
-.sidebar-chats {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 7px;
-  margin-top: 18px;
-  overflow: hidden;
-}
-
-.sidebar-chats-heading {
-  display: flex;
-  height: 30px;
-  min-height: 30px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  padding: 0 3px 0 7px;
-  color: var(--sidebar-muted);
-  font-size: 11px;
-  font-weight: 720;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.sidebar-chats-label {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 180ms ease, transform 280ms var(--sidebar-ease);
-}
-
-.sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chats-label {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.sidebar-search-trigger {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--sidebar-muted);
-}
-
-.sidebar-search-trigger:hover,
-.sidebar-search-trigger:focus-visible {
-  background: var(--sidebar-hover);
-  color: var(--sidebar-ink);
-}
-
-.sidebar-search-field {
-  display: flex;
-  height: 32px;
-  min-height: 32px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 6px 0 9px;
-  border: 1px solid var(--sidebar-line);
-  border-radius: 9px;
-  background: var(--sidebar-surface-raised);
-  color: var(--sidebar-muted);
-  box-shadow: 0 4px 12px rgba(23, 37, 20, 0.04);
-}
-
-.sidebar-search-field:focus-within {
-  border-color: var(--sidebar-marker);
-  outline: 2px solid rgba(118, 191, 59, 0.32);
-  outline-offset: 2px;
-}
-
-.sidebar-search-field input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--sidebar-ink);
-  font-size: 12px;
-}
-
-.sidebar-search-field input::placeholder {
-  color: #9aa199;
-}
-
-.sidebar-search-field button {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--sidebar-muted);
-}
-
-.sidebar-search-field button:hover {
-  background: var(--sidebar-hover);
-  color: var(--sidebar-ink);
-}
-
-.sidebar-chat-list {
-  min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-}
-
-.sidebar-chat-row {
-  height: 34px;
-  min-height: 34px;
-  padding-left: 9px;
-  font-size: 12px;
-  font-weight: 560;
-}
-
-.sidebar-chat-row.active {
-  box-shadow: inset 3px 0 0 var(--sidebar-marker);
-}
-
-.sidebar-chat-empty {
-  display: block;
-  padding: 7px 9px;
-  color: #9aa199;
-  font-size: 11px;
-  line-height: 1.4;
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
-.sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chat-empty {
-  opacity: 1;
-}
-
 .sidebar-footer {
   flex: 0 0 auto;
-  margin-top: 16px;
+  margin-top: auto;
   padding-top: 14px;
   border-top: 1px solid var(--sidebar-line);
 }
@@ -684,25 +540,6 @@
   transform: translate(0, -50%);
 }
 
-.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-chats {
-  flex: 0 0 auto;
-  margin-top: 14px;
-}
-
-.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-chat-list,
-.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-search-field {
-  display: none;
-}
-
-.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-chats-heading {
-  justify-content: center;
-  padding: 0;
-}
-
-.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-footer {
-  margin-top: auto;
-}
-
 .sidebar-nav[data-sidebar-collapsed="true"] .sidebar-footer .sidebar-row,
 .sidebar-nav[data-sidebar-collapsed="true"] .sidebar-new-chat {
   justify-content: center;
@@ -730,12 +567,12 @@
     grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
   }
 
-  .rail.sidebar-nav {
+  .sidebar-nav {
     width: var(--sidebar-collapsed-width);
     padding: 14px 10px 14px;
   }
 
-  .rail.sidebar-nav[data-sidebar-collapsed="false"] {
+  .sidebar-nav[data-sidebar-collapsed="false"] {
     z-index: 20;
     width: var(--sidebar-expanded-width);
     padding: 18px 16px 20px;
@@ -744,25 +581,6 @@
 
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-header {
     min-height: 38px;
-  }
-
-  .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chats {
-    flex: 1 1 auto;
-    gap: 7px;
-    margin-top: 18px;
-  }
-
-  .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chats-heading {
-    justify-content: space-between;
-    padding: 0 3px 0 7px;
-  }
-
-  .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-search-field {
-    display: flex;
-  }
-
-  .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chat-list {
-    display: grid;
   }
 
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-workspace-trigger {
@@ -782,7 +600,6 @@
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-workspace-chevron,
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-row-copy,
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-row-badge,
-  .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-chats-label,
   .sidebar-nav[data-sidebar-collapsed="false"] .sidebar-status-copy {
     opacity: 1;
     transform: translateX(0);
@@ -797,7 +614,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rail.sidebar-nav,
+  .sidebar-nav,
   .sidebar-header,
   .sidebar-workspace-trigger,
   .sidebar-collapse-control,
@@ -808,8 +625,6 @@
   .sidebar-row-copy,
   .sidebar-row-badge,
   .sidebar-glide-highlight,
-  .sidebar-chats-label,
-  .sidebar-chat-empty,
   .sidebar-status-copy,
   .sidebar-nav .sidebar-row::after,
   .sidebar-nav .sidebar-status::after,

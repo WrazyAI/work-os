@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The sidebar now stays focused on workspace navigation, with the retired empty chat-history rail removed.
+
 ## 0.3.40
 
 - Profile settings now open in a dedicated personal view, keeping the main Settings page focused on companion controls.

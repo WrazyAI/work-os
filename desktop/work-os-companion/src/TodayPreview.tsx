@@ -6,7 +6,6 @@ import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
 import type { TaskRow } from "./taskWorkspace";
 import SidebarNav from "./SidebarNav";
-import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 
 const initialTasks: TaskRow[] = [
   { id: "today-1", title: "Finalize the active workday experience", description: "Ship the KPI strip and the top-task cards for the pre-shift dashboard.", priority: "high", due_date: "2026-08-25", completed: false, subtask_total: 4, subtask_completed: 2 },
@@ -26,7 +25,7 @@ const otherTasks: TaskRow[] = [
 
 function PreviewRail({ onShift = true }: { onShift?: boolean }) {
   const expanded = new URLSearchParams(window.location.search).get("sidebar") === "expanded";
-  return <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} onSelectChat={() => undefined} status={{ label: onShift ? "On shift" : "Off shift", detail: "Synced", tone: onShift ? "live" : "idle" }} chats={SIDEBAR_PREVIEW_CHATS} initiallyCollapsed={!expanded} />;
+  return <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} status={{ label: onShift ? "On shift" : "Off shift", detail: "Synced", tone: onShift ? "live" : "idle" }} initiallyCollapsed={!expanded} />;
 }
 
 export default function TodayPreview() {

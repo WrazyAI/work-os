@@ -76,6 +76,18 @@ describe("operational visualizations", () => {
     expect(styles).toContain("animation: pageEnter");
   });
 
+  it("keeps the sidebar focused on navigation instead of an empty chat rail", () => {
+    expect(sidebar).toContain('className="sidebar-nav"');
+    expect(sidebar).not.toContain('className="rail sidebar-nav"');
+    expect(sidebar).not.toContain("sidebar-chats");
+    expect(sidebar).not.toContain("Search chats");
+    expect(sidebar).not.toContain("No recent chats");
+    expect(sidebarStyles).not.toContain(".rail.sidebar-nav");
+    expect(sidebarStyles).toContain('.sidebar-nav[data-sidebar-collapsed="false"]');
+    expect(sidebarStyles).toContain(".sidebar-row {\n  min-width: 0;");
+    expect(sidebarStyles).toContain(".sidebar-footer");
+  });
+
   it("makes the account surface reachable from both the masthead and Settings", () => {
     expect(app).toContain('title="Open profile settings"');
     expect(app).toContain('setProfileOpen(true)');
