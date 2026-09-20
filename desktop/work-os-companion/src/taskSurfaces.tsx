@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
-import { Archive, Check, ChevronRight, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Trash2, UserRound, Video, X } from "lucide-react";
+import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
 import { BOTTLENECK_QUESTION, composeEodMarkdown, extractBottleneckAnswer, hasBottleneckAnswer, resolvedBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -133,6 +133,31 @@ export function moveMenuFocus(event: KeyboardEvent) {
 
 type AnyTask = Record<string, any>;
 
+/**
+ * App-wide task surfaces have one seam: they render through document.body so
+ * fixed positioning cannot be scoped by the scrolling workspace or its chat
+ * dock. The server-rendered fallback keeps static markup tests and previews
+ * deterministic when no document exists yet.
+ */
+function renderViewportSurface(node: ReactNode) {
+  return typeof document === "undefined" ? node : createPortal(node, document.body);
+}
+
+function AppWideSidePanel({ children, className = "", closeLabel, onClose, busy = false }: {
+  children: ReactNode;
+  className?: string;
+  closeLabel: string;
+  onClose: () => void;
+  busy?: boolean;
+}) {
+  return renderViewportSurface(
+    <div className={`work-os-side-panel-layer ${className}`.trim()}>
+      <button type="button" className="work-os-side-panel-scrim" aria-label={closeLabel} disabled={busy} onClick={onClose} />
+      {children}
+    </div>,
+  );
+}
+
 /** Historical Nifty mirrors remain identifiable; new tasks are Work OS records. */
 export function taskSourceLabel(task: AnyTask): string {
   return String(task?.provider ?? "") === "local" ? "Work OS" : "Nifty";
@@ -193,13 +218,13 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
   </div>;
 }
 
-export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
+export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy, subtaskTitle, subtaskDescription, subtaskMenuId, moveMenuId, onSubtaskTitle, onSubtaskDescription, onSubtaskMenu, onMoveMenu, onSubtaskCreate, onEditTask, onCompleteTask, onMoveSubtask, onToggleSubtask, onArchiveSubtask, onDeleteSubtask, onClose }: {
   details: { task: AnyTask; subtasks: AnyTask[]; moveTargets: AnyTask[]; subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null } };
   loading: boolean; readOnly: boolean; currentDate: string; busy: boolean;
   subtaskTitle: string; subtaskDescription: string; subtaskMenuId: string | null; moveMenuId: string | null;
   onSubtaskTitle: (value: string) => void; onSubtaskDescription: (value: string) => void;
   onSubtaskMenu: (id: string | null) => void; onMoveMenu: (id: string | null) => void;
-  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
+  onSubtaskCreate: () => void; onEditTask: (task: AnyTask) => void; onCompleteTask?: () => void; onMoveSubtask: (subtask: AnyTask, target: AnyTask) => void;
   onToggleSubtask: (subtask: AnyTask) => void; onArchiveSubtask: (subtask: AnyTask) => void; onDeleteSubtask: (subtask: AnyTask) => void; onClose: () => void;
 }) {
   const task = details.task;
@@ -207,19 +232,41 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
   const subtasks = Array.isArray(details.subtasks) ? details.subtasks : [];
   const moveTargets = Array.isArray(details.moveTargets) ? details.moveTargets : [];
   const sync = details.subtaskSync;
-  return <div className="task-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onClose(); }}>
-    <section className="task-modal task-detail-modal" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
-      <header><div><span>{task.completed ? "Completed task" : "Active task"}</span><h2 id="task-detail-title">{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</h2></div><button aria-label="Close task details" disabled={busy} onClick={onClose}><X size={18} /></button></header>
+  const title = safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`);
+  const project = safeTaskText(task.project?.name, taskSourceLabel(task));
+  const milestone = safeTaskText(task.milestone?.name, "");
+  const dueDate = typeof task.due_date === "string" && task.due_date ? formatWorkOsDate(task.due_date) : "No due date";
+  const addedDate = typeof task.provider_created_at === "string" && task.provider_created_at
+    ? formatWorkOsDate(task.provider_created_at.slice(0, 10))
+    : typeof task.created_at === "string" && task.created_at ? formatWorkOsDate(task.created_at.slice(0, 10)) : "Not recorded";
+  const priority = task.priority ? sentence(String(task.priority)) : "Normal";
+  const completedSubtasks = subtasks.filter((subtask) => subtask.completed === true).length;
+  const progressPercent = subtasks.length ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
+  const contextDay = typeof task.due_date === "string" && task.due_date.slice(0, 10) === currentDate ? "Today" : task.due_date ? formatWorkOsDate(task.due_date) : "Today";
+  const breadcrumbs = [contextDay, taskSourceLabel(task), project !== taskSourceLabel(task) ? project : null, milestone || null].filter(Boolean) as string[];
+  return <AppWideSidePanel className="task-detail-layer" closeLabel="Close task details" onClose={onClose} busy={busy}>
+    <section className="task-modal task-detail-modal work-os-side-panel" role="dialog" aria-modal="true" aria-labelledby="task-detail-title">
+      <header><div><span>{task.completed ? "Completed task" : "Active task"}</span></div><button aria-label="Close task details" disabled={busy} onClick={onClose}><X size={18} /></button></header>
       <div className="task-modal-body">
-        {loading ? <TaskDetailSkeleton /> : <>
+        {loading ? <><h2 className="task-detail-title" id="task-detail-title">{title}</h2><TaskDetailSkeleton /></> : <>
           {readOnly && <div className="task-readonly-banner" role="note"><strong>Historical view</strong><span>Read-only record. Make changes from the current day in Tasks.</span></div>}
-          <section className="task-description"><span>Description</span><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /><div><small>{safeTaskText(task.project?.name, taskSourceLabel(task))}</small>{task.due_date && <small>Due {formatWorkOsDate(task.due_date)}</small>}{typeof task.start_date === "string" && task.start_date && task.start_date !== task.due_date && <small>Scheduled {formatWorkOsDate(task.start_date)}</small>}{task.completed_at && <small>Completed {formatWorkOsDate(String(task.completed_at).slice(0, 10))}</small>}{typeof task.provider_created_at === "string" && task.provider_created_at && <small>Logged {formatWorkOsDate(task.provider_created_at.slice(0, 10))}</small>}<span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div></section>
-          <section className="subtask-section"><header><div><span>Subtasks</span><strong>{subtasks.length}</strong></div>{subtasks.length > 0 && <ProgressRing size={16} stroke={2} completed={subtasks.filter((subtask) => subtask.completed === true).length} total={subtasks.length} label="subtasks" />}</header>
+          <nav className="task-detail-breadcrumb" aria-label="Task location">{breadcrumbs.map((crumb, index) => <span key={`${crumb}-${index}`}>{index > 0 && <ChevronRight size={13} aria-hidden="true" />}{crumb}</span>)}</nav>
+          <section className="task-detail-intro"><h2 className="task-detail-title" id="task-detail-title">{title}</h2><p>{safeTaskText(task.description, "No description has been added.")}</p><AssigneeTags task={task} /></section>
+          <section className="task-detail-meta" aria-label="Task metadata">
+            <div><CalendarDays size={18} aria-hidden="true" /><span>Due</span><strong>{dueDate}</strong></div>
+            <div><Clock3 size={18} aria-hidden="true" /><span>Added</span><strong>{addedDate}</strong></div>
+            <div><Target size={18} aria-hidden="true" /><span>Priority</span><strong>{priority}</strong></div>
+          </section>
+          <section className="task-detail-progress" aria-label="Subtask progress">
+            <header><span>Subtasks <b>{completedSubtasks} / {subtasks.length}</b></span><span>{progressPercent}%</span></header>
+            <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} aria-label={`${progressPercent}% of subtasks complete`}><i style={{ width: `${progressPercent}%` }} /></div>
+          </section>
+          <section className="subtask-section task-detail-next-steps"><header><div><strong>Next steps</strong><small>Keep the next concrete move visible.</small></div><span className="task-detail-next-count">{subtasks.length}</span></header>
             {sync?.error && String(task.provider ?? "") !== "local" && <p className="subtask-sync-warning" role="status">Couldn’t refresh subtasks from Nifty. Showing the last mirrored records.</p>}
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
-              return <article key={subtask.id} className={subtask.completed ? "completed" : ""}><div><strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong><p>{safeTaskText(subtask.description, "No description")}</p><AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
+              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy"><strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong>{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
                 subtask={subtask} busy={busy}
                 menuOpen={subtaskMenuId === subtaskId} moveOpen={moveMenuId === subtaskId}
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}
@@ -234,11 +281,12 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             }) : <p className="empty-subtasks">No subtasks yet.</p>}</div>
             {!readOnly && <div className="inline-subtask"><span>Add a subtask</span><input value={subtaskTitle} maxLength={240} onChange={(event) => onSubtaskTitle(event.target.value)} placeholder="What is the next concrete step?" /><textarea value={subtaskDescription} maxLength={20000} onChange={(event) => onSubtaskDescription(event.target.value)} placeholder="Description (optional)" /><button className="primary" disabled={busy || !subtaskTitle.trim()} onClick={onSubtaskCreate}><Plus size={14} /> Add subtask</button></div>}
           </section>
+          <div className="task-detail-provenance"><span className={`task-state ${state}`}>{sentence(state)}</span><SyncChip task={task} /></div>
         </>}
       </div>
-      <footer className="task-detail-footer"><small>{safeTaskText(task.project?.name, taskSourceLabel(task))} · {taskSourceLabel(task)} is the task record</small><button onClick={onClose}>Done</button></footer>
+      <footer className="task-detail-footer"><small>{project} · {taskSourceLabel(task)} is the task record</small><div className="task-detail-footer-actions">{!readOnly && !task.completed ? <><button disabled={busy} onClick={() => onEditTask(task)}>Edit task</button><button className="primary" disabled={busy} onClick={() => onCompleteTask?.()}><Check size={15} /> Mark complete</button></> : <button onClick={onClose}>Close</button>}</div></footer>
     </section>
-  </div>;
+  </AppWideSidePanel>;
 }
 
 export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy, localTask = false, onCancel, onConfirm }: {
@@ -276,16 +324,16 @@ export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTa
   taskFlight?: ReadonlyMap<string, "completing" | "leaving">;
 }) {
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
-  return <div className="carry-flyout-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
-    <aside className="carry-flyout" aria-label="Unfinished work" role="dialog" aria-modal="true">
-      <header><div><span>From previous days</span><h2>Review unfinished work.</h2><small>{total} unfinished task{total === 1 ? "" : "s"} across {groups.length} workday{groups.length === 1 ? "" : "s"}. Decide what moves forward.</small></div><button aria-label="Close unfinished work" onClick={onClose}><X size={18} /></button></header>
+  return <AppWideSidePanel className="carry-over-layer carry-flyout-backdrop" closeLabel="Close unfinished work" onClose={onClose} busy={busy}>
+    <aside className="carry-flyout work-os-side-panel" aria-label="Unfinished work" role="dialog" aria-modal="true" aria-labelledby="unfinished-work-title">
+      <header><div><span>From previous days</span><h2 id="unfinished-work-title">Review unfinished work.</h2><small>{total} unfinished task{total === 1 ? "" : "s"} across {groups.length} workday{groups.length === 1 ? "" : "s"}. Decide what moves forward.</small></div><button aria-label="Close unfinished work" onClick={onClose}><X size={18} /></button></header>
       <div>{groups.length ? groups.map((group) => <section key={group.date}><h3>{group.label}</h3>{group.items.map(({ task, attribution }) => <article key={task.id}>
         <div className="carry-row-copy"><strong>{safeTaskText(task.title, `Untitled ${taskSourceLabel(task)} task`)}</strong><small>{attribution.reason === "due" ? "Due on that day" : attribution.reason === "created" ? "Created on that day" : "Previously surfaced"}</small></div>
         <div className="carry-row-actions"><button disabled={busy} onClick={() => onSurfaceTask(task)}><Plus size={13} /> Add to today</button><button disabled={busy || taskFlight?.has(String(task.provider_task_id || task.id))} onClick={() => onTaskCompletion(task, true)}>{taskFlight?.get(String(task.provider_task_id || task.id)) === "completing" ? <FadeArc size={13} /> : <Check size={13} />} Complete</button><button disabled={busy} onClick={() => onSurfaceTask(task, "deferred")}>Defer</button><button onClick={() => onOpenDay(attribution.date!)}>Open day</button></div>
       </article>)}</section>) : <div className="carry-empty"><Check size={20} /><strong>Nothing left behind</strong><span>Earlier work is complete or carried forward.</span></div>}</div>
       <footer><small>Nothing changes in Nifty until you act.</small><button onClick={onClose}>Close</button></footer>
     </aside>
-  </div>;
+  </AppWideSidePanel>;
 }
 
 export function AssigneeTags({ task }: { task: AnyTask }) {

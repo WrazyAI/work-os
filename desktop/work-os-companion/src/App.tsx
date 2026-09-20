@@ -11,7 +11,7 @@ import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnno
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Target, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
@@ -66,6 +66,7 @@ import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import SidebarNav, { type SidebarChat, type SidebarStatus, type SidebarView } from "./SidebarNav";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
+import { resolveDashboardShift } from "./dashboardModel";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -1698,13 +1699,27 @@ export default function App() {
     })
     .slice(0, 3);
   const dashboardTopTasks = [...openTasks.filter((task) => task.pending_status), ...sortedDashboardTasks].slice(0, 3);
-  const pulse = shiftPulse(workSession, visibleDay?.shift ?? null, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
+  const dashboardTimezone = visibleDay?.shift?.timezone ?? visibleOnboarding?.profile.timezone ?? null;
+  const dashboardSchedule = visibleOnboarding?.organizationSetup.officialSchedule
+    ?? (visibleOnboarding?.employeeRequirements.scheduleProvided ? visibleOnboarding.profile.schedule : null);
+  const dashboardShift = useMemo(() => resolveDashboardShift({
+    shift: visibleDay?.shift ?? null,
+    session: workSession,
+    schedule: dashboardSchedule,
+    currentDate: visibleDay?.shiftDate ?? "",
+    timezone: dashboardTimezone,
+    now: pulseNow,
+  }), [dashboardSchedule, dashboardTimezone, pulseNow, visibleDay?.shift, visibleDay?.shiftDate, workSession]);
+  const pulse = shiftPulse(workSession, dashboardShift, pulseNow, visibleDay?.breakPolicy?.worktivityAuthoritative === true, visibleDay?.attendance);
   const dashboardModel = useMemo(() => buildWorkdayDashboardModel({
     active,
     paused,
     observedOnly,
     currentDate: visibleDay?.shiftDate ?? "",
-    shift: visibleDay?.shift ?? null,
+    shift: dashboardShift,
+    session: workSession,
+    schedule: dashboardSchedule,
+    timezone: dashboardTimezone,
     attendance: visibleDay?.attendance ?? null,
     pulse,
     tasks: visibleTodayTasks,
@@ -1715,8 +1730,8 @@ export default function App() {
       ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
       : goalSuggestion ? "Suggested from today’s tasks" : "Task record",
     niftySync: visibleDay?.niftySync,
-  }), [active, paused, observedOnly, visibleDay?.shiftDate, visibleDay?.shift, visibleDay?.attendance, pulse, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
-  const extendedClockOut = !!visibleDay?.shift?.endsAt && pulseNow.getTime() > Date.parse(visibleDay.shift.endsAt) + 15 * 60_000;
+  }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
+  const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
     if (active && (debugScenario.planningState === "required" || visibleDay?.prompt.kind === "plan" && visibleDay.prompt.required && visibleDay.plan?.status !== "confirmed")) {
@@ -2978,7 +2993,7 @@ export default function App() {
       />}
     </section>
     {taskComposerOpen && <TaskComposerModal closing={taskComposerClosing} busy={busy} title={taskComposerTitle} description={taskComposerDescription} assignees={taskComposerAssignees} options={taskAssigneeOptions} optionsLoading={taskOptionsLoading} onTitle={setTaskComposerTitle} onDescription={setTaskComposerDescription} onToggleAssignee={(id) => setTaskComposerAssignees((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onClose={closeTaskComposer} onSubmit={submitTaskFromDesktop} />}
-        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
+        {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => setTaskCompletion(taskDetails.task as TaskRow, true, true)} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
@@ -3583,6 +3598,9 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     : goal ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   const dateFilterActive = !!filterFrom || !!filterTo;
+  const focusOpenCount = myDayTasks.filter((task) => task.completed !== true).length;
+  const focusDueSoonCount = myDayTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) <= currentDate).length;
+  const focusCompletedCount = completedTasks.filter((task) => String(task.completed_at ?? task.due_date ?? "").slice(0, 10) === currentDate).length;
   useEffect(() => {
     if (!filtersOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -3611,14 +3629,14 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     </div>
     <section className={`panel task-agenda-strip ${historical ? "historical" : ""}`} aria-label="Agenda">
       <div className="agenda-strip-focus">
-        {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><Pencil size={13} aria-hidden="true" /><span className="agenda-strip-text">{agendaText}</span></button> : <span className="agenda-strip-text">{agendaText}</span>}
+        <span className="task-focus-kicker"><Target size={12} aria-hidden="true" /> {historical ? "Workday focus" : "Today's focus"}</span>
+        {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><span className="agenda-strip-text">{agendaText}</span><Pencil size={13} aria-hidden="true" /></button> : <span className="agenda-strip-text">{agendaText}</span>}
         <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small>
       </div>
-      {!historical && <>
-        <div className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</div>
-        {carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
-      </>}
+      {!historical && <div className="task-focus-stats" aria-label="Focus summary"><span><b>{focusOpenCount}</b><small>open today</small></span><span><b>{focusDueSoonCount}</b><small>due soon</small></span><span><b>{focusCompletedCount}</b><small>completed</small></span></div>}
+      {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </section>
+    {!historical && <nav className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</nav>}
     <section className="task-search-toolbar" aria-label="Task search and date filters">
       <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => setTaskSearch("")}><X size={14} /></button>}</label>
       <div className="task-filters-wrap">
@@ -3631,7 +3649,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
         </div>}
       </div>
     </section>
-    <section className="panel task-list-panel"><div className="card-title"><span><ListChecks size={17} /> {historical ? formatWorkOsDate(selectedDate) : viewLabel}{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}{overflowNote && <small className="task-filter-result" role="status">{overflowNote}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div>{!historical && taskView === "unfinished" && backlogError && <div className="task-backlog-warning" role="status">The full backlog could not be loaded — this list shows only the tasks already loaded.</div>}
+    <section className="panel task-list-panel"><div className="card-title task-list-heading"><span className="task-list-heading-copy"><small className="task-list-kicker"><ListChecks size={13} /> {historical ? "Recorded work" : "Task queue"}</small><strong>{historical ? formatWorkOsDate(selectedDate) : viewLabel}</strong>{hasFilters && <small className="task-filter-result" role="status">{displayed.length} result{displayed.length === 1 ? "" : "s"}</small>}{overflowNote && <small className="task-filter-result" role="status">{overflowNote}</small>}</span>{!historical && <button className="primary" onClick={onAddTask}><Plus size={15} /> Add task</button>}</div>{!historical && taskView === "unfinished" && backlogError && <div className="task-backlog-warning" role="status">The full backlog could not be loaded — this list shows only the tasks already loaded.</div>}
       <div className={`evidence-list task-records ${displayedSections.length ? "has-sort" : ""}`.trim()} ref={listRef}>{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedSections.length ? <><SortHeaderRow columns={TASK_SORT_COLUMNS} sort={sort} fallback={DEFAULT_TASK_SORT} onChange={setSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} />{displayedSections.map((section) => <section className={`task-record-section ${section.id}`} key={section.id}><header><div className="task-record-section-head"><strong>{section.label}</strong><span>{section.tasks.length}</span><small>{section.note}</small></div></header>{section.tasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);

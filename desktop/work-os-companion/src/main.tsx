@@ -10,6 +10,7 @@ import EodPreview from "./EodPreview";
 import InsightsSynthesisPreview from "./InsightsSynthesisPreview";
 import EodOutstandingPreview from "./EodOutstandingPreview";
 import TasksPreview from "./TasksPreview";
+import TaskDesignGallery from "./TaskDesignGallery";
 import TodayPreview from "./TodayPreview";
 import PlanningPreview from "./PlanningPreview";
 import LoadingPreview from "./LoadingPreview";
@@ -26,6 +27,7 @@ import "./sessionGate.css";
 import "./workspace-redesign.css";
 import "./dashboard-overhaul.css";
 import "./sidebar.css";
+import "./task-design-gallery.css";
 import "./loading.css";
 import "./otto.css";
 import "./work-os-chat.css";
@@ -47,7 +49,8 @@ const Root = params.get("window") === "avatar" ? AvatarApp
   : import.meta.env.DEV && params.has("preview-onboarding") ? OnboardingPreview
     : import.meta.env.DEV && params.has("preview-avatar") ? AvatarPreview
     : import.meta.env.DEV && params.has("preview-chat") ? ChatPreview
-    : import.meta.env.DEV && params.has("preview-tasks") ? TasksPreview
+    : import.meta.env.DEV && params.has("preview-task-options") ? TaskDesignGallery
+      : import.meta.env.DEV && params.has("preview-tasks") ? TasksPreview
         : import.meta.env.DEV && params.has("preview-today") ? TodayPreview
           : import.meta.env.DEV && params.has("preview-loading") ? LoadingPreview
               : import.meta.env.DEV && params.has("preview-skeletons") ? SkeletonsPreview

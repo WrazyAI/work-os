@@ -32,6 +32,9 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("2h 52m remaining");
     expect(markup.match(/Your scheduled window is ready when you are\./g)?.length).toBe(1);
     expect(markup).toContain("Clock in");
+    expect(markup).toContain("Updated August 26, 12:06 PM");
+    expect(markup).not.toContain("Scheduled window");
+    expect(markup).not.toContain("Observed context");
   });
 
   it("renders the active workday around a queue and real controls", () => {

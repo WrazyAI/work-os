@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Clicking a task now opens a full-height detail panel, and unfinished work uses the same clear overlay without trapping you inside the task list.
+
 ## 0.3.38
 
 - The companion now opens with a cleaner collapsed sidebar that expands when you need workspace names, chat history, and navigation labels.

@@ -163,7 +163,6 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
         <h2>Start the day with one clear move.</h2>
         <p>{model.stateDetail} {model.schedule.phase === "upcoming" ? "Work OS will keep the session and observed activity distinct." : "You can shape the agenda now and start recording when you are ready."}</p>
         <div className="dashboard-primary-actions"><button className="dashboard-primary-action" disabled={busy || !canClockIn} onClick={onClockIn}><CirclePlay size={16} /> Clock in</button><button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={14} /> Set focus</button></div>
-        <div className="dashboard-readiness-facts"><span><CalendarDays size={14} /><small>Scheduled window</small><strong>{scheduleLabel(model)}</strong></span><span><Activity size={14} /><small>Observed context</small><strong>{model.attendance?.message || "No activity observed yet"}</strong></span></div>
       </div>
       <div className="dashboard-readiness-art"><div className="dashboard-art-orbit"><Otto pose="sleep" className="dashboard-otto" /></div><span>{model.schedule.phase === "upcoming" ? "Ready when you are" : "No active workday"}</span></div>
       <footer className="dashboard-panel-footer"><span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span><small>{model.sync.detail}</small>{goalSaveState !== "saved" && <small className="dashboard-save-warning"><RefreshCw size={12} /> Focus changes are {goalSaveState === "saving" ? "saving" : "waiting to retry"}.</small>}</footer>
@@ -171,7 +170,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
 
     <section className="dashboard-panel dashboard-pulse-panel">
       <header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><Clock3 size={13} /> Workday pulse</span><h3>{scheduleDescription(model)}</h3></div><span className={`dashboard-state-pill ${syncClass(model.stateTone)}`}>{model.stateLabel}</span></header>
-      <div className="dashboard-pulse-value"><div><small>Time until shift</small><strong>{model.schedule.phase === "upcoming" ? dashboardRemainingLabel(model) : "Ready"}</strong></div><span className="dashboard-schedule-badge"><CalendarDays size={15} /><small>{model.schedule.phase === "upcoming" ? "Scheduled" : "Schedule"}</small><strong>{scheduleLabel(model)}</strong></span></div>
+      <div className="dashboard-pulse-value"><div><small>Time until shift</small><strong>{model.schedule.phase === "upcoming" ? dashboardRemainingLabel(model) : "Ready"}</strong></div><span className="dashboard-schedule-badge"><CalendarDays size={15} /><small>{model.schedule.phase === "upcoming" ? "Next shift" : "Today’s schedule"}</small><strong>{scheduleLabel(model)}</strong></span></div>
       <PulseTimeline model={model} />
       <p className="dashboard-separation-note"><Activity size={13} /> Activity observation stays separate until you clock in.</p>
     </section>

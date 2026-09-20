@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkdayDashboardModel, dashboardRemainingLabel } from "./dashboardModel";
+import { buildWorkdayDashboardModel, dashboardRemainingLabel, resolveDashboardShift } from "./dashboardModel";
 import type { AttendanceProjection } from "./types";
 import type { ShiftPulse } from "./shiftPulse";
 
@@ -76,5 +76,41 @@ describe("buildWorkdayDashboardModel", () => {
   it("does not invent a remaining time when a schedule is missing", () => {
     const model = buildWorkdayDashboardModel(input({ shift: null, pulse: { ...pulse, schedulePhase: "unavailable" } }));
     expect(dashboardRemainingLabel(model, Date.parse("2026-09-20T12:00:00Z"))).toBe("No end time set");
+  });
+
+  it("formats provider freshness for people and keeps the schedule timezone", () => {
+    const model = buildWorkdayDashboardModel(input({ timezone: "UTC" }));
+    expect(model.sync.detail).toBe("Updated September 20, 12:00 PM");
+  });
+
+  it("uses the configured next window when the day endpoint has no resolved shift", () => {
+    const shift = resolveDashboardShift({
+      shift: null,
+      currentDate: "2026-09-20",
+      timezone: "UTC",
+      now: new Date("2026-09-20T12:00:00Z"),
+      schedule: { daysOfWeek: [1, 2, 3, 4, 5], shiftStart: "09:00", shiftEnd: "17:00", breaks: [] },
+    });
+    expect(shift).toMatchObject({ startsAt: "2026-09-21T09:00:00.000Z", endsAt: "2026-09-21T17:00:00.000Z", timezone: "UTC" });
+  });
+
+  it("does not invent a spring-forward shift and picks the first fall-back occurrence", () => {
+    const springGap = resolveDashboardShift({
+      shift: null,
+      currentDate: "2026-03-08",
+      timezone: "America/New_York",
+      now: new Date("2026-03-08T00:00:00Z"),
+      schedule: { daysOfWeek: [0], shiftStart: "02:30", shiftEnd: "03:30", breaks: [] },
+    });
+    expect(springGap?.startsAt).toBe("2026-03-15T06:30:00.000Z");
+
+    const fallOverlap = resolveDashboardShift({
+      shift: null,
+      currentDate: "2026-11-01",
+      timezone: "America/New_York",
+      now: new Date("2026-11-01T00:00:00Z"),
+      schedule: { daysOfWeek: [0], shiftStart: "01:30", shiftEnd: "02:30", breaks: [] },
+    });
+    expect(fallOverlap?.startsAt).toBe("2026-11-01T05:30:00.000Z");
   });
 });
