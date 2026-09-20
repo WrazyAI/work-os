@@ -1,0 +1,87 @@
+/* Studio Otto owns its rig; the shared wrapper must not animate it a second time. */
+.mascot-pet[data-motion="renderer"][data-activity] {
+  animation: none;
+  transform: none;
+  will-change: auto;
+}
+.studio-otto {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  isolation: isolate;
+}
+.studio-otto .studio-head,
+.studio-otto .studio-arm,
+.studio-otto .studio-eye,
+.studio-otto .studio-typing-hand {
+  transform-box: view-box;
+}
+.studio-otto .studio-head { transform-origin: 80px 107px; }
+.studio-otto .studio-arm-left { transform-origin: 50px 116px; }
+.studio-otto .studio-arm-right { transform-origin: 110px 118px; }
+.studio-otto .studio-eye { transform-origin: 80px 58px; }
+.studio-otto .studio-typing-hand { transform-origin: 105px 141px; }
+.studio-otto .studio-face {
+  fill: none;
+  stroke: var(--studio-phosphor);
+  stroke-width: 4.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.studio-otto .studio-dot-fill { fill: var(--studio-phosphor); stroke: none; }
+.studio-otto .studio-gaze {
+  transform: translate(var(--mascot-look-x, 0px), var(--mascot-look-y, 0px));
+  transition: transform 150ms ease-out;
+}
+/* Idle stays planted. A blink gives presence without continuous whole-body drift. */
+.studio-otto[data-pose="idle"] .studio-eye,
+.studio-otto[data-pose="focus"] .studio-eye { animation: studio-blink 6.8s ease-in-out infinite; }
+.studio-otto[data-pose="think"] .studio-head { transform: rotate(-2deg); }
+.studio-otto[data-pose="think"] .studio-dot { animation: studio-process 1.8s ease-in-out infinite; }
+.studio-otto[data-pose="think"] .dot-2 { animation-delay: .2s; }
+.studio-otto[data-pose="think"] .dot-3 { animation-delay: .4s; }
+.studio-otto[data-pose="think"] .studio-typing-hand { animation: studio-type 1.8s ease-in-out infinite; }
+.studio-otto[data-pose="alert"] .studio-arm-right { transform: rotate(-63deg); animation: studio-ask 650ms ease-out 1; }
+.studio-otto[data-pose="alert"] .studio-head { transform: rotate(2deg); }
+.studio-otto[data-pose="celebrate"] .studio-head { animation: studio-nod 700ms ease-out 1; }
+.studio-otto[data-pose="celebrate"] .studio-arm-right { transform: rotate(-48deg); animation: studio-done 700ms ease-out 1; }
+.studio-otto[data-pose="recover"] .studio-head { transform: rotate(-4deg) translateY(1px); }
+.studio-otto[data-pose="sleep"] .studio-head { transform: translateY(2px) rotate(3deg); }
+.studio-otto[data-pose="sleep"] .studio-face { opacity: .5; }
+.studio-otto[data-pose="sleep"] .studio-power { opacity: .4; }
+.studio-otto[data-pose="rest"] .studio-head { transform: rotate(2deg); }
+@keyframes studio-blink {
+  0%, 44%, 48%, 100% { transform: scaleY(1); }
+  46% { transform: scaleY(.1); }
+}
+@keyframes studio-process { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+@keyframes studio-type { 0%, 30%, 65%, 100% { transform: translateY(0); } 48% { transform: translateY(-2px); } }
+@keyframes studio-ask { from { transform: rotate(0); } to { transform: rotate(-63deg); } }
+@keyframes studio-done { from { transform: rotate(0); } to { transform: rotate(-48deg); } }
+@keyframes studio-nod { 0%, 100% { transform: rotate(0); } 45% { transform: rotate(3deg) translateY(1px); } }
+/* Tiny identity marks are static, light renderers, not hidden animated pets. */
+.studio-otto[data-crop="head"] { overflow: hidden; }
+.studio-otto[data-crop="head"] *,
+.studio-otto[data-static="true"] * { animation: none !important; transition: none !important; }
+.studio-otto[data-crop="head"] .studio-head,
+.studio-otto[data-crop="head"] .studio-gaze,
+.studio-otto[data-static="true"] .studio-gaze { transform: none !important; }
+/* Preserve the posed hands and terminal glyphs when motion is removed. */
+.mascot-lab.reduced-motion .studio-otto *,
+[data-reduced-motion="true"] .studio-otto * { animation: none !important; transition: none !important; }
+.mascot-lab.reduced-motion .studio-otto .studio-gaze,
+[data-reduced-motion="true"] .studio-otto .studio-gaze { transform: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .studio-otto * { animation: none !important; transition: none !important; }
+  .studio-otto .studio-gaze { transform: none !important; }
+}
+/* Lab-only sizing: production wrapper geometry is deliberately unchanged. */
+.mascot-lab.studio-lab .mascot-lab-state-grid { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+.mascot-lab.studio-lab .mascot-lab-state .mascot-pet-art { width: 100px; height: 112.5px; }
+.mascot-lab.studio-lab .mascot-lab-live .mascot-pet-art { width: 176px; height: 198px; }
+.mascot-lab.studio-lab .mascot-lab-live.scale-2 .mascot-pet-art { width: 320px; height: 360px; max-width: 100%; }
+.mascot-lab.studio-lab .mascot-lab-live { min-height: 300px; padding: 20px; }
+.mascot-lab.studio-lab .mascot-lab-live.scale-2 { min-height: 410px; }
+.mascot-lab.studio-lab .mascot-lab-controls button { min-height: 40px; }
+.mascot-lab.studio-lab button:focus-visible { outline: 2px solid var(--color-ink, #182018); outline-offset: 3px; }

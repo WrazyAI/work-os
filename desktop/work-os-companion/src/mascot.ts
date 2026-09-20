@@ -1,4 +1,4 @@
-import { SignalSpirit } from "./SignalSpirit";
+import { StudioOtto } from "./StudioOtto";
 import type { MascotCrop, MascotPose } from "./mascotTypes";
 
 /** The agent's identity and art, in one place.
@@ -24,13 +24,13 @@ export const MASCOT = {
   /** Pose for idle or welcome surfaces. */
   idlePose: "idle" as MascotPose,
   /** Compact identity renderer for chat turns, badges, and tiny surfaces. */
-  Mark: SignalSpirit,
+  Mark: StudioOtto,
   /** Full-figure renderer used by behavior-aware MascotPet surfaces. */
-  Pet: SignalSpirit,
+  Pet: StudioOtto,
   /** Bundled art for surfaces that need a raster or file reference. */
   assets: {
-    mark: "/signal-spirit-mark.svg",
-    companion: "/signal-spirit.svg",
+    mark: "/studio-otto-mark.svg",
+    companion: "/studio-otto.svg",
   },
 } as const;
 

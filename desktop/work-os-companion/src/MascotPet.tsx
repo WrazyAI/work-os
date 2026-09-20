@@ -18,7 +18,7 @@ export interface MascotPetProps {
 /** Full-size, behavior-aware mascot renderer.
  *
  * Unlike MascotMark, this component is allowed to express product state and
- * motion. The current renderer is Signal Spirit; the eventual Rive version
+ * motion. The current renderer is Studio Otto; the eventual Rive version
  * keeps this same contract so mascot.ts remains the only renderer switch.
  */
 export function MascotPet({
@@ -47,6 +47,7 @@ export function MascotPet({
   return (
     <span
       className={cx("mascot-pet", className)}
+      data-motion="renderer"
       data-activity={visual.activity}
       data-workday={visual.workday}
       data-attention={visual.attention ? "true" : "false"}

@@ -14,14 +14,14 @@ const read = (path: string) => readFileSync(resolve(companion, path), "utf8");
 
 const mascot = read("mascot.ts");
 assert.match(mascot, /export const MASCOT = \{/);
-assert.match(mascot, /Mark: SignalSpirit/);
-assert.match(mascot, /Pet: SignalSpirit/);
+assert.match(mascot, /Mark: StudioOtto/);
+assert.match(mascot, /Pet: StudioOtto/);
 assert.match(mascot, /name: "Otto"/);
 assert.match(mascot, /chatPose:/);
 assert.match(mascot, /thinkingPose:/);
 assert.match(mascot, /idlePose:/);
-assert.match(mascot, /mark: "\/signal-spirit-mark\.svg"/);
-assert.match(mascot, /companion: "\/signal-spirit\.svg"/);
+assert.match(mascot, /mark: "\/studio-otto-mark\.svg"/);
+assert.match(mascot, /companion: "\/studio-otto\.svg"/);
 
 const mascotMark = read("chat/MascotMark.tsx");
 assert.match(mascotMark, /import \{ MASCOT,/);
@@ -48,12 +48,15 @@ assert.match(state, /agent === "ready"/);
 
 const mascotTypes = read("mascotTypes.ts");
 assert.match(mascotTypes, /export type MascotCrop = "full" \| "head"/);
-const spirit = read("SignalSpirit.tsx");
-assert.match(spirit, /head: "18 12 76 72"/);
+const spirit = read("StudioOtto.tsx");
+assert.match(spirit, /head: "9 10 142 110"/);
 assert.match(spirit, /data-pose=\{pose\}/);
 assert.match(spirit, /data-tone=\{tone\}/);
-assert.match(spirit, /signal-spirit-tail/);
-assert.match(spirit, /signal-spirit-beacon/);
+assert.match(spirit, /studio-chassis/);
+assert.match(spirit, /studio-head/);
+assert.match(spirit, /studio-terminal-working/);
+assert.match(mascotPet, /data-motion="renderer"/);
+assert.doesNotMatch(mascotPet, /from "\.\/StudioOtto"/);
 assert.match(mascot, /chatCrop: "head" as MascotCrop/);
 const chatStyles = read("chat/chat.css");
 assert.match(chatStyles, /\.chat-turn-mark \.chat-mascot-art \{/);
@@ -101,4 +104,4 @@ for (const [name, source] of Object.entries({
   }
 }
 
-console.log("Mascot guard passed: Signal Spirit identity, visual state, mark, and pet stay decoupled.");
+console.log("Mascot guard passed: Studio Otto identity, visual state, mark, and pet stay decoupled.");

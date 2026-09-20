@@ -7,7 +7,7 @@ import { MASCOT_POSES, type MascotPose } from "./mascotTypes";
 import SidebarNav from "./SidebarNav";
 
 const POSES: MascotPose[] = [...MASCOT_POSES];
-const CORE_STATES: MascotAgentActivity[] = ["idle", "working", "needs-input", "ready"];
+const CORE_STATES: MascotAgentActivity[] = ["idle", "working", "needs-input", "ready", "blocked"];
 const WORKDAY_STATES: MascotWorkdayState[] = ["disconnected", "off-shift", "active", "paused", "late", "check-in-due", "eod-due"];
 const SIZES = [16, 24, 36, 64] as const;
 
@@ -15,7 +15,7 @@ const SIZES = [16, 24, 36, 64] as const;
 const titleCase = (value: string) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
 /** Mascot Lab: behavior, transitions, scaling, dark/light contrast, and the
- * Signal Spirit lifecycle in one dev-only surface. */
+ * Studio Otto lifecycle in one dev-only surface. */
 export default function OttoPreview() {
   const [agent, setAgent] = useState<MascotAgentActivity>("idle");
   const [workday, setWorkday] = useState<MascotWorkdayState>("active");
@@ -59,12 +59,11 @@ export default function OttoPreview() {
   return <div className="workspace preview-workspace">
     <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
-      <main className={`page mascot-lab${reducedMotion ? " reduced-motion" : ""}`}>
+      <main className={`page mascot-lab studio-lab${reducedMotion ? " reduced-motion" : ""}`}>
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Signal Spirit prototype · Rive-ready state contract</small></div>
+          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Studio Otto · retro-terminal vector renderer</small></div>
           <div className="mascot-lab-controls" aria-label="Agent lifecycle">
             {CORE_STATES.map((state) => <button key={state} aria-pressed={agent === state} onClick={() => { clearSequence(); setAgent(state); }}>{titleCase(state)}</button>)}
-            <button aria-pressed={agent === "blocked"} onClick={() => { clearSequence(); setAgent("blocked"); }}>Blocked</button>
           </div>
           <div className="mascot-lab-controls" aria-label="Workday state">
             {WORKDAY_STATES.map((state) => <button key={state} aria-pressed={workday === state} onClick={() => setWorkday(state)}>{titleCase(state)}</button>)}
@@ -82,7 +81,7 @@ export default function OttoPreview() {
         </section>
 
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Core lifecycle — light</span><small>Idle · working · needs input · ready</small></div>
+          <div className="card-title"><span>Core lifecycle — light</span><small>White idle · yellow work/input · green ready · red blocked</small></div>
           <div className="mascot-lab-state-grid">
             {CORE_STATES.map((state) => <div className="mascot-lab-state" key={state}><MascotPet agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
           </div>
@@ -96,12 +95,12 @@ export default function OttoPreview() {
         </section>
 
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Mark sizes</span><small>Signal Spirit identity readability</small></div>
+          <div className="card-title"><span>Mark sizes</span><small>Studio Otto identity readability</small></div>
           <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><MASCOT.Mark pose={MASCOT.idlePose} tone="signal" crop={MASCOT.chatCrop} style={{ width: size, height: size }} ariaLabel={`${MASCOT.name} mark`} /><small>{size}px</small></div>)}</div>
         </section>
 
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Legacy Otto comparison</span><small>Reference only — retained while the new Signal Spirit is validated</small></div>
+          <div className="card-title"><span>Legacy Otto comparison</span><small>Reference only — retained while the new Studio Otto is validated</small></div>
           <div className="otto-preview-grid">{POSES.map((pose) => <div className="otto-preview-cell" key={pose}><Otto pose={pose} className="otto-preview-figure" /><small>{pose}</small></div>)}</div>
         </section>
       </main>
