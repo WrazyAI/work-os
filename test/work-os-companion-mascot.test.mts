@@ -20,6 +20,8 @@ assert.match(mascot, /name: "Otto"/);
 assert.match(mascot, /chatPose:/);
 assert.match(mascot, /thinkingPose:/);
 assert.match(mascot, /idlePose:/);
+assert.match(mascot, /mark: "\/signal-spirit-mark\.svg"/);
+assert.match(mascot, /companion: "\/signal-spirit\.svg"/);
 
 const mascotMark = read("chat/MascotMark.tsx");
 assert.match(mascotMark, /import \{ MASCOT,/);
