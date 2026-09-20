@@ -37,6 +37,8 @@
 
 .signal-spirit[data-crop="head"] .signal-spirit-expression {
   filter: none;
+  transform: none;
+  transition: none;
 }
 
 .signal-spirit-shadow {
@@ -98,7 +100,9 @@
 
 .signal-spirit-expression {
   color: var(--spirit-signal);
+  transform: translate(var(--mascot-look-x, 0px), var(--mascot-look-y, 0px));
   transform-origin: 56px 57px;
+  transition: transform 130ms ease-out;
 }
 
 .signal-spirit-stem,
@@ -368,10 +372,18 @@
     animation: none !important;
     transition: none !important;
   }
+
+  .mascot-pet .signal-spirit-expression {
+    transform: none !important;
+  }
 }
 
 .mascot-lab.reduced-motion .signal-spirit *,
 .mascot-lab.reduced-motion .signal-spirit {
   animation: none !important;
   transition: none !important;
+}
+
+.mascot-lab.reduced-motion .signal-spirit-expression {
+  transform: none !important;
 }
