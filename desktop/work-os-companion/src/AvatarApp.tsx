@@ -166,6 +166,7 @@ export default function AvatarApp(): React.ReactElement {
   const [chat, setChat] = useState<ChatEntry[]>(() => avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
+  const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
@@ -337,7 +338,9 @@ export default function AvatarApp(): React.ReactElement {
     void secureState.conversation(avatarConversationScope).then((turns) => {
       if (!cancelled) {
         chatConversationSignature.current = JSON.stringify(turns);
-        setChat(mergeAvatarChatEntries([], turns as AvatarStoredTurn[]));
+        const restored = mergeAvatarChatEntries([], turns as AvatarStoredTurn[]);
+        readyReceiptRef.current = [...restored].reverse().find((entry) => !!entry.receipt)?.id ?? null;
+        setChat(restored);
         setLoadedChatConversation(avatarConversationScope);
       }
     }).catch(() => {
@@ -982,7 +985,8 @@ export default function AvatarApp(): React.ReactElement {
   const lastEntry = chat[chat.length - 1];
   const [readyPulse, setReadyPulse] = useState(false);
   useEffect(() => {
-    if (!lastEntry?.receipt) return;
+    if (!lastEntry?.receipt || readyReceiptRef.current === lastEntry.id) return;
+    readyReceiptRef.current = lastEntry.id;
     setReadyPulse(true);
     const timer = window.setTimeout(() => setReadyPulse(false), 1_450);
     return () => window.clearTimeout(timer);
