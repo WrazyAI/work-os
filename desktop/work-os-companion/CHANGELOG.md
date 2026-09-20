@@ -21,21 +21,24 @@ under `## Unreleased`; when cutting a release, move them under the new
 `## <version>` heading. Omit refactors, chores, and internal tooling unless
 they change what the employee sees or does.
 
-## 0.3.35
-
-- Batch task cards now show live filed, skipped, and needs-attention results, keep edits safe, and collapse into a clear receipt after approval.
-- Batch cards now use the full compact width in the floating companion instead of squeezing titles and steps into a narrow strip.
-
 ## Unreleased
+
+## 0.3.37
 
 - The Today view now separates readiness, active time, observed activity, and task flow into a clearer workday command center.
 - Tasks now use a calmer, denser workspace with truthful counts, overdue grouping, row-level progress, and a focused detail drawer.
+- Dashboard and task selection surfaces now use a stable neutral treatment instead of a distracting colored rail.
 
 ## 0.3.36
 
 - The in-app chat now rests as a compact Otto launcher and opens into a bounded sheet without covering your task list.
 - The floating companion now fits its window, keeps the composer growing with your draft, and opens context menus reliably.
 - Chat review cards keep one clear copy action and remain usable near the window edge.
+
+## 0.3.35
+
+- Batch task cards now show live filed, skipped, and needs-attention results, keep edits safe, and collapse into a clear receipt after approval.
+- Batch cards now use the full compact width in the floating companion instead of squeezing titles and steps into a narrow strip.
 
 ## 0.3.34
 
