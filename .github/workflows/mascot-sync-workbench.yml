@@ -17,37 +17,51 @@ jobs:
         with:
           node-version: '22'
       - name: Prepare isolated product worktree
+        id: prepare
         run: |
           git fetch origin main
           test "$(git rev-parse origin/main)" = b4ac70ba075621193579fefd8321c5ba095138e5
           git worktree add /tmp/otto-product -b codex/fix-studio-otto-scenario-sync b4ac70ba075621193579fefd8321c5ba095138e5
           python3 mascot-sync-workbench/tools/apply.py /tmp/otto-product
+          python3 mascot-sync-workbench/tools/finish.py /tmp/otto-product
           cd /tmp/otto-product
           git diff --check
-          git diff --stat
       - name: Companion tests and production build
+        id: companion
         working-directory: /tmp/otto-product/desktop/work-os-companion
         run: |
           npm ci --no-audit --no-fund
-          npm test
-          npm run build
+          set +e
+          npm test > /tmp/companion-tests.log 2>&1
+          T=$?
+          npm run build > /tmp/companion-build.log 2>&1
+          B=$?
+          tail -45 /tmp/companion-tests.log
+          tail -45 /tmp/companion-build.log
+          test "$T" = 0 && test "$B" = 0
       - name: Root quality gates
+        id: root
+        if: always() && steps.prepare.outcome == 'success'
         working-directory: /tmp/otto-product
         run: |
           npm ci --no-audit --no-fund
-          npm run lint
-          npm run work-os:typecheck
-          npm run work-os:test
+          npm run lint > /tmp/root-lint.log 2>&1 || { tail -50 /tmp/root-lint.log; exit 1; }
+          npm run work-os:typecheck > /tmp/root-types.log 2>&1 || { tail -50 /tmp/root-types.log; exit 1; }
+          npm run work-os:test > /tmp/root-tests.log 2>&1 || { tail -60 /tmp/root-tests.log; exit 1; }
+          tail -20 /tmp/root-tests.log
       - name: Actual app browser verification
+        id: browser
+        if: always() && steps.prepare.outcome == 'success'
         run: |
           npm install --prefix /tmp/otto-browser playwright --no-audit --no-fund
-          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium
+          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium > /tmp/browser-install.log 2>&1 || { tail -30 /tmp/browser-install.log; exit 1; }
           cd /tmp/otto-product/desktop/work-os-companion
           npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/otto-vite.log 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break || sleep 1; done
           cd "$GITHUB_WORKSPACE"
           node mascot-sync-workbench/tools/browser.cjs
       - name: Publish verified product branch only
+        if: always() && steps.companion.outcome == 'success' && steps.root.outcome == 'success' && steps.browser.outcome == 'success'
         run: |
           cd /tmp/otto-product
           git fetch origin main
@@ -62,4 +76,4 @@ jobs:
       - name: Troubleshooting context
         if: failure()
         run: |
-          test ! -f /tmp/otto-vite.log || tail -40 /tmp/otto-vite.log
+          test ! -f /tmp/otto-vite.log || tail -25 /tmp/otto-vite.log
