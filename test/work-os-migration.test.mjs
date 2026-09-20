@@ -38,6 +38,7 @@ const migrations = [
     "neon/migrations/0038_work_reports_daily_eod_unique.sql",
     "neon/migrations/0039_work_screenshot_schedule.sql",
     "supabase/migrations/0050_work_os_profile_atomicity.sql",
+    "supabase/migrations/0051_work_os_employee_schedule_settings.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -191,6 +192,16 @@ test("Work OS companion migration is complete and idempotent", async () => {
   `, [orgA, personA, owner.id, orgB, personB, owner.id]);
   const scheduleA = schedules.rows.find((row) => row.organization_id === orgA).id;
   const scheduleB = schedules.rows.find((row) => row.organization_id === orgB).id;
+  const savedAccountSettings = await db.query(`
+    select * from work_save_employee_account_settings(
+      $1, $2, 0, 'settings-schedule-a',
+      '{"timezone":"UTC","draft_step":"profile","schedule_proposal":{"daysOfWeek":[1,2,3,4,5],"shiftStart":"08:30","shiftEnd":"16:30","breaks":[]}}'::jsonb,
+      '{}'::jsonb
+    )
+  `, [orgA, personA]);
+  assert.equal(savedAccountSettings.rows[0].draft_revision, 1);
+  const updatedSchedule = await db.query(`select timezone, shift_start, shift_end, days_of_week from work_schedules where id=$1`, [scheduleA]);
+  assert.deepEqual(updatedSchedule.rows[0], { timezone: "UTC", shift_start: "08:30:00", shift_end: "16:30:00", days_of_week: [1, 2, 3, 4, 5] });
   const workSessions = await db.query(`
     insert into work_sessions(organization_id,person_id,schedule_id,shift_date,state,timezone,scheduled_starts_at,scheduled_ends_at,clocked_in_at,clock_in_idempotency_key)
     values ($1,$2,$3,'2026-08-11','active','UTC','2026-08-11T09:00:00Z','2026-08-11T17:00:00Z','2026-08-11T09:03:00Z','clock-a'),

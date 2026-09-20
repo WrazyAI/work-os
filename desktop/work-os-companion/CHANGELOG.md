@@ -23,6 +23,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.42
+
+- Profile settings now let you change scheduled days, clock-in and clock-out times, and break windows used by Work OS.
+
 ## 0.3.41
 
 - The sidebar now stays focused on workspace navigation, with the retired empty chat-history rail removed.

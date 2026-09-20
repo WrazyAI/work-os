@@ -1997,9 +1997,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.3);
 }
-.profile-schedule.is-locked {
-  background: #f0f0e9;
-}
 .profile-day-picker {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -2018,11 +2015,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: var(--signal);
   color: #1a2116;
   font-weight: 700;
-}
-.profile-day-picker button:disabled,
-.profile-break-row input:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
 }
 .profile-breaks {
   display: grid;

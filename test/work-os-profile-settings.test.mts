@@ -30,6 +30,9 @@ test("profile routes require Work OS access and expose only authenticated media"
   const avatarRoute = await source("src/app/api/work-os/me/profile/avatar/route.ts");
   const onboarding = await source("src/lib/work-os-onboarding.ts");
   const profileService = await source("src/lib/work-os-profile.ts");
+  const profileSettings = await source("desktop/work-os-companion/src/ProfileSettings.tsx");
+  const profileStyles = await source("desktop/work-os-companion/src/styles.css");
+  const scheduleMigration = await source("supabase/migrations/0051_work_os_employee_schedule_settings.sql");
 
   assert.match(profileRoute, /requireWorkOsAccess/);
   assert.match(profileRoute, /export async function GET/);
@@ -45,4 +48,8 @@ test("profile routes require Work OS access and expose only authenticated media"
   assert.match(onboarding, /work_employee_onboarding/);
   assert.match(onboarding, /mutationKey[\s\S]*currentRevision/);
   assert.match(onboarding, /work_save_employee_account_settings/);
+  assert.doesNotMatch(profileSettings, /scheduleLocked/);
+  assert.doesNotMatch(profileStyles, /profile-schedule\.is-locked/);
+  assert.match(scheduleMigration, /work_schedules/);
+  assert.match(scheduleMigration, /notify\s+pgrst/i);
 });
