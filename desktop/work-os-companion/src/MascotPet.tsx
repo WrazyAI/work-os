@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { MASCOT } from "./mascot";
 import {
   deriveMascotVisualState,
@@ -31,6 +31,19 @@ export function MascotPet({
   const visual = deriveMascotVisualState({ agent, workday });
   const Pet = MASCOT.Pet;
 
+  const updateGaze = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1;
+    const y = ((event.clientY - rect.top) / Math.max(rect.height, 1)) * 2 - 1;
+    event.currentTarget.style.setProperty("--mascot-look-x", `${Math.max(-1, Math.min(1, x)) * 2}px`);
+    event.currentTarget.style.setProperty("--mascot-look-y", `${Math.max(-1, Math.min(1, y)) * 1.4}px`);
+  };
+
+  const resetGaze = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    event.currentTarget.style.setProperty("--mascot-look-x", "0px");
+    event.currentTarget.style.setProperty("--mascot-look-y", "0px");
+  };
+
   return (
     <span
       className={cx("mascot-pet", className)}
@@ -39,6 +52,8 @@ export function MascotPet({
       data-attention={visual.attention ? "true" : "false"}
       data-transient={visual.transient ? "true" : "false"}
       aria-hidden="true"
+      onPointerMove={updateGaze}
+      onPointerLeave={resetGaze}
     >
       <Pet
         pose={visual.pose}
