@@ -23,10 +23,13 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.43
+
+- The main and floating chats now open with a clean, first-name welcome that helps you start an update without a mascot in the hero.
+
 ## 0.3.42
 
 - Profile settings now let you change scheduled days, clock-in and clock-out times, and break windows used by Work OS.
-- The main and floating chats now open with a clean, first-name welcome that helps you start an update without a mascot in the hero.
 
 ## 0.3.41
 
