@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Otto, type OttoPose } from "./Otto";
+import { Otto } from "./Otto";
 import { MascotPet } from "./MascotPet";
 import { MASCOT } from "./mascot";
 import type { MascotAgentActivity, MascotWorkdayState } from "./mascotState";
+import { MASCOT_POSES, type MascotPose } from "./mascotTypes";
 import SidebarNav from "./SidebarNav";
 
-const POSES: OttoPose[] = ["idle", "sleep", "focus", "alert", "rest", "think", "celebrate", "recover"];
+const POSES: MascotPose[] = [...MASCOT_POSES];
 const CORE_STATES: MascotAgentActivity[] = ["idle", "working", "needs-input", "ready"];
 const WORKDAY_STATES: MascotWorkdayState[] = ["disconnected", "off-shift", "active", "paused", "late", "check-in-due", "eod-due"];
 const SIZES = [16, 24, 36, 64] as const;
@@ -14,7 +15,7 @@ const SIZES = [16, 24, 36, 64] as const;
 const titleCase = (value: string) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
 /** Mascot Lab: behavior, transitions, scaling, dark/light contrast, and the
- * underlying Otto fallback poses in one dev-only surface. */
+ * Signal Spirit lifecycle in one dev-only surface. */
 export default function OttoPreview() {
   const [agent, setAgent] = useState<MascotAgentActivity>("idle");
   const [workday, setWorkday] = useState<MascotWorkdayState>("active");
@@ -60,7 +61,7 @@ export default function OttoPreview() {
     <section className="stage">
       <main className={`page mascot-lab${reducedMotion ? " reduced-motion" : ""}`}>
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Temporary Otto renderer · behavior contract first</small></div>
+          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Signal Spirit prototype · Rive-ready state contract</small></div>
           <div className="mascot-lab-controls" aria-label="Agent lifecycle">
             {CORE_STATES.map((state) => <button key={state} aria-pressed={agent === state} onClick={() => { clearSequence(); setAgent(state); }}>{titleCase(state)}</button>)}
             <button aria-pressed={agent === "blocked"} onClick={() => { clearSequence(); setAgent("blocked"); }}>Blocked</button>
@@ -95,12 +96,12 @@ export default function OttoPreview() {
         </section>
 
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Mark sizes</span><small>Fallback SVG readability</small></div>
+          <div className="card-title"><span>Mark sizes</span><small>Signal Spirit identity readability</small></div>
           <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><Otto pose="idle" style={{ width: size, height: size }} /><small>{size}px</small></div>)}</div>
         </section>
 
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Renderer poses</span><small>Implementation detail — useful while Otto remains the Pet renderer</small></div>
+          <div className="card-title"><span>Legacy Otto comparison</span><small>Reference only — retained while the new Signal Spirit is validated</small></div>
           <div className="otto-preview-grid">{POSES.map((pose) => <div className="otto-preview-cell" key={pose}><Otto pose={pose} className="otto-preview-figure" /><small>{pose}</small></div>)}</div>
         </section>
       </main>
