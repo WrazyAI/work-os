@@ -23,6 +23,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.39
+
 - Clicking a task now opens a full-height detail panel, and unfinished work uses the same clear overlay without trapping you inside the task list.
 
 ## 0.3.38
