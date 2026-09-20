@@ -27,7 +27,10 @@ export default function OttoPreview() {
     timers.current = [];
   };
 
-  useEffect(() => clearSequence, []);
+  useEffect(() => () => {
+    timers.current.forEach((timer) => window.clearTimeout(timer));
+    timers.current = [];
+  }, []);
 
   const schedule = (delay: number, next: MascotAgentActivity) => {
     timers.current.push(window.setTimeout(() => setAgent(next), delay));
