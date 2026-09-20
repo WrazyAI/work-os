@@ -122,6 +122,16 @@ The Nifty project IDs are deliberately different:
 - **EOD Report** (`Dyo7QY7XNR`) is a project, not a task. Each daily report is a
   normal task inside that project, named `<Full Name><MM/DD/YYYY>`.
 
+The authoritative VPS checkout and Nifty task logger are reached through this
+SSH command. Use it for ledger reads, task creation, and release operations:
+
+```bash
+ssh -i /home/zahemen/.ssh/google_compute_engine dev@72.62.5.190
+```
+
+The remote Agent OS checkout is `/home/dev/agent-os`; the canonical task logger
+is `/home/dev/agent-os/scripts/log-nifty-tasks.mjs`.
+
 Never search for an “EOD Report task” in the Tasks project. A draft is a
 read-only response: do not create or update an EOD task until the operator has
 reviewed and explicitly approved the final name and description.
