@@ -14,8 +14,8 @@ const read = (path: string) => readFileSync(resolve(companion, path), "utf8");
 
 const mascot = read("mascot.ts");
 assert.match(mascot, /export const MASCOT = \{/);
-assert.match(mascot, /Mark: Otto/);
-assert.match(mascot, /Pet: Otto/);
+assert.match(mascot, /Mark: SignalSpirit/);
+assert.match(mascot, /Pet: SignalSpirit/);
 assert.match(mascot, /name: "Otto"/);
 assert.match(mascot, /chatPose:/);
 assert.match(mascot, /thinkingPose:/);
@@ -33,6 +33,7 @@ assert.match(mascotPet, /const visual = deriveMascotVisualState/);
 assert.match(mascotPet, /const Pet = MASCOT\.Pet;/);
 assert.match(mascotPet, /data-activity=\{visual\.activity\}/);
 assert.doesNotMatch(mascotPet, /from "\.\/Otto"/);
+assert.doesNotMatch(mascotPet, /from "\.\/SignalSpirit"/);
 
 const state = read("mascotState.ts");
 assert.match(state, /export function deriveMascotVisualState/);
@@ -41,10 +42,15 @@ assert.match(state, /agent === "working"/);
 assert.match(state, /agent === "needs-input"/);
 assert.match(state, /agent === "ready"/);
 
-const otto = read("Otto.tsx");
-assert.match(otto, /export type OttoCrop = "full" \| "head"/);
-assert.match(otto, /head: "20 12 56 56"/);
-assert.match(mascot, /chatCrop: "head" as OttoCrop/);
+const mascotTypes = read("mascotTypes.ts");
+assert.match(mascotTypes, /export type MascotCrop = "full" \| "head"/);
+const spirit = read("SignalSpirit.tsx");
+assert.match(spirit, /head: "18 12 76 72"/);
+assert.match(spirit, /data-pose=\{pose\}/);
+assert.match(spirit, /data-tone=\{tone\}/);
+assert.match(spirit, /signal-spirit-tail/);
+assert.match(spirit, /signal-spirit-beacon/);
+assert.match(mascot, /chatCrop: "head" as MascotCrop/);
 const chatStyles = read("chat/chat.css");
 assert.match(chatStyles, /\.chat-turn-mark \.chat-mascot-art \{/);
 
@@ -88,4 +94,4 @@ for (const [name, source] of Object.entries({
   }
 }
 
-console.log("Mascot guard passed: identity, visual state, mark, and pet stay decoupled.");
+console.log("Mascot guard passed: Signal Spirit identity, visual state, mark, and pet stay decoupled.");
