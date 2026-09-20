@@ -25,6 +25,7 @@ they change what the employee sees or does.
 
 - The companion now opens with a cleaner collapsed sidebar that expands when you need workspace names, chat history, and navigation labels.
 - The same sidebar now appears in the design previews, with clearer active states, session status, chat search, and workspace actions.
+- Connecting a new workspace now starts with a calmer, clearer screen and a labeled server setting.
 
 ## 0.3.37
 

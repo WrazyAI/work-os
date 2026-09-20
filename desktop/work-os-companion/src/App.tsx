@@ -64,6 +64,7 @@ import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import SidebarNav, { type SidebarChat, type SidebarStatus, type SidebarView } from "./SidebarNav";
+import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -2956,7 +2957,60 @@ function moveDate(date: string, amount: number) {
 }
 
 
-export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave }: { apiBase: string; setApiBase: (value: string) => void; connecting: boolean; onConnect: () => void; onSave: () => Promise<void> }) { return <main className="connect"><section><div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div><div className="connect-stack"><span className="kicker">Desktop companion</span><h1>Welcome to a clearer workday.</h1><p>Bring your tasks, priorities, and progress into one calm place, then move through the day with confidence and focus.</p><button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button><details className="connect-settings"><summary>Server settings</summary><div className="connect-settings-row"><input value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" aria-label="Workspace server URL" /><button onClick={() => void onSave()}>Save</button></div></details></div></section><aside className="connect-art"><Otto pose="idle" className="otto-connect" /></aside></main>; }
+type ConnectScreenProps = {
+  apiBase: string;
+  setApiBase: (value: string) => void;
+  connecting: boolean;
+  onConnect: () => void;
+  onSave: () => Promise<void>;
+};
+
+function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced settings" }: Pick<ConnectScreenProps, "apiBase" | "setApiBase" | "onSave"> & { summary?: string }) {
+  return <details className="connect-settings">
+    <summary>{summary}</summary>
+    <div className="connect-settings-row">
+      <label htmlFor="workspace-server-url">Workspace server URL</label>
+      <div className="connect-settings-controls">
+        <input id="workspace-server-url" value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder="https://work.example.com" />
+        <button onClick={() => void onSave()}>Save</button>
+      </div>
+    </div>
+  </details>;
+}
+
+function ConnectSteps() {
+  return <ol className="connect-steps" aria-label="Connection steps">
+    <li><span>1</span><strong>Connect</strong></li>
+    <li><span>2</span><strong>Authorize</strong></li>
+    <li><span>3</span><strong>Return</strong></li>
+  </ol>;
+}
+
+export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave }: ConnectScreenProps) {
+  return <main className="connect connect-focus">
+    <section className="connect-content">
+      <header className="connect-brand">
+        <div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
+        <span className="connect-brand-label">Work OS</span>
+      </header>
+      <div className="connect-stack">
+        <span className="kicker">Desktop companion</span>
+        <h1>Connect your workspace.</h1>
+        <p>Open secure sign-in in your browser. After you authorize this device, Work OS returns here and brings your day into focus.</p>
+        <ConnectSteps />
+        <button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button>
+        <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
+      </div>
+    </section>
+    <aside className="connect-art" aria-label="A calmer way to begin">
+      <img className="connect-atmosphere" src={assetUrl(connectWarmPaper)} alt="" />
+      <div className="connect-art-content">
+        <div className="connect-art-copy"><span>A calmer way to begin</span><strong>Your workday, in one place.</strong></div>
+        <Otto pose="idle" className="otto-connect" />
+      </div>
+    </aside>
+  </main>;
+}
 export function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) {
   return <main className="loading"><div className="loading-shell">
     <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>

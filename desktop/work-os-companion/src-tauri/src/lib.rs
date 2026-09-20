@@ -49,10 +49,10 @@ fn get_vault_password() -> Result<String, String> {
 fn allowed_desktop_connect_url(url: &str) -> Result<tauri::Url, String> {
     let parsed = tauri::Url::parse(url).map_err(|error| error.to_string())?;
     if parsed.scheme() != "https"
-        || parsed.host_str() != Some("app.wrazyos.com")
+        || parsed.host_str().is_none()
         || parsed.path() != "/work-os/desktop/connect"
     {
-        return Err("Only the WrazyOS desktop authorization URL can be opened.".into());
+        return Err("Only an HTTPS Work OS authorization URL can be opened.".into());
     }
     Ok(parsed)
 }
@@ -377,4 +377,25 @@ pub fn run() {
                 _ => {}
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_desktop_connect_url;
+
+    #[test]
+    fn allows_an_https_workspace_host() {
+        let result = allowed_desktop_connect_url(
+            "https://srv1726015.tailbf7608.ts.net/work-os/desktop/connect?state=test",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_non_https_workspace_urls() {
+        let result = allowed_desktop_connect_url(
+            "http://srv1726015.tailbf7608.ts.net/work-os/desktop/connect?state=test",
+        );
+        assert!(result.is_err());
+    }
 }

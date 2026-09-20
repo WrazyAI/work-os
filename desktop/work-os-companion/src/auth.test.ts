@@ -22,8 +22,25 @@ describe("desktop connect URL", () => {
     expect(() => assertDesktopConnectUrl(url.toString())).not.toThrow();
   });
 
-  it("rejects a non-WrazyOS host", () => {
-    expect(() => assertDesktopConnectUrl("https://example.com/work-os/desktop/connect?challenge=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG&state=state-value-123456&redirect_uri=wrazy-workos://auth")).toThrow(/Only the WrazyOS/);
+  it("rejects an unconfigured host", () => {
+    expect(() => assertDesktopConnectUrl("https://example.com/work-os/desktop/connect?challenge=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG&state=state-value-123456&redirect_uri=wrazy-workos://auth")).toThrow(/Only an HTTPS Work OS/);
+  });
+
+  it("accepts the explicitly configured HTTPS workspace host", () => {
+    const url = buildDesktopConnectUrl(
+      "https://srv1726015.tailbf7608.ts.net/",
+      "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+      "state-value-123456",
+    );
+    expect(url.origin).toBe("https://srv1726015.tailbf7608.ts.net");
+    expect(() => assertDesktopConnectUrl(url.toString(), url.origin)).not.toThrow();
+  });
+
+  it("still rejects a URL that does not match the configured workspace host", () => {
+    expect(() => assertDesktopConnectUrl(
+      "https://example.com/work-os/desktop/connect?challenge=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG&state=state-value-123456&redirect_uri=wrazy-workos://auth",
+      "https://srv1726015.tailbf7608.ts.net",
+    )).toThrow(/Only an HTTPS Work OS/);
   });
 });
 

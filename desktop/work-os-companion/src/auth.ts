@@ -31,10 +31,11 @@ async function challenge(verifier: string) {
   return btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-export function assertDesktopConnectUrl(url: string) {
+export function assertDesktopConnectUrl(url: string, allowedOrigin = `https://${DESKTOP_CONNECT_HOST}`) {
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.hostname !== DESKTOP_CONNECT_HOST || parsed.pathname !== DESKTOP_CONNECT_PATH) {
-    throw new Error("Only the WrazyOS desktop authorization URL can be opened.");
+  const expected = new URL(allowedOrigin);
+  if (parsed.protocol !== "https:" || expected.protocol !== "https:" || parsed.origin !== expected.origin || parsed.pathname !== DESKTOP_CONNECT_PATH) {
+    throw new Error("Only an HTTPS Work OS authorization URL can be opened.");
   }
   if (!parsed.searchParams.get("challenge") || !parsed.searchParams.get("state") || parsed.searchParams.get("redirect_uri") !== DESKTOP_REDIRECT_URI) {
     throw new Error("The desktop authorization URL is missing required parameters.");
@@ -48,7 +49,7 @@ export function buildDesktopConnectUrl(apiBase: string, challengeValue: string, 
   url.searchParams.set("challenge", challengeValue);
   url.searchParams.set("state", state);
   url.searchParams.set("redirect_uri", DESKTOP_REDIRECT_URI);
-  return assertDesktopConnectUrl(url.toString());
+  return assertDesktopConnectUrl(url.toString(), origin);
 }
 
 async function openDesktopConnectUrl(url: URL) {
