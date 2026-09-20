@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 12 76 72" role="img" aria-label="Otto, the Work OS Signal Spirit">
+  <defs>
+    <radialGradient id="body" cx="38%" cy="22%" r="78%">
+      <stop offset="0" stop-color="#f7fff1"/>
+      <stop offset=".52" stop-color="#dff4d8"/>
+      <stop offset="1" stop-color="#9bc8a2"/>
+    </radialGradient>
+    <linearGradient id="face" x1=".2" y1=".1" x2=".82" y2=".9">
+      <stop offset="0" stop-color="#17221a"/>
+      <stop offset="1" stop-color="#0d140f"/>
+    </linearGradient>
+  </defs>
+  <path d="M38 78C22 80 15 91 25 97c9 6 23-2 18-10-3-5-13-3-14 3" fill="none" stroke="#9df35b" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+  <path d="M57 26C56 20 59 16 64 13" fill="none" stroke="#9df35b" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="66.5" cy="11.5" r="7.5" fill="#9df35b" opacity=".18" stroke="#9df35b" stroke-width="1.3"/>
+  <circle cx="66.5" cy="11.5" r="3.9" fill="#9df35b"/>
+  <path d="M56 23C38 23 24 37 24 56c0 15 7 25 18 31 4 2 7 7 8 12 1 4 4 6 7 2 3-3 5-7 10-10 13-7 22-18 22-35 0-19-14-33-33-33Z" fill="url(#body)" stroke="#a9e08c" stroke-width="1.5"/>
+  <rect x="32" y="39" width="49" height="35" rx="17.5" fill="url(#face)" stroke="#9df35b" stroke-opacity=".35" stroke-width="1.2"/>
+  <path d="M42 56c2.2-4 5.7-4 7.9 0M63 56c2.2-4 5.7-4 7.9 0" fill="none" stroke="#9df35b" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="57" cy="82" r="5.5" fill="#9df35b" fill-opacity=".08" stroke="#9df35b" stroke-width="1.3"/>
+  <circle cx="57" cy="82" r="2.1" fill="#9df35b"/>
+</svg>
