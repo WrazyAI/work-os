@@ -23,6 +23,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.44
+
+- Otto now uses a retro-terminal companion design with clear idle, working, input, ready, and blocked states.
+- The floating companion and chat marks now share the same Studio Otto identity across light, dark, and reduced-motion views.
+
 ## 0.3.43
 
 - The main and floating chats now open with a clean, first-name welcome that helps you start an update without a mascot in the hero.
