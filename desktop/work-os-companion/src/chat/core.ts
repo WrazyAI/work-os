@@ -90,12 +90,13 @@ export interface ChatTab {
   count?: number;
 }
 
-/** Two-row composer layout for multi-line drafts (or the labeled
- *  Focus action). Deliberately derived from the draft value only —
- *  measuring the field feeds back into the next measurement and
- *  oscillates as placeholder wrap changes with width. */
+/** Two-row composer layout for drafts that actually need more room. The
+ *  labeled Focus action stays in the compact row while the field is empty or
+ *  single-line, then moves below a draft that can grow. Deliberately derived
+ *  from the draft value only — measuring the field feeds back into the next
+ *  measurement and oscillates as placeholder wrap changes with width. */
 export function isWideDraft(value: string, hasFooter: boolean): boolean {
-  return value.includes("\n") || hasFooter;
+  return value.includes("\n") || (hasFooter && value.trim().length > 0);
 }
 
 export interface CollapsibleTurn {

@@ -57,7 +57,7 @@ describe("turnCopyText", () => {
       role: "assistant",
       operations: [{ op: "complete_task", taskTitle: "Repair provider sync" }],
     });
-    expect(text).toBe("Actions recorded:\n- Repair provider sync — Awaiting review");
+    expect(text).toBe("Actions:\n- Repair provider sync — Awaiting review");
   });
 
   it("does not turn a mutation provider payload into a task list", () => {

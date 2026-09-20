@@ -26,8 +26,8 @@ export default function ChatPreview() {
   const isolate = params.get("isolate");
   if (isolate === "avatar") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
-        <AvatarSection />
+      <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
+        <AvatarSection standalone />
       </div>
     );
   }
@@ -201,9 +201,9 @@ function InAppSection() {
   } | null>(null);
   return (
     <section aria-label="In-app composer preview" style={{ display: "grid", gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 14 }}>In-app dock</h2>
-      {/* Stand-in for the page content the sticky dock intentionally
-          pulls up over (margin-top: -82px), as on Today/Tasks. */}
+      <h2 style={{ margin: 0, fontSize: 14 }}>In-app launcher</h2>
+      {/* Stand-in for the page content that remains in normal flow while the
+          viewport-anchored launcher waits in the lower corner. */}
       <div aria-hidden="true" style={{ height: 200 }} />
       <ProgressComposer
         input={input}
@@ -412,14 +412,14 @@ const AVATAR_TASKS = [
   { id: "t-open", title: "Document release evidence", dueDate: null, state: "pending" as const },
 ];
 
-function AvatarSection() {
+function AvatarSection({ standalone = false }: { standalone?: boolean }) {
   const [tab, setTab] = useState<"chat" | "tasks">("chat");
   const [input, setInput] = useState("");
   const [entries, setEntries] = useState<Array<{ id: string; text: string }>>([]);
   return (
-    <section aria-label="Avatar panel preview" style={{ display: "grid", gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>
-      <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion preview`} className="avatar-panel" style={{ width: "min(440px, 100%)", height: 720 }}>
+    <section aria-label="Avatar panel preview" style={{ display: "grid", gap: standalone ? 0 : 12, width: standalone ? "100%" : undefined, height: standalone ? "100%" : undefined }}>
+      {!standalone && <h2 style={{ margin: 0, fontSize: 14 }}>Floating companion panel</h2>}
+      <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion preview`} className="avatar-panel" style={{ width: "min(400px, 100%)", height: 620 }}>
         <header className="avatar-head">
           <div className="avatar-head-row">
             <div className="avatar-drag-zone">

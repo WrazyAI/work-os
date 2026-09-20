@@ -7,6 +7,7 @@
 
 export { ChatTabs } from "./chat/ChatTabs";
 export { ChatComposer as WorkOsPromptBar } from "./chat/ChatComposer";
+export { ConversationLauncher, type ConversationLauncherMode } from "./chat/ConversationLauncher";
 export { ChatSection, StreamingText } from "./chat/StreamingText";
 export { ChatTurn, type ChatTurnRole } from "./chat/ChatTurn";
 export { ConversationSurface, type ConversationSurfaceKind } from "./chat/ConversationSurface";

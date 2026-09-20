@@ -31,8 +31,18 @@ describe("computeMenuPlacement", () => {
       viewport,
     });
     expect(result.placement).toBe("down");
-    expect(result.top).toBe(476);
+    expect(result.top).toBe(472);
     expect(result.top + 420).toBeLessThanOrEqual(viewport.height);
+  });
+
+  it("uses the roomier side when the menu fits neither side", () => {
+    const result = computeMenuPlacement({
+      trigger: { top: 500, bottom: 530, left: 1000, right: 1030 },
+      menu: { width: 196, height: 600 },
+      viewport,
+    });
+    expect(result.placement).toBe("up");
+    expect(result.top).toBe(8);
   });
 
   it("clamps horizontally to the viewport edge", () => {
@@ -51,7 +61,7 @@ describe("computeMenuPlacement", () => {
       menu: { width: 240, height: 850 },
       viewport,
     });
-    expect(result.top).toBe(50);
+    expect(result.top).toBe(42);
     expect(result.top + 850).toBeLessThanOrEqual(viewport.height);
   });
 

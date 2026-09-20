@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+const avatarApp = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+const chatPreview = readFileSync(resolve(root, "src/ChatPreview.tsx"), "utf8");
 const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8");
 const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
 const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
@@ -74,7 +76,7 @@ describe("operational visualizations", () => {
     expect(app).toContain('label === "shift.clock_in" && /workday is already closed/i.test(message)');
     expect(app).toContain("Add a task — planning doesn't clock you in…");
     expect(app).toContain("Added from the Work OS daily composer.");
-    expect(app).toContain("Share an update or add a task…");
+    expect(app).toContain("Share an update, a blocker, or add a task…");
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
     expect(app).toContain("otto-hero");
     expect(app).toContain("otto-connect");
@@ -83,6 +85,11 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".kpi-strip");
     expect(workspaceStyles).toContain(".kpi-card em.kpi-attention");
     expect(workspaceStyles).toContain(".agenda-dock .progress-input-shell");
+  });
+
+  it("keeps the floating companion inside its 400 by 620 window", () => {
+    expect(avatarApp).toContain("const AVATAR_EXPANDED = { width: 400, height: 620 };");
+    expect(chatPreview).toContain('style={{ width: "min(400px, 100%)", height: 620 }}');
   });
 
   it("pins task row columns so the status pill aligns across every row shape", () => {

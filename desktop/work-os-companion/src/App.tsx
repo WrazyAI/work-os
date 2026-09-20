@@ -28,7 +28,7 @@ import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, ChatTurn, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import { taskSelectionFromResult } from "./chat/selection";
@@ -3075,15 +3075,16 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose, open]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
   const [sweepSignal, setSweepSignal] = useState(0);
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const wasOpenRef = useRef(open);
   const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
   useEffect(() => {
-    const el = conversationRef.current;
-    if (!el) return;
     const justOpened = open && !wasOpenRef.current;
     wasOpenRef.current = open;
+    const el = conversationRef.current;
+    if (!el) return;
     const newest = el.lastElementChild as HTMLElement | null;
     const isTurn = !!newest && !newest.classList.contains("progress-history");
     /* Compare the reader's position against the height before this arrival, so a
@@ -3102,6 +3103,16 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     if (target !== null) el.scrollTop = target;
     threadMetricsRef.current = { scrollHeight: el.scrollHeight };
   }, [history.length, interpretation, pending, receipt, open]);
+  const previousOpenRef = useRef(open);
+  useEffect(() => {
+    if (!open && previousOpenRef.current) {
+      const frame = window.requestAnimationFrame(() => launcherRef.current?.focus());
+      previousOpenRef.current = open;
+      return () => window.cancelAnimationFrame(frame);
+    }
+    previousOpenRef.current = open;
+    return undefined;
+  }, [open]);
   const options: Array<{ kind: ProgressUpdateKind; label: string }> = [
     { kind: "material_progress", label: "Progress" }, { kind: "completion_claim", label: "Completed work" },
     { kind: "blocked", label: "Blocker" }, { kind: "priority_change", label: "Priority change" }, { kind: "new_task", label: "New task" },
@@ -3121,8 +3132,8 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
     ariaLabel={panel === "goal" ? "Daily focus editor" : "Daily update conversation"}
     className={`progress-dock ${agendaMode ? "agenda-dock" : "progress-mode"} ${open ? "open" : ""}`}
   >
-    <div className={`chat-surface ${open ? "is-open" : ""}`}>
-    {open && <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
+    {open ? <div className="chat-surface is-open" id="conversation-panel">
+    <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><span className="conversation-pane-title">{MASCOT.name}</span><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Agenda" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
@@ -3148,10 +3159,12 @@ export function ProgressComposer({ mode = "progress", input, open, panel, pendin
 
   : interpretation?.status === "ready" ? null
   : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <div className={`chat-welcome ${agendaMode ? "agenda-welcome" : ""}`}><MascotMark pose={MASCOT.idlePose} /><div><strong>What would you like to record?</strong><p>Share progress, completed work, a blocker, a priority change, or a new task. You’ll choose the type after sending.</p></div></div>}</div>}
-    </section>}
+    </section>
     <div className="progress-input-shell">
-      <WorkOsPromptBar sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : open ? "Share an update, a blocker, or add a task…" : "Share an update or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" /></div>
+      <WorkOsPromptBar autoFocus={open && panel === "update"} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update, a blocker, or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" />
     </div>
+    </div>
+    : <ConversationLauncher ref={launcherRef} mode={agendaMode ? "agenda" : "progress"} required={required} onOpen={onOpen} />}
   </ConversationSurface>;
 }
 

@@ -21,9 +21,13 @@ export interface MenuPlacement {
 export function computeMenuPlacement({ trigger, menu, viewport, gap = 6, margin = 8 }: MenuPlacementInput): MenuPlacement {
   const spaceBelow = viewport.height - margin - trigger.bottom;
   const spaceAbove = trigger.top - margin;
-  const placement: MenuPlacement["placement"] = menu.height <= spaceAbove && menu.height > spaceBelow ? "up" : "down";
+  const placement: MenuPlacement["placement"] = menu.height <= spaceBelow
+    ? "down"
+    : menu.height <= spaceAbove || spaceAbove > spaceBelow
+      ? "up"
+      : "down";
   const preferredTop = placement === "down" ? trigger.bottom + gap : trigger.top - gap - menu.height;
-  const top = Math.min(Math.max(margin, preferredTop), Math.max(margin, viewport.height - menu.height));
+  const top = Math.min(Math.max(margin, preferredTop), Math.max(margin, viewport.height - margin - menu.height));
   const align: MenuPlacement["align"] = trigger.right - menu.width >= margin || viewport.width - trigger.left <= menu.width + margin ? "right" : "left";
   const unclampedLeft = align === "right" ? trigger.right - menu.width : trigger.left;
   const left = Math.min(Math.max(margin, unclampedLeft), Math.max(margin, viewport.width - margin - menu.width));

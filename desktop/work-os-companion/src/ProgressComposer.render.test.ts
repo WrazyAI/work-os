@@ -86,6 +86,14 @@ describe("ProgressComposer simplified chrome", () => {
     expect(markup).toContain("What would you like to record?");
   });
 
+  it("renders a compact launcher instead of mounting the full composer when closed", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, open: false }));
+    expect(markup).toContain("data-conversation-launcher");
+    expect(markup).toContain("Share an update");
+    expect(markup).not.toContain("progress-input-shell");
+    expect(markup).not.toContain("What would you like to record?");
+  });
+
   it("still surfaces the due state when an update is required", () => {
     const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, required: true }));
     expect(markup).toContain("An update is due");

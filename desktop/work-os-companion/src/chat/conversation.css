@@ -23,17 +23,131 @@
   position: fixed;
   z-index: 90;
   right: 24px;
-  bottom: 20px;
-  width: min(720px, calc(100vw - 48px));
+  bottom: 24px;
+  width: min(328px, calc(100vw - 48px));
   margin: 0 !important;
   filter: none;
   pointer-events: none;
 }
 
 [data-conversation-surface="in-app"].progress-dock.open {
-  top: 16px;
-  bottom: 16px;
-  width: min(560px, calc(100vw - 40px));
+  top: auto;
+  right: 24px;
+  bottom: 24px;
+  width: min(480px, calc(100vw - 48px));
+  height: min(680px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
+}
+
+/* The dashboard entry point stays out of document flow. The page owns its
+ * task-list rhythm; the assistant only occupies a small, intentional corner
+ * until the employee asks for the conversation. */
+.stage.has-dock { padding-bottom: 24px; }
+.stage.has-dock > main { margin-bottom: 0; }
+
+.conversation-launcher {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 9px;
+  border: 1px solid rgba(23, 26, 24, 0.14);
+  border-radius: 19px;
+  background: rgba(255, 252, 246, 0.96);
+  color: var(--conversation-ink);
+  box-shadow: 0 16px 36px rgba(18, 21, 18, 0.15), 0 2px 7px rgba(18, 21, 18, 0.06);
+  cursor: pointer;
+  pointer-events: auto;
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.conversation-launcher:hover {
+  border-color: rgba(23, 26, 24, 0.25);
+  box-shadow: 0 20px 42px rgba(18, 21, 18, 0.18), 0 3px 8px rgba(18, 21, 18, 0.07);
+  transform: translateY(-2px);
+}
+
+.conversation-launcher:active { transform: translateY(0) scale(0.99); }
+
+.conversation-launcher:focus-visible {
+  outline: 3px solid rgba(213, 255, 84, 0.72);
+  outline-offset: 3px;
+}
+
+.conversation-launcher-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  border-radius: 14px;
+  background: var(--conversation-paper);
+}
+
+.conversation-launcher-mark .chat-mascot-mark,
+.conversation-launcher-mark .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.conversation-launcher-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conversation-launcher-copy strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-launcher-copy small {
+  overflow: hidden;
+  color: var(--conversation-muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-launcher-action {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--conversation-graphite);
+  color: var(--conversation-surface);
+}
+
+.conversation-launcher.is-agenda {
+  border-color: rgba(99, 154, 49, 0.25);
+  background: rgba(250, 255, 244, 0.97);
+}
+
+.conversation-launcher.is-agenda .conversation-launcher-action {
+  background: #29421e;
+}
+
+.conversation-launcher.is-required {
+  border-color: rgba(163, 119, 28, 0.34);
+  background: #fffaf0;
+}
+
+.conversation-launcher.is-required .conversation-launcher-action {
+  background: #8a6417;
 }
 
 .conversation-surface {
@@ -190,9 +304,11 @@
 }
 
 [data-conversation-surface="in-app"] .progress-input-shell {
-  min-height: 82px;
+  display: flex;
+  min-height: 0;
   margin: 12px 16px 16px;
-  padding: 10px;
+  align-items: stretch;
+  padding: 7px 8px;
   border: 1px solid rgba(23, 26, 24, 0.18);
   border-radius: 20px;
   background: var(--conversation-surface);
@@ -200,14 +316,31 @@
 }
 
 [data-conversation-surface="in-app"] .chat-surface.is-open .progress-input-shell {
-  min-height: 82px;
+  min-height: 0;
   margin: 12px 16px 16px;
-  padding: 10px;
+  padding: 7px 8px;
   border: 1px solid rgba(23, 26, 24, 0.18);
   border-radius: 20px;
   background: var(--conversation-surface);
   box-shadow: 0 10px 30px rgba(23, 26, 24, 0.08);
   transform: none;
+}
+
+[data-conversation-surface="in-app"] .progress-input-shell > .workos-promptbar,
+[data-conversation-surface="in-app"] .progress-input-shell .chat-composer {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-conversation-surface="in-app"] .progress-input-shell .chat-composer {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-conversation-surface="in-app"] .progress-input-shell textarea {
+  min-height: 36px;
+  max-height: 116px;
 }
 
 [data-conversation-surface="in-app"] .progress-input-shell:focus-within {
@@ -591,9 +724,19 @@
 }
 
 @media (max-width: 1024px) {
+  [data-conversation-surface="in-app"].progress-dock {
+    right: 12px;
+    bottom: 12px;
+  }
+
   [data-conversation-surface="in-app"].progress-dock.open {
-    inset: 12px;
-    width: auto;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: auto;
+    width: min(480px, calc(100vw - 24px));
+    height: min(680px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
   }
 }
 
@@ -605,14 +748,20 @@
   }
 
   [data-conversation-surface="in-app"].progress-dock.open {
-    inset: 0;
-    width: 100vw;
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    height: min(680px, calc(100dvh - 20px));
+    max-height: calc(100dvh - 20px);
   }
 
-  [data-conversation-surface="in-app"] .chat-surface { border-radius: 0; }
+  [data-conversation-surface="in-app"] .chat-surface { border-radius: 22px; }
   [data-conversation-surface="in-app"] .workos-chat-head { min-height: 62px; padding: 11px 14px; }
   [data-conversation-surface="in-app"] .progress-conversation { padding: 20px 14px 14px; }
   [data-conversation-surface="in-app"] .progress-input-shell { margin: 10px 10px 12px; }
+  .conversation-launcher { min-height: 60px; }
   .conversation-surface .chat-turn-user { max-width: 88%; }
   .conversation-surface .chat-turn .chat-markdown p { font-size: 13px; }
 }

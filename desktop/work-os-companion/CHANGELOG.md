@@ -28,7 +28,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
-- Chat now keeps task cards truthful after saving, gives one clear copy action, and keeps the context menu usable near the edge of the window.
+## 0.3.36
+
+- The in-app chat now rests as a compact Otto launcher and opens into a bounded sheet without covering your task list.
+- The floating companion now fits its window, keeps the composer growing with your draft, and opens context menus reliably.
+- Chat review cards keep one clear copy action and remain usable near the window edge.
 
 ## 0.3.34
 

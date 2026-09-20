@@ -268,6 +268,11 @@ export function ChatComposer({
   const hasFooter = !!footerLeft;
   const menuLabel = menu === "at" ? "Work OS context" : "Work OS commands";
   const activeOptionId = menu && rows[active] ? `${menuId}-option-${active}` : undefined;
+  const gridColumns = wide && hasFooter
+    ? "grid-cols-[36px_auto_minmax(0,1fr)_36px]"
+    : hasFooter
+      ? "grid-cols-[36px_minmax(0,1fr)_auto_36px]"
+      : "grid-cols-[36px_minmax(0,1fr)_36px]";
 
   return (
     <div ref={rootRef} data-workos-promptbar className={`relative w-full min-w-0 ${className ?? ""}`}>
@@ -312,11 +317,7 @@ export function ChatComposer({
       >
         {sweepSignal > 0 ? <span key={sweepSignal} className="chat-composer-sweep" aria-hidden="true" /> : null}
         <div
-          className={`relative z-10 grid items-end gap-x-1 gap-y-1.5 ${
-            wide && hasFooter
-              ? "grid-cols-[36px_auto_minmax(0,1fr)_36px]"
-              : "grid-cols-[36px_minmax(0,1fr)_36px]"
-          }`}
+          className={`relative z-10 grid items-end gap-x-1 gap-y-1.5 ${gridColumns}`}
         >
           <button
             type="button"
@@ -380,7 +381,9 @@ export function ChatComposer({
             disabled={!canSend || busy}
             onClick={send}
             className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong disabled:cursor-default ${
-              wide && hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-1"
+              wide
+                ? hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-2"
+                : hasFooter ? "col-start-4 row-start-1" : "col-start-3 row-start-1"
             } ${canSend && !busy ? "bg-ink text-white hover:-translate-y-px" : "bg-line text-ink-2"}`}
           >
             <ArrowUp size={16} strokeWidth={2.4} aria-hidden="true" />

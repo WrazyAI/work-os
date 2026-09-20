@@ -93,7 +93,7 @@ export function turnCopyText(turn: CopyableTurn): string | null {
   const pending = pendingActionLines(turn.operations ?? [], results);
   const actionCopy = [...actions.flatMap((result) => actionLines(result)), ...pending];
   if (actionCopy.length) {
-    sections.push(["Actions recorded:", ...actionCopy].join("\n"));
+    sections.push([pending.length ? "Actions:" : "Actions recorded:", ...actionCopy].join("\n"));
   }
   const text = sections.join("\n\n").trim();
   return text.length ? text : null;

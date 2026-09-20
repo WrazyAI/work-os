@@ -1143,7 +1143,7 @@ Platform differences are limited to delivery constraints:
 |---|---|---|
 | Shell | Persistent application rail and masthead | Product shell navigation with the same content axis and destination order |
 | Density | Pointer-first compact controls | Pointer and touch-aware; slightly larger controls where needed |
-| Composer | Sticky dock above the window edge | Sticky dock or page-local sticky action surface that never covers navigation |
+| Composer | Viewport-fixed launcher with an anchored chat sheet | Sticky dock or page-local sticky action surface that never covers navigation |
 | Overlays | Constrained to the Tauri window | Constrained to the browser viewport and safe areas |
 | Provider state | May include local queue/offline state | Must distinguish local Work OS persistence from historical provider confirmation |
 | Admin workflows | Rare and secondary | May use denser master-detail and table layouts |
@@ -1754,34 +1754,34 @@ leaving ink-filled controls with invisible ink-colored icons and labels. The
 reply reveal runs ~32ms per token and caps out (rendering instantly) for very
 long replies; the sweep is ~620ms + ~90ms outro and is one-shot. Both are fully
 removed under `prefers-reduced-motion`, which leaves the labels, receipt, and
-full reply text visible. The two-row composer layout is derived from the draft
-value (newline or labeled action), never from field measurement — placeholder
-wrap changes with width, so measurement feeds back into itself and oscillates.
+full reply text visible. Empty drafts stay in one compact row, including when
+the labeled Focus action is present; a non-empty or multi-line draft earns the
+second row. The layout is derived from the draft value, never from field
+measurement — placeholder wrap changes with width, so measurement feeds back
+into itself and oscillates.
 
 Delivery-surface layout differs where the page demands it. The floating panel
 is a fixed-height window, so its thread, task context, and composer stay one
 growing surface in flow, bottom-anchored with an auto-collapsing spacer so
-short threads hug the composer instead of leaving a dead void. The in-app dock
-overlays a scrolling workspace, so an in-flow flyout would extend the page's
-scroll range and leave scrollable blank space beneath the content; there the
-**open flyout is a detached card** that overlays above the composer shell
-(`position: absolute; bottom: calc(100% + 10px)`, capped at
-`calc(100dvh - 132px)` with an internal scroll), the surface hands its chrome to
-the shell, and the shell carries the card chrome while open. Detaching is the
-in-app dock's documented deviation from the one-surface look. The `@` and `/`
-menus are detached everywhere: they portal to `document.body` with fixed
-coordinates measured from the prompt bar, so no scroll container or overflow
-boundary in either surface can clip them. Thread scrollers never inflate page
-scroll ranges.
+short threads hug the composer instead of leaving a dead void. The in-app
+surface has a deliberate two-state contract: its closed state is a compact
+`ConversationLauncher` beacon in the lower-right viewport corner, outside page
+flow, with the current intent and the configured mascot mark; it does not mount
+the full input bar. Activating it replaces the beacon with a bounded white chat
+sheet (about 480px wide and 680px tall at desktop, with viewport-safe insets on
+narrow screens). The sheet owns the thread and composer together, closes on
+Escape or its close action, and returns focus to the beacon. This supersedes the
+old sticky/negative-flow dock, which could cover task cards and leave an empty
+composer shell behind. The `@` and `/` menus are detached everywhere: they
+portal to `document.body` with fixed coordinates measured from the prompt bar,
+so no scroll container or overflow boundary in either surface can clip them.
+Thread scrollers never inflate page scroll ranges.
 
-**The dock is anchored to the viewport bottom in every content state.** Its
-sticky `bottom` pin only applies once the flow position is below the fold, so
-on a short page (the off-shift dashboard) the bar used to float mid-page with
-dead space beneath it. Dock views give the stage a column-flex layout with a
-viewport-tall minimum and a 16px bottom padding — the exact sticky offset — and
-the dock's auto top margin parks it there; the main keeps the composer's 82px
-overlap through a negative bottom margin, so long pages look unchanged. The
-resting and pinned positions are identical by construction.
+**The in-app launcher and sheet are anchored to the viewport bottom in every
+content state.** The launcher remains visible without consuming task-list
+space; the open sheet preserves the same lower-right anchor and stays inside
+the viewport. Content targets retain target-level scroll clearance for keyboard
+and programmatic reveals, while the input's own caret geometry remains local.
 
 **Reply reveal rule** (`threadScrollTarget`, shared by both surfaces): a reader
 who scrolled up is never yanked; a turn that fits the thread pins to the end; a
@@ -1918,8 +1918,8 @@ cards. Its vertical anatomy is fixed:
 3. **Task toolbar:** Today, Previous day, Other days, and `Add task`.
 4. **Task list:** at least enough reserved height to avoid collapse while loading.
 5. **54px minimum footer:** truthful Work OS task state, with historical Nifty sync only where applicable, and a link to full Tasks.
-6. **Sticky composer:** visually attached to the workflow but layered above the
-   page edge.
+6. **Chat entry:** a compact Otto launcher rests outside page flow; activating
+   it opens the shared anchored conversation sheet without covering navigation.
 
 The two hero metrics are:
 
@@ -2138,20 +2138,22 @@ lookalike input bars.
 
 ### 28.1 Dock geometry
 
-- Sticky near the bottom (`16px` desktop, about `10px` compact).
-- Width: `min(calc(100% - 48px), 760px)` at full width.
-- Input shell: at least 58px high, 17px radius, white raised surface.
+- Collapsed state: a viewport-fixed launcher, `24px` from the desktop bottom/right
+  edges and `10–12px` on compact screens; it is at most 328px wide and does not
+  consume page flow.
+- Open state: a viewport-fixed sheet in the same corner, `min(480px,
+  calc(100vw - 48px))` wide and at most `680px` tall; compact screens use
+  safe 10–12px insets rather than a full-bleed window.
+- Input shell: roughly 58px high in the empty compact state, 17–20px radius,
+  white raised surface; it grows only when the draft needs a second row.
 - Focus control: labeled 36px-high secondary button on desktop; icon with an
   accessible hidden label at very narrow widths.
 - Send control: 36px square, 11px radius, dark ink when enabled.
-- Reserve page bottom padding so the dock never obscures the last task or footer.
-- Clearance for focus and programmatic reveals is `scroll-margin-bottom` on the
-  content targets, never `scroll-padding-bottom` on the scroller. The composer is
-  pinned `16px` above the fold, so a scroller-level bottom padding can never be
-  satisfied on its behalf and the browser re-scrolls the page on every keystroke
-  to reveal the caret. A target-level margin keeps keyboard/Tab reveals clear of
-  the dock without touching the composer's own caret geometry.
-- Typing must not move the page: growing the draft, opening the flyout, or
+- The launcher itself never obscures task content because it is compact and
+  outside flow; open-sheet thread scrolling stays inside the sheet. Focus and
+  programmatic reveals use target-level `scroll-margin-bottom`, never
+  `scroll-padding-bottom` on the scroller.
+- Typing must not move the page: growing the draft, opening the sheet, or
   revealing a thread must leave the content the reader is looking at in place.
 
 ### 28.2 Modes and outcomes
@@ -2168,9 +2170,10 @@ receipt names what was recorded or proposed. Focus opens the same goal editor fr
 the hero and dock. The goal editor shows provenance, save state, optional task
 suggestion, and the statement that focus does not affect attendance.
 
-The flyout appears directly above the dock with approximately 16px radius and a
-48px header. It may scroll internally, must close on Escape, and must preserve
-typed content unless the user intentionally discards it.
+The sheet appears in the lower-right viewport corner with approximately 16px
+radius and a 48px header. Its thread may scroll internally, it must close on
+Escape, and it must preserve typed content unless the user intentionally
+discards it.
 
 ## 29. Supporting surface blueprints
 
@@ -2698,7 +2701,8 @@ Specific collapse rules:
 - Long task titles and focus statements wrap where they are primary; task rows
   clamp descriptions to one line (see 27.4).
 - Menus, dialogs, and detached cards use viewport collision handling and internal
-  scrolling. They never extend beneath the sticky composer or browser safe area.
+  scrolling. They never extend beneath the open conversation sheet or browser
+  safe area.
 - The composer must not cover the row action currently being used. Scroll or
   reserve space rather than relying on transparency.
 

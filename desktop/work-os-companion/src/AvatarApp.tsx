@@ -95,7 +95,7 @@ interface AgendaReview {
 }
 
 const AVATAR_COLLAPSED = { width: 176, height: 176 };
-const AVATAR_EXPANDED = { width: 440, height: 720 };
+const AVATAR_EXPANDED = { width: 400, height: 620 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";

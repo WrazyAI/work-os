@@ -66,9 +66,10 @@ describe("isWideDraft", () => {
     expect(isWideDraft("a long single line that will wrap visually", false)).toBe(false);
   });
 
-  it("takes two rows for multi-line drafts or the labeled Focus action", () => {
+  it("takes two rows only when the draft needs more room", () => {
     expect(isWideDraft("line one\nline two", false)).toBe(true);
-    expect(isWideDraft("", true)).toBe(true);
+    expect(isWideDraft("", true)).toBe(false);
+    expect(isWideDraft("Progress: shipped the new flow", true)).toBe(true);
   });
 });
 
@@ -194,7 +195,7 @@ describe("WorkOsPromptBar", () => {
     expect(markup).not.toContain('disabled=""');
   });
 
-  it("keeps the focus action inside the composer grid", () => {
+  it("keeps an empty composer compact even with the focus action", () => {
     const markup = renderToStaticMarkup(
       createElement(WorkOsPromptBar, {
         ...base,
@@ -202,7 +203,18 @@ describe("WorkOsPromptBar", () => {
       }),
     );
     expect(markup).toContain("focus-dock-button");
-    // The labeled footer takes the roomy two-row grid.
+    expect(markup).toContain("grid-cols-[36px_minmax(0,1fr)_auto_36px]");
+    expect(markup).not.toContain("grid-cols-[36px_auto_minmax(0,1fr)_36px]");
+  });
+
+  it("moves the focus action below a non-empty draft", () => {
+    const markup = renderToStaticMarkup(
+      createElement(WorkOsPromptBar, {
+        ...base,
+        value: "Progress: shipped the new flow",
+        footerLeft: createElement("button", { className: "focus-dock-button" }, "Focus"),
+      }),
+    );
     expect(markup).toContain("grid-cols-[36px_auto_minmax(0,1fr)_36px]");
   });
 
