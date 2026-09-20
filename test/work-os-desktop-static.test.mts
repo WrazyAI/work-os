@@ -235,6 +235,7 @@ assert.doesNotMatch(app, /The completion proposals were not saved/);
 const avatarAppSource = read("src/AvatarApp.tsx");
 assert.match(avatarAppSource, /failures\?: Array<\{ client_operation_index: number; error: string \}>/);
 assert.doesNotMatch(avatarAppSource, /The completion proposals were not saved/);
+assert.match(avatarAppSource, /apiRequest<\{ interpretation: unknown \}>\("\/api\/work-os\/me\/interpret", \{[\s\S]*?signal: AbortSignal\.timeout\(60_000\)/);
 assert.match(app, /update\.download\(\(event\) =>/);
 assert.match(app, /applyDownloadEvent\(progress, event\)/);
 assert.match(app, /arm_update_exit_watchdog/);

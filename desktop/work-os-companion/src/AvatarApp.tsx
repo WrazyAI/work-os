@@ -576,6 +576,7 @@ export default function AvatarApp(): React.ReactElement {
     try {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
+        signal: AbortSignal.timeout(60_000),
         body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
       setThinkingTrace({ stages, active: 1, startedAt });

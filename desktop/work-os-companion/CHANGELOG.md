@@ -23,6 +23,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.45
+
+- The floating companion now waits long enough for a full AI update instead of stopping at 20 seconds while the assistant is working.
+
 ## 0.3.44
 
 - Otto now uses a retro-terminal companion design with clear idle, working, input, ready, and blocked states.
