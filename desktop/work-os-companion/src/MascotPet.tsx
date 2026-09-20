@@ -18,8 +18,8 @@ export interface MascotPetProps {
 /** Full-size, behavior-aware mascot renderer.
  *
  * Unlike MascotMark, this component is allowed to express product state and
- * motion. The current Pet renderer is still Otto; replacing it later should be
- * a mascot.ts change rather than a surface-by-surface rewrite.
+ * motion. The current renderer is Signal Spirit; the eventual Rive version
+ * keeps this same contract so mascot.ts remains the only renderer switch.
  */
 export function MascotPet({
   agent = "idle",
