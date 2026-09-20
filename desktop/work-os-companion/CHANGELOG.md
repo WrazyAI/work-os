@@ -23,6 +23,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The companion now opens with a cleaner collapsed sidebar that expands when you need workspace names, chat history, and navigation labels.
+- The same sidebar now appears in the design previews, with clearer active states, session status, chat search, and workspace actions.
+
 ## 0.3.37
 
 - The Today view now separates readiness, active time, observed activity, and task flow into a clearer workday command center.

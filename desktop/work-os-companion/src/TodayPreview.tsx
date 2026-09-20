@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Gauge, LayoutDashboard, ListChecks, MessageSquareText, RefreshCw, Settings, ShieldCheck } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import { shiftPulse } from "./shiftPulse";
 import type { TaskRow } from "./taskWorkspace";
-import wordmark from "./assets/work-os-mark.png";
+import SidebarNav from "./SidebarNav";
+import { SIDEBAR_PREVIEW_CHATS } from "./sidebarPreviewData";
 
 const initialTasks: TaskRow[] = [
   { id: "today-1", title: "Finalize the active workday experience", description: "Ship the KPI strip and the top-task cards for the pre-shift dashboard.", priority: "high", due_date: "2026-08-25", completed: false, subtask_total: 4, subtask_completed: 2 },
@@ -24,7 +25,8 @@ const otherTasks: TaskRow[] = [
 ];
 
 function PreviewRail({ onShift = true }: { onShift?: boolean }) {
-  return <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav aria-label="Work OS"><div className="nav-group nav-core"><button className="active"><LayoutDashboard size={18} /><span>Today</span></button><button><ListChecks size={18} /><span>Tasks</span></button><button><MessageSquareText size={18} /><span>Review</span></button></div><div className="nav-group nav-context"><button><Gauge size={18} /><span>Insights</span></button><button><ShieldCheck size={18} /><span>Evidence</span></button></div><div className="nav-group nav-settings"><button><Settings size={18} /><span>Settings</span></button></div></nav><div className="rail-foot"><span className={`presence ${onShift ? "live" : ""}`} /><div><strong>{onShift ? "On shift" : "Off shift"}</strong><small>Synced</small></div></div></aside>;
+  const expanded = new URLSearchParams(window.location.search).get("sidebar") === "expanded";
+  return <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} onSelectChat={() => undefined} status={{ label: onShift ? "On shift" : "Off shift", detail: "Synced", tone: onShift ? "live" : "idle" }} chats={SIDEBAR_PREVIEW_CHATS} initiallyCollapsed={!expanded} />;
 }
 
 export default function TodayPreview() {

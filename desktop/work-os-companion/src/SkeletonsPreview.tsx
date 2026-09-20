@@ -1,11 +1,11 @@
 import { DashboardSkeleton, InsightsSkeleton, TaskDetailSkeleton, TaskListSkeleton } from "./LoadingUi";
-import { LayoutDashboard, ListChecks, MessageSquareText, Gauge, ShieldCheck, Settings } from "lucide-react";
-import wordmark from "./assets/work-os-mark.png";
+import { ListChecks } from "lucide-react";
+import SidebarNav, { SIDEBAR_PREVIEW_CHATS } from "./SidebarNav";
 
 /** Visual review states for every skeleton in the loading language. */
 export default function SkeletonsPreview() {
   return <div className="workspace preview-workspace">
-    <aside className="rail"><div className="wordmark"><img src={wordmark} alt="" /><span>WORK <b>OS</b></span></div><nav aria-label="Work OS"><div className="nav-group nav-core">{[[LayoutDashboard, "My day"], [ListChecks, "Tasks"], [MessageSquareText, "Review"]].map(([Icon, label]) => <button key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-context">{[[Gauge, "Insights"], [ShieldCheck, "Evidence"]].map(([Icon, label]) => <button key={String(label)}><Icon size={18} /><span>{String(label)}</span></button>)}</div><div className="nav-group nav-settings"><button><Settings size={18} /><span>Settings</span></button></div></nav><div className="rail-foot"><span className="presence" /><div><strong>Loading</strong><small>Syncing</small></div></div></aside>
+    <SidebarNav activeView="day" onNavigate={() => undefined} onNewChat={() => undefined} onSelectChat={() => undefined} status={{ label: "Loading", detail: "Syncing", tone: "loading" }} chats={SIDEBAR_PREVIEW_CHATS} initiallyCollapsed={new URLSearchParams(window.location.search).get("sidebar") !== "expanded"} />
     <section className="stage">
       <main className="page"><div className="card-title"><span><ListChecks size={17} /> Dashboard skeleton</span></div></main>
       <DashboardSkeleton />

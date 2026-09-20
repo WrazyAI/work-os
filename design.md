@@ -181,9 +181,12 @@ change in place. Use negative tracking only for display/page statements.
 
 ### 4.1 Desktop shell
 
-The companion uses a permanent 68–80px icon rail so content never shifts when
-the rail collapses. The web shell may use a 208px labeled rail at wide widths,
-but both surfaces use the same content axis and destination order.
+The companion opens with a collapsed 68px icon rail so the task stage gets the
+room it needs. The employee can expand it to the 208px labeled reference rail
+without leaving the shell; the workspace grid moves with the rail instead of
+letting navigation cover the stage. The web shell may use the same 208px labeled
+rail at wide widths, and both surfaces use the same content axis and destination
+order.
 
 At wide desktop:
 
@@ -197,7 +200,7 @@ At wide desktop:
 Reference geometry:
 
 - Wide web rail: 208px.
-- Companion rail: 68–80px.
+- Companion rail: 68px collapsed, 208px expanded.
 - Stage padding: 24–64px, responsive.
 - Masthead: 78–104px depending on shell.
 - Content maximum: 1200–1320px.
@@ -215,9 +218,11 @@ and a visible focus ring. A narrow marker is allowed only for the primary
 navigation rail itself; it is not allowed beside content rows, task rows, cards,
 or selected records.
 
-Icon-only destinations require an accessible name and tooltip. Settings and
-connection/session status live in a quiet footer separated by a rule; they are
-not dark inset cards.
+Icon-only destinations require an accessible name and tooltip. The companion
+also owns a workspace identity control, New chat, and a chat-history affordance;
+production chat rows must be backed by real conversation history rather than
+invented threads or workspace actions. Settings and connection/session status
+live in a quiet footer separated by a rule; they are not dark inset cards.
 
 ## 5. Dashboard blueprint
 

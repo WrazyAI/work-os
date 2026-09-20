@@ -63,13 +63,14 @@ import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, Met
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
+import SidebarNav, { type SidebarChat, type SidebarStatus, type SidebarView } from "./SidebarNav";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
 type AssetSource = string | { src: string };
 const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
 
-type View = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
+type View = SidebarView;
 type TaskView = "today" | "unfinished" | "completed" | "all";
 type EodScreenshotContext = { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] };
 
@@ -1463,6 +1464,13 @@ export default function App() {
   const composerConversationScope = visibleSession?.organizationId && visibleDay?.access?.personId && visibleDay.shiftDate
     ? `workday:${visibleSession.organizationId}:${visibleDay.access.personId}:${visibleDay.shiftDate}`
     : null;
+  const sidebarChats = useMemo<SidebarChat[]>(() => {
+    if (!composerHistory.length) return [];
+    const firstUserTurn = composerHistory.find((turn) => turn.role === "user");
+    const source = firstUserTurn?.text.trim().replace(/\s+/g, " ") || "Current workday chat";
+    const label = source.length > 42 ? `${source.slice(0, 41).trimEnd()}…` : source;
+    return [{ id: composerConversationScope ?? "current-workday", label, active: progressComposerOpen }];
+  }, [composerConversationScope, composerHistory, progressComposerOpen]);
   useEffect(() => {
     let cancelled = false;
     composerConversationSignature.current = "";
@@ -2619,12 +2627,40 @@ export default function App() {
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
+  const sidebarStatus: SidebarStatus = {
+    label: observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift",
+    detail: queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline",
+    tone: observedOnly ? paused ? "paused" : "observed" : active ? paused ? "paused" : "live" : navigator.onLine ? "idle" : "offline",
+  };
+  const startNewChat = () => {
+    clearComposerChat();
+    setView("day");
+    setInput("");
+    setProgressPanel("update");
+    setProgressComposerOpen(true);
+    setPendingProgressUpdate("");
+    setProgressReceipt(null);
+    setInterpretation(null);
+    setAiUnavailable(null);
+    setComposerThinking(null);
+  };
+  const openSidebarChat = () => {
+    setView("day");
+    setProgressPanel("update");
+    setProgressComposerOpen(true);
+  };
   return <div className="workspace">
-    <aside className="rail">
-      <div className="wordmark"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
-      <nav aria-label="Work OS"><div className="nav-group nav-core">{views.slice(0, 3).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span>{id === "review" && !!visibleDay?.proposals.length && <em>{visibleDay.proposals.length}</em>}</button>)}</div><div className="nav-group nav-context">{views.slice(3, 5).filter(({ id }) => id !== "evidence" || FEATURES.evidence).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div><div className="nav-group nav-settings">{views.slice(5).map(({ id, label, icon: Icon }) => <button key={id} data-label={label} aria-label={label} title={label} aria-current={view === id ? "page" : undefined} className={`nav-${id} ${view === id ? "active" : ""}`} onClick={() => setView(id)}><Icon size={18} /><span>{label}</span></button>)}</div></nav>
-      <div className="rail-foot"><span className={`presence ${sessionActive && !paused ? "live" : gate.worktivitySynced ? "observed" : ""}`} /> <div><strong>{observedOnly ? paused ? "Observed break" : "Activity synced" : active ? paused ? "Paused" : "On shift" : "Off shift"}</strong><small>{queueCount ? `${queueCount} queued` : gate.worktivitySynced ? "Worktivity connected" : navigator.onLine ? "Synced" : "Offline"}</small></div></div>
-    </aside>
+    <SidebarNav
+      activeView={view}
+      onNavigate={(nextView) => setView(nextView)}
+      onNewChat={startNewChat}
+      onSelectChat={openSidebarChat}
+      onSignOut={() => { void logout(); }}
+      reviewCount={visibleDay?.proposals.length ?? 0}
+      evidenceEnabled={FEATURES.evidence}
+      status={sidebarStatus}
+      chats={sidebarChats}
+    />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
         days={outstandingQuery.data?.days ?? []}

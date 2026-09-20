@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+const sidebar = readFileSync(resolve(root, "src/SidebarNav.tsx"), "utf8");
+const sidebarStyles = readFileSync(resolve(root, "src/sidebar.css"), "utf8");
 const avatarApp = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
 const chatPreview = readFileSync(resolve(root, "src/ChatPreview.tsx"), "utf8");
 const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8");
@@ -59,9 +61,14 @@ describe("operational visualizations", () => {
   });
 
   it("keeps the application hierarchy and sidebar footer intentional", () => {
-    expect(app).toContain("nav-group nav-core");
-    expect(app).toContain("nav-group nav-context");
-    expect(app).toContain("nav-group nav-settings");
+    expect(sidebar).toContain("nav-group nav-core");
+    expect(sidebar).toContain("nav-group nav-context");
+    expect(sidebar).toContain("nav-group nav-settings");
+    expect(sidebar).toContain("initiallyCollapsed = true");
+    expect(sidebar).toContain('data-sidebar-collapsed={collapsed ? "true" : "false"}');
+    expect(sidebarStyles).toContain("--sidebar-collapsed-width: 68px");
+    expect(sidebarStyles).toContain("--sidebar-expanded-width: 208px");
+    expect(sidebarStyles).toContain(":has(> .sidebar-nav[data-sidebar-collapsed=\"false\"])");
     expect(app).toContain('className="tasks-heading-row"');
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");

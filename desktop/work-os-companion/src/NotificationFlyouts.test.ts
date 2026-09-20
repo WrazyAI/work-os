@@ -59,10 +59,11 @@ describe("application notification flyouts", () => {
   });
 
   it("keeps compact rail navigation named when its text labels are visually hidden", () => {
-    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
-    expect(app).toContain("aria-label={label}");
-    expect(app).toContain('aria-current={view === id ? "page" : undefined}');
-    expect(app).toContain("title={label}");
+    const sidebar = readFileSync(new URL("./SidebarNav.tsx", import.meta.url), "utf8");
+    expect(sidebar).toContain("aria-label={label}");
+    expect(sidebar).toContain('aria-current={active ? "page" : undefined}');
+    expect(sidebar).toContain("title={label}");
+    expect(sidebar).toContain('aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}');
   });
 
   it("renders download progress as an accessible bar without a dismiss while locked", () => {
