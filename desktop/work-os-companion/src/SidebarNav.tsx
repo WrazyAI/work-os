@@ -202,7 +202,7 @@ function WorkspaceMenu({
       document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [anchor, onClose]);
 
   return createPortal(
     <div
