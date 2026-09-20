@@ -30,6 +30,7 @@ import "./sidebar.css";
 import "./task-design-gallery.css";
 import "./loading.css";
 import "./otto.css";
+import "./signal-spirit.css";
 import "./work-os-chat.css";
 import "./chat/chat.css";
 import "./avatar.css";
