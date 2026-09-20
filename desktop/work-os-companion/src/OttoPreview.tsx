@@ -10,6 +10,7 @@ const CORE_STATES: MascotAgentActivity[] = ["idle", "working", "needs-input", "r
 const WORKDAY_STATES: MascotWorkdayState[] = ["disconnected", "off-shift", "active", "paused", "late", "check-in-due", "eod-due"];
 const SIZES = [16, 24, 36, 64] as const;
 
+/** Converts state ids into the readable labels shown in the lab controls. */
 const titleCase = (value: string) => value.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 
 /** Mascot Lab: behavior, transitions, scaling, dark/light contrast, and the
@@ -22,6 +23,7 @@ export default function OttoPreview() {
   const [reducedMotion, setReducedMotion] = useState(false);
   const timers = useRef<number[]>([]);
 
+  /** Cancels any in-flight state sequence before a new preview starts. */
   const clearSequence = () => {
     timers.current.forEach((timer) => window.clearTimeout(timer));
     timers.current = [];
@@ -32,10 +34,12 @@ export default function OttoPreview() {
     timers.current = [];
   }, []);
 
+  /** Queues one lifecycle transition while keeping timers under one cleanup path. */
   const schedule = (delay: number, next: MascotAgentActivity) => {
     timers.current.push(window.setTimeout(() => setAgent(next), delay));
   };
 
+  /** Replays a normal working-to-attention-to-ready notification journey. */
   const runNotificationSequence = () => {
     clearSequence();
     setAgent("working");
@@ -44,6 +48,7 @@ export default function OttoPreview() {
     schedule(3_000, "idle");
   };
 
+  /** Stops work at the needs-input state to test an interruptible transition. */
   const runInterruptionSequence = () => {
     clearSequence();
     setAgent("working");

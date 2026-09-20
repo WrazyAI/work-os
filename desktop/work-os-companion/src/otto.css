@@ -99,7 +99,7 @@
 }
 
 /* The floating orb sits on a dark face — brighten the red there. */
-.avatar-pet .otto[data-tone="late"] {
+.mascot-pet .otto[data-tone="late"] {
   --otto-signal: #e2604f;
 }
 
@@ -111,7 +111,7 @@
   stroke-linejoin: round;
 }
 
-.avatar-pet .otto[data-tone="late"] .otto-late-mark {
+.mascot-pet .otto[data-tone="late"] .otto-late-mark {
   stroke: #e2604f;
 }
 
@@ -491,7 +491,7 @@
 
 .mascot-lab-live {
   display: grid;
-  min-height: 230px;
+  min-height: 280px;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -517,8 +517,8 @@
 }
 
 .mascot-lab-live.scale-2 .mascot-pet-art {
-  width: 200px;
-  height: 200px;
+  width: 240px;
+  height: 240px;
 }
 
 .mascot-lab-state-grid {

@@ -995,8 +995,10 @@ export default function AvatarApp(): React.ReactElement {
     const timer = window.setTimeout(() => setReadyPulse(false), 1_450);
     return () => window.clearTimeout(timer);
   }, [lastEntry?.id, lastEntry?.receipt]);
+  // A recorded receipt is the one transient celebration: show it while the
+  // day refresh settles, then return to active work or queued attention.
   const agentActivity: MascotAgentActivity =
-    thinking || filing ? "working" : attentionDue ? "needs-input" : readyPulse ? "ready" : "idle";
+    readyPulse ? "ready" : thinking || filing ? "working" : attentionDue ? "needs-input" : "idle";
   const workdayState: MascotWorkdayState =
     !facts.loaded ? "disconnected"
       : !onShift ? "off-shift"
