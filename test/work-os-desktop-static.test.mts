@@ -391,7 +391,7 @@ assert.match(planItemsModule, /item_kind: "outcome"/);
 
 // ── Late-start reason: the mascot state layer owns the late tone ──
 const otto = read("src/Otto.tsx");
-assert.match(otto, /export type OttoTone = "signal" \| "late";/);
+assert.match(otto, /export type OttoTone = MascotTone;/);
 assert.match(otto, /data-tone=\{tone\}/);
 assert.match(otto, /late start needs a reason/);
 assert.match(otto, /className="otto-late-mark"/);

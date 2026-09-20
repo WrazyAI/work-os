@@ -8,7 +8,7 @@ export function MascotMark({ pose = MASCOT.chatPose, tone = "signal", crop = MAS
   const Mark = MASCOT.Mark;
   return (
     <span className={cx("chat-mascot-mark", className)} aria-hidden="true">
-      <Mark pose={pose} tone={tone} crop={crop} className="chat-mascot-art" />
+      <Mark pose={pose} tone={tone} crop={crop} className="chat-mascot-art" ariaLabel={`${MASCOT.name}, ${MASCOT.role}`} />
     </span>
   );
 }

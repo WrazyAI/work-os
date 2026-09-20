@@ -10,9 +10,9 @@ const OTTO_VIEWBOX: Record<OttoCrop, string> = { full: "0 0 96 96", head: "20 12
  * The SVG is intentionally small so the silhouette survives favicon sizes.
  * `tone="late"` is the one documented palette exception: the signal accents
  * render danger red until a late-start reason is recorded (design.md §8). */
-export function Otto({ pose = "idle", tone = "signal", crop = "full", className = "", style }: MascotRendererProps) {
+export function Otto({ pose = "idle", tone = "signal", crop = "full", className = "", style, ariaLabel }: MascotRendererProps) {
   const full = crop === "full";
-  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} data-tone={tone} data-crop={crop} style={style} viewBox={OTTO_VIEWBOX[crop]} role="img" aria-label={`Otto, the Work OS companion, ${tone === "late" ? "late start needs a reason" : pose}`}>
+  return <svg className={`otto${className ? ` ${className}` : ""}`} data-pose={pose} data-tone={tone} data-crop={crop} style={style} viewBox={OTTO_VIEWBOX[crop]} role="img" aria-label={ariaLabel ?? `Work OS mascot, ${tone === "late" ? "late start needs a reason" : pose}`}>
     {full && <ellipse className="otto-shadow" cx="48" cy="87" rx="23" ry="4.5" />}
     <g className="otto-figure">
       <path className="otto-antenna" d="M48 31V20" />

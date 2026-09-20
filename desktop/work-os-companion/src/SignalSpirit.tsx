@@ -19,6 +19,7 @@ export function SignalSpirit({
   crop = "full",
   className = "",
   style,
+  ariaLabel,
 }: MascotRendererProps) {
   const uid = useId().replace(/:/g, "");
   const bodyGradient = `spirit-body-${uid}`;
@@ -37,7 +38,7 @@ export function SignalSpirit({
       style={style}
       viewBox={VIEWBOX[crop]}
       role="img"
-      aria-label={`Otto, the Work OS Signal Spirit, ${tone === "late" ? "late start needs a reason" : pose}`}
+      aria-label={ariaLabel ?? `Signal Spirit, ${tone === "late" ? "late start needs a reason" : pose}`}
     >
       <defs>
         <radialGradient id={bodyGradient} cx="38%" cy="22%" r="78%">

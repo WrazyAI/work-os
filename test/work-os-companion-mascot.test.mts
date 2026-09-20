@@ -26,6 +26,7 @@ assert.match(mascot, /companion: "\/signal-spirit\.svg"/);
 const mascotMark = read("chat/MascotMark.tsx");
 assert.match(mascotMark, /import \{ MASCOT,/);
 assert.match(mascotMark, /const Mark = MASCOT\.Mark;/);
+assert.match(mascotMark, /ariaLabel=\{`\$\{MASCOT\.name\}/);
 assert.doesNotMatch(mascotMark, /from "\.\.\/Otto"/);
 assert.match(mascotMark, /crop = MASCOT\.chatCrop/);
 assert.match(mascotMark, /tone = "signal"/);
@@ -33,6 +34,7 @@ assert.match(mascotMark, /tone = "signal"/);
 const mascotPet = read("MascotPet.tsx");
 assert.match(mascotPet, /const visual = deriveMascotVisualState/);
 assert.match(mascotPet, /const Pet = MASCOT\.Pet;/);
+assert.match(mascotPet, /ariaLabel=\{`\$\{MASCOT\.name\}/);
 assert.match(mascotPet, /data-activity=\{visual\.activity\}/);
 assert.doesNotMatch(mascotPet, /from "\.\/Otto"/);
 assert.doesNotMatch(mascotPet, /from "\.\/SignalSpirit"/);
@@ -69,10 +71,13 @@ assert.doesNotMatch(thinking, /Sparkles/, "thinking traces represent the agent a
 
 const app = read("App.tsx");
 assert.match(app, /import \{ MascotPet \} from "\.\/MascotPet"/);
-assert.match(app, /<MascotMark pose=\{MASCOT\.idlePose\} \/>/);
 assert.match(app, /<MascotPet/);
 assert.doesNotMatch(app, /from "\.\/Otto"/);
 assert.doesNotMatch(app, /<Otto\b/);
+
+const lab = read("OttoPreview.tsx");
+assert.match(lab, /MASCOT\.Mark pose=\{MASCOT\.idlePose\}/);
+assert.doesNotMatch(lab, /<Otto pose="idle" style=\{\{ width: size/);
 
 const avatar = read("AvatarApp.tsx");
 assert.match(avatar, /import \{ MascotPet \} from "\.\/MascotPet"/);

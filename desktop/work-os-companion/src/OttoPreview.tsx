@@ -97,7 +97,7 @@ export default function OttoPreview() {
 
         <section className="panel otto-preview-panel">
           <div className="card-title"><span>Mark sizes</span><small>Signal Spirit identity readability</small></div>
-          <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><Otto pose="idle" style={{ width: size, height: size }} /><small>{size}px</small></div>)}</div>
+          <div className="otto-preview-sizes">{SIZES.map((size) => <div className="otto-preview-cell" key={size}><MASCOT.Mark pose={MASCOT.idlePose} tone="signal" crop={MASCOT.chatCrop} style={{ width: size, height: size }} ariaLabel={`${MASCOT.name} mark`} /><small>{size}px</small></div>)}</div>
         </section>
 
         <section className="panel otto-preview-panel">

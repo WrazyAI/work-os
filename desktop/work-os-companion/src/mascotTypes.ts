@@ -12,6 +12,7 @@ export interface MascotRendererProps {
   crop?: MascotCrop;
   className?: string;
   style?: CSSProperties;
+  ariaLabel?: string;
 }
 
 export type MascotRenderer = ComponentType<MascotRendererProps>;

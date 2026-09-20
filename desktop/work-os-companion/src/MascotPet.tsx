@@ -61,6 +61,7 @@ export function MascotPet({
         crop="full"
         className={cx("mascot-pet-art", artClassName)}
         style={style}
+        ariaLabel={`${MASCOT.name}, ${MASCOT.role}, ${visual.label}`}
       />
     </span>
   );
