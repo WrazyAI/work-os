@@ -4,23 +4,24 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-const sidebar = readFileSync(resolve(root, "src/SidebarNav.tsx"), "utf8");
-const sidebarStyles = readFileSync(resolve(root, "src/sidebar.css"), "utf8");
-const avatarApp = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
-const chatPreview = readFileSync(resolve(root, "src/ChatPreview.tsx"), "utf8");
-const taskSurfaces = readFileSync(resolve(root, "src/taskSurfaces.tsx"), "utf8");
-const styles = readFileSync(resolve(root, "src/styles.css"), "utf8");
-const workspaceStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
-const insightStyles = readFileSync(resolve(root, "src/plan-insights.css"), "utf8");
-const insightChartStyles = readFileSync(resolve(root, "src/insight-charts.css"), "utf8");
-const insightCharts = readFileSync(resolve(root, "src/InsightCharts.tsx"), "utf8");
-const insightMath = readFileSync(resolve(root, "src/insights.ts"), "utf8");
-const planningSession = readFileSync(resolve(root, "src/PlanningSession.tsx"), "utf8");
-const memoryPanel = readFileSync(resolve(root, "src/MemorySettings.tsx"), "utf8");
-const profileSettings = readFileSync(resolve(root, "src/ProfileSettings.tsx"), "utf8");
-const memoryStyles = readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8");
-const listShift = readFileSync(resolve(root, "src/listShift.ts"), "utf8");
+const readText = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+const app = readText(resolve(root, "src/App.tsx"));
+const sidebar = readText(resolve(root, "src/SidebarNav.tsx"));
+const sidebarStyles = readText(resolve(root, "src/sidebar.css"));
+const avatarApp = readText(resolve(root, "src/AvatarApp.tsx"));
+const chatPreview = readText(resolve(root, "src/ChatPreview.tsx"));
+const taskSurfaces = readText(resolve(root, "src/taskSurfaces.tsx"));
+const styles = readText(resolve(root, "src/styles.css"));
+const workspaceStyles = readText(resolve(root, "src/workspace-redesign.css"));
+const insightStyles = readText(resolve(root, "src/plan-insights.css"));
+const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
+const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
+const insightMath = readText(resolve(root, "src/insights.ts"));
+const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
+const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
+const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
+const memoryStyles = readText(resolve(root, "src/workspace-redesign.css"));
+const listShift = readText(resolve(root, "src/listShift.ts"));
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
