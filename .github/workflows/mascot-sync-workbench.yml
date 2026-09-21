@@ -23,6 +23,7 @@ jobs:
           python3 mascot-sync-workbench/tools/apply.py /tmp/otto-product
           python3 mascot-sync-workbench/tools/finish.py /tmp/otto-product
           python3 mascot-sync-workbench/tools/polish.py /tmp/otto-product
+          python3 mascot-sync-workbench/tools/finalize.py /tmp/otto-product
           cd /tmp/otto-product
           git diff --check
       - name: Companion tests and production build
@@ -35,8 +36,8 @@ jobs:
           T=$?
           npm run build > /tmp/companion-build.log 2>&1
           B=$?
-          tail -20 /tmp/companion-tests.log
-          tail -25 /tmp/companion-build.log
+          tail -12 /tmp/companion-tests.log
+          tail -20 /tmp/companion-build.log
           test "$T" = 0 && test "$B" = 0
       - name: Root quality gates
         id: root
