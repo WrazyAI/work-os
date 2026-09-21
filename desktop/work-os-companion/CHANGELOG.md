@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Chat threads now fade smoothly into the header and composer while staying in one bounded surface.
+- Floating companion Chat and Tasks now share one compact header row.
+
 ## 0.3.47
 
 - Collapsed sidebar labels now stay readable above dashboard cards when you hover a navigation icon.
@@ -35,6 +38,8 @@ they change what the employee sees or does.
 - The scenario debugger can now exercise every mascot state, reduced motion, and recovery sequences.
 - Mascot previews reset with scenario mode and never write real receipts.
 - The active workday summary now keeps Review unfinished work in a clear, padded footer.
+
+- Settings now uses larger category headings and removes the extra descriptions between the page title and controls.
 
 ## 0.3.45
 

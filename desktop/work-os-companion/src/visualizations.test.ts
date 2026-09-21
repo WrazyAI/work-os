@@ -325,7 +325,16 @@ describe("operational visualizations", () => {
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
     expect(app).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
+    expect(app).not.toContain('eyebrow="Workspace control"');
+    expect(app).not.toContain("Your identity and personal Work OS preferences.");
+    expect(app).not.toContain("How the companion starts and updates itself.");
+    expect(app).not.toContain("Check-ins and what the workspace may surface.");
+    expect(app).not.toContain("Local queue state and the account this companion is signed in to.");
+    expect(app).not.toContain("Prove what the companion did, or reproduce a state on purpose.");
+    expect(app).not.toContain("Changes your local setup. Manager-owned setup and consent history stay intact.");
     expect(styles).toContain(".settings-group-head");
+    expect(styles).toMatch(/\.settings-group-head h3 \{[\s\S]*?font: 700 16px\/1\.2/);
+    expect(styles).toContain("color: var(--ink);");
     // Settings rows are flat, hairline-separated entries on the page — never
     // per-row white cards (and never a second card around them).
     expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 74px;/);

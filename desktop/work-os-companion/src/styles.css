@@ -1722,15 +1722,9 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .settings-group-head h3 {
   margin: 0;
-  font-size: 11px;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.settings-group-head small {
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--ink);
+  font: 700 16px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.02em;
 }
 .settings-panel {
   display: grid;

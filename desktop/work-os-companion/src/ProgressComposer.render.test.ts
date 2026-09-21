@@ -89,6 +89,11 @@ describe("ProgressComposer simplified chrome", () => {
     expect(markup).not.toContain("chat-mascot-mark");
   });
 
+  it("keeps the thread and composer in the shared bounded edge frame", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base }));
+    expect(markup).toContain('class="conversation-scroll-region"');
+  });
+
   it("renders a compact launcher instead of mounting the full composer when closed", () => {
     const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, open: false }));
     expect(markup).toContain("data-conversation-launcher");

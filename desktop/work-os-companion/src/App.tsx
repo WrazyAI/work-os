@@ -2906,15 +2906,15 @@ export default function App() {
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
        {view === "settings" && (
         <main className="page">
-          <PageIntro eyebrow="Workspace control" title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
-          <section className="settings-group" aria-labelledby="settings-profile-title">
-            <header className="settings-group-head"><h3 id="settings-profile-title">Profile settings</h3><small>Your identity and personal Work OS preferences.</small></header>
+           <PageIntro title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
+           <section className="settings-group" aria-labelledby="settings-profile-title">
+             <header className="settings-group-head"><h3 id="settings-profile-title">Profile settings</h3></header>
             <section className="settings-panel">
               <Setting title="Workspace settings" detail="Update your name, photo, workday preferences, notifications, privacy exclusions, and work profile."><button type="button" className="quiet-action" onClick={() => setProfileOpen(true)}>Open profile settings <ChevronRight size={14} /></button></Setting>
             </section>
-          </section>
-          <section className="settings-group" aria-labelledby="settings-device-title">
-            <header className="settings-group-head"><h3 id="settings-device-title">This device</h3><small>How the companion starts and updates itself.</small></header>
+           </section>
+           <section className="settings-group" aria-labelledby="settings-device-title">
+             <header className="settings-group-head"><h3 id="settings-device-title">This device</h3></header>
             <section className="settings-panel">
               <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
               <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
@@ -2930,34 +2930,34 @@ export default function App() {
                 </span>
               </Setting>
             </section>
-          </section>
+           </section>
 
-          <section className="settings-group" aria-labelledby="settings-workday-title">
-            <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3><small>Check-ins and what the workspace may surface.</small></header>
+           <section className="settings-group" aria-labelledby="settings-workday-title">
+             <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3></header>
             <section className="settings-panel">
               <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-chip">Avatar</span></Setting>
               <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-chip">Hidden</span></Setting>
             </section>
-          </section>
+           </section>
 
-          <section className="settings-group" aria-labelledby="settings-sync-title">
-            <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3><small>Local queue state and the account this companion is signed in to.</small></header>
+           <section className="settings-group" aria-labelledby="settings-sync-title">
+             <header className="settings-group-head"><h3 id="settings-sync-title">Sync &amp; session</h3></header>
             <section className="settings-panel">
               <Setting title="Offline queue" detail={queueAttentionCount ? `${queueAttentionCount} update${queueAttentionCount === 1 ? "" : "s"} need attention` : queueCount ? `${queueCount} updates waiting to sync` : "Everything is synced"}><span className={`status-chip${queueAttentionCount ? " attention" : ""}`}>{queueAttentionCount ? "Needs attention" : "Ready"}</span></Setting>
               <Setting title="Account session" detail={`Signed in through ${visibleSession.apiBase}`}><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void logout()}><LogOut size={15} /> Sign out</button></Setting>
             </section>
-          </section>
+           </section>
 
-          <section className="settings-group" aria-labelledby="settings-diagnostics-title">
-            <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3><small>Prove what the companion did, or reproduce a state on purpose.</small></header>
+           <section className="settings-group" aria-labelledby="settings-diagnostics-title">
+             <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3></header>
             <section className="settings-panel">
               <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
               <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
             </section>
-          </section>
+           </section>
 
-          <section className="settings-group danger" aria-labelledby="settings-danger-title">
-            <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3><small>Changes your local setup. Manager-owned setup and consent history stay intact.</small></header>
+           <section className="settings-group danger" aria-labelledby="settings-danger-title">
+             <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3></header>
             <section className="settings-panel">
               <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
             </section>
@@ -3016,7 +3016,7 @@ export default function App() {
 }
 
 function Empty({ title, body }: { title: string; body: string }) { return <div className="empty"><Sparkles size={20} /><strong>{title}</strong><p>{body}</p></div>; }
-function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) { return <header className="page-intro"><span>{eyebrow}</span><h2>{title}</h2><p>{body}</p></header>; }
+function PageIntro({ eyebrow, title, body }: { eyebrow?: string; title: string; body: string }) { return <header className="page-intro">{eyebrow ? <span>{eyebrow}</span> : null}<h2>{title}</h2><p>{body}</p></header>; }
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
 function moveDate(date: string, amount: number) {
   return shiftWorkOsDate(date, amount);
@@ -3356,7 +3356,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
     <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><span className="conversation-pane-title">{MASCOT.name}</span><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Agenda" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><Plus size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
-      {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
+       {panel === "goal" ? <div className="goal-composer-panel"><div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goal} onChange={(event) => onGoal(event.target.value)} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>{!goal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button onClick={onAcceptSuggestion}>Use suggestion</button></div>}</div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
   key={turn.id ?? index}
   turn={{
     ...turn,
@@ -3378,7 +3378,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
        : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
-   : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div>}
+   : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div></div>}
     </section>
     <div className="progress-input-shell">
       <WorkOsPromptBar autoFocus={open && panel === "update"} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update, a blocker, or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" />

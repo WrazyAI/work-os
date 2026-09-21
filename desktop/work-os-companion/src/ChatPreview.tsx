@@ -430,12 +430,21 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
                 <span className="avatar-head-mark avatar-otto-mark" aria-hidden="true"><MascotMark pose="focus" /></span>
                 <div className="avatar-head-copy">
                   <strong title="On shift · September 7">
-                    <span className="avatar-head-name">{MASCOT.name}</span>
-                    <em className="avatar-live-dot is-live" aria-hidden="true" />
                     <span className="avatar-head-shift">On shift · 2h 14m</span>
                   </strong>
                 </div>
               </div>
+            </div>
+            <div className="avatar-nav">
+              <ChatTabs
+                tabs={[
+                  { id: "chat", label: "Chat" },
+                  { id: "tasks", label: "Tasks", count: AVATAR_TASKS.length },
+                ]}
+                active={tab}
+                onSelect={(id) => setTab(id as "chat" | "tasks")}
+                ariaLabel="Companion view"
+              />
             </div>
             <div className="avatar-head-actions">
               <button className="avatar-icon" aria-label="New conversation" title="New conversation">
@@ -449,20 +458,10 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
               </button>
             </div>
           </div>
-          <div className="avatar-nav">
-            <ChatTabs
-              tabs={[
-                { id: "chat", label: "Chat" },
-                { id: "tasks", label: "Tasks", count: AVATAR_TASKS.length },
-              ]}
-              active={tab}
-              onSelect={(id) => setTab(id as "chat" | "tasks")}
-              ariaLabel="Companion view"
-            />
-          </div>
         </header>
-        {tab === "tasks" ? (
-          <div className="avatar-chat">
+         <div className="conversation-scroll-region">
+         {tab === "tasks" ? (
+           <div className="avatar-chat">
             <TaskSelectionCard
               title="Open tasks"
               tasks={AVATAR_TASKS}
@@ -506,8 +505,9 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
               ))}
             </>}
           </div>
-        )}
-        <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
+         )}
+         </div>
+         <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
           <WorkOsPromptBar
             value={input}
             onChange={setInput}

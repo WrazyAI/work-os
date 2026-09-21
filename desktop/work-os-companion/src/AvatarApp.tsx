@@ -984,9 +984,6 @@ export default function AvatarApp(): React.ReactElement {
   const onShift = isOnShift(facts, now);
   const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
   const ringClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
-  // The header dot reports shift state, so a due check-in never turns it red:
-  // the banner, the orb pulse, and the composer carry that instead.
-  const dotClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : "live";
   const shiftLabel = onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift";
   const lastEntry = chat[chat.length - 1];
   const [readyPulse, setReadyPulse] = useState(false);
@@ -1086,8 +1083,8 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
-            <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
+           <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong>Connect Work OS</strong><small>to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+              <div className="conversation-scroll-region"><div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div></div>
           </ConversationSurface>
         )}
       </div>
@@ -1125,13 +1122,22 @@ export default function AvatarApp(): React.ReactElement {
                   <span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={mascotVisual.pose} tone={mascotVisual.tone} /></span>
                   <div className="avatar-head-copy">
                     <strong title={statusText}>
-                      <span className="avatar-head-name">{MASCOT.name}</span>
-                      <em className={`avatar-live-dot is-${dotClass}`} aria-hidden="true" />
                       <span className="avatar-head-shift">{shiftLabel}</span>
                     </strong>
                     <span className="sr-only" aria-live="polite">{statusText}</span>
                   </div>
                 </div>
+              </div>
+              <div className="avatar-nav">
+                <ChatTabs
+                  tabs={[
+                    { id: "chat", label: "Chat" },
+                    { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
+                  ]}
+                  active={avatarTab}
+                  onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
+                  ariaLabel="Companion view"
+                />
               </div>
               <div className="avatar-head-actions">
                 {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }} title="Refresh today's record" aria-label="Refresh today's record">Retry</button>}
@@ -1140,19 +1146,9 @@ export default function AvatarApp(): React.ReactElement {
                 <button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button>
               </div>
             </div>
-            <div className="avatar-nav">
-              <ChatTabs
-                tabs={[
-                  { id: "chat", label: "Chat" },
-                  { id: "tasks", label: "Tasks", count: facts.taskOptions.filter((task) => !task.completed).length },
-                ]}
-                active={avatarTab}
-                onSelect={(id) => setAvatarTab(id as "chat" | "tasks")}
-                ariaLabel="Companion view"
-              />
-            </div>
           </header>
-          <div className="avatar-chat" ref={chatScroll}>
+           <div className="conversation-scroll-region">
+           <div className="avatar-chat" ref={chatScroll}>
             {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
           {avatarTab === "tasks" ? (
             <TaskSelectionCard
@@ -1274,8 +1270,9 @@ export default function AvatarApp(): React.ReactElement {
               />
             )}
           </>)}
-          </div>
-          {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
+           </div>
+           </div>
+           {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
             <WorkOsPromptBar
               sweepSignal={sweepSignal}
               value={input}
