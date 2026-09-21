@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.47
+
+- Collapsed sidebar labels now stay readable above dashboard cards when you hover a navigation icon.
+
 ## 0.3.46
 
 - Studio Otto now appears in the My Day readiness hero and active workday header.

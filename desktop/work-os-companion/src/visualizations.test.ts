@@ -89,6 +89,12 @@ describe("operational visualizations", () => {
     expect(sidebarStyles).toContain(".sidebar-footer");
   });
 
+  it("keeps collapsed rail tooltips above stage cards", () => {
+    expect(sidebarStyles).toMatch(/\.sidebar-nav\[data-sidebar-collapsed=\"true\"\]\s*\{[^}]*z-index:\s*100;/s);
+    expect(sidebarStyles).toContain('.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-row:hover::after');
+    expect(sidebarStyles).toContain('.sidebar-nav[data-sidebar-collapsed="true"] .sidebar-row:focus-visible::after');
+  });
+
   it("uses the logo and non-navigation surface as the collapsed expand affordance", () => {
     expect(sidebar).toContain("data-sidebar-nav-option");
     expect(sidebar).toContain("data-sidebar-surface-hover");

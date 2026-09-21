@@ -43,6 +43,9 @@
 }
 
 .sidebar-nav[data-sidebar-collapsed="true"] {
+  z-index: 100;
+  /* Sticky positioning creates a stacking context. Keep its detached labels
+     above the stage cards instead of letting the cards paint over them. */
   cursor: pointer;
 }
 
