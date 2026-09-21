@@ -23,6 +23,9 @@ change(p, '  const preview = resolveMascotRuntime({ connected: true, sessionStat
   const preview = resolved ?? resolveMascotRuntime({ connected: false }, {}, scenario);''')
 change(p, '<strong>{scenario.enabled ? "Visual simulation" : "Preview inactive"}</strong>', '<strong>{resolved ? scenario.enabled ? "Window-reported simulation" : "Window-reported live state" : "Sample - waiting for window"}</strong>')
 change(p, '<strong>Reported by running windows</strong>', '<strong>Last reported by each window</strong>')
+# Clocked-in fixture requires its plan: do not erase its required prompt.
+change(src/'mascotRuntimeModel.ts', '  clocked_in: "active", paused:', '  clocked_in: "check-in-due", paused:')
+change(root/'test/work-os-desktop-static.test.mts', r'assert.match(avatar, /const mascotVisual = deriveMascotVisualState\(\{ agent: agentActivity, workday: workdayState \}\);/);', r'assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);')
 # Copy the browser regression harness into the product PR, without test-only
 # dependencies in the desktop app. Resolve Playwright externally via NODE_PATH.
 source=Path(__file__).parent/'browser.cjs'
@@ -31,4 +34,4 @@ if source.exists():
  text=source.read_text().replace("require('/tmp/otto-browser/node_modules/playwright')", "require('playwright')")
  text='// Start the companion Vite dev server on 127.0.0.1:5173.\n// Run with Playwright available on NODE_PATH; no live credentials required.\n'+text
  target.write_text(text)
-print('Applied sequence cancellation, live preview and reproducible browser checks.')
+print('Applied sequence cancellation, live preview, clock-in attention and browser checks.')
