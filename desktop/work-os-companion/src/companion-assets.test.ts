@@ -96,6 +96,9 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('fetchDay({ variant: "compact" })');
     expect(avatar).toContain('fetchDay({ variant: "details" })');
     expect(avatar).toContain('"Time unavailable"');
+    expect(avatar).toContain("staleTime: force ? 0 : DAY_STALE_MS");
+    expect(avatar).toContain("recoveredStartValue");
+    expect(avatar).toContain('remaining === "Time unavailable"');
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");
