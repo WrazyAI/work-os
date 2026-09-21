@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare private review thumbnails from existing test screenshots
+      - name: Prepare private review thumbnails
         run: |
           python3 -m pip install --target /tmp/otto-pil pillow --quiet
           PYTHONPATH=/tmp/otto-pil python3 - <<'PY'
@@ -21,15 +21,15 @@ jobs:
           root=Path('mascot-sync-workbench/evidence')
           for name in ['otto-dashboard','otto-active','otto-debugger']:
             image=Image.open(root/(name+'.png')).convert('RGB')
-            image.thumbnail((500,500))
+            image.thumbnail((320,320))
             buffer=io.BytesIO()
-            image.save(buffer,format='JPEG',quality=45,optimize=True)
+            image.save(buffer,format='JPEG',quality=15,optimize=True)
             encoded=base64.b64encode(buffer.getvalue()).decode()
-            (root/(name+'.b64')).write_text(encoded+'\n')
+            (root/(name+'-mini.b64')).write_text(encoded+'\n')
             print(name, image.size, len(encoded))
           PY
           git config user.name 'ChatGPT'
           git config user.email 'chatgpt@users.noreply.github.com'
-          git add mascot-sync-workbench/evidence/*.b64
-          git commit -m 'test: save private screenshot review thumbnails'
+          git add mascot-sync-workbench/evidence/*-mini.b64
+          git commit -m 'test: save transport-sized screenshot evidence'
           git push origin HEAD:refs/heads/codex/mascot-sync-workbench
