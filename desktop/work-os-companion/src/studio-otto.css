@@ -89,7 +89,7 @@
 
 /* Event-driven stop-motion body acting.
  * Otto stays calm at rest; working may loop while real work is in flight and
- * attention/result states play a short 3-5-frame gesture when they arrive. */
+ * attention/result states play a short 3-5-frame gesture when they arrive.\n * Attention repeats only a few times so peripheral motion is noticeable, then stops. */
 .studio-otto .studio-rig,
 .studio-otto .studio-chassis,
 .studio-otto .studio-working-arms,
@@ -118,40 +118,40 @@
 /* A due update should be noticeable in peripheral vision: Otto steps forward,
  * looks up, and gives one deliberate wave instead of only lighting the ring. */
 .studio-otto[data-pose="alert"] .studio-rig {
-  animation: studio-attention-rig 520ms steps(5, end) 1 both;
+  animation: studio-attention-rig 520ms steps(5, end) 3 both;
 }
 .studio-otto[data-pose="alert"] .studio-head {
-  animation: studio-attention-head 520ms steps(5, end) 1 both;
+  animation: studio-attention-head 520ms steps(5, end) 3 both;
 }
 .studio-otto[data-pose="alert"] .studio-arm-right {
-  animation: studio-attention-wave 520ms steps(5, end) 1 both;
+  animation: studio-attention-wave 520ms steps(5, end) 3 both;
 }
 
 /* Confirmed outcomes get a compact whole-body hop. It plays once, never as an
  * ambient celebration loop. */
 .studio-otto[data-pose="celebrate"] .studio-rig {
-  animation: studio-celebrate-rig 520ms steps(5, end) 1 both;
+  animation: studio-celebrate-rig 520ms steps(5, end) 2 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-head {
-  animation: studio-celebrate-head 520ms steps(5, end) 1 both;
+  animation: studio-celebrate-head 520ms steps(5, end) 2 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-left {
-  animation: studio-celebrate-left 520ms steps(5, end) 1 both;
+  animation: studio-celebrate-left 520ms steps(5, end) 2 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-right {
-  animation: studio-celebrate-right 520ms steps(5, end) 1 both;
+  animation: studio-celebrate-right 520ms steps(5, end) 2 both;
 }
 
 /* Failure/blocker: a visible shake and settle, again bounded to one gesture. */
 .studio-otto[data-pose="recover"] .studio-rig {
-  animation: studio-recover-rig 560ms steps(5, end) 1 both;
+  animation: studio-recover-rig 560ms steps(5, end) 2 both;
 }
 .studio-otto[data-pose="recover"] .studio-head {
-  animation: studio-recover-head 560ms steps(5, end) 1 both;
+  animation: studio-recover-head 560ms steps(5, end) 2 both;
 }
 .studio-otto[data-pose="recover"] .studio-arm-left,
 .studio-otto[data-pose="recover"] .studio-arm-right {
-  animation: studio-recover-arms 560ms steps(5, end) 1 both;
+  animation: studio-recover-arms 560ms steps(5, end) 2 both;
 }
 
 @keyframes studio-work-rig {
