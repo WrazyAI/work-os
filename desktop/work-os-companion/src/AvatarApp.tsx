@@ -254,14 +254,33 @@ export default function AvatarApp(): React.ReactElement {
           const detailed = await workOsQueryClient.fetchQuery({
             queryKey: workOsKeys.day("details"),
             queryFn: () => fetchDay({ variant: "details" }),
-            staleTime: DAY_STALE_MS,
+            staleTime: force ? 0 : DAY_STALE_MS,
           }) as unknown as Record<string, any>;
           const detailedSession = (detailed?.session ?? {}) as Record<string, any>;
-          const detailedStart = Date.parse(String(detailed?.shift?.startsAt ?? detailedSession.scheduled_starts_at ?? ""));
-          const detailedEnd = Date.parse(String(detailed?.shift?.endsAt ?? detailedSession.scheduled_ends_at ?? ""));
-          if (Number.isFinite(detailedEnd) && (!Number.isFinite(detailedStart) || detailedEnd > detailedStart)) {
-            day = detailed;
-            session = detailedSession;
+          const detailedStartValue = detailed?.shift?.startsAt ?? detailedSession.scheduled_starts_at ?? null;
+          const detailedEndValue = detailed?.shift?.endsAt ?? detailedSession.scheduled_ends_at ?? null;
+          const detailedStart = Date.parse(String(detailedStartValue ?? ""));
+          const detailedEnd = Date.parse(String(detailedEndValue ?? ""));
+          const recoveredStartValue = Number.isFinite(detailedStart)
+            ? detailedStartValue
+            : day?.shift?.startsAt ?? session.scheduled_starts_at ?? null;
+          const recoveredStart = Date.parse(String(recoveredStartValue ?? ""));
+          if (Number.isFinite(recoveredStart) && Number.isFinite(detailedEnd) && detailedEnd > recoveredStart) {
+            const recoveredSession = {
+              ...detailedSession,
+              scheduled_starts_at: recoveredStartValue,
+              scheduled_ends_at: detailedEndValue,
+            };
+            day = {
+              ...detailed,
+              shift: detailed?.shift
+                ? { ...detailed.shift, startsAt: recoveredStartValue, endsAt: detailedEndValue }
+                : day?.shift
+                  ? { ...day.shift, startsAt: recoveredStartValue, endsAt: detailedEndValue }
+                  : null,
+              session: recoveredSession,
+            };
+            session = recoveredSession;
           }
         } catch {
           // Keep the compact day usable. The timer renders "Time unavailable"
@@ -1125,7 +1144,7 @@ export default function AvatarApp(): React.ReactElement {
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
           title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
-          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${remaining}. ${Math.round(fraction * 100)}% of shift complete.` : `Open ${MASCOT.name} companion`}
+          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${remaining}.${remaining === "Time unavailable" ? "" : ` ${Math.round(fraction * 100)}% of shift complete.`}` : `Open ${MASCOT.name} companion`}
         >
           <svg viewBox="0 0 48 48" className="avatar-ring">
             <circle cx="24" cy="24" r="22" className="ring-track" />
