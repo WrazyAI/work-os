@@ -433,6 +433,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .active-command-panel > .dashboard-panel-footer { margin: 24px -25px 0; }
 .active-summary-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(290px, 0.88fr); gap: 16px; }
 .active-focus-panel, .active-summary-panel { min-width: 0; padding: 22px 23px 0; }
+.active-summary-panel { display: flex; flex-direction: column; }
 .active-focus-panel > p { margin: 17px 0 0; color: var(--dash-muted); font-size: 11px; }
 .active-focus-panel .dashboard-flow-visual { margin-top: 22px; }
 .active-summary-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 25px 0 20px; }
@@ -440,6 +441,8 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .active-summary-facts strong { font-size: 22px; letter-spacing: -0.06em; }
 .active-summary-facts strong.is-danger { color: var(--dash-danger); }
 .active-summary-facts small { color: var(--dash-muted); font-size: 9px; }
+.active-summary-action { width: calc(100% + 46px); min-height: 50px; margin: auto -23px 0; padding: 14px 23px 17px; border-top: 1px solid var(--dash-line); justify-content: flex-start; border-radius: 0 0 15px 15px; }
+.active-summary-action:hover { background: #f7faf5; }
 .active-task-panel { min-width: 0; padding: 22px 23px 0; }
 .active-task-panel-actions { display: flex; align-items: center; gap: 13px; }
 .active-task-tabs { display: flex; gap: 5px; margin: 24px 0 0; border-bottom: 1px solid var(--dash-line); }
@@ -562,6 +565,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   .active-time-grid strong { font-size: 21px; }
   .active-command-panel > .dashboard-panel-footer { margin-inline: -17px; }
   .active-focus-panel, .active-summary-panel, .active-task-panel { padding-inline: 17px; }
+  .active-summary-action { width: calc(100% + 34px); margin-inline: -17px; padding-inline: 17px; }
   .active-task-panel-header { display: grid; }
   .active-task-panel-actions { justify-content: flex-start; }
   .active-task-panel > .dashboard-panel-footer { margin-inline: -17px; }

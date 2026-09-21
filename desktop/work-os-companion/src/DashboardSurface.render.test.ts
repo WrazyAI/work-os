@@ -52,6 +52,7 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Yesterday");
     expect(markup).toContain("Clock out");
     expect(markup).toContain("Make the first task visible");
+    expect(markup).toContain("active-summary-action");
     expect(markup).toContain('aria-label="Completing Make the first task visible"');
     expect(markup).toContain('aria-busy="true"');
 
