@@ -17,6 +17,7 @@ const fs = require('node:fs');
   context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
   const main = await context.newPage(); const debug = await context.newPage();
   const avatar = await context.newPage(); const readiness = await context.newPage();
+  const orb = await context.newPage();
   async function attr(page, selector, name, expected) {
     try { await page.waitForFunction(({ selector, name, expected }) => document.querySelector(selector)?.getAttribute(name) === expected, { selector, name, expected }, { timeout: 12000 }); }
     catch (e) { console.log('ATTR_FAILED', selector, name, expected, await page.locator(selector).first().evaluate(el => el.outerHTML.slice(0,900)).catch(() => 'missing')); throw e; }
@@ -24,6 +25,19 @@ const fs = require('node:fs');
   }
   const pet = '.dashboard-shell .mascot-pet';
   try {
+    await orb.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb&prompt');
+    await orb.locator('.avatar-pet .studio-otto').waitFor();
+    const orbFigure = await orb.locator('.avatar-pet .studio-otto').boundingBox();
+    assert(orbFigure.width >= 116 && orbFigure.height >= 130, JSON.stringify(orbFigure)); checks++;
+    assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m left'); checks++;
+    const orbMotion = await orb.locator('.studio-rig').evaluate(el => {
+      const style = getComputedStyle(el);
+      return { name: style.animationName, timing: style.animationTimingFunction };
+    });
+    assert(orbMotion.name.includes('studio-attention-rig'), JSON.stringify(orbMotion)); checks++;
+    assert(orbMotion.timing.includes('steps(5'), JSON.stringify(orbMotion)); checks++;
+    const ringOffset = Number(await orb.locator('.ring-fill').getAttribute('stroke-dashoffset'));
+    assert(ringOffset > 0 && ringOffset < 138.2, String(ringOffset)); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
     await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
@@ -99,6 +113,8 @@ const fs = require('node:fs');
         assert(dimensions.scroll <= dimensions.width + 1, JSON.stringify(dimensions)); checks++;
       }
     }
+    await orb.setViewportSize({ width: 360, height: 360 });
+    await orb.screenshot({ path: '/tmp/otto-orb.png' });
     await readiness.setViewportSize({ width: 1000, height: 800 });
     await readiness.screenshot({ path: '/tmp/otto-dashboard.png' });
     await main.setViewportSize({ width: 1000, height: 800 });
