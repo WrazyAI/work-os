@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.48
+
 - Chat threads now fade smoothly into the header and composer while staying in one bounded surface.
 - Floating companion Chat and Tasks now share one compact header row.
 
