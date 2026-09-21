@@ -3,6 +3,30 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
+import { migrationTargetLabel, resolveMigrationDbUrl } from "../scripts/resolve-migration-db-url.mjs";
+
+test("db:apply resolves the Neon runtime database before legacy Supabase", () => {
+  const neon = "postgresql://neondb_owner:pw@ep-test-pooler.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require";
+  const unpooled = "postgresql://neondb_owner:pw@ep-test.c-6.eu-central-1.aws.neon.tech/neondb?sslmode=require";
+  const supabase = "postgresql://postgres:pw@db.pooler.supabase.co:6543/postgres";
+  const legacy = {
+    SUPABASE_DB_URL: supabase,
+    SUPABASE_DB_PASSWORD: "pw",
+    NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklm.supabase.co",
+  };
+
+  assert.equal(resolveMigrationDbUrl({ ...legacy, DATABASE_URL: neon }), neon, "Neon beats the legacy Supabase env");
+  assert.equal(resolveMigrationDbUrl({ ...legacy, DATABASE_URL: neon, DATABASE_URL_UNPOOLED: unpooled }), unpooled, "the direct Neon endpoint is preferred for DDL");
+  assert.equal(resolveMigrationDbUrl({ ...legacy, DATABASE_URL: neon, DATABASE_URL_UNPOOLED: unpooled, MIGRATION_DATABASE_URL: supabase }), supabase, "an explicit override wins");
+  assert.equal(resolveMigrationDbUrl(legacy), supabase, "Supabase remains reachable when no runtime URL is present");
+  assert.equal(
+    resolveMigrationDbUrl({ SUPABASE_DB_PASSWORD: "pw", NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklm.supabase.co" }),
+    "postgresql://postgres:pw@db.abcdefghijklm.supabase.co:5432/postgres",
+    "the legacy password fallback still derives the direct host",
+  );
+  assert.equal(resolveMigrationDbUrl({}), null, "no connection means a hard failure, never a silent default");
+  assert.equal(migrationTargetLabel(neon), "ep-test-pooler.c-6.eu-central-1.aws.neon.tech (Neon)");
+});
 
 const migrations = [
   "supabase/migrations/0001_init.sql",

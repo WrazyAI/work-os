@@ -249,7 +249,10 @@ modal (design §19.8).
 ## Supabase operations
 - Keys in `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `..._ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_PASSWORD`). The runner self-loads `.env`/`.env.local`.
-- Apply schema (direct Postgres): `npm run db:apply`
+- Apply schema (direct Postgres): `npm run db:apply`. The runtime Postgres is
+  Neon, so the script resolves `DATABASE_URL_UNPOOLED`/`DATABASE_URL` first and
+  prints the target host; `MIGRATION_DATABASE_URL` deliberately overrides it to
+  reach the legacy Supabase project.
 - On an established database, apply a new additive migration explicitly so
   historical non-replay-safe migrations are not rerun:
   `npm run db:apply -- 0021_example.sql`. The runner validates the filename
