@@ -24,6 +24,7 @@ jobs:
           python3 mascot-sync-workbench/tools/finish.py /tmp/otto-product
           python3 mascot-sync-workbench/tools/polish.py /tmp/otto-product
           python3 mascot-sync-workbench/tools/finalize.py /tmp/otto-product
+          python3 mascot-sync-workbench/tools/quality.py /tmp/otto-product
           cd /tmp/otto-product
           git diff --check
       - name: Companion tests and production build
