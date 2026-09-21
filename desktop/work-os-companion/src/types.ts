@@ -1,3 +1,4 @@
+import type { MascotDebugOverrides } from "./mascotRuntimeModel";
 export type PromptKind = "plan" | "catch_up" | "optional" | "follow_up" | "hourly_fallback" | "eod" | null;
 
 export interface WorkSession {
@@ -282,7 +283,7 @@ export interface OnboardingData {
 export type DebugOnboardingDetail = OnboardingRequirement | "roleAssigned" | "teamAssigned" | "managerAssigned" | "officialScheduleConfigured";
 export type DebugDayState = "real" | "no_shift" | "scheduled" | "shift_start" | "clocked_in" | "paused" | "eod_due" | "catch_up" | "optional" | "final_hour" | "eod" | "clocked_out";
 
-export interface DebugScenario {
+export interface DebugScenario extends MascotDebugOverrides {
   enabled: boolean;
   liveWrites?: boolean;
   syncBypass: boolean;

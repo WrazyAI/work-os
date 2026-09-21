@@ -1,5 +1,6 @@
 # Work OS Companion changelog
 
+
 An employee reads this right after installing an update, so every entry is
 one short, plain bullet: what changed for them, in their words. No jargon,
 no file names, no implementation detail. One bullet per change, one line per
@@ -22,6 +23,14 @@ under `## Unreleased`; when cutting a release, move them under the new
 they change what the employee sees or does.
 
 ## Unreleased
+
+## 0.3.46
+
+- Studio Otto now appears in the My Day readiness hero and active workday header.
+- Dashboard and floating Otto now follow the same activity and workday states.
+- The scenario debugger can now exercise every mascot state, reduced motion, and recovery sequences.
+- Mascot previews reset with scenario mode and never write real receipts.
+- The active workday summary now keeps Review unfinished work in a clear, padded footer.
 
 ## 0.3.45
 

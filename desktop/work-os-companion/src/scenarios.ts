@@ -18,6 +18,10 @@ export const DEFAULT_DEBUG_SCENARIO: DebugScenario = {
   enabled: false,
   syncBypass: false,
   companionForce: null,
+  mascotActivity: null,
+  mascotWorkday: null,
+  mascotMotion: "system",
+  mascotReplay: 0,
   planningState: null,
   authState: "real",
   onboardingState: "real",
@@ -62,6 +66,11 @@ export const DEBUG_PRESETS: Array<{ id: string; label: string; description: stri
   { id: "provider_failure", label: "Provider outage", description: "Nifty sync fails, so degraded provider states are visible.", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], niftyFailure: true } },
   { id: "eod", label: "EOD review", description: "End of day: the EOD review is due.", scenario: { enabled: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "eod" } },
   { id: "offline_playground", label: "Offline playground (no backend)", description: "Fixtures only: never contacts the backend, writes stay here.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", invalidateOnboardingData: false, missingDetails: [], dayState: "clocked_in" } },
+  { id: "mascot_idle", label: "Mascot: Idle", description: "Visual fixture; no backend writes.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", mascotActivity: "idle" } },
+  { id: "mascot_working", label: "Mascot: Working", description: "Visual fixture; no backend writes.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", mascotActivity: "working" } },
+  { id: "mascot_needs-input", label: "Mascot: Needs input", description: "Visual fixture; no backend writes.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", mascotActivity: "needs-input" } },
+  { id: "mascot_ready", label: "Mascot: Completed", description: "Visual fixture; no backend writes.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", mascotActivity: "ready" } },
+  { id: "mascot_blocked", label: "Mascot: Failed", description: "Visual fixture; no backend writes.", scenario: { enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in", mascotActivity: "blocked" } },
 ];
 
 function onboardingFixture(): OnboardingData {

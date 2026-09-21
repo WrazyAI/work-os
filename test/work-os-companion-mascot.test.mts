@@ -32,7 +32,7 @@ assert.match(mascotMark, /crop = MASCOT\.chatCrop/);
 assert.match(mascotMark, /tone = "signal"/);
 
 const mascotPet = read("MascotPet.tsx");
-assert.match(mascotPet, /const visual = deriveMascotVisualState/);
+assert.match(mascotPet, /deriveMascotVisualState/);
 assert.match(mascotPet, /const Pet = MASCOT\.Pet;/);
 assert.match(mascotPet, /ariaLabel=\{`\$\{MASCOT\.name\}/);
 assert.match(mascotPet, /data-activity=\{visual\.activity\}/);
@@ -84,7 +84,7 @@ assert.doesNotMatch(lab, /<Otto pose="idle" style=\{\{ width: size/);
 
 const avatar = read("AvatarApp.tsx");
 assert.match(avatar, /import \{ MascotPet \} from "\.\/MascotPet"/);
-assert.match(avatar, /deriveMascotVisualState/);
+assert.match(avatar, /useMascotRuntime/);
 assert.match(avatar, /agentActivity/);
 assert.match(avatar, /workdayState/);
 assert.doesNotMatch(avatar, /from "\.\/Otto"/);
@@ -105,3 +105,11 @@ for (const [name, source] of Object.entries({
 }
 
 console.log("Mascot guard passed: Studio Otto identity, visual state, mark, and pet stay decoupled.");
+
+const dashboard = read("DashboardSurface.tsx");
+assert.doesNotMatch(dashboard, /from "\.\/Otto"/);
+assert.doesNotMatch(dashboard, /<Otto\b/);
+assert.match(dashboard, /<MascotPet/);
+assert.match(app, /useMascotRuntime/);
+assert.match(read("DebugWindow.tsx"), /<MascotDebugControls/);
+assert.match(read("MascotPet.tsx"), /useMascotRuntimeSnapshot/);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emit, listen } from "@tauri-apps/api/event";
+import { emit, listen } from "./tauriEvents";
+import { MascotDebugControls } from "./MascotDebugControls";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, Bug, Check, Copy, Download, RotateCcw, X } from "lucide-react";
@@ -18,6 +19,8 @@ export default function DebugWindow() {
   const notifications = useNotifications();
   const [tab, setTab] = useState<Tab>("scenarios");
   const [scenario, setScenario] = useState<DebugScenario>(DEFAULT_DEBUG_SCENARIO);
+  const scenarioRef = useRef(scenario);
+  scenarioRef.current = scenario;
   const [events, setEvents] = useState<DiagnosticEvent[]>([]);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(paused);
@@ -34,17 +37,24 @@ export default function DebugWindow() {
   const previewTrace = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-trace");
 
   useEffect(() => {
-    if (!isTauri()) return;
-    let unlistenCurrent: (() => void) | undefined;
-    let unlistenEvents: (() => void) | undefined;
-    void listen<DebugScenario>("work-os://debug-current", (event) => setScenario(event.payload)).then((cleanup) => { unlistenCurrent = cleanup; }).catch(() => undefined);
+    let disposed = false;
+    const cleaners: Array<() => void> = [];
+    const register = (off: () => void) => { if (disposed) off(); else cleaners.push(off); };
+    void listen<DebugScenario>("work-os://debug-current", (event) => {
+      if (disposed || !event.payload || typeof event.payload.enabled !== "boolean") return;
+      const next = { ...DEFAULT_DEBUG_SCENARIO, ...event.payload };
+      scenarioRef.current = next;
+      setScenario(next);
+    }).then((off) => {
+      register(off);
+      if (!disposed) void emit("work-os://debug-request");
+    }).catch(() => undefined);
     void listen<DiagnosticEvent>("work-os://diagnostics", (event) => {
-      if (pausedRef.current) return;
+      if (disposed || pausedRef.current) return;
       setEvents((current) => [...current.slice(-1999), event.payload]);
-    }).then((cleanup) => { unlistenEvents = cleanup; }).catch(() => undefined);
-    void emit("work-os://debug-request").catch(() => undefined);
-    void diagnosticsSnapshot().then(setEvents).catch(() => undefined);
-    return () => { unlistenCurrent?.(); unlistenEvents?.(); };
+    }).then(register).catch(() => undefined);
+    if (isTauri()) void diagnosticsSnapshot().then((value) => { if (!disposed) setEvents(value); }).catch(() => undefined);
+    return () => { disposed = true; cleaners.forEach((off) => off()); };
   }, []);
 
   const visible = useMemo(() => events.filter((event) => {
@@ -86,7 +96,8 @@ export default function DebugWindow() {
   }
 
   function update(patch: Partial<DebugScenario>) {
-    const next = { ...scenario, ...patch };
+    const next = { ...scenarioRef.current, ...patch };
+    scenarioRef.current = next;
     setScenario(next);
     void emit("work-os://debug-scenario", next).catch(() => undefined);
   }
@@ -200,7 +211,7 @@ export default function DebugWindow() {
       </section>
       <section className="debug-group">
         <header className="debug-group-head"><h2>My Day conditions</h2><small>The workday state the app renders</small></header>
-        <label className="debug-field"><span>Shift state</span><select value={scenario.dayState} onChange={(event) => update({ dayState: event.target.value as DebugDayState })}>
+        <label className="debug-field"><span>Shift state</span><select aria-label="Shift state" value={scenario.dayState} onChange={(event) => update({ dayState: event.target.value as DebugDayState })}>
           <option value="real">Use server state</option><option value="no_shift">No shift</option><option value="scheduled">Scheduled — clock-in required</option><option value="shift_start">Shift start</option><option value="clocked_in">Clocked in</option><option value="paused">Paused</option><option value="catch_up">First-hour follow-up</option><option value="optional">Optional hourly check-in</option><option value="final_hour">Final-hour suppression</option><option value="eod_due">EOD due</option><option value="eod">EOD review</option><option value="clocked_out">Clocked out</option>
         </select></label>
         <div className="debug-switches">
@@ -228,6 +239,7 @@ export default function DebugWindow() {
         </select></label>
         <p className="debug-help">Forces the companion machine into a state with its synthetic prompt. Offline beats every force; quiet mode in Settings suppresses notifications for real.</p>
       </section>
+      <MascotDebugControls scenario={scenario} onChange={update} />
       <div className="debug-footer-actions">
         <button type="button" className="debug-copy" onClick={() => void copyScenario()}>{flash === "scenario" ? <Check size={15} /> : <Copy size={15} />} {flash === "scenario" ? "Scenario copied" : "Copy scenario JSON"}</button>
         <button type="button" className="debug-reset" onClick={() => { setConfirmLiveWrites(false); update(DEFAULT_DEBUG_SCENARIO); }}><RotateCcw size={15} /> Reset all overrides</button>

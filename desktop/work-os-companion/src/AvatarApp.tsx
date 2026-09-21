@@ -1,3 +1,4 @@
+import { hasPendingMascotApproval } from "./mascotApproval";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
@@ -28,7 +29,8 @@ import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import { MascotPet } from "./MascotPet";
-import { deriveMascotVisualState, type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
+import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
+import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
   agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
@@ -173,6 +175,8 @@ export default function AvatarApp(): React.ReactElement {
   const thinking = thinkingTrace !== null;
   const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
   const [filing, setFiling] = useState(false);
+  const debugScenario = useMascotScenarioMirror();
+  const [mascotReceipt, setMascotReceipt] = useState<object | null>(null);
   const [proposedTaskIds, setProposedTaskIds] = useState<Set<string>>(() => new Set());
   const [snoozeCount, setSnoozeCount] = useState<number>(() => {
     const s = readJson<{ count?: number; until?: number | null }>(SNOOZE_KEY, {});
@@ -649,6 +653,7 @@ export default function AvatarApp(): React.ReactElement {
         })),
       ]);
       const results = [...outcome.results, ...rejectionResults];
+      if (outcome.recorded > 0 && !results.some((result) => result.status !== "recorded" && result.status !== "denied")) setMascotReceipt({});
       setChat((current) => current.map((entry) => entry.id === entryId
         ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(entry.toolResults ?? [], results), receipt: null }
         : entry));
@@ -998,17 +1003,22 @@ export default function AvatarApp(): React.ReactElement {
   }, [lastEntry?.id, lastEntry?.receipt]);
   // A recorded receipt is the one transient celebration: show it while the
   // day refresh settles, then return to active work or queued attention.
-  const agentActivity: MascotAgentActivity =
-    readyPulse ? "ready" : thinking || filing ? "working" : attentionDue ? "needs-input" : "idle";
-  const workdayState: MascotWorkdayState =
-    !facts.loaded ? "disconnected"
-      : !onShift ? "off-shift"
-        : facts.lateReasonRequired ? "late"
-          : facts.sessionState === "paused" ? "paused"
-            : contextualPrompt.kind === "eod" ? "eod-due"
-              : attentionDue ? "check-in-due"
-                : "active";
-  const mascotVisual = deriveMascotVisualState({ agent: agentActivity, workday: workdayState });
+  const mascotVisual = useMascotRuntime({
+    window: "avatar",
+    scope: debugScenario.enabled ? "debug:scenario" : desktopSession && facts.personId && facts.shiftDate
+      ? `${desktopSession.organizationId}/${facts.personId}/${facts.shiftDate}` : "",
+    scenario: debugScenario,
+    facts: { ...facts, connected: connected === true && facts.loaded,
+      promptKind: contextualPrompt.kind, promptRequired: attentionDue },
+    working: thinking || filing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
+    failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
+      || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
+    needsInput: attentionDue || !!agendaReview || hasPendingMascotApproval(lastEntry?.operations, lastEntry?.toolResults),
+    completed: readyPulse,
+    receipt: mascotReceipt,
+  });
+  const agentActivity: MascotAgentActivity = mascotVisual.activity;
+  const workdayState: MascotWorkdayState = mascotVisual.workday;
   const statusText = facts.lateReasonRequired
     ? "Late start — add a reason"
     : !facts.loaded
@@ -1076,7 +1086,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+          <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong><span className="avatar-head-name">{MASCOT.name}</span></strong><small>Connect Work OS to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
             <div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div>
           </ConversationSurface>
         )}
@@ -1112,7 +1122,7 @@ export default function AvatarApp(): React.ReactElement {
             <div className="avatar-head-row">
               <div className="avatar-drag-zone" data-tauri-drag-region>
                 <div className="avatar-title">
-                  <span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark pose={mascotVisual.pose} tone={mascotVisual.tone} /></span>
+                  <span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={mascotVisual.pose} tone={mascotVisual.tone} /></span>
                   <div className="avatar-head-copy">
                     <strong title={statusText}>
                       <span className="avatar-head-name">{MASCOT.name}</span>
