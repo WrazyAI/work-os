@@ -61,8 +61,8 @@ jobs:
             const page = await browser.newPage({ viewport: { width: 240, height: 320 } });
             await page.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb&prompt');
             await page.locator('.avatar-pet .studio-otto').waitFor();
-            const image = await page.screenshot({ type: 'jpeg', quality: 24, encoding: 'base64' });
-            console.log('ORB_REVIEW_JPEG=' + image);
+            const image = await page.screenshot({ type: 'jpeg', quality: 24 });
+            console.log('ORB_REVIEW_JPEG=' + image.toString('base64'));
             await browser.close();
           })().catch(error => { console.error(error); process.exit(1); });
           NODE
