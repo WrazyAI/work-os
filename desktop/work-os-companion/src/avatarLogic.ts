@@ -244,26 +244,43 @@ export function collectNudges(facts: CompanionDayFacts, now: number, notifiedKey
   return nudges.filter((nudge): nudge is CompanionNudge => nudge !== null);
 }
 
-/** Fraction of the scheduled shift elapsed, 0..1, for the avatar's timer ring.
- * Falls back to time since clock-in when no schedule exists. Paused time is
- * subtracted only via the session's paused_seconds snapshot. */
+/** Scheduled-shift progress for the floating companion ring.
+ * The ring follows the scheduled window exactly, matching the dashboard pulse:
+ * pauses change session elapsed time, but they do not move the scheduled end. */
 export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { fraction: number; label: string; remaining: string } {
-  // The ring represents the scheduled workday, not attendance duration. A late
-  // clock-in must not make the day look longer than the actual shift window.
-  const scheduledStart = facts.shiftStartsAt ? new Date(facts.shiftStartsAt).getTime() : null;
-  const start = scheduledStart && !Number.isNaN(scheduledStart) ? scheduledStart : facts.clockedInAt ? new Date(facts.clockedInAt).getTime() : null;
-  const scheduledEnd = facts.shiftEndsAt ? new Date(facts.shiftEndsAt).getTime() : null;
-  if (start === null || Number.isNaN(start)) return { fraction: 0, label: "", remaining: "" };
-  const pausedMs = (facts.pausedSeconds || 0) * 1000;
-  const end = scheduledEnd && !Number.isNaN(scheduledEnd) && scheduledEnd > start ? scheduledEnd : now;
-  const total = Math.max(60_000, end - start);
-  const elapsed = Math.max(0, Math.min(total, now - start - pausedMs));
-  const minutes = Math.floor(Math.max(0, now - start - pausedMs) / 60_000);
-  const hours = Math.floor(minutes / 60);
-  const label = hours > 0 ? `${hours}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes}m`;
-  const remainingMinutes = Math.max(0, Math.ceil((end - now) / 60_000));
-  const remainingHours = Math.floor(remainingMinutes / 60);
-  const remaining = remainingHours > 0 ? `${remainingHours}h ${String(remainingMinutes % 60).padStart(2, "0")}m left` : `${remainingMinutes}m left`;
+  const validTime = (value: string | null | undefined) => {
+    const parsed = value ? Date.parse(value) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const formatMinutes = (minutes: number) => {
+    const safe = Math.max(0, Math.ceil(minutes));
+    const hours = Math.floor(safe / 60);
+    return hours > 0 ? `${hours}h ${String(safe % 60).padStart(2, "0")}m` : `${safe}m`;
+  };
+
+  // Prefer the authoritative schedule. Clock-in is only a fallback when the
+  // compact day payload does not contain a scheduled start.
+  const scheduledStart = validTime(facts.shiftStartsAt);
+  const start = scheduledStart ?? validTime(facts.clockedInAt);
+  const scheduledEnd = validTime(facts.shiftEndsAt);
+  if (start === null) return { fraction: 0, label: "", remaining: "Time unavailable" };
+  if (scheduledEnd === null || scheduledEnd <= start) {
+    const elapsedMinutes = Math.max(0, Math.floor((now - start) / 60_000));
+    const hours = Math.floor(elapsedMinutes / 60);
+    const label = hours > 0 ? `${hours}h ${String(elapsedMinutes % 60).padStart(2, "0")}m` : `${elapsedMinutes}m`;
+    return { fraction: 0, label, remaining: "Time unavailable" };
+  }
+
+  const total = Math.max(60_000, scheduledEnd - start);
+  const elapsed = Math.max(0, Math.min(total, now - start));
+  const elapsedMinutes = Math.floor(elapsed / 60_000);
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  const label = elapsedHours > 0 ? `${elapsedHours}h ${String(elapsedMinutes % 60).padStart(2, "0")}m` : `${elapsedMinutes}m`;
+  const remaining = now < start
+    ? `${formatMinutes((start - now) / 60_000)} to start`
+    : now >= scheduledEnd
+      ? "Shift complete"
+      : `${formatMinutes((scheduledEnd - now) / 60_000)} left`;
   return { fraction: Math.max(0, Math.min(1, elapsed / total)), label, remaining };
 }
 

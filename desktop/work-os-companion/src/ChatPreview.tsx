@@ -10,7 +10,7 @@ import { WhatsNewModal } from "./WhatsNewModal";
 import { displayUpdateVersion } from "./updater";
 import { changelogHistory, updateInstalledCopy } from "./whatsNew";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
-import { Otto } from "./Otto";
+import { MascotPet } from "./MascotPet";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
@@ -166,7 +166,7 @@ function HistorySection() {
           <button className="avatar-hide" aria-label="Hide companion"><X size={13} /></button>
           <button className={`avatar-orb ${params.has("prompt") ? "due pulse" : "live"}`} aria-label={`Open ${MASCOT.name} companion`}>
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /><circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={44} /></svg>
-            <Otto pose="focus" className="avatar-pet" />
+            <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
             <span className="avatar-orb-state">{params.has("prompt") ? "Check in" : "Focused"}</span>
             <span className="avatar-badge" />
           </button>
