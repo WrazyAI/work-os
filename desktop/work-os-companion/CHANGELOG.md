@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.49
+
 - You can now build today's plan directly from a Loom recording without writing a separate planning note.
 - The daily planning window now makes Loom link, transcript, and review steps clearer.
 - Floating Otto now shows the full figure, real shift time and progress, and stepped body gestures when work or attention changes.
