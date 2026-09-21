@@ -50,8 +50,25 @@ jobs:
           NODE_PATH: /tmp/otto-browser/node_modules
         run: node scripts/verify-mascot-sync.cjs
 
+      - name: Emit compact orb review sample
+        env:
+          NODE_PATH: /tmp/otto-browser/node_modules
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+            const page = await browser.newPage({ viewport: { width: 240, height: 320 } });
+            await page.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb&prompt');
+            await page.locator('.avatar-pet .studio-otto').waitFor();
+            const image = await page.screenshot({ type: 'jpeg', quality: 24, encoding: 'base64' });
+            console.log('ORB_REVIEW_JPEG=' + image);
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
       - name: Upload visual evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: mascot-motion-evidence
