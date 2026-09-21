@@ -1,0 +1,67 @@
+name: Mascot motion verification
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/work-os-companion/**'
+      - 'scripts/verify-mascot-sync.cjs'
+      - '.github/workflows/mascot-motion-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install companion dependencies
+        working-directory: desktop/work-os-companion
+        run: npm ci --no-audit --no-fund
+
+      - name: Install browser runtime
+        run: |
+          npm install --prefix /tmp/otto-browser playwright --no-audit --no-fund
+          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start companion preview
+        working-directory: desktop/work-os-companion
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/otto-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/otto-vite.log
+          exit 1
+
+      - name: Verify mascot state, motion and layout
+        env:
+          NODE_PATH: /tmp/otto-browser/node_modules
+        run: node scripts/verify-mascot-sync.cjs
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mascot-motion-evidence
+          path: |
+            /tmp/otto-orb.png
+            /tmp/otto-dashboard.png
+            /tmp/otto-active.png
+            /tmp/otto-debugger.png
+          if-no-files-found: warn
+
+      - name: Troubleshooting context
+        if: failure()
+        run: tail -60 /tmp/otto-vite.log || true
