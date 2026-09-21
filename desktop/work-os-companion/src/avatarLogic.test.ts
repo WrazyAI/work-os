@@ -154,9 +154,20 @@ describe("shift elapsed fraction", () => {
     const lateClockIn = { ...base, clockedInAt: "2026-08-31T10:00:00Z" };
     expect(shiftElapsedFraction(lateClockIn, NOW).fraction).toBeCloseTo(0.25);
   });
-  it("clamps to 1 after the scheduled end", () => {
+  it("keeps scheduled progress truthful while the employee is paused", () => {
+    const paused = { ...base, sessionState: "paused", pausedSeconds: 45 * 60 };
+    expect(shiftElapsedFraction(paused, NOW).fraction).toBeCloseTo(0.25);
+    expect(shiftElapsedFraction(paused, NOW).remaining).toBe("6h 00m left");
+  });
+  it("does not invent zero minutes when the schedule end is unavailable", () => {
+    const noEnd = { ...base, shiftEndsAt: null };
+    expect(shiftElapsedFraction(noEnd, NOW)).toMatchObject({ fraction: 0, remaining: "Time unavailable" });
+  });
+  it("clamps to 1 after the scheduled end and names the completed shift", () => {
     const late = new Date("2026-08-31T20:00:00Z").getTime();
-    expect(shiftElapsedFraction(base, late).fraction).toBe(1);
+    const result = shiftElapsedFraction(base, late);
+    expect(result.fraction).toBe(1);
+    expect(result.remaining).toBe("Shift complete");
   });
   it("never renders negative elapsed time before a stale future shift boundary", () => {
     const future = { ...base, shiftStartsAt: "2026-09-03T15:00:00Z", clockedInAt: "2026-09-03T15:00:00Z" };
