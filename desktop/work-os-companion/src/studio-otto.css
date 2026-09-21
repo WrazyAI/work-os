@@ -85,3 +85,165 @@
 .mascot-lab.studio-lab .mascot-lab-live.scale-2 { min-height: 410px; }
 .mascot-lab.studio-lab .mascot-lab-controls button { min-height: 40px; }
 .mascot-lab.studio-lab button:focus-visible { outline: 2px solid var(--color-ink, #182018); outline-offset: 3px; }
+
+
+/* Event-driven stop-motion body acting.
+ * Otto stays calm at rest; working may loop while real work is in flight and
+ * attention/result states play a short 3-5-frame gesture when they arrive. */
+.studio-otto .studio-rig,
+.studio-otto .studio-chassis,
+.studio-otto .studio-working-arms,
+.studio-otto .studio-taskpad {
+  transform-box: view-box;
+}
+.studio-otto .studio-rig { transform-origin: 80px 154px; }
+.studio-otto .studio-chassis,
+.studio-otto .studio-working-arms,
+.studio-otto .studio-taskpad { transform-origin: 80px 128px; }
+
+/* Active work: five held drawings per cycle instead of smooth 60fps drift. */
+.studio-otto[data-pose="think"] .studio-rig {
+  animation: studio-work-rig 600ms steps(5, end) infinite;
+}
+.studio-otto[data-pose="think"] .studio-working-arms {
+  animation: studio-work-arms 600ms steps(5, end) infinite;
+}
+.studio-otto[data-pose="think"] .studio-typing-hand {
+  animation: studio-type-stop 600ms steps(5, end) infinite;
+}
+.studio-otto[data-pose="think"] .studio-dot {
+  animation-timing-function: steps(3, end);
+}
+
+/* A due update should be noticeable in peripheral vision: Otto steps forward,
+ * looks up, and gives one deliberate wave instead of only lighting the ring. */
+.studio-otto[data-pose="alert"] .studio-rig {
+  animation: studio-attention-rig 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="alert"] .studio-head {
+  animation: studio-attention-head 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="alert"] .studio-arm-right {
+  animation: studio-attention-wave 520ms steps(5, end) 1 both;
+}
+
+/* Confirmed outcomes get a compact whole-body hop. It plays once, never as an
+ * ambient celebration loop. */
+.studio-otto[data-pose="celebrate"] .studio-rig {
+  animation: studio-celebrate-rig 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="celebrate"] .studio-head {
+  animation: studio-celebrate-head 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="celebrate"] .studio-arm-left {
+  animation: studio-celebrate-left 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="celebrate"] .studio-arm-right {
+  animation: studio-celebrate-right 520ms steps(5, end) 1 both;
+}
+
+/* Failure/blocker: a visible shake and settle, again bounded to one gesture. */
+.studio-otto[data-pose="recover"] .studio-rig {
+  animation: studio-recover-rig 560ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="recover"] .studio-head {
+  animation: studio-recover-head 560ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="recover"] .studio-arm-left,
+.studio-otto[data-pose="recover"] .studio-arm-right {
+  animation: studio-recover-arms 560ms steps(5, end) 1 both;
+}
+
+@keyframes studio-work-rig {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-1px, -1px) rotate(-.8deg); }
+  40% { transform: translate(1px, 0) rotate(.5deg); }
+  60% { transform: translate(0, -2px) rotate(-.4deg); }
+  80% { transform: translate(1px, -1px) rotate(.7deg); }
+}
+@keyframes studio-work-arms {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(1px) rotate(-2deg); }
+  40% { transform: translateY(-1px) rotate(2deg); }
+  60% { transform: translateY(1px) rotate(1deg); }
+  80% { transform: translateY(-1px) rotate(-1deg); }
+}
+@keyframes studio-type-stop {
+  0%, 100% { transform: translateY(0); }
+  20% { transform: translate(-1px, -2px); }
+  40% { transform: translate(1px, 0); }
+  60% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, -2px); }
+}
+@keyframes studio-attention-rig {
+  0% { transform: translate(0, 0) rotate(0); }
+  20% { transform: translate(0, -4px) rotate(-2deg); }
+  40% { transform: translate(2px, -5px) rotate(2deg); }
+  60% { transform: translate(-1px, -3px) rotate(-1deg); }
+  80% { transform: translate(0, -2px) rotate(.5deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+@keyframes studio-attention-head {
+  0% { transform: rotate(2deg); }
+  20% { transform: translateY(-2px) rotate(-5deg); }
+  40% { transform: translateY(-3px) rotate(4deg); }
+  60% { transform: translateY(-2px) rotate(-2deg); }
+  80%, 100% { transform: rotate(2deg); }
+}
+@keyframes studio-attention-wave {
+  0% { transform: rotate(-32deg); }
+  20% { transform: rotate(-70deg); }
+  40% { transform: rotate(-48deg); }
+  60% { transform: rotate(-72deg); }
+  80%, 100% { transform: rotate(-63deg); }
+}
+@keyframes studio-celebrate-rig {
+  0% { transform: translateY(0) scale(1); }
+  20% { transform: translateY(2px) scale(.99, 1.01); }
+  40% { transform: translateY(-6px) scale(1.02, .99); }
+  60% { transform: translateY(-4px) rotate(2deg); }
+  80% { transform: translateY(1px) scale(1.01, .99); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes studio-celebrate-head {
+  0% { transform: rotate(0); }
+  20% { transform: rotate(-4deg); }
+  40% { transform: translateY(-2px) rotate(5deg); }
+  60% { transform: rotate(-3deg); }
+  80%, 100% { transform: rotate(0); }
+}
+@keyframes studio-celebrate-left {
+  0% { transform: rotate(0); }
+  20% { transform: rotate(34deg); }
+  40%, 60% { transform: rotate(48deg); }
+  80% { transform: rotate(18deg); }
+  100% { transform: rotate(0); }
+}
+@keyframes studio-celebrate-right {
+  0% { transform: rotate(-20deg); }
+  20% { transform: rotate(-58deg); }
+  40%, 60% { transform: rotate(-72deg); }
+  80%, 100% { transform: rotate(-48deg); }
+}
+@keyframes studio-recover-rig {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-4px, 1px) rotate(-3deg); }
+  40% { transform: translate(4px, 2px) rotate(3deg); }
+  60% { transform: translate(-3px, 3px) rotate(-2deg); }
+  80% { transform: translate(1px, 2px) rotate(1deg); }
+  100% { transform: translate(0, 1px); }
+}
+@keyframes studio-recover-head {
+  0% { transform: rotate(-4deg) translateY(1px); }
+  20% { transform: rotate(5deg) translateY(2px); }
+  40% { transform: rotate(-6deg) translateY(3px); }
+  60% { transform: rotate(3deg) translateY(3px); }
+  80%, 100% { transform: rotate(-4deg) translateY(1px); }
+}
+@keyframes studio-recover-arms {
+  0% { transform: rotate(0); }
+  20% { transform: rotate(7deg); }
+  40% { transform: rotate(-7deg); }
+  60% { transform: rotate(4deg); }
+  80%, 100% { transform: rotate(0); }
+}
