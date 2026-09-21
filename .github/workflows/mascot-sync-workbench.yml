@@ -6,85 +6,30 @@ on:
 permissions:
   contents: write
 jobs:
-  workspace:
+  visual-review:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 12
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Prepare isolated product worktree
-        id: prepare
+      - name: Prepare private review thumbnails from existing test screenshots
         run: |
-          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
-          test "$(git rev-parse origin/main)" = b4ac70ba075621193579fefd8321c5ba095138e5
-          git worktree add /tmp/otto-product -b codex/fix-studio-otto-scenario-sync origin/main
-          python3 mascot-sync-workbench/tools/apply.py /tmp/otto-product
-          python3 mascot-sync-workbench/tools/finish.py /tmp/otto-product
-          python3 mascot-sync-workbench/tools/polish.py /tmp/otto-product
-          python3 mascot-sync-workbench/tools/finalize.py /tmp/otto-product
-          python3 mascot-sync-workbench/tools/quality.py /tmp/otto-product
-          cd /tmp/otto-product
-          git diff --check
-      - name: Companion tests and production build
-        id: companion
-        working-directory: /tmp/otto-product/desktop/work-os-companion
-        run: |
-          npm ci --no-audit --no-fund
-          set +e
-          npm test > /tmp/companion-tests.log 2>&1
-          T=$?
-          npm run build > /tmp/companion-build.log 2>&1
-          B=$?
-          tail -12 /tmp/companion-tests.log
-          tail -20 /tmp/companion-build.log
-          test "$T" = 0 && test "$B" = 0
-      - name: Root quality gates
-        id: root
-        if: always() && steps.prepare.outcome == 'success'
-        working-directory: /tmp/otto-product
-        run: |
-          npm ci --no-audit --no-fund
-          npm run lint > /tmp/root-lint.log 2>&1 || { tail -50 /tmp/root-lint.log; exit 1; }
-          npm run work-os:typecheck > /tmp/root-types.log 2>&1 || { tail -50 /tmp/root-types.log; exit 1; }
-          npm run work-os:test > /tmp/root-tests.log 2>&1 || { grep -n -B 12 -A 14 'not ok\|AssertionError\|ERR_ASSERTION' /tmp/root-tests.log | head -100; tail -12 /tmp/root-tests.log; exit 1; }
-          tail -12 /tmp/root-tests.log
-      - name: Actual app browser verification
-        id: browser
-        if: always() && steps.prepare.outcome == 'success'
-        run: |
-          npm install --prefix /tmp/otto-browser playwright --no-audit --no-fund
-          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium > /tmp/browser-install.log 2>&1 || { tail -30 /tmp/browser-install.log; exit 1; }
-          cd /tmp/otto-product/desktop/work-os-companion
-          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/otto-vite.log 2>&1 &
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:5173/ > /dev/null && break || sleep 1; done
-          cd "$GITHUB_WORKSPACE"
-          node mascot-sync-workbench/tools/browser.cjs
-      - name: Publish verified product branch only
-        if: always() && steps.companion.outcome == 'success' && steps.root.outcome == 'success' && steps.browser.outcome == 'success'
-        run: |
-          cd /tmp/otto-product
-          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
-          test "$(git rev-parse origin/main)" = b4ac70ba075621193579fefd8321c5ba095138e5
-          git add desktop/work-os-companion/src desktop/work-os-companion/CHANGELOG.md scripts/verify-mascot-sync.cjs test/work-os-companion-mascot.test.mts test/work-os-desktop-static.test.mts
-          git diff --cached --check
+          python3 -m pip install --target /tmp/otto-pil pillow --quiet
+          PYTHONPATH=/tmp/otto-pil python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          import io, base64
+          root=Path('mascot-sync-workbench/evidence')
+          for name in ['otto-dashboard','otto-active','otto-debugger']:
+            image=Image.open(root/(name+'.png')).convert('RGB')
+            image.thumbnail((500,500))
+            buffer=io.BytesIO()
+            image.save(buffer,format='JPEG',quality=45,optimize=True)
+            encoded=base64.b64encode(buffer.getvalue()).decode()
+            (root/(name+'.b64')).write_text(encoded+'\n')
+            print(name, image.size, len(encoded))
+          PY
           git config user.name 'ChatGPT'
           git config user.email 'chatgpt@users.noreply.github.com'
-          git commit -m 'fix(companion): synchronize Studio Otto with dashboard and scenario debugger'
-          git push origin HEAD:refs/heads/codex/fix-studio-otto-scenario-sync
-          git log -1 --oneline
-      - name: Keep private visual evidence on workbench only
-        if: always() && steps.browser.outcome == 'success'
-        run: |
-          mkdir -p mascot-sync-workbench/evidence
-          cp /tmp/otto-dashboard.png /tmp/otto-active.png /tmp/otto-debugger.png mascot-sync-workbench/evidence/
-          git add mascot-sync-workbench/evidence
-          git config user.name 'ChatGPT'
-          git config user.email 'chatgpt@users.noreply.github.com'
-          git commit -m 'test: record rendered dashboard and debugger evidence'
+          git add mascot-sync-workbench/evidence/*.b64
+          git commit -m 'test: save private screenshot review thumbnails'
           git push origin HEAD:refs/heads/codex/mascot-sync-workbench
-      - name: Troubleshooting context
-        if: failure()
-        run: |
-          test ! -f /tmp/otto-vite.log || tail -20 /tmp/otto-vite.log
