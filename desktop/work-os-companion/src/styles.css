@@ -294,8 +294,10 @@ select:focus-visible {
   max-height: calc(100vh - 36px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.notification-flyouts::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .notification-flyout {
   --notification-accent: #496176;
   --notification-surface: #f2f7fb;
@@ -313,7 +315,7 @@ select:focus-visible {
   border-radius: 14px;
   background: color-mix(in srgb, var(--notification-surface) 96%, white);
   color: #252b2e;
-  box-shadow: 0 18px 45px rgba(28, 31, 27, 0.18), 0 3px 10px rgba(28, 31, 27, 0.1);
+  box-shadow: none;
   pointer-events: auto;
   animation: notification-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -331,7 +333,7 @@ select:focus-visible {
   --notification-accent: #846414;
   --notification-surface: #fff9e8;
   --notification-border: #e6cf8d;
-  box-shadow: 0 20px 50px rgba(49, 42, 21, 0.2), 0 3px 10px rgba(49, 42, 21, 0.1);
+  box-shadow: none;
 }
 .notification-flyout.persistent.error {
   --notification-accent: #9f342e;
@@ -1828,7 +1830,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   grid-template-rows: auto minmax(0, 1fr);
 }
 .task-modal-backdrop.profile-backdrop {
-  z-index: 100;
+  z-index: 1300;
 }
 .profile-modal > header p {
   max-width: 500px;
@@ -2988,7 +2990,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .task-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 1100;
   background: rgba(18, 20, 16, 0.68);
   backdrop-filter: blur(9px);
   display: grid;
@@ -3472,7 +3474,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   color: #963a2d;
 }
 .confirmation-backdrop {
-  z-index: 60;
+  z-index: 1200;
 }
 .delete-confirmation {
   width: min(430px, 100%);
@@ -4337,7 +4339,11 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   }
 }
 /* Finishing-quality accessibility and legibility floor. */
-body.modal-open { overflow: hidden; }
+html.modal-open,
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 ::selection { background: rgba(184, 255, 90, 0.55); color: var(--ink); }
 :where(button, a, input, textarea, select, summary, [role="button"], [role="menuitem"]):focus-visible {
   outline: 3px solid rgba(132, 190, 59, 0.42);
@@ -4345,7 +4351,13 @@ body.modal-open { overflow: hidden; }
   box-shadow: 0 0 0 1px #4e7b1a;
 }
 .rail nav button:focus-visible { outline-color: rgba(184, 255, 90, 0.72); outline-offset: 1px; }
-.task-modal-backdrop { overscroll-behavior: contain; }
+.task-modal-backdrop {
+  overscroll-behavior: none;
+  touch-action: pan-y;
+}
+.task-modal-backdrop > .task-modal,
+.task-modal-backdrop > .planning-session,
+.task-modal-backdrop > .delete-confirmation { touch-action: auto; }
 .task-modal,
 .delete-confirmation,
 .carry-flyout { outline: none; }

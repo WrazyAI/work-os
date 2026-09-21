@@ -18,6 +18,7 @@ const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
 const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
+const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
 const memoryPanel = readText(resolve(root, "src/MemorySettings.tsx"));
 const profileSettings = readText(resolve(root, "src/ProfileSettings.tsx"));
 const memoryStyles = readText(resolve(root, "src/workspace-redesign.css"));
@@ -131,6 +132,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("new FormData()");
     expect(styles).toContain(".profile-modal");
     expect(styles).toContain(".task-modal-backdrop.profile-backdrop");
+    expect(app).toContain("!!clockOutConfirmation");
     expect(app).toContain('aria-describedby="profile-settings-description"');
     expect(styles).toContain(".profile-editor-actions");
   });
@@ -274,7 +276,14 @@ describe("operational visualizations", () => {
   it("treats keyboard and readable secondary text as part of the polish", () => {
     expect(app).toContain("moveMenuFocus");
     expect(taskSurfaces).toContain("function moveMenuFocus");
-    expect(app).toContain('document.body.classList.add("modal-open")');
+    expect(app).toContain("useModalScrollLock(modalOpen)");
+    expect(modalScrollLock).toContain('target.documentElement.classList.add("modal-open")');
+    expect(modalScrollLock).toContain('target.body.classList.add("modal-open")');
+    expect(styles).toContain("html.modal-open");
+    expect(styles).toContain("z-index: 1100;");
+    expect(styles).toContain(".notification-flyouts::-webkit-scrollbar");
+    expect(styles).toContain(".notification-flyout.persistent");
+    expect(styles).toContain("box-shadow: none;");
     expect(app).toContain('event.key === "Escape"');
     expect(app).toContain('event.key !== "Tab"');
     expect(styles).toContain("Finishing-quality accessibility and legibility floor");

@@ -5797,8 +5797,8 @@ button:not(:disabled):active {
   .eod-shot-skeleton { animation: none; background: var(--surface); }
 }
 .eod-shot-unavailable { display: inline-grid; place-items: center; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: 9px; }
-.eod-shot-modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgba(18, 20, 16, 0.68); backdrop-filter: blur(9px); animation: modalFade 0.18s ease both; }
-.eod-shot-modal-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(760px, 100%); max-height: min(640px, calc(100vh - 48px)); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 18px; background: #f7f5ed; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38); overflow: hidden; animation: modalRise 0.24s ease both; }
+.eod-shot-modal { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 24px; background: rgba(18, 20, 16, 0.68); backdrop-filter: blur(9px); overscroll-behavior: none; touch-action: pan-y; animation: modalFade 0.18s ease both; }
+.eod-shot-modal-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(760px, 100%); max-height: min(640px, calc(100vh - 48px)); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 18px; background: #f7f5ed; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38); overflow: hidden; touch-action: auto; animation: modalRise 0.24s ease both; }
 .eod-shot-modal-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .eod-shot-modal-panel > header strong { font-size: 12px; }
 .eod-shot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(128px, 100%), 1fr)); gap: 10px; padding: 14px; overflow-y: auto; overflow-x: clip; }
@@ -5807,8 +5807,8 @@ button:not(:disabled):active {
 .eod-shot-grid-item > span small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eod-shot-grid-image, .eod-shot-tile-image, .eod-shot-thumb { display: block; max-width: 100%; }
 .eod-shot-grid-image { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
-.eod-shot-lightbox { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 48px 24px; background: rgba(8, 10, 8, 0.78); backdrop-filter: blur(6px); animation: modalFade 0.18s ease both; }
-.eod-shot-lightbox figure { position: relative; display: grid; gap: 10px; width: min(880px, 100%); margin: 0; }
+.eod-shot-lightbox { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 48px 24px; background: rgba(8, 10, 8, 0.78); backdrop-filter: blur(6px); overscroll-behavior: none; touch-action: pan-y; animation: modalFade 0.18s ease both; }
+.eod-shot-lightbox figure { position: relative; display: grid; gap: 10px; width: min(880px, 100%); margin: 0; touch-action: auto; }
 .eod-shot-lightbox-image { width: 100%; max-height: min(72vh, 700px); object-fit: contain; border-radius: 12px; background: #0c0e0c; }
 .eod-shot-lightbox figcaption { color: rgba(255, 255, 255, 0.82); font-size: 11px; line-height: 1.4; text-align: center; }
 .eod-shot-lightbox-nav { position: absolute; top: 50%; left: -52px; right: -52px; display: flex; justify-content: space-between; transform: translateY(-50%); pointer-events: none; }

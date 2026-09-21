@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequestBlob } from "./api";
 import type { EodScreenshotGallery, EodScreenshotHour, EodScreenshotItem } from "./types";
+import { useModalScrollLock } from "./modalScrollLock";
 
 const clock = (value: string) => value.slice(11, 16) || "—";
 const altLabel = (item: EodScreenshotItem) => `Screenshot captured at ${clock(item.capturedAt)}${item.visibleApp ? ` in ${item.visibleApp}` : ""}`;
@@ -56,6 +57,7 @@ export function EodScreenshotPanel({ context, gallery, limit = 7, resolveSrc }: 
   const [gridOpen, setGridOpen] = useState(false);
   const [lightbox, setLightbox] = useState<EodScreenshotItem | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  useModalScrollLock(gridOpen || lightbox !== null);
 
   const openLightbox = useCallback((item: EodScreenshotItem, trigger?: HTMLElement | null) => {
     restoreFocusRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);

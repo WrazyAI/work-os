@@ -4,6 +4,7 @@ import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
 import { FadeArc, Wave } from "./LoadingUi";
 import { formatWorkOsDate } from "./dateFormat";
+import { useModalScrollLock } from "./modalScrollLock";
 import {
   annotationsForTarget,
   annotatedTextSegments,
@@ -150,6 +151,7 @@ export function PlanningSession({
   const [lateReasonSaving, setLateReasonSaving] = useState(false);
   const [lateReasonSaved, setLateReasonSaved] = useState(false);
   const reviewRef = useRef<HTMLElement | null>(null);
+  useModalScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

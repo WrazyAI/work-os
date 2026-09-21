@@ -682,6 +682,8 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   background: rgba(18, 27, 17, 0.38) !important;
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   animation: taskSurfaceFade 180ms ease both;
 }
 .work-os-side-panel-scrim {
@@ -707,6 +709,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   border-right: 0;
   border-radius: 28px 0 0 28px;
   background: #fbfcf8;
+  touch-action: auto;
   box-shadow: -24px 0 72px rgba(16, 28, 14, 0.2);
   animation: taskSurfaceEnter 230ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

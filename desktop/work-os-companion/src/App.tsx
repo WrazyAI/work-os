@@ -60,6 +60,7 @@ import { SettingsSwitch } from "./SettingsSwitch";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
+import { useModalScrollLock } from "./modalScrollLock";
 import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
 import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
@@ -298,7 +299,8 @@ export default function App() {
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen;
+  const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen;
+  useModalScrollLock(modalOpen);
 
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
     const message = errorMessage(value, fallback);
@@ -322,18 +324,18 @@ export default function App() {
     if (editRequest) { setEditRequest(null); return; }
     if (clockInConfirmation) { setClockInConfirmation(null); return; }
     if (missedClockOut) { setMissedClockOut(null); return; }
+    if (clockOutConfirmation) { setClockOutConfirmation(false); return; }
     if (taskDetails) { setTaskDetails(null); return; }
     if (taskComposerOpen) { closeTaskComposer(); return; }
     if (planningSessionOpen) { setPlanningSessionOpen(false); return; }
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, deleteRequest, editRequest, missedClockOut, moveMenuId, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
 
   useEffect(() => {
     if (!modalOpen) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.classList.add("modal-open");
     const frame = window.requestAnimationFrame(() => {
       const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
       const dialog = dialogs.item(dialogs.length - 1);
@@ -358,7 +360,6 @@ export default function App() {
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKey);
-      document.body.classList.remove("modal-open");
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [dismissTopLayer, modalOpen]);

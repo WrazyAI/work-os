@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.51
+
+- Modal windows now keep the page and navigation still while you scroll inside the open window.
+- Notification flyouts no longer flash scrollbars or leave heavy block shadows when stacked.
+
 ## 0.3.50
 
 - The floating companion now uses one clearly labelled collapse control, while the compact mascot keeps the separate hide action.

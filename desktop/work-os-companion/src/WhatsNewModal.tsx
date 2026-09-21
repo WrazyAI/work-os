@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Clock, X } from "lucide-react";
 import { displayUpdateVersion } from "./updater";
+import { useModalScrollLock } from "./modalScrollLock";
 import type { ChangelogHistoryEntry } from "./whatsNew";
 
 const HISTORY_PAGE_SIZE = 10;
@@ -52,6 +53,7 @@ export function WhatsNewModal({ displayVersion, bullets, history = [], onClose }
   const [showAll, setShowAll] = useState(false);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const olderCount = history.filter((entry) => !entry.installed).length;
+  useModalScrollLock(true);
 
   useEffect(() => {
     if (view === "history") headingRef.current?.focus();
