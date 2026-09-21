@@ -783,3 +783,60 @@ body.avatar-window {
   .avatar-thinking-active, .avatar-thinking-spinner, .avatar-thinking-chevron,
   .avatar-thinking-trace-wrap { animation: none; transition: none; }
 }
+
+
+/* Collapsed companion: reserve enough native canvas for the full figure,
+ * schedule progress, state label, and remaining-time readout. */
+.avatar-compact {
+  width: 200px;
+  height: 276px;
+}
+.avatar-orb {
+  width: 144px;
+  height: 154px;
+  margin: 76px 28px 0;
+}
+.avatar-prompt-bubble ~ .avatar-orb { margin-top: 76px; }
+.avatar-orb .avatar-ring {
+  inset: 4px 4px auto;
+  width: 136px;
+  height: 136px;
+}
+.avatar-orb .avatar-ring circle { stroke-width: 4.2; }
+.avatar-orb .ring-track { stroke: rgba(76, 101, 73, .28); }
+.avatar-orb .ring-fill { filter: drop-shadow(0 0 2px rgba(168, 241, 91, .24)); }
+.avatar-pet {
+  width: 118px;
+  height: 133px;
+  margin: -2px auto 0;
+}
+.avatar-pet .avatar-pet-art {
+  width: 118px;
+  height: 133px;
+}
+.avatar-orb-state {
+  top: 137px;
+  right: 25px;
+  bottom: auto;
+  left: 25px;
+  padding: 4px 7px;
+}
+.avatar-day-time {
+  right: 50%;
+  bottom: 5px;
+  min-width: 76px;
+  padding: 4px 8px;
+  text-align: center;
+  font-size: 10px;
+}
+.avatar-drag-surface {
+  top: 6px;
+  left: 69px;
+  width: 62px;
+}
+.avatar-prompt-bubble + .avatar-drag-surface {
+  top: 63px;
+  left: 69px;
+  width: 62px;
+}
+.avatar-badge { top: 11px; right: 11px; }
