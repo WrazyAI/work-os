@@ -97,7 +97,7 @@ interface AgendaReview {
   round: number;
 }
 
-const AVATAR_COLLAPSED = { width: 176, height: 176 };
+const AVATAR_COLLAPSED = { width: 200, height: 276 };
 const AVATAR_EXPANDED = { width: 400, height: 620 };
 const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
@@ -238,12 +238,31 @@ export default function AvatarApp(): React.ReactElement {
       if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
       // Shared query cache: a fresh cached day is served without a network
       // round-trip; stale data refreshes in the background.
-      const day = await workOsQueryClient.fetchQuery({
+      let day = await workOsQueryClient.fetchQuery({
         queryKey: workOsKeys.day("compact"),
         queryFn: () => fetchDay({ variant: "compact" }),
         staleTime: DAY_STALE_MS,
       }) as unknown as Record<string, any>;
-      const session = (day?.session ?? {}) as Record<string, any>;
+      let session = (day?.session ?? {}) as Record<string, any>;
+      // The collapsed companion must show the real scheduled remainder. Some
+      // compact payloads can omit or stale the schedule boundary, so recover
+      // it from the cached details view only when the active shift needs it.
+      const compactStart = Date.parse(String(day?.shift?.startsAt ?? session.scheduled_starts_at ?? ""));
+      const compactEnd = Date.parse(String(day?.shift?.endsAt ?? session.scheduled_ends_at ?? ""));
+      if (session.clocked_in_at && (!Number.isFinite(compactEnd) || (Number.isFinite(compactStart) && compactEnd <= compactStart))) {
+        const detailed = await workOsQueryClient.fetchQuery({
+          queryKey: workOsKeys.day("details"),
+          queryFn: () => fetchDay({ variant: "details" }),
+          staleTime: DAY_STALE_MS,
+        }) as unknown as Record<string, any>;
+        const detailedSession = (detailed?.session ?? {}) as Record<string, any>;
+        const detailedStart = Date.parse(String(detailed?.shift?.startsAt ?? detailedSession.scheduled_starts_at ?? ""));
+        const detailedEnd = Date.parse(String(detailed?.shift?.endsAt ?? detailedSession.scheduled_ends_at ?? ""));
+        if (Number.isFinite(detailedEnd) && (!Number.isFinite(detailedStart) || detailedEnd > detailedStart)) {
+          day = detailed;
+          session = detailedSession;
+        }
+      }
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
         loaded: true,
@@ -1101,6 +1120,7 @@ export default function AvatarApp(): React.ReactElement {
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
           title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
+          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${remaining}. ${Math.round(fraction * 100)}% of shift complete.` : `Open ${MASCOT.name} companion`}
         >
           <svg viewBox="0 0 48 48" className="avatar-ring">
             <circle cx="24" cy="24" r="22" className="ring-track" />
@@ -1110,7 +1130,7 @@ export default function AvatarApp(): React.ReactElement {
           <span className="avatar-orb-state">{mascotVisual.label}</span>
           {showBadge && <span className="avatar-badge" />}
         </button>
-        {onShift && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
+        {onShift && remaining && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
         </div>
       )}
       {expanded && (
