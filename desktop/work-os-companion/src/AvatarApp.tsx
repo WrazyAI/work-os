@@ -250,17 +250,22 @@ export default function AvatarApp(): React.ReactElement {
       const compactStart = Date.parse(String(day?.shift?.startsAt ?? session.scheduled_starts_at ?? ""));
       const compactEnd = Date.parse(String(day?.shift?.endsAt ?? session.scheduled_ends_at ?? ""));
       if (session.clocked_in_at && (!Number.isFinite(compactEnd) || (Number.isFinite(compactStart) && compactEnd <= compactStart))) {
-        const detailed = await workOsQueryClient.fetchQuery({
-          queryKey: workOsKeys.day("details"),
-          queryFn: () => fetchDay({ variant: "details" }),
-          staleTime: DAY_STALE_MS,
-        }) as unknown as Record<string, any>;
-        const detailedSession = (detailed?.session ?? {}) as Record<string, any>;
-        const detailedStart = Date.parse(String(detailed?.shift?.startsAt ?? detailedSession.scheduled_starts_at ?? ""));
-        const detailedEnd = Date.parse(String(detailed?.shift?.endsAt ?? detailedSession.scheduled_ends_at ?? ""));
-        if (Number.isFinite(detailedEnd) && (!Number.isFinite(detailedStart) || detailedEnd > detailedStart)) {
-          day = detailed;
-          session = detailedSession;
+        try {
+          const detailed = await workOsQueryClient.fetchQuery({
+            queryKey: workOsKeys.day("details"),
+            queryFn: () => fetchDay({ variant: "details" }),
+            staleTime: DAY_STALE_MS,
+          }) as unknown as Record<string, any>;
+          const detailedSession = (detailed?.session ?? {}) as Record<string, any>;
+          const detailedStart = Date.parse(String(detailed?.shift?.startsAt ?? detailedSession.scheduled_starts_at ?? ""));
+          const detailedEnd = Date.parse(String(detailed?.shift?.endsAt ?? detailedSession.scheduled_ends_at ?? ""));
+          if (Number.isFinite(detailedEnd) && (!Number.isFinite(detailedStart) || detailedEnd > detailedStart)) {
+            day = detailed;
+            session = detailedSession;
+          }
+        } catch {
+          // Keep the compact day usable. The timer renders "Time unavailable"
+          // rather than inventing 0m when the richer schedule cannot refresh.
         }
       }
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
