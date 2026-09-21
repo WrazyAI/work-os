@@ -1,3 +1,4 @@
+import { hasPendingMascotApproval } from "./mascotApproval";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
@@ -49,6 +50,7 @@ import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { MascotPet } from "./MascotPet";
+import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
@@ -157,6 +159,8 @@ export default function App() {
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
   const [pendingProgressUpdate, setPendingProgressUpdate] = useState("");
   const [progressReceipt, setProgressReceipt] = useState<ProgressReceipt | null>(null);
+  const [mascotReceipt, setMascotReceipt] = useState<object | null>(null);
+  useEffect(() => { if (progressReceipt && !progressReceipt.queued) setMascotReceipt(progressReceipt); }, [progressReceipt]);
   // Full composer conversation. Persists for the app session until the user
   // explicitly clears it (trash) or starts a new chat (plus) — closing the
   // flyout intentionally keeps it.
@@ -1103,17 +1107,20 @@ export default function App() {
   }, [day?.plan?.id, day?.plan?.revision, day?.plan?.status, day?.shiftDate, goalProvenance, notifications, planDirty, planIntent, resyncPlanFromServer, showError, suggestionTaskIds]);
 
   useEffect(() => {
-    if (!isTauri()) return;
-    let unlistenScenario: (() => void) | undefined;
-    let unlistenRequest: (() => void) | undefined;
+    let disposed = false;
+    const cleaners: Array<() => void> = [];
+    const register = (off: () => void) => { if (disposed) off(); else cleaners.push(off); };
     void listen<DebugScenario>("work-os://debug-scenario", (event) => {
-      debugRef.current = event.payload;
-      setDebugScenario(event.payload);
-    }).then((fn) => { unlistenScenario = fn; }).catch(() => undefined);
+      if (disposed || !event.payload || typeof event.payload.enabled !== "boolean") return;
+      const next = { ...DEFAULT_DEBUG_SCENARIO, ...event.payload };
+      debugRef.current = next;
+      setDebugScenario(next);
+      void emit("work-os://debug-current", next).catch(() => undefined);
+    }).then(register).catch(() => undefined);
     void listen("work-os://debug-request", () => {
-      void emit("work-os://debug-current", debugRef.current);
-    }).then((fn) => { unlistenRequest = fn; }).catch(() => undefined);
-    return () => { unlistenScenario?.(); unlistenRequest?.(); };
+      if (!disposed) void emit("work-os://debug-current", debugRef.current).catch(() => undefined);
+    }).then(register).catch(() => undefined);
+    return () => { disposed = true; cleaners.forEach((off) => off()); };
   }, []);
 
   useEffect(() => {
@@ -1609,6 +1616,19 @@ export default function App() {
   }, [debugScenario.enabled, visibleDay?.plan]);
   const workSession = visibleDay?.session;
   const gate = sessionGate(visibleDay);
+  useMascotRuntime({
+    window: "main",
+    scope: debugScenario.enabled ? "debug:scenario" : visibleSession && visibleDay?.access?.personId
+      ? `${visibleSession.organizationId}/${visibleDay.access.personId}/${visibleDay.shiftDate}` : "",
+    facts: mascotFactsFromDay(visibleDay, !!visibleSession), scenario: debugScenario,
+    working: !!composerThinking || interpretation?.status === "loading" || busy || eodRedrafting || !!eodPreparing
+      || !!interpretation?.results?.some((result) => result.status === "processing")
+      || completingTaskIds.size > 0 || pendingTasks.some((task) => task.status === "syncing"),
+    failed: !!error || (!!aiUnavailable && !syncBypass) || pendingTasks.some((task) => task.status === "failed")
+      || !!interpretation?.results?.some((result) => result.status === "failed"),
+    needsInput: interpretation?.status === "ready" && hasPendingMascotApproval(interpretation.operations, interpretation.results),
+    receipt: mascotReceipt,
+  });
   const active = gate.active;
   const sessionActive = !!workSession && ["clocked_in", "active", "paused", "eod_due"].includes(workSession.state);
   const observedOnly = gate.worktivitySynced && !sessionActive;
@@ -2060,6 +2080,7 @@ export default function App() {
       // then the caches drop it so the list shifts without a refresh.
       setCompletingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
       setLeavingTaskIds((current) => new Set([...current, taskId]));
+      setMascotReceipt({});
       await new Promise((resolve) => window.setTimeout(resolve, prefersReducedMotion() ? 0 : 150));
       patchTaskCaches(taskId, { completed, status: completed ? "completed" : "open" });
       setLeavingTaskIds((current) => { const next = new Set(current); next.delete(taskId); return next; });
@@ -2379,6 +2400,7 @@ export default function App() {
           }
         })),
       ]);
+      if (outcome.recorded > 0 && !outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
       const parts: string[] = [];
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
       if (outcome.queued) parts.push(`${outcome.queued} queued for sync`);
@@ -2433,6 +2455,7 @@ export default function App() {
         });
       }
       if (outcome.recorded > 0) {
+        if (!outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
         notifications.success("Recorded the retried update.", "Retry succeeded");
         void refresh();
         return;
@@ -2478,6 +2501,7 @@ export default function App() {
           }
         })),
       ]);
+      if (outcome.recorded > 0 && !outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
       patchHistoryTurn(turnId, [...outcome.results, ...denialResults]);
       const parts: string[] = [];
       if (outcome.recorded) parts.push(`Recorded ${outcome.recorded} update${outcome.recorded === 1 ? "" : "s"}`);
@@ -2487,6 +2511,7 @@ export default function App() {
       if (denialResults.length) parts.push(`skipped ${denialResults.length}`);
       const message = parts.length ? `${parts.join(" · ")}.` : "Nothing was recorded.";
       if (outcome.recorded > 0) {
+        if (!outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
         notifications.success(message, "Update recorded");
         void refresh();
       } else if (outcome.failed.length || denialResults.some((result) => result.status === "failed")) {
@@ -2522,6 +2547,7 @@ export default function App() {
     void fileApprovedOperations([op], proposalFilingTransport(), result.createResolution ? { createResolution: result.createResolution } : undefined).then((outcome) => {
       patchHistoryTurn(turnId, outcome.results);
       if (outcome.recorded > 0) {
+        if (!outcome.failed.length && outcome.queued === 0 && outcome.processing === 0) setMascotReceipt({});
         notifications.success("Recorded the retried update.", "Retry succeeded");
         void refresh();
         return;

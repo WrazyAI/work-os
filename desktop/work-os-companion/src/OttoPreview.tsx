@@ -76,21 +76,21 @@ export default function OttoPreview() {
             <button onClick={runInterruptionSequence}>Interrupt work</button>
           </div>
           <div className={`mascot-lab-live ${dark ? "dark" : ""} scale-${scale}`}>
-            <MascotPet agent={agent} workday={workday} />
+            <MascotPet isolated agent={agent} workday={workday} />
           </div>
         </section>
 
         <section className="panel otto-preview-panel">
           <div className="card-title"><span>Core lifecycle — light</span><small>White idle · yellow work/input · green ready · red blocked</small></div>
           <div className="mascot-lab-state-grid">
-            {CORE_STATES.map((state) => <div className="mascot-lab-state" key={state}><MascotPet agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
+            {CORE_STATES.map((state) => <div className="mascot-lab-state" key={state}><MascotPet isolated agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
           </div>
         </section>
 
         <section className="panel otto-preview-panel otto-preview-dark">
           <div className="card-title"><span>Core lifecycle — dark</span><small>Contrast and silhouette check</small></div>
           <div className="mascot-lab-state-grid">
-            {CORE_STATES.map((state) => <div className="mascot-lab-state dark" key={state}><MascotPet agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
+            {CORE_STATES.map((state) => <div className="mascot-lab-state dark" key={state}><MascotPet isolated agent={state} workday="active" /><small>{titleCase(state)}</small></div>)}
           </div>
         </section>
 

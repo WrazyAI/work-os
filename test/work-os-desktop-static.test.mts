@@ -403,7 +403,7 @@ assert.match(ottoStyles, /\.otto-late-mark/);
 assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/);
 assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
 assert.match(avatar, /const workdayState: MascotWorkdayState =/);
-assert.match(avatar, /const mascotVisual = deriveMascotVisualState\(\{ agent: agentActivity, workday: workdayState \}\);/);
+assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);
 assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" \/>/);
 assert.match(avatar, /Late start — add a reason/);
 
