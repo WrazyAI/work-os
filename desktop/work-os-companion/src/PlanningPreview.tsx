@@ -23,7 +23,7 @@ export default function PlanningPreview() {
   const [open, setOpen] = useState(true);
   return <main className="planning-preview"><PlanningSession
     open={open}
-    plan={{ id: "preview-plan", status: "draft", freeform_intent: draft.rawIntent, shift_date: "2026-09-08", revision: 1, items: [] }}
+    plan={{ id: "preview-plan", status: "draft", freeform_intent: params.has("loom-only") ? "" : draft.rawIntent, shift_date: "2026-09-08", revision: 1, items: [] }}
     active
     busy={false}
     loomEnabled={params.has("loom")}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { interpretDailyPlan, type PlanLoomContext, type PlanMemoryContext } from "@/lib/aiPlan";
+import { interpretDailyPlan, LOOM_ONLY_PLAN_INTENT, type PlanLoomContext, type PlanMemoryContext } from "@/lib/aiPlan";
 import { buildLoomAttachment } from "@/lib/aiLoom";
 import { findLoomReference, loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
     }
     const date = body.date;
+    const inputText = typeof body.input === "string" ? body.input : "";
     const context = await buildPlanningContext(auth.access, date);
     let memory: PlanMemoryContext | undefined;
     if (memoryEnabled(auth.access.featureFlags)) {
@@ -43,7 +44,11 @@ export async function POST(req: Request) {
     // planning, and the shift lookup only runs when a Loom link is present.
     let loom: PlanLoomContext | undefined;
     const loomInput = body.loom && typeof body.loom === "object" ? body.loom as { url?: unknown; transcript?: unknown } : null;
-    const loomText = [typeof body.input === "string" ? body.input : "", typeof loomInput?.url === "string" ? loomInput.url : ""].filter(Boolean).join(" ");
+    const loomText = [
+      inputText,
+      typeof loomInput?.url === "string" ? loomInput.url : "",
+      typeof loomInput?.transcript === "string" ? loomInput.transcript : "",
+    ].filter(Boolean).join(" ");
     if (loomMetadataEnabled(auth.access.featureFlags) && findLoomReference(loomText)) {
       try {
         const { timezone } = await loadShiftData(auth.access, auth.access.personId as string, new Date());
@@ -58,14 +63,15 @@ export async function POST(req: Request) {
         loom = undefined;
       }
     }
-    const result = await interpretDailyPlan({ rawIntent: body.input, conversation: body.conversation }, context, memory, loom);
+    const planningInput = inputText.trim() || (loom ? LOOM_ONLY_PLAN_INTENT : "");
+    const result = await interpretDailyPlan({ rawIntent: planningInput, conversation: body.conversation }, context, memory, loom);
     if (!result.ok) {
       return NextResponse.json({ error: result.detail, reason: result.reason }, { status: result.reason === "ai_unconfigured" ? 501 : 503 });
     }
     await persistInterpretHistory(
       { organizationId: auth.access.organizationId, personId: auth.access.personId as string, localDate: date },
       body.conversation,
-      typeof body.input === "string" ? body.input : "",
+      planningInput,
     );
     const buildId = await issueDailyPlanBuild(auth.access, date, result.interpretation.rawIntent);
     return NextResponse.json({

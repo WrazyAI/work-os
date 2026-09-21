@@ -227,7 +227,10 @@ export async function buildLoomAttachment(input: {
       line: loomFeedLine(feed.bundle),
       summary: feed.analysis?.summary ?? null,
       suggestedTasks: feed.analysis?.suggestedTasks ?? [],
-      cautions: feed.analysis?.cautions ?? [],
+      cautions: [
+        ...(feed.analysis?.cautions ?? []),
+        ...(feed.reason === "transcript_required" ? ["No transcript was supplied; do not infer work from recording metadata."] : []),
+      ],
       transcriptChars: feed.bundle.transcript.chars,
       blocked: feed.blocked,
     },

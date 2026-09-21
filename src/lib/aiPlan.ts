@@ -4,6 +4,7 @@ const PLAN_MODEL = process.env.WORK_OS_PLAN_MODEL ?? process.env.WORK_OS_INTERPR
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const PLAN_TIMEOUT_MS = 45_000;
 const MAX_CLARIFICATIONS = 2;
+export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
 
 export type PlanClarificationReason = "missing_outcome" | "ambiguous_scope" | "missing_completion_criteria" | "unclear_task_match" | "conflicting_context";
 export type PlanSourceRef = { provider: "work_os" | "nifty" | "employee"; type: "task" | "intent"; id: string; label?: string };
@@ -120,6 +121,10 @@ export interface PlanLoomContext {
   blocked: boolean;
 }
 
+export function resolvePlanIntent(rawIntent: unknown, loom?: PlanLoomContext) {
+  return text(rawIntent, 4_000) ?? (loom ? LOOM_ONLY_PLAN_INTENT : null);
+}
+
 const MEMORY_RULE = "todayContext is the live day state; memoryContext is dated recalled history for continuity only — never treat it as evidence of completion, progress, or current state.";
 
 export function buildPlanningPrompt(
@@ -178,7 +183,7 @@ export async function interpretDailyPlan(
   memory?: PlanMemoryContext,
   loom?: PlanLoomContext,
 ): Promise<PlanInterpretationResult> {
-  const rawIntent = text(input.rawIntent, 4_000);
+  const rawIntent = resolvePlanIntent(input.rawIntent, loom);
   if (!rawIntent) return { ok: false, reason: "ai_malformed", detail: "input is required" };
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "AI planning is not configured on this server" };

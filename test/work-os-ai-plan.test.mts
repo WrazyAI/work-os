@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPlanningPrompt, parsePlanInterpretation } from "../src/lib/aiPlan";
+import { buildPlanningPrompt, LOOM_ONLY_PLAN_INTENT, parsePlanInterpretation, resolvePlanIntent } from "../src/lib/aiPlan";
 
 const context = {
   date: "2026-09-04",
@@ -58,4 +58,11 @@ test("planning prompt embeds live snapshot and recalled memory only when provide
   assert.match(enriched, /memoryContext/);
   assert.match(enriched, /Shift: on shift/);
   assert.match(enriched, /never treat it as evidence of completion/);
+});
+
+test("a Loom attachment can supply the planning intent", () => {
+  const loom = { verdict: "same_day", createdLocalDate: "2026-09-04", targetDate: "2026-09-04", line: "Daily update", summary: "The recording describes the release work.", suggestedTasks: [], cautions: [], blocked: false };
+  assert.equal(resolvePlanIntent("", loom), LOOM_ONLY_PLAN_INTENT);
+  assert.equal(resolvePlanIntent("Write a plan.", loom), "Write a plan.");
+  assert.equal(resolvePlanIntent("", undefined), null);
 });

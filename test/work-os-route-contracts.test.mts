@@ -173,6 +173,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(interpret, /buildLoomAttachment/);
   const planInterpretLoom = await source("src/app/api/work-os/me/plan/interpret/route.ts");
   assert.match(planInterpretLoom, /buildLoomAttachment/);
+  assert.match(planInterpretLoom, /loomInput\?\.transcript/);
   const aiDraft = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
   assert.match(aiDraft, /loom_prior_day/);
   assert.match(aiDraft, /grounding\.media = /);

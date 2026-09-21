@@ -18,7 +18,8 @@ describe("PlanningSession footer gating", () => {
   it("requires Build before Confirm can appear", () => {
     const markup = renderToStaticMarkup(createElement(PlanningSession, props));
     expect(markup).toContain("Plan your day");
-    expect(markup).toContain("What do you want to get done today?");
+    expect(markup).toContain("What should today");
+    expect(markup).toContain("plan focus on?");
     expect(markup).toContain("Build my plan");
     expect(markup).toContain("Refine plan");
     expect(markup).toContain("disabled");

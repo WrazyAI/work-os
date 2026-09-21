@@ -20,6 +20,7 @@ import {
 } from "./planningAnnotations";
 
 export type PlanningSessionState = "idle" | "drafting" | "interpreting" | "refining" | "clarifying" | "reviewing" | "saving" | "saved" | "confirmed" | "offline_fallback" | "ai_unavailable" | "save_error" | "conflict";
+export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
 export type PlanningInterpretation = {
   buildId?: string;
   rawIntent: string;
@@ -130,8 +131,10 @@ export function PlanningSession({
   const [loomUrl, setLoomUrl] = useState("");
   const [loomTranscript, setLoomTranscript] = useState("");
   const [loomReading, setLoomReading] = useState(false);
+  const [loomError, setLoomError] = useState("");
   const [loomReadback, setLoomReadback] = useState<{ title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; usableForDay: boolean; metadataAvailable: boolean } | null>(null);
   const [interpretation, setInterpretation] = useState<PlanningInterpretation | null>(null);
+  const [builtIntent, setBuiltIntent] = useState("");
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [annotations, setAnnotations] = useState<PlanAnnotation[]>([]);
@@ -154,8 +157,10 @@ export function PlanningSession({
     setLoomOpen(false);
     setLoomUrl("");
     setLoomTranscript("");
+    setLoomError("");
     setLoomReadback(null);
     setInterpretation(null);
+    setBuiltIntent("");
     setClarificationAnswers(plan?.clarification_answers ?? {});
     setError("");
     setAnnotations([]);
@@ -173,6 +178,10 @@ export function PlanningSession({
   if (!open) return null;
   const hasDraft = interpretation !== null;
   const working = busy || state === "saving" || state === "interpreting" || state === "refining";
+  const loomReady = Boolean(loomUrl.trim() && loomReadback?.usableForDay !== false && loomReadback);
+  const effectiveInput = input.trim() || (loomReady ? LOOM_ONLY_PLAN_INTENT : "");
+  const planningInput = builtIntent || effectiveInput;
+  const canBuild = Boolean(effectiveInput) && (!loomReadback || loomReadback.usableForDay);
   const pendingValid = pendingSelection !== null && isAnnotationCommentValid(pendingComment);
   const unansweredClarifications = Boolean(interpretation?.clarifications.some((question) => !clarificationAnswers[question.id]?.trim()));
   const editedCommitments = interpretation ? diffEditedCommitments(interpretation.commitments, edited) : [];
@@ -194,7 +203,7 @@ export function PlanningSession({
         : unansweredClarifications
           ? "Answer the clarification questions to confirm."
           : null;
-  const confirmDisabled = working || !input.trim() || confirmBlockedReason !== null;
+  const confirmDisabled = working || !planningInput || confirmBlockedReason !== null;
 
   const resetDraftState = () => {
     setInterpretation(null);
@@ -206,6 +215,7 @@ export function PlanningSession({
     setEditedSummary(null);
     setPendingSelection(null);
     setPendingComment("");
+    setBuiltIntent("");
   };
 
   /** Records the late-start reason on the session itself, independent of the
@@ -225,15 +235,17 @@ export function PlanningSession({
     }
   };
 
-  const build = async () => {
-    if (!input.trim()) return;
+  const build = async (loomOnly = false) => {
+    const requestedInput = loomOnly ? LOOM_ONLY_PLAN_INTENT : effectiveInput;
+    if (!requestedInput) return;
     resetDraftState();
     setState("interpreting");
     setError("");
     try {
-      const loom = loomOpen && loomUrl.trim() ? { url: loomUrl.trim(), ...(loomTranscript.trim() ? { transcript: loomTranscript.trim() } : {}) } : undefined;
-      const result = await onInterpret(input.trim(), loom);
+      const loom = loomUrl.trim() ? { url: loomUrl.trim(), ...(loomTranscript.trim() ? { transcript: loomTranscript.trim() } : {}) } : undefined;
+      const result = await onInterpret(requestedInput, loom);
       setInterpretation(result);
+      setBuiltIntent(requestedInput);
       setState(result.clarifications.length ? "clarifying" : "reviewing");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Planning assistance is unavailable.");
@@ -245,8 +257,14 @@ export function PlanningSession({
   const readLoom = async () => {
     if (!loomUrl.trim() || !onLoomPreview || loomReading) return;
     setLoomReading(true);
+    setLoomError("");
     try {
-      setLoomReadback(await onLoomPreview(loomUrl.trim()));
+      const result = await onLoomPreview(loomUrl.trim());
+      setLoomReadback(result);
+      if (!result) setLoomError("The Loom link could not be read. Check the link and try again.");
+    } catch {
+      setLoomReadback(null);
+      setLoomError("The Loom link could not be read. Check the link and try again.");
     } finally {
       setLoomReading(false);
     }
@@ -263,7 +281,7 @@ export function PlanningSession({
   };
 
   const refine = async () => {
-    if (!interpretation || !input.trim() || working || !refineReady) return;
+    if (!interpretation || !planningInput || working || !refineReady) return;
     const settled = flushPendingAnnotation(annotations);
     const edits = editedCommitments;
     const draftForServer: PlanningInterpretation = {
@@ -280,8 +298,9 @@ export function PlanningSession({
     setState("refining");
     setError("");
     try {
-      const result = await onRefine(input.trim(), draftForServer, settled, edits);
+      const result = await onRefine(planningInput, draftForServer, settled, edits);
       setInterpretation(result);
+      setBuiltIntent(planningInput);
       setAnnotations([]);
       setEdited({});
       setEditedSummary(null);
@@ -294,7 +313,7 @@ export function PlanningSession({
   };
 
   const save = async () => {
-    if (!input.trim() || (!interpretation && !fallbackSave)) return;
+    if (!planningInput || (!interpretation && !fallbackSave)) return;
     setState("saving");
     const effective = interpretation ? {
       ...interpretation,
@@ -302,7 +321,7 @@ export function PlanningSession({
       commitments: applyEditsToCommitments(interpretation.commitments, edited),
     } : null;
     try {
-      const result = await onConfirm(input.trim(), effective, clarificationAnswers);
+      const result = await onConfirm(planningInput, effective, clarificationAnswers);
       if (result === "confirmed") { setState("confirmed"); return; }
       if (result === "conflict") { setState("conflict"); return; }
       if (result === "rebuild") {
@@ -408,23 +427,45 @@ export function PlanningSession({
 
   const effectiveSummary = interpretation && editedSummary !== null ? editedSummary : interpretation?.summary ?? "";
 
+  const toggleLoom = () => {
+    if (loomOpen) {
+      setLoomOpen(false);
+      setLoomUrl("");
+      setLoomTranscript("");
+      setLoomReadback(null);
+      setLoomError("");
+      return;
+    }
+    setLoomOpen(true);
+  };
+
   return <div className="task-modal-backdrop planning-backdrop" role="presentation">
     <section className="planning-session" role="dialog" aria-modal="true" aria-labelledby="planning-session-title">
       <header><div><small>Today</small><h2 id="planning-session-title">Plan your day</h2></div><button aria-label="Close planning session" onClick={onClose} disabled={busy || state === "saving"}><X size={16} /></button></header>
       <div className="planning-session-body">
-        <label htmlFor="planning-intent">What do you want to get done today?</label>
-        <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder="Fix the failing integration test, then get the migration ready for review." />
+        <div className="planning-intent-heading">
+          <label htmlFor="planning-intent">What should today's plan focus on?</label>
+          <span>{loomEnabled ? "Optional when you use a Loom" : "Start with a clear outcome"}</span>
+        </div>
+        <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder={loomEnabled ? "Add a direction, or build directly from your Loom below." : "Fix the failing integration test, then get the migration ready for review."} />
         <small className="planning-provenance">Your words stay attached to the plan. Work OS only suggests structure for your review.</small>
         {loomEnabled && <div className="planning-loom">
-          <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={() => setLoomOpen((value) => !value)}><Video size={13} /> {loomOpen ? "Remove Loom link" : "Recorded a Loom for today?"}</button>
+          <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={toggleLoom} disabled={working}>
+            <span className="planning-loom-toggle-label"><Video size={15} /><span><strong>{loomOpen ? "Loom source attached" : "Plan from a Loom recording"}</strong><small>{loomOpen ? "Recording details and transcript" : "Use the recording instead of writing a brief"}</small></span></span>
+            <span className="planning-loom-toggle-action">{loomOpen ? "Remove" : "Add"}</span>
+          </button>
           {loomOpen ? <div className="planning-loom-panel">
+            <div className="planning-loom-heading"><div><strong>Recording link</strong><small>Read the date first, then build from its transcript.</small></div><span className="planning-loom-badge">Optional</span></div>
             <div className="planning-loom-row">
-              <input value={loomUrl} onChange={(event) => { setLoomUrl(event.target.value); setLoomReadback(null); }} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
-              <button type="button" className="secondary" disabled={!loomUrl.trim() || loomReading} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
+              <input value={loomUrl} onChange={(event) => { setLoomUrl(event.target.value); setLoomReadback(null); setLoomError(""); }} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
+              <button type="button" className="secondary" disabled={!loomUrl.trim() || loomReading || working} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
             </div>
-            {loomReadback ? <small className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`}>{loomReadback.title ?? "Loom recording"} · recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "an unverified date"}{loomReadback.usableForDay ? "" : " — it can't be used for today's plan"}.</small> : null}
-            <details className="planning-loom-transcript"><summary>Paste transcript (optional)</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={2} maxLength={50000} placeholder="In Loom open Transcript, then Copy — paste it here so the plan can use what you said." aria-label="Loom transcript" /></details>
-            <small className="planning-loom-note">The recording only shapes the draft you review. Nothing is filed from it.</small>
+            {loomError ? <p className="planning-loom-message is-error" role="alert"><AlertTriangle size={14} />{loomError}</p> : null}
+            {loomReadback ? <div className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`} role="status"><CheckCircle2 size={15} /><span><strong>{loomReadback.title ?? "Loom recording"}</strong><small>Recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "on an unverified date"}{loomReadback.durationSeconds ? ` - ${Math.round(loomReadback.durationSeconds / 60)} min` : ""}</small>{loomReadback.usableForDay ? <em>Ready for today's plan</em> : <em>Not usable for today's plan</em>}</span></div> : null}
+            <details className="planning-loom-transcript"><summary>{loomTranscript.trim() ? "Transcript attached" : "Add transcript for task extraction"}</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={3} maxLength={50000} placeholder="In Loom, open Transcript, then Copy and paste it here." aria-label="Loom transcript" /></details>
+            {loomReadback && !loomTranscript.trim() ? <p className="planning-loom-message"><Video size={14} /><span>The link confirms the recording, but Loom does not expose its spoken content here. Add the transcript if you want tasks extracted from what was said.</span></p> : null}
+            {loomReadback && loomReady && input.trim() ? <button type="button" className="planning-loom-use" onClick={() => void build(true)} disabled={working}>Use Loom only <span>Build without the text above</span></button> : null}
+            <small className="planning-loom-note">Nothing is filed from the recording. You will review the plan before anything is saved.</small>
           </div> : null}
         </div>}
         {lateReasonRequired && <div className="planning-notice planning-late-reason" role="status">
@@ -495,13 +536,13 @@ export function PlanningSession({
       </div>
       <footer>
         {state !== "confirmed" && state !== "saved" && <>
-          {confirmBlockedReason && input.trim() && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
+          {confirmBlockedReason && planningInput && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
           <button className="secondary" onClick={onClose} disabled={busy || state === "saving"}>Close</button>
           {annotations.length > 0 && <span className="planning-annotation-pill">{annotations.length} Annotation{annotations.length === 1 ? "" : "s"}<button type="button" aria-label="Clear all annotations" title="Clear all annotations" onClick={() => { setAnnotations([]); setPendingSelection(null); setPendingComment(""); }}><X size={12} /></button></span>}
           <button className="secondary planning-refine-button" onClick={() => void refine()} disabled={!hasDraft || working || !refineReady} title={!hasDraft ? "Build your plan first" : !refineReady ? "Add feedback or edits to refine" : "Refine the draft with your feedback"}>Refine plan{annotations.length > 0 && <span className="planning-refine-count" aria-label={`${annotations.length} annotations`}>{annotations.length}</span>}</button>
-          {!hasDraft && !fallbackSave
-            ? <button className="secondary" onClick={() => void build()} disabled={!input.trim() || working}>Build my plan</button>
-            : <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>}
+           {!hasDraft && !fallbackSave
+             ? <button className="primary" onClick={() => void build()} disabled={!canBuild || working}>{input.trim() || !loomReady ? "Build my plan" : "Build from Loom"}</button>
+             : <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>}
         </>}
         {(state === "confirmed" || state === "saved") && <button className="primary" onClick={onClose}>Continue working</button>}
       </footer>

@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- You can now build today's plan directly from a Loom recording without writing a separate planning note.
+- The daily planning window now makes Loom link, transcript, and review steps clearer.
+
 ## 0.3.48
 
 - Chat threads now fade smoothly into the header and composer while staying in one bounded surface.
