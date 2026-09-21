@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.50
+
+- The floating companion now uses one clearly labelled collapse control, while the compact mascot keeps the separate hide action.
+
 ## 0.3.49
 
 - You can now build today's plan directly from a Loom recording without writing a separate planning note.

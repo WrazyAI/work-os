@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Minus, SquarePen, X } from "lucide-react";
+import { SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
@@ -163,7 +163,7 @@ function HistorySection() {
         <div className="avatar-compact">
           {params.has("prompt") ? <button className="avatar-prompt-bubble"><strong>Quick check-in</strong><span>What changed since your last update?</span></button> : null}
           <span className="avatar-drag-surface" aria-hidden="true">•••</span>
-          <button className="avatar-hide" aria-label="Hide companion"><X size={13} /></button>
+          <button className="avatar-hide" aria-label="Hide companion" title="Hide companion"><X size={13} /></button>
           <button className={`avatar-orb ${params.has("prompt") ? "due pulse" : "live"}`} aria-label={`Open ${MASCOT.name} companion`}>
             <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /><circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={44} /></svg>
             <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
@@ -450,10 +450,7 @@ function AvatarSection({ standalone = false }: { standalone?: boolean }) {
               <button className="avatar-icon" aria-label="New conversation" title="New conversation">
                 <SquarePen size={15} aria-hidden="true" />
               </button>
-              <button className="avatar-icon" aria-label="Minimize to orb" title="Minimize to orb">
-                <Minus size={15} aria-hidden="true" />
-              </button>
-              <button className="avatar-icon avatar-close-hide" aria-label="Hide companion" title="Hide companion">
+              <button className="avatar-icon" aria-label="Collapse companion" title="Collapse companion">
                 <X size={15} aria-hidden="true" />
               </button>
             </div>

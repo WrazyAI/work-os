@@ -263,8 +263,7 @@ body.avatar-window {
 }
 .avatar-retry + .avatar-clear { margin-left: 0; }
 .avatar-clear:hover, .avatar-clear:focus-visible { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
-.avatar-icon,
-.avatar-close {
+.avatar-icon {
   display: grid;
   place-items: center;
   width: 28px;
@@ -277,20 +276,8 @@ body.avatar-window {
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
-.avatar-icon:hover,
-.avatar-close:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
-.avatar-icon:focus-visible,
-.avatar-close:focus-visible { outline: 2px solid #7cc936; outline-offset: 1px; }
-
-.avatar-close-hide {
-  color: #8a3f34;
-}
-
-.avatar-close-hide:hover,
-.avatar-icon.avatar-close-hide:hover {
-  background: rgba(180, 61, 45, 0.1);
-  color: #8a3f34;
-}
+.avatar-icon:hover { background: rgba(23, 25, 20, 0.06); color: var(--avatar-ink); }
+.avatar-icon:focus-visible { outline: 2px solid #7cc936; outline-offset: 1px; }
 
 /* Compact orb dismiss: visible on hover or keyboard focus. */
 .avatar-hide {
@@ -662,7 +649,6 @@ body.avatar-window {
 .avatar-live-dot.is-due { background: #d65a4c; box-shadow: 0 0 0 3px rgba(214, 90, 76, .12); }
 .avatar-live-dot.is-late { background: #d4493f; box-shadow: 0 0 0 3px rgba(212, 73, 63, .16); }
 .avatar-head-actions { gap: 1px; }
-.avatar-close,
 .avatar-clear,
 .avatar-retry { min-height: 30px; border-radius: 9px; }
 

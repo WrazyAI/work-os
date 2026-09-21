@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { Minus, SquarePen, X } from "lucide-react";
+import { SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
@@ -1126,7 +1126,7 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-           <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong>Connect Work OS</strong><small>to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button><button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+           <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong>Connect Work OS</strong><small>to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button></div></div></header>
               <div className="conversation-scroll-region"><div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div></div>
           </ConversationSurface>
         )}
@@ -1186,8 +1186,7 @@ export default function AvatarApp(): React.ReactElement {
               <div className="avatar-head-actions">
                 {daySyncState !== "ready" && <button className="avatar-retry" onClick={() => { setDaySyncState("loading"); void loadDay(); }} title="Refresh today's record" aria-label="Refresh today's record">Retry</button>}
                 {chat.length > 0 && <button className="avatar-icon" onClick={clearAvatarConversation} aria-label="New conversation" title="New conversation"><SquarePen size={15} aria-hidden="true" /></button>}
-                <button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Minimize to orb" title="Minimize to orb"><Minus size={15} aria-hidden="true" /></button>
-                <button className="avatar-icon avatar-close-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={15} aria-hidden="true" /></button>
+                <button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button>
               </div>
             </div>
           </header>

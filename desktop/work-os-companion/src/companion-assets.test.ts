@@ -86,8 +86,10 @@ describe("floating companion integration", () => {
     expect(rustShell).toContain('"companion"');
     expect(avatar).toContain('invoke("hide_avatar")');
     expect(avatar).toContain("avatar-hide");
-    expect(avatar).toContain("avatar-close-hide");
     expect(avatar).toContain("avatar-head-actions");
+    expect(avatar.match(/aria-label="Collapse companion"/g)).toHaveLength(2);
+    expect(avatar).toContain('title="Collapse companion"');
+    expect(avatar).not.toContain("Minimize to orb");
     expect(avatar).toContain("nextAgendaAutoExpand");
     expect(avatar).toContain('from "lucide-react"');
     expect(capability.permissions).toContain("core:window:allow-start-dragging");
