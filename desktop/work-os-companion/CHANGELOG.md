@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Floating Otto now shows the full figure, real shift time and progress, and stepped body gestures when work or attention changes.
+
 ## 0.3.48
 
 - Chat threads now fade smoothly into the header and composer while staying in one bounded surface.
