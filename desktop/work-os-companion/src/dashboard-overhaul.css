@@ -460,8 +460,6 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   margin: 0 auto;
 }
 
-.tasks-heading-row { min-height: 46px; margin-bottom: 14px; }
-.tasks-heading-context { color: var(--dash-muted); font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .date-navigator { border-color: var(--dash-line); background: rgba(255, 255, 252, 0.76); border-radius: 12px; }
 .date-navigator button { border-color: var(--dash-line); color: var(--dash-muted); }
 .formatted-date-picker { color: var(--dash-ink); }
@@ -477,6 +475,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .agenda-strip-carry { min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
 
 .task-search-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin: 14px 0; }
+.task-search-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .task-search { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); box-shadow: none; }
 .task-search:focus-within { border-color: #a9c79c; box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.13); }
 .task-filters-toggle { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); color: var(--dash-muted); }
@@ -570,6 +569,9 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   .active-task-panel-actions { justify-content: flex-start; }
   .active-task-panel > .dashboard-panel-footer { margin-inline: -17px; }
   .task-search-toolbar { grid-template-columns: 1fr; }
+  .task-search-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .task-search-actions > .task-filters-wrap,
+  .task-search-actions > .task-add-button { width: 100%; }
   .task-filters-toggle { width: 100%; justify-content: center; }
   .task-records { padding-inline: 9px; }
   .task-record.workspace-task { grid-template-columns: 29px minmax(0, 1fr) 30px !important; gap: 9px; min-height: 67px; }

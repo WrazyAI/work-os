@@ -72,7 +72,7 @@ describe("operational visualizations", () => {
     expect(sidebarStyles).toContain("--sidebar-collapsed-width: 68px");
     expect(sidebarStyles).toContain("--sidebar-expanded-width: 208px");
     expect(sidebarStyles).toContain(":has(> .sidebar-nav[data-sidebar-collapsed=\"false\"])");
-    expect(app).toContain('className="tasks-heading-row"');
+    expect(app).toContain("TaskDateNavigator");
     expect(styles).toContain("Settings and shift state form one full-width footer cluster");
     expect(styles).toContain("--ease-product");
     expect(styles).toContain("animation: pageEnter");
@@ -185,6 +185,7 @@ describe("operational visualizations", () => {
   });
 
   it("keeps My day open-only and states its counts from the rendered list", () => {
+    expect(app).toContain("My day is open work only");
     expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
     expect(app).toContain("Today <em>{openToday.length}</em>");
     expect(app).toContain("count: myDayTasks.filter((task) => task.completed !== true).length");
@@ -292,10 +293,13 @@ describe("operational visualizations", () => {
   });
 
   it("keeps the Tasks page layout flat, single-headed, and wrap-proof", () => {
-    // The shell masthead owns the page title; the workspace row must not repeat it.
-    expect(app).toContain('className="tasks-heading-context"');
+    // The shell masthead owns the page title and date; the workspace must not
+    // repeat a context label, queue heading, or secondary sort surface.
+    expect(app).toContain("TaskDateNavigator");
+    expect(app).not.toContain('className="tasks-heading-context"');
+    expect(app).not.toContain(">Task queue<");
     expect(app).not.toContain('<h1>{historical ? "Workday history" : "Tasks"}</h1>');
-    expect(workspaceStyles).toContain(".tasks-heading-context");
+    expect(workspaceStyles).not.toContain(".tasks-heading-context");
     expect(workspaceStyles).not.toContain(".tasks-heading-row h1");
     expect(styles).not.toContain(".tasks-page");
     expect(styles).not.toContain(".task-view-tabs");

@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Tasks now keeps date navigation in the masthead, puts Add task beside search, and lets you edit or remove subtasks from their action menu.
+
 ## 0.3.51
 
 - Modal windows now keep the page and navigation still while you scroll inside the open window.

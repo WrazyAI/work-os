@@ -172,22 +172,21 @@ describe("Tasks workspace ordering contract", () => {
     onLoadMore: () => undefined,
   };
 
-  it("renders a real sort header row and applies the default due-latest-first order", () => {
+  it("keeps one flat list with the canonical due-latest-first order", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, props));
 
-    expect(markup).toContain('role="toolbar"');
-    expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain("Due, sorted descending.");
-    expect(markup).toContain("Sort by status, ascending.");
-    expect(markup).toContain("Due date · latest first");
-    expect(markup).not.toContain("Activity");
+    expect(markup).not.toContain('role="toolbar"');
+    expect(markup).not.toContain("Task queue");
+    expect(markup).not.toContain("Scheduled today");
+    expect(markup).not.toContain("Due, sorted descending.");
+    expect(markup).toContain("Add task");
 
-    const overdueIndex = markup.indexOf("Late work");
-    const openIndex = markup.indexOf("Soon work");
+    const latestDueIndex = markup.indexOf("Soon work");
+    const olderDueIndex = markup.indexOf("Late work");
     const doneIndex = markup.indexOf("Finished work");
-    expect(overdueIndex).toBeGreaterThan(-1);
-    expect(overdueIndex).toBeLessThan(openIndex);
-    expect(openIndex).toBeLessThan(doneIndex);
+    expect(latestDueIndex).toBeGreaterThan(-1);
+    expect(latestDueIndex).toBeLessThan(olderDueIndex);
+    expect(olderDueIndex).toBeLessThan(doneIndex);
   });
 
   it("states every view chip count from the rows that view renders", () => {
@@ -251,7 +250,7 @@ describe("Tasks workspace backlog reconciliation", () => {
     }));
     expect(markup).toContain("Beyond the loaded window");
     expect(markup).toContain("Unfinished<em>2</em>");
-    expect(markup).toContain('role="toolbar"');
+    expect(markup).not.toContain('role="toolbar"');
   });
 
 it("discloses a backlog failure instead of silently using the loaded window", () => {

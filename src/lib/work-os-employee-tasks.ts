@@ -5,7 +5,7 @@ import {
   deleteTask,
   getTaskByLocalOrProviderId,
   hydrateTaskAssignees,
-  isNiftyTaskAttributableToMember,
+  isTaskAttributableToPerson,
   listEvidence,
   listPersonTasks,
   moveTaskToParent,
@@ -45,9 +45,29 @@ async function employeeTaskContext(access: WorkOsAccess, taskId: string) {
   if (task.status === "archived" || task.status === "deleted") throw new Error("Task not found");
   const { data: person, error } = await db().from("work_people").select("nifty_member_id").eq("organization_id", access.organizationId).eq("id", access.personId as string).single();
   if (error) throw new Error(`load task employee mapping: ${error.message}`);
-  const assignedToPerson = Array.isArray(task.assignee_person_ids) && task.assignee_person_ids.includes(access.personId as string);
-  if (!assignedToPerson && !isNiftyTaskAttributableToMember(task, person.nifty_member_id as string | null)) throw new Error("Task is not available to this employee");
+  let parent: Record<string, any> | null = null;
+  const parentId = task.parent_task_id ?? task.parent_provider_task_id;
+  if (parentId) {
+    try {
+      parent = await getTaskByLocalOrProviderId(ownerId, String(parentId));
+    } catch {
+      // A dangling or inaccessible parent cannot grant child access.
+      parent = null;
+    }
+  }
+  if (!isEmployeeTaskAccessible(task, parent, access.personId as string | null, person.nifty_member_id as string | null)) throw new Error("Task is not available to this employee");
   return { ownerId, task, niftyMemberId: person.nifty_member_id as string | null };
+}
+
+/**
+ * A child task inherits employee access from its active parent. Local inline
+ * subtasks are intentionally created unassigned, so checking only the child
+ * assignee makes their edit/archive/delete controls unusable after creation.
+ */
+export function isEmployeeTaskAccessible(task: Record<string, any>, parent: Record<string, any> | null, personId: string | null | undefined, niftyMemberId: string | null | undefined) {
+  if (isTaskAttributableToPerson(task, personId, niftyMemberId)) return true;
+  if (!parent || parent.status === "archived" || parent.status === "deleted") return false;
+  return isTaskAttributableToPerson(parent, personId, niftyMemberId);
 }
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -111,8 +131,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
   if (moveError) throw new Error(`load task move targets: ${moveError.message}`);
   const moveTargets = (moveRows ?? []).filter((candidate: Record<string, unknown>) => {
     if (String(candidate.provider_task_id ?? candidate.id) === providerTaskId) return false;
-    const assignedToPerson = Array.isArray(candidate.assignee_person_ids) && candidate.assignee_person_ids.includes(access.personId as string);
-    return assignedToPerson || isNiftyTaskAttributableToMember(candidate, niftyMemberId);
+    return isTaskAttributableToPerson(candidate, access.personId as string, niftyMemberId);
   }).slice(0, 50).map((candidate: Record<string, unknown>) => ({
     id: candidate.id,
     provider_task_id: candidate.provider_task_id,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { isNiftyTaskAttributableToMember, isTaskAttributableToPerson } from "../src/lib/work-os";
+import { isEmployeeTaskAccessible } from "../src/lib/work-os-employee-tasks";
 import { normalizeNiftyTask } from "../src/lib/integrations/nifty";
 import { readFileSync } from "node:fs";
 
@@ -58,4 +59,11 @@ test("both task surfaces share the unified attribution predicate", () => {
   assert.match(workspaceSource, /isTaskAttributableToPerson\(task, access\.personId, context\.niftyMemberId\)/);
   assert.doesNotMatch(workspaceSource, /isNiftyTaskAttributableToMember/);
   assert.match(tasksSource, /export async function listPersonOpenTasks/);
+});
+
+test("unassigned child tasks inherit access from their active parent", () => {
+  const parent = { id: "parent", assignee_person_ids: ["person-a"], status: "open" };
+  assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, parent, "person-a", null), true);
+  assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, parent, "person-b", null), false);
+  assert.equal(isEmployeeTaskAccessible({ id: "child", parent_task_id: "parent", assignee_person_ids: [] }, { ...parent, status: "archived" }, "person-a", null), false);
 });

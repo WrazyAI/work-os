@@ -310,8 +310,8 @@ workspace than a list of cards.
 2. One compact agenda strip: focus statement, save/provenance state, live count
    shortcuts, and Review unfinished work only when relevant.
 3. Four views: My day, Unfinished, Completed, All tasks.
-4. Search and compact date/filter toolbar.
-5. One task-list panel with a local Add task action.
+4. Search/date/filter toolbar with the local Add task action.
+5. One flat task-list panel.
 6. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
@@ -319,9 +319,15 @@ editing belongs to the shared composer/editor.
 
 ### 6.2 Table rhythm
 
-Use a flat, readable list with a functional header:
+Use a flat, readable list:
 
     completion | task + metadata | progress | due | status | actions
+
+The Tasks page has one date navigator in the masthead, one search/filter
+toolbar, and one task list. Do not repeat a Task queue heading, status section
+headers, or a second sort/header toolbar inside the list. Keep the canonical
+default order visible through the row sequence: due date latest-first, open
+work above completed work, and undated items last.
 
 At wide widths, the title column absorbs available space. Progress, due date,
 status, and menu columns remain intrinsic and aligned. At narrow widths, hide
@@ -366,9 +372,9 @@ set. Counts describe the rendered list, or state Showing N of M when
 pagination is involved.
 
 The default order is due date latest-first, with open work above completed and
-undated items last. A real sort toolbar may offer Task, Status, Due, and
-Priority. Each control states its current/next order and uses aria-pressed; do
-not disguise a sort toolbar as decorative table headers.
+undated items last. The active-day dashboard may expose its own real sort
+controls, but the Tasks page does not duplicate those controls inside the task
+list.
 
 Overdue means an open task with a valid due date before the current workday.
 Undated old work is carryover, not overdue. All surfaces use the same selector

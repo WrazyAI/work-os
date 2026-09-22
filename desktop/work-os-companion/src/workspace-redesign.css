@@ -2552,6 +2552,24 @@ body {
   margin-bottom: 12px;
 }
 
+.task-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.task-add-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.task-filter-summary {
+  margin: -4px 2px 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .task-search {
   display: flex;
   min-width: 240px;
@@ -2697,27 +2715,6 @@ body {
 .goal-independence {
   margin-top: 8px;
   font-size: 10px;
-}
-
-/* Tasks heading: one line — title and date navigator on a shared baseline. */
-.tasks-heading-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.tasks-heading-context {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.tasks-heading-row .date-navigator {
-  margin-bottom: 0;
 }
 
 /* Agenda strip: focus statement, view chips with live counts, carry link. */
@@ -3463,6 +3460,13 @@ button:not(:disabled):active {
   display: block;
   z-index: 90;
   box-shadow: 0 16px 44px rgba(18, 27, 17, 0.16), 0 2px 8px rgba(18, 27, 17, 0.08);
+}
+
+/* Detail menus are portaled outside the z-index-1000 drawer, so they need
+   their own layer or the drawer body intercepts their pointer events. */
+.task-detail-menu.anchored-menu,
+.task-detail-move-menu.anchored-menu {
+  z-index: 1100;
 }
 
 .anchored-menu > button[role="menuitem"] {

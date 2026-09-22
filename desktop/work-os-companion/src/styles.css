@@ -2273,6 +2273,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 /* Unified Tasks daily workspace */
 .tasks-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
 .date-navigator { display: flex; align-items: center; gap: 5px; margin-bottom: 30px; }
+.mast-actions .date-navigator { margin: 0; }
 .date-navigator button, .formatted-date-picker { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); }
 .date-navigator button { width: 38px; display: grid; place-items: center; }
 .formatted-date-picker { min-width: 132px; position: relative; display: grid; place-items: center; padding: 0 12px; overflow: hidden; font: 600 11px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }

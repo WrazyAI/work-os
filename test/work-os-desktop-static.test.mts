@@ -568,7 +568,9 @@ assert.doesNotMatch(sortHeader, /aria-sort=/);
 assert.doesNotMatch(sortHeader, /role="columnheader"/);
 assert.match(app, /active-task-sort-note/);
 assert.match(app, /readTaskSort\(DAY_SORT_STORAGE_KEY\)/);
-assert.match(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
+assert.doesNotMatch(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
+assert.match(app, /TaskDateNavigator/);
+assert.match(app, /const displayedTasks = sortTaskList/);
 // One day scope and one overdue predicate; the old split sources must not return.
 assert.match(app, /dayScopedTasks\(todayTasks, currentPlan\?\.items/);
 assert.match(app, /dayScopedTasks\(visibleDay\?\.tasks/);

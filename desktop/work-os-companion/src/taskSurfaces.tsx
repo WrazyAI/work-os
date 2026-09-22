@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
@@ -69,6 +69,71 @@ export function useAnchoredMenu(open: boolean) {
   return { triggerRef, menuRef, style };
 }
 
+type MenuElementRef = { current: HTMLElement | null };
+
+/**
+ * Owns the interaction contract for a detached menu: clicks in any related
+ * trigger/menu stay inside the interaction, Escape closes it, the first item
+ * receives focus, and focus returns to the trigger afterwards. Keeping this
+ * beside the portal placement hook prevents each surface from inventing a
+ * slightly different outside-click boundary.
+ */
+function usePortalMenuInteraction({ open, triggerRefs, menuRefs, focusMenuRef, onClose }: {
+  open: boolean;
+  triggerRefs: readonly MenuElementRef[];
+  menuRefs: readonly MenuElementRef[];
+  focusMenuRef: MenuElementRef;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => focusMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+    const isInsideMenu = (target: Node) => triggerRefs.some((ref) => ref.current?.contains(target)) || menuRefs.some((ref) => ref.current?.contains(target));
+    const onKey = (event: KeyboardEvent) => {
+      // The App-level dialog trap may receive the same event first. Avoid
+      // moving a menu item twice when a detached menu sits inside a drawer.
+      if (event.defaultPrevented) return;
+      if (moveMenuFocus(event)) return;
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && isInsideMenu(target)) return;
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [focusMenuRef, menuRefs, onClose, open, triggerRefs]);
+}
+
+/**
+ * Nested task dialogs can open while the detail drawer remains mounted. Keep
+ * their focus lifecycle local so the App-level modal effect does not have to
+ * observe a boolean that is already true for the parent drawer.
+ */
+function useDialogFocus(dialogRef: { current: HTMLElement | null }) {
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      if (!dialog || dialog.contains(document.activeElement)) return;
+      const field = dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])');
+      (field ?? dialog.querySelector<HTMLElement>('button:not([disabled]), [tabindex]:not([tabindex="-1"])'))?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [dialogRef]);
+}
+
 /**
  * Anchored ellipsis menu rendered through a portal at fixed viewport
  * coordinates. Placement is measured from the real trigger/menu boxes, so
@@ -79,27 +144,9 @@ export function EllipsisMenu({ open, label, onToggle, onClose, children, disable
   open: boolean; label: string; onToggle: () => void; onClose: () => void; children: ReactNode; disabled?: boolean;
 }) {
   const { triggerRef, menuRef, style } = useAnchoredMenu(open);
-  useEffect(() => {
-    if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
-    const onKey = (event: KeyboardEvent) => {
-      if (moveMenuFocus(event)) return;
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Node ? event.target : null;
-      if (!target || (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target))) onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [onClose, open]);
+  const triggerRefs = useMemo(() => [triggerRef], [triggerRef]);
+  const menuRefs = useMemo(() => [menuRef], [menuRef]);
+  usePortalMenuInteraction({ open, triggerRefs, menuRefs, focusMenuRef: menuRef, onClose });
   return <>
     <button
       className="ellipsis-button"
@@ -187,13 +234,16 @@ export function TaskComposerModal({ busy, closing = false, title, description, a
   </div>;
 }
 
-function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMoveToggle, onToggle, onEdit, onMove, onArchive, onDelete, moveTargets }: {
+function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMoveToggle, onClose, onToggle, onEdit, onMove, onArchive, onDelete, moveTargets }: {
   subtask: AnyTask; busy: boolean; menuOpen: boolean; moveOpen: boolean;
-  onMenuToggle: () => void; onMoveToggle: () => void; onToggle: () => void; onEdit: () => void;
+  onMenuToggle: () => void; onMoveToggle: () => void; onClose: () => void; onToggle: () => void; onEdit: () => void;
   onMove: (target: AnyTask) => void; onArchive: () => void; onDelete: () => void; moveTargets: AnyTask[];
 }) {
   const { triggerRef, menuRef, style } = useAnchoredMenu(menuOpen);
   const move = useAnchoredMenu(moveOpen);
+  const triggerRefs = useMemo(() => [triggerRef, move.triggerRef], [move.triggerRef, triggerRef]);
+  const menuRefs = useMemo(() => [menuRef, move.menuRef], [menuRef, move.menuRef]);
+  usePortalMenuInteraction({ open: menuOpen || moveOpen, triggerRefs, menuRefs, focusMenuRef: moveOpen ? move.menuRef : menuRef, onClose });
   return <div className="subtask-actions">
     <button
       className="ellipsis-button"
@@ -204,14 +254,14 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
       ref={(node) => { triggerRef.current = node; }}
       onClick={onMenuToggle}
     ><MoreHorizontal size={17} /></button>
-    {menuOpen && createPortal(<div className="subtask-menu anchored-menu" role="menu" style={style} ref={menuRef}>
+    {menuOpen && createPortal(<div className="subtask-menu task-detail-menu anchored-menu" role="menu" style={style} ref={menuRef}>
       <button role="menuitem" onClick={onToggle}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button>
       <button role="menuitem" onClick={onEdit}><Pencil size={14} /> Edit</button>
       <button role="menuitem" aria-haspopup="menu" aria-expanded={moveOpen} ref={(node) => { move.triggerRef.current = node; }} onClick={onMoveToggle}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>
       <button role="menuitem" onClick={onArchive}><Archive size={14} /> Archive <small>reversible</small></button>
       <button className="danger" role="menuitem" onClick={onDelete}><Trash2 size={14} /> Delete permanently</button>
     </div>, document.body)}
-    {moveOpen && createPortal(<div className="move-target-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
+    {moveOpen && createPortal(<div className="move-target-menu task-detail-move-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
       <span>Move to task</span>
       {(moveTargets || []).length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
     </div>, document.body)}
@@ -271,7 +321,8 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
                 menuOpen={subtaskMenuId === subtaskId} moveOpen={moveMenuId === subtaskId}
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}
                 onMoveToggle={() => onMoveMenu(moveMenuId === subtaskId ? null : subtaskId)}
-                onToggle={() => { onSubtaskMenu(null); onToggleSubtask(subtask); }}
+                onClose={() => { onSubtaskMenu(null); onMoveMenu(null); }}
+                onToggle={() => { onClose(); onToggleSubtask(subtask); }}
                 onEdit={() => onEditTask(subtask)}
                 onMove={(target) => onMoveSubtask(subtask, target)}
                 onArchive={() => onArchiveSubtask(subtask)}
@@ -294,26 +345,30 @@ export function TaskRemovalConfirmation({ mode, scope, title, subtaskCount, busy
 }) {
   const permanent = mode === "delete";
   const source = localTask ? "Work OS" : "Nifty";
-  return <div className="task-modal-backdrop confirmation-backdrop"><section className={`delete-confirmation ${permanent ? "" : "reversible"}`} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useDialogFocus(dialogRef);
+  return renderViewportSurface(<div className="task-modal-backdrop confirmation-backdrop"><section ref={dialogRef} className={`delete-confirmation ${permanent ? "" : "reversible"}`} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirmation-title" aria-describedby="delete-confirmation-description">
     <span className={permanent ? "danger-icon" : "reversible-icon"}>{permanent ? <Trash2 size={18} /> : <Archive size={18} />}</span>
     <h2 id="delete-confirmation-title">{permanent ? "Permanently delete" : "Archive"} this {scope}?</h2>
     <p id="delete-confirmation-description">{permanent ? <>“{title}” will be permanently removed from {source} and cannot be restored.</> : <>“{title}” will be hidden from active work but retained in {localTask ? "Work OS history" : `Nifty. It can be restored from Nifty’s archived tasks`}.</>}{scope === "task" && subtaskCount > 0 ? ` Its ${subtaskCount} remaining subtask${subtaskCount === 1 ? "" : "s"} will also be ${permanent ? "permanently deleted" : "archived"}.` : ""}</p>
     <div><button disabled={busy} onClick={onCancel}>Cancel</button><button className={permanent ? "confirm-delete" : "confirm-archive"} disabled={busy} onClick={onConfirm}>{busy ? (permanent ? "Deleting…" : "Archiving…") : permanent ? "Delete permanently" : "Archive task"}</button></div>
-  </section></div>;
+  </section></div>);
 }
 
 export function TaskEditModal({ kind, title, description, busy, localTask = false, onTitle, onDescription, onClose, onSubmit }: {
   kind: "task" | "subtask"; title: string; description: string; busy: boolean; localTask?: boolean;
   onTitle: (value: string) => void; onDescription: (value: string) => void; onClose: () => void; onSubmit: () => void;
 }) {
-  return <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title">
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useDialogFocus(dialogRef);
+  return renderViewportSurface(<div className="task-modal-backdrop"><section ref={dialogRef} className="task-modal" role="dialog" aria-modal="true" aria-labelledby="edit-task-title">
     <header><div><span>Edit {kind}</span><h2 id="edit-task-title">Update the {localTask ? "Work OS" : "Nifty"} record</h2></div><button aria-label="Close editor" disabled={busy} onClick={onClose}><X size={18} /></button></header>
     <div className="task-modal-body">
       <label><span>Title</span><input autoFocus maxLength={240} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label><span>Description</span><textarea maxLength={20000} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
     </div>
     <footer><button disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !title.trim()} onClick={onSubmit}>Save changes</button></footer>
-  </section></div>;
+  </section></div>);
 }
 
 export function TaskCarryOverFlyout({ groups, busy, onClose, onSurfaceTask, onTaskCompletion, onOpenDay, taskFlight }: {
