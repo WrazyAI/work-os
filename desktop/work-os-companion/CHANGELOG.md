@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.52
+
 - Tasks now keeps date navigation in the masthead, puts Add task beside search, and lets you edit or remove subtasks from their action menu.
 
 ## 0.3.51
