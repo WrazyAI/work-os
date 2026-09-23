@@ -180,7 +180,7 @@ async function listAllTaskCandidates(userId: string, opts: TaskListOptions) {
   const rows: Record<string, any>[] = [];
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
-    const page = await listTasks(userId, { ...opts, offset, limit: pageSize });
+    const page = (await listTasks(userId, { ...opts, offset, limit: pageSize })) ?? [];
     rows.push(...page);
     if (page.length < pageSize) return rows;
   }
