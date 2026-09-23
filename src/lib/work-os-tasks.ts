@@ -141,6 +141,7 @@ export function isNiftyTaskAttributableToMember(task: Record<string, any>, nifty
     || stringValues(raw.subscribers).includes(niftyMemberId);
 }
 
+/** Query one stable page of mirrored tasks using provider-neutral filters. */
 export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   let query = db()
     .from("work_tasks")
@@ -226,10 +227,12 @@ function compareTaskDueOrder(left: Record<string, any>, right: Record<string, an
   return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
 }
 
+/** Normalize a task due value to a comparable calendar date. */
 function normalizedTaskDue(value: unknown) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
+/** Compare workspace rows by due date while keeping completed and undated work in canonical positions. */
 function compareWorkspaceDue(left: Record<string, any>, right: Record<string, any>, direction: "asc" | "desc") {
   // Match the companion contract: open work before completed work, and undated
   // rows after dated rows in either direction.
@@ -244,12 +247,14 @@ function compareWorkspaceDue(left: Record<string, any>, right: Record<string, an
   return due || compareTaskRecency(left, right);
 }
 
+/** Rank overdue, open, and completed rows for Status sorting. */
 function workspaceStatusRank(task: Record<string, any>, currentDate: string) {
   if (task.completed === true) return 2;
   const due = normalizedTaskDue(task.due_date);
   return due && due < currentDate ? 0 : 1;
 }
 
+/** Apply the server-side ordering contract used before paginating Tasks workspace results. */
 function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, any>, order: TaskListOrder, currentDate: string) {
   switch (order) {
     case "title_asc":
@@ -276,6 +281,7 @@ function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, 
   }
 }
 
+/** Load all task provenance paths attributable to one person, then globally sort and page them. */
 export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
