@@ -26,6 +26,13 @@ export class SyncBypassError extends Error {
 const MAX_BACKOFF_MS = 60 * 60_000;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
+export type QueueFlushResult = {
+  sent?: number;
+  remaining: number;
+  needsAttention: number;
+  retiredAttendanceControls?: number;
+};
+
 function cleanBase(value: string) { return value.trim().replace(/\/$/, ""); }
 
 export class ApiRequestError extends Error {
@@ -229,22 +236,40 @@ export async function discardReadyInterpretation(id: string) {
   await secureState.saveQueue(queue.filter((action) => action.id !== id || action.status !== "ready_for_review"));
 }
 
-export async function flushQueue(now = Date.now()) {
+export async function flushQueue(now = Date.now()): Promise<QueueFlushResult> {
   return diagnostics.withSpan("offline_queue.flush", async () => {
-    const queue = await secureState.queue();
+    let queue = await secureState.queue();
     if (syncBypassActive) {
       return { remaining: queue.length, needsAttention: queue.filter((action) => action.status === "needs_attention").length };
     }
+    const obsoleteAttendance = queue.filter((action) => {
+      if (action.path.replace(/\/$/, "") !== "/api/work-os/me/workday") return false;
+      if (action.method === "POST") return true;
+      return action.method === "PATCH" && !["late_reason", "resolve_missed_clock_out"].includes(String(action.body.action ?? ""));
+    });
+    if (obsoleteAttendance.length) {
+      const obsoleteIds = new Set(obsoleteAttendance.map((action) => action.id));
+      queue = queue.filter((action) => !obsoleteIds.has(action.id));
+      await secureState.saveQueue(queue);
+      diagnostics.warn("offline_queue.worktivity_migration", "Saved attendance actions were not replayed because Worktivity now controls clock status.", {
+        count: obsoleteAttendance.length,
+        methods: [...new Set(obsoleteAttendance.map((action) => action.method))],
+      }, { source: "sync" });
+    }
+    const retiredAttendanceControls = obsoleteAttendance.length;
+    const withRetired = <T extends Record<string, unknown>>(result: T) => retiredAttendanceControls
+      ? { ...result, retiredAttendanceControls }
+      : result;
     const due = queue.filter((action) =>
       action.status === "pending"
       && (!action.nextAttemptAt || Date.parse(action.nextAttemptAt) <= now)
     );
     if (!due.length) {
-      return {
+      return withRetired({
         sent: 0,
         remaining: queue.length,
         needsAttention: queue.filter((action) => action.status === "needs_attention").length,
-      };
+      });
     }
 
     try {
@@ -256,11 +281,11 @@ export async function flushQueue(now = Date.now()) {
       const dueIds = new Set(due.map((action) => action.id));
       const remaining = queue.map((action) => dueIds.has(action.id) ? reschedule(action, error, now) : action);
       await secureState.saveQueue(remaining);
-      return {
+      return withRetired({
         sent: 0,
         remaining: remaining.length,
         needsAttention: remaining.filter((action) => action.status === "needs_attention").length,
-      };
+      });
     }
 
     const dueIds = new Set(due.map((action) => action.id));
@@ -289,10 +314,10 @@ export async function flushQueue(now = Date.now()) {
       }
     }
     await secureState.saveQueue(remaining);
-    return {
+    return withRetired({
       sent,
       remaining: remaining.length,
       needsAttention: remaining.filter((action) => action.status === "needs_attention").length,
-    };
+    });
   }, {}, "sync");
 }

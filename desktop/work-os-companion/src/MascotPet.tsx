@@ -26,7 +26,7 @@ export function MascotPet({ agent = "idle", workday = "active", className, artCl
   const runtime = isolated ? null : snapshot;
   const visual = runtime ?? deriveMascotVisualState({ agent, workday });
   const reduced = reducedMotion || runtime?.reducedMotion === true;
-  const attention = useAttentionSequence(visual.pose === "alert", reduced);
+  const attention = useAttentionSequence(visual.pose === "alert", reduced, replayKey);
   const Pet = MASCOT.Pet;
   const updateGaze = (event: ReactPointerEvent<HTMLSpanElement>) => {
     if (reduced || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;

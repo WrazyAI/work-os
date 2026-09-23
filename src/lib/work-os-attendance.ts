@@ -4,6 +4,7 @@ import { activeSession, clockIn, insertHistoricalWorktivitySession, syncWorktivi
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
+import { worktivityClockOutBoundary } from "@/modules/work-os/worktivity-control";
 
 const CACHE_MS = 55_000;
 const ATTENDANCE_PROVIDER_TIMEOUT_MS = 12_000;
@@ -129,11 +130,11 @@ export function worktivityLocalDayBounds(timezone: string, at: Date) {
   };
 }
 
-async function employeeAttendance(employeeId: string, timezone: string, observedAt: string): Promise<{ projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }> {
+async function employeeAttendance(employeeId: string, timezone: string, observedAt: string, forceRefresh = false): Promise<{ projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }> {
   const bounds = worktivityLocalDayBounds(timezone, new Date(observedAt));
   const cacheKey = `${employeeId}:${timezone}:${bounds.date}`;
   const previous = cache.get(cacheKey);
-  if (previous && Date.now() - previous.fetchedAt < CACHE_MS) {
+  if (!forceRefresh && previous && Date.now() - previous.fetchedAt < CACHE_MS) {
     return { employee: previous.employee, projection: { ...previous.projection, observedAt }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
   }
   try {
@@ -166,7 +167,7 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
     cache.set(cacheKey, result);
     return result;
   } catch (error) {
-    if (previous) return { employee: previous.employee, projection: { ...previous.projection, observedAt, stale: true, fallbackAllowed: true, message: "Worktivity could not be refreshed; showing the last observed status." }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
+    if (!forceRefresh && previous) return { employee: previous.employee, projection: { ...previous.projection, observedAt, stale: true, fallbackAllowed: true, message: "Worktivity could not be refreshed; showing the last observed status." }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
     return { employee: null, projection: unknownAttendance(error instanceof Error ? error.message : "Worktivity attendance is unavailable.", observedAt), latestActivity: null, activityLogs: [], sessionStartAt: null };
   }
 }
@@ -208,7 +209,7 @@ async function persistAttendanceObservation(access: WorkOsAccess, timezone: stri
     clocked_out_at: projection.clockedOutAt,
     activity_observed_at: projection.activityObservedAt ?? null,
     provider_break_seconds: projection.providerBreakSeconds ?? 0,
-    raw: { source: "worktivity" },
+    raw: { source: "worktivity", clockedOutAtInferred: projection.clockedOutAtInferred === true },
   }, { onConflict: "organization_id,person_id,provider,observed_at" });
   if (error) throw new Error(`persist Worktivity attendance observation: ${error.message}`);
 }
@@ -249,7 +250,7 @@ export async function loadPersistedWorktivityAttendance(access: WorkOsAccess, at
 /** Fresh Worktivity attendance converges into the Work OS interval ledger.
  * Provider facts retain their provenance, while stale or unknown observations
  * never create or transition a session. */
-export async function observeWorktivityAttendance(access: WorkOsAccess, at = new Date()) {
+export async function observeWorktivityAttendance(access: WorkOsAccess, at = new Date(), options: { forceRefresh?: boolean; clockInContext?: Record<string, unknown> } = {}) {
   if (!access.personId) throw new Error("Work OS person mapping required");
   if (!worktivityConfigured()) return { attendance: unknownAttendance("Worktivity is not configured.", at.toISOString()), session: await activeSession(access) };
   const { data: person, error } = await db().from("work_people").select("worktivity_employee_id")
@@ -261,20 +262,27 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
     .eq("organization_id", access.organizationId).eq("person_id", access.personId).maybeSingle();
   if (onboardingError) throw new Error(`load Worktivity employee timezone: ${onboardingError.message}`);
   const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
-  const { projection, employee, latestActivity, activityLogs, sessionStartAt } = await employeeAttendance(employeeId, timezone, at.toISOString());
+  const { projection, employee, latestActivity, activityLogs, sessionStartAt } = await employeeAttendance(employeeId, timezone, at.toISOString(), options.forceRefresh === true);
   const existing = await activeSession(access);
   void employee;
   void latestActivity;
   void sessionStartAt;
   let session = existing;
   if (projection.source === "worktivity" && !projection.stale) {
+    if (projection.state === "off_shift" && !projection.clockedOutAt && existing?.clocked_in_at) {
+      const boundary = worktivityClockOutBoundary({ clockedInAt: String(existing.clocked_in_at), clockedOutAt: null, observedAt: projection.observedAt });
+      if (boundary) {
+        projection.clockedOutAt = boundary.at;
+        projection.clockedOutAtInferred = boundary.inferred;
+      }
+    }
     await persistAttendanceObservation(access, timezone, projection);
     // A session left open on an earlier day would otherwise block today's
     // clock-in forever; close it from the stored observations first.
     await closeStaleWorktivitySessions(access).catch((error) => {
       console.error("[work-os] stale Worktivity session repair failed", { personId: access.personId, message: error instanceof Error ? error.message : "unknown" });
     });
-    session = await syncWorktivitySession(access, projection);
+    session = await syncWorktivitySession(access, projection, options.clockInContext);
     session = await persistProviderBreaks(access, session, activityLogs, projection.observedAt, false);
     if (projection.status === "break") projection.message = "Worktivity OnBreak observed; the active workday and provider break time are synchronized.";
   }

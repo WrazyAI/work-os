@@ -19,7 +19,7 @@ export function sessionGate(day: DayData | null): SessionGate {
   const attendance = day?.attendance;
   const worktivitySynced = attendance?.source === "worktivity" && !attendance.stale && (attendance.state === "active" || attendance.state === "paused");
   if (worktivitySynced) {
-    return { active: true, canClockIn: false, message: "Worktivity activity is active while the Work OS session synchronizes.", worktivitySynced: true };
+    return { active: true, canClockIn: false, message: "Worktivity confirms attendance while Work OS mirrors the session.", worktivitySynced: true };
   }
   if (state === "clocked_out") {
     return { active: false, canClockIn: false, message: "Today’s Work OS session is closed.", worktivitySynced: false, persistentTitle: "Workday closed", persistentMessage: "Today’s Work OS session is closed." };
@@ -27,5 +27,5 @@ export function sessionGate(day: DayData | null): SessionGate {
   if (!day?.shift) {
     return { active: false, canClockIn: true, message: "No scheduled shift is active. Start an exception session before sending session-based updates.", worktivitySynced: false, persistentTitle: "No scheduled shift", persistentMessage: "Start an exception session only if you are working outside your configured schedule. Work OS will not invent an end time." };
   }
-  return { active: false, canClockIn: true, message: "Start your Work OS session before sending session-based updates.", worktivitySynced: false, persistentTitle: "Work OS session not started", persistentMessage: "Start your Work OS session when you begin. Worktivity observations remain separate." };
+  return { active: false, canClockIn: true, message: "Clock in with Worktivity before sending session-based updates.", worktivitySynced: false, persistentTitle: "Work OS session not started", persistentMessage: "Clock in with Worktivity from the Windows Companion. Work OS mirrors confirmed status." };
 }

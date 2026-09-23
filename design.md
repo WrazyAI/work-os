@@ -248,9 +248,10 @@ content axis, tokens, and action language.
 The wide composition is a 7/5 split:
 
 1. Readiness hero. One strong outcome statement, short state detail, one
-   primary Clock in action, one quiet Set focus action, scheduled window, and
-   one provenance sentence. Otto is a restrained visual anchor, never the
-   reason the hero is tall.
+   primary Clock in action in the Windows Companion, one quiet Set focus
+   action, scheduled window, and one provenance sentence. The web dashboard
+   shows status and directs employees to the Companion for attendance actions.
+   Otto is a restrained visual anchor, never the reason the hero is tall.
 2. Workday pulse. A compact schedule/timeline surface with time-until-shift,
    scheduled window, and one observation disclaimer. It does not repeat task
    counts, reviews, or a six-fact provider diagnostic.
@@ -266,15 +267,18 @@ The readiness hero should feel like a composed editorial panel: large type,
 simple facts, a single ink action, and a small signal accent. Do not use a
 full-bleed green gradient, large decorative robot, or multiple calls to action.
 
-When no schedule exists, say so and keep Clock in truthful. Planning before
-clock-in must state that it does not start attendance.
+When no schedule exists, say so and keep the Companion's exception-start
+confirmation truthful. Planning before clock-in must state that it does not
+start attendance.
 
 ### 5.2 Active / clocked in
 
 The active dashboard is organized around one command surface:
 
-1. Status header: On shift, Paused, or Worktivity observation; elapsed time;
-   next update; Pause/Resume and Clock out only when Work OS owns those actions.
+1. Status header: On shift, Paused, or Worktivity status; elapsed time and
+   next update. Pause/Resume and Clock out appear in the connected Windows
+   Companion; Worktivity owns the state and confirms each change before Work OS
+   mirrors it. The web dashboard remains status-only.
 2. Time band: elapsed, a bounded progress orb/ring, remaining time, and
    schedule. It is a calm instrument, not a gamified score.
 3. Focus and flow: today's focus, provenance/save state, and a completed /
@@ -291,13 +295,20 @@ visual anchor.
 ### 5.3 Observed-only and degraded states
 
 Observed-only mode changes the labels and available actions, not the entire
-composition. Say Worktivity observation and Observed active time; never call it
-a Work OS session or imply attendance.
+composition. Name Worktivity as the attendance source and show whether Work OS
+has mirrored the session yet. A stale or unknown provider state must not be
+presented as a confirmed current workday.
 
 Loading reserves the dashboard geometry with content-shaped skeletons. Refreshing
 keeps existing data visible. Empty and degraded states use one concise sentence
 and one recovery path. A provider error never replaces the entire command center
 with a raw error.
+
+On the web, attendance is status-only and names the Worktivity state, observation
+freshness, and any inferred clock-out boundary. It points employees to the
+Windows Companion for attendance actions. In the Companion, an unconfirmed
+provider action stays visibly pending and blocks another clock action until a
+read-only status check resolves it; never imply success from a desktop click.
 
 ## 6. Task workspace blueprint
 
@@ -473,12 +484,43 @@ They close on Escape/outside click and remain within the viewport. Use a
 detached card for contextual details rather than inserting a panel into the
 page and shifting the user's scroll position.
 
+### 8.4 Worktivity attendance controls
+
+The Windows Companion is the only Work OS surface that can initiate attendance
+changes. Clock in, clock out, pause, and resume follow this sequence:
+
+1. Read fresh Worktivity status and check whether the requested state is already
+   reached or whether the action is allowed.
+2. Preserve required late-start, exception-start, and extended-shift
+   confirmations. Explain when Worktivity is unavailable, unconfigured, or
+   cannot be controlled.
+3. Open Worktivity when it is closed. If it is already running without a
+   controllable page, restart it through the approved graceful-close and
+   bounded force-close path, and show that Worktivity is being restarted.
+4. Make one desktop action through Worktivity's own interface, then read fresh
+   provider status. Do not queue attendance actions offline or repeat a click
+   after an ambiguous result.
+5. Show a pending state with a read-only status retry when Worktivity has not
+   confirmed the result. Disable the other attendance controls while pending.
+   A provider-confirmed result is the receipt; a click or successful process
+   launch is not.
+
+Worktivity owns attendance state and timestamps. Work OS mirrors fresh provider
+state into its session ledger while retaining its work planning and review
+state. Provider state wins a conflicting session state. If the provider reports
+clock-out without an exact time, use the first fresh off-shift observation as
+the boundary and label the time as inferred in both the attendance observation
+and its audit event. Keep closed sessions as history. Web surfaces may display
+provider status and freshness but must not initiate attendance mutations.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:
 
 - Work OS session state.
-- Worktivity/provider observation.
+- Worktivity provider state and provider-confirmed attendance actions.
+- Inferred Worktivity boundaries, explicitly labeled with their observation
+  time and inference provenance.
 - Employee-authored progress or claims.
 - AI-suggested interpretation.
 - Work OS task state.
@@ -486,10 +528,12 @@ The visual system must keep these evidence classes distinct:
 - Output evidence.
 - Review/approval state.
 
-Observation is not attendance, effort, productivity, completion, or quality.
-Provider credentials are not a verified connection. A successful browser
-request is not a provider-confirmed mutation. Use labels, placement, and
-source/freshness copy to keep meanings separate.
+Activity observation is not effort, productivity, completion, or quality.
+Fresh Worktivity attendance status is the attendance source of truth; an
+activity event alone is not a provider-confirmed clock action. Provider
+credentials are not a verified connection. A successful browser request is not
+a provider-confirmed mutation. Use labels, placement, and source/freshness copy
+to keep meanings separate.
 
 Every asynchronous surface defines:
 
@@ -525,6 +569,12 @@ Motion explains a state change:
 Use small transforms only: a 1px hover lift, 4–9px entry translation, or
 approximately .985 press scale. No ambient loops, bouncing, overshoot, or
 theatrical dashboard animation.
+
+The floating companion starts a bounded three-play attention sequence when an
+actionable prompt needs input: five seconds of movement, one second still, then
+repeat twice. A snoozed prompt replays the same sequence when it returns. The
+mascot then stays still in its alert pose until the employee responds. Never
+loop continuously, and remove attention motion under reduced-motion preferences.
 
 Respect prefers-reduced-motion. Remove transforms, shimmer, and nonessential
 animation while preserving state, labels, and final geometry.
@@ -597,6 +647,12 @@ attention motion under reduced-motion preferences.
 Art uses the existing ink/paper/signal palette and never becomes a generic stock
 illustration. Do not create a new raster asset where the configured original
 asset can be referenced. Mascot motion is removed under reduced motion.
+
+The compact companion's drag handle is a visible, subtle dark capsule centered
+above the mascot with a generous grab area. Keep it about 50% larger than the
+previous 48×20px ordinary handle (72×30px) and 52×20px due-prompt handle
+(78×30px), without covering the separate hide control. The due-prompt mascot
+starts below the handle, including during its 6px attention gesture.
 
 ## 14. Deep module and seam rules
 

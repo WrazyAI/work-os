@@ -55,6 +55,8 @@ import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from 
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { buildPlanItemsFromInterpretation } from "./planItems";
+import { WorktivityControlNotice } from "./WorktivityControlNotice";
+import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemorySettings } from "./MemorySettings";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
@@ -84,10 +86,34 @@ type EodScreenshotContext = { processed: number; excluded: number; failed: numbe
  * frames is enough to cover a day's sampled context without letting a single
  * press run away with vision cost. */
 const EOD_PREPARE_ROUNDS = 4;
+
+const worktivityControlTransport: WorktivityControlTransport = {
+  preflight: (request) => apiRequest<WorktivityPreflight>("/api/work-os/me/workday/worktivity-control", {
+    method: "POST",
+    headers: { "Idempotency-Key": request.operation_id, "X-Work-OS-Desktop-Control": "companion" },
+    body: JSON.stringify(request),
+  }),
+  execute: (action) => invoke<WorktivityDesktopResult>("worktivity_control", { action }),
+  restore: (desktop) => !desktop || desktop.restore_required
+    ? invoke<void>("finish_worktivity_control")
+    : Promise.resolve(),
+  confirm: (request) => apiRequest<Extract<WorktivityControlResult, { status: "confirmed" | "pending" | "blocked" | "not_applied" }>>("/api/work-os/me/workday/worktivity-control", {
+    method: "POST",
+    headers: { "Idempotency-Key": request.operation_id, "X-Work-OS-Desktop-Control": "companion" },
+    body: JSON.stringify(request),
+  }),
+  sleep: (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+};
+
 type TaskAssigneeOption = { id: string; displayName: string; email: string | null };
 type TaskDeletionRequest = { task: Record<string, any>; closeParent: boolean; mode: "archive" | "delete" };
 type TaskEditRequest = { task: Record<string, any>; kind: "task" | "subtask" };
-type ClockInConfirmation = { kind: "late" | "exception"; reason: string };
+type ClockInConfirmation = { kind: "late" | "exception"; reason: string; operationId?: string };
+type PendingWorktivityControl = { action: WorktivityControlAction; operationId: string; body: Record<string, unknown>; message: string };
+function isWorktivityControlResult(value: unknown): value is WorktivityControlResult {
+  return !!value && typeof value === "object" && "operation_id" in value && "status" in value
+    && ["confirmed", "not_applied", "pending", "desktop_failed", "blocked", "confirmation_required"].includes(String((value as { status: unknown }).status));
+}
 type MissedClockOutCorrection = { sessionId: string; date: string; clockedInAt: string | null };
 type ProgressUpdateKind = "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
 type ProgressReceipt = { text: string; message: string; kind: ProgressUpdateKind; queued?: boolean };
@@ -215,6 +241,9 @@ export default function App() {
   const [report, setReport] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [worktivityPending, setWorktivityPending] = useState<PendingWorktivityControl | null>(null);
+  const [worktivityControlPhase, setWorktivityControlPhase] = useState<WorktivityControlPhase | null>(null);
+  const [clockOutExtendedPrompt, setClockOutExtendedPrompt] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
   const [queueAttentionCount, setQueueAttentionCount] = useState(0);
   const [apiBase, setApiBase] = useState("");
@@ -755,7 +784,16 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    const recover = async () => { if (syncBypassRef.current || !navigator.onLine) return; const result = await flushQueue(); setQueueCount(result.remaining); setQueueAttentionCount(result.needsAttention); };
+    const recover = async () => {
+      if (syncBypassRef.current || !navigator.onLine) return;
+      const result = await flushQueue();
+      setQueueCount(result.remaining);
+      setQueueAttentionCount(result.needsAttention);
+      if (result.retiredAttendanceControls) {
+        const count = result.retiredAttendanceControls;
+        notifications.info(`${count} saved attendance change${count === 1 ? " was" : "s were"} not replayed. Check Worktivity, then start a new action from the Windows Companion.`, "Worktivity now controls attendance");
+      }
+    };
     window.addEventListener("online", recover); const timer = window.setInterval(() => void recover().catch(() => undefined), 60_000);
     return () => { window.removeEventListener("online", recover); clearInterval(timer); };
   }, [session]);
@@ -1134,7 +1172,33 @@ export default function App() {
       return;
     }
     if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
-      await action();
+      const result = await action();
+      if (isWorktivityControlResult(result)) {
+        if (result.status === "confirmation_required") {
+          if (result.requirement === "late" || result.requirement === "exception") {
+            setClockInConfirmation({ kind: result.requirement, reason: "", operationId: result.operation_id });
+          } else if (result.requirement === "extended") {
+            setClockOutExtendedPrompt(true);
+            setClockOutConfirmation(true);
+          }
+          return;
+        }
+        if (result.status === "pending") {
+          setWorktivityPending({ action: result.action, operationId: result.operation_id, body: result.body ?? {}, message: result.message });
+          diagnostics.warn("worktivity.control.pending", result.message, { action: result.action, operationId: result.operation_id });
+          notifications.info(result.message, "Worktivity confirmation pending");
+          if (result.restore_warning) notifications.notify("warning", result.restore_warning, "Worktivity control connection needs attention");
+          return;
+        }
+        if ("restore_warning" in result && result.restore_warning) notifications.notify("warning", result.restore_warning, "Worktivity control connection needs attention");
+        if (result.status === "not_applied") {
+          setWorktivityPending((current) => current?.operationId === result.operation_id ? null : current);
+          notifications.info(result.message, "Worktivity did not change");
+          return;
+        }
+        if (result.status === "desktop_failed" || result.status === "blocked") throw new Error(result.message || "Worktivity could not complete this action.");
+        if (result.status === "confirmed") setWorktivityPending((current) => current?.operationId === result.operation_id ? null : current);
+      }
       // Task/workspace writes already patched the caches surgically; just mark
       // them for the next natural revalidation (focus, TTL, view entry) so the
       // page never refetches everything for one row. Everything else (shift,
@@ -1150,28 +1214,12 @@ export default function App() {
       const queue = await secureState.queue(); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
       void emit("work-os://main-day-changed");
       diagnostics.info("ui.action.completed", label, { activeView: view });
-      notifications.success(actionSuccessMessages[label] ?? "The change was saved.");
+      notifications.success(isWorktivityControlResult(result) && result.status === "confirmed" && result.already_target
+        ? "Worktivity already reflects this attendance state."
+        : actionSuccessMessages[label] ?? "The change was saved.");
     }
     catch (value) {
       const message = value instanceof Error ? value.message : "Action failed";
-      if (label === "shift.clock_in" && /workday is already closed/i.test(message)) {
-        try {
-          const nextDay = await refresh({ dayOnly: true, refreshProviders: true });
-          if (nextDay && sessionGate(nextDay).worktivitySynced) {
-            diagnostics.info("ui.action.recovered", "Fresh Worktivity activity replaced a stale closed-workday view.", { action: label, activeView: view });
-            notifications.info("Worktivity activity is active. Retrying your clock-in.", "Activity synchronized");
-            await sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop" });
-            const queuedAfter = await secureState.queue();
-            setQueueCount(queuedAfter.length);
-            setQueueAttentionCount(queuedAfter.filter((item) => item.status === "needs_attention").length);
-            await refresh();
-            notifications.success(actionSuccessMessages["shift.clock_in"]);
-            return;
-          }
-        } catch {
-          // Preserve the original conflict when the provider refresh also fails.
-        }
-      }
       diagnostics.error("ui.action.failed", message, { action: label, activeView: view });
       showError(message, message);
     }
@@ -1623,6 +1671,9 @@ export default function App() {
   const sessionActive = !!workSession && ["clocked_in", "active", "paused", "eod_due"].includes(workSession.state);
   const observedOnly = gate.worktivitySynced && !sessionActive;
   const paused = sessionActive ? workSession?.state === "paused" : observedOnly && visibleDay?.attendance?.state === "paused";
+  const providerAttendanceActive = visibleDay?.attendance?.source === "worktivity" && !visibleDay.attendance.stale
+    && (visibleDay.attendance.state === "active" || visibleDay.attendance.state === "paused");
+  const canControlWorktivity = sessionActive || providerAttendanceActive;
   const hasVisibleSession = Boolean(visibleSession);
   const lateReasonMissing = lateReasonRequired(visibleDay?.session);
   const clockInLateProlonged = clockInConfirmation?.kind === "late" && !!visibleDay?.shift
@@ -2185,6 +2236,17 @@ export default function App() {
     }
   }
 
+  function performWorktivityControl(action: WorktivityControlAction, body: Record<string, unknown> = {}, operationId?: string) {
+    if (worktivityPending) throw new Error("A Worktivity action is waiting for confirmation. Check its status before starting another clock action.");
+    return runWorktivityControl(action, body, worktivityControlTransport, {
+      operationId,
+      attempts: 16,
+      intervalMs: 2_000,
+      timeoutMs: 20_000,
+      onPhase: setWorktivityControlPhase,
+    }).finally(() => setWorktivityControlPhase(null));
+  }
+
   function clockIn() {
     const shift = visibleDay?.shift;
     const now = pulseNow.getTime();
@@ -2192,15 +2254,15 @@ export default function App() {
     const ends = shift ? Date.parse(shift.endsAt) : NaN;
     const startable = Number.isFinite(starts) && now >= starts - 30 * 60_000 && now < ends;
     if (!startable) {
-      setClockInConfirmation({ kind: "exception", reason: "" });
+      setClockInConfirmation({ kind: "exception", reason: "", operationId: crypto.randomUUID() });
       return;
     }
     if (now > starts + 15 * 60_000) {
-      setClockInConfirmation({ kind: "late", reason: "" });
+      setClockInConfirmation({ kind: "late", reason: "", operationId: crypto.randomUUID() });
       return;
     }
     if (syncBypassRef.current) { bypassAct("shift.clock_in", (base) => ({ ...base, session: { id: base.session?.id ?? "debug-local", state: "active", scheduled_starts_at: base.shift?.startsAt ?? null, scheduled_ends_at: base.shift?.endsAt ?? null, clocked_in_at: new Date().toISOString(), clocked_out_at: null, paused_seconds: 0 } as DayData["session"] })); return; }
-    void act("shift.clock_in", () => sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop" }));
+    void act("shift.clock_in", () => performWorktivityControl("clock_in"));
   }
 
   function confirmClockIn() {
@@ -2213,9 +2275,9 @@ export default function App() {
     if (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim()) return;
     const confirmation = clockInConfirmation;
     setClockInConfirmation(null);
-    void act("shift.clock_in", () => sendOrQueue("/api/work-os/me/workday", "POST", confirmation.kind === "late"
-      ? { source: "desktop", late_acknowledged: true, late_reason: confirmation.reason.trim() || undefined }
-      : { source: "desktop", exception_acknowledged: true, exception_reason: confirmation.reason.trim() }));
+    void act("shift.clock_in", () => performWorktivityControl("clock_in", confirmation.kind === "late"
+      ? { late_acknowledged: true, late_reason: confirmation.reason.trim() || undefined }
+      : { exception_acknowledged: true, exception_reason: confirmation.reason.trim() }, confirmation.operationId));
   }
 
   /** Records the late-start reason on the active session (design.md §8). */
@@ -2226,16 +2288,20 @@ export default function App() {
   }
 
   function confirmClockOut() {
-    setClockOutConfirmation(false);    if (syncBypassRef.current) {
+    const extendedAcknowledged = extendedClockOut || clockOutExtendedPrompt;
+    setClockOutConfirmation(false);
+    setClockOutExtendedPrompt(false);
+    if (syncBypassRef.current) {
       bypassAct("shift.clock_out", (base) => ({ ...base, session: base.session ? { ...base.session, state: "clocked_out", clocked_out_at: new Date().toISOString() } : null }));
       return;
     }
-    void act("shift.clock_out", async () => {
-      await sendOrQueue("/api/work-os/me/workday", "PATCH", {
-        action: "clock_out",
-        ...(extendedClockOut ? { extended_acknowledged: true } : {}),
-      });
-    });
+    void act("shift.clock_out", () => performWorktivityControl("clock_out", { ...(extendedAcknowledged ? { extended_acknowledged: true } : {}) }));
+  }
+
+  function retryWorktivityStatus() {
+    if (!worktivityPending) return;
+    const pending = worktivityPending;
+    void act(`shift.verify_${pending.action}`, () => retryWorktivityConfirmation(pending.action, pending.operationId, worktivityControlTransport, pending.body));
   }
 
   function correctMissedClockOut() {
@@ -2722,12 +2788,14 @@ export default function App() {
         onRetry={() => void outstandingQuery.refetch()}
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
+      {worktivityPending && <WorktivityControlNotice state={{ status: "pending", message: worktivityPending.message }} busy={busy} onCheckStatus={retryWorktivityStatus} />}
+      {!worktivityPending && worktivityControlPhase && <WorktivityControlNotice state={{ status: "starting", phase: worktivityControlPhase }} />}
       {view === "day" && (!visibleDay ? <DashboardSkeleton /> : !active ? <OffShiftDashboard
         model={dashboardModel}
         tasks={visibleTodayTasks}
         currentDate={visibleDay.shiftDate}
         busy={busy}
-        canClockIn={gate.canClockIn}
+        canClockIn={gate.canClockIn && !worktivityPending}
         goalSaveState={planSaveState}
         onClockIn={clockIn}
         onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
@@ -2745,9 +2813,9 @@ export default function App() {
         previousTasks={unfinishedCarryOver.filter((item) => item.attribution.date === moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
         currentDate={visibleDay.shiftDate}
-        busy={busy}
-        canPause={sessionActive && !visibleDay.breakPolicy?.worktivityAuthoritative}
-        canClockOut={sessionActive}
+        busy={busy || !!worktivityPending || !!worktivityControlPhase}
+        canPause={canControlWorktivity}
+        canClockOut={canControlWorktivity}
         observedOnly={observedOnly}
         goalSaveState={planSaveState}
         onRetryGoalSave={() => setPlanDirty(true)}
@@ -2759,9 +2827,9 @@ export default function App() {
         onToggleTask={setTaskCompletion}
         onPause={() => {
           if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" as const : "paused" as const, paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
-          void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
+          void act("shift.pause_toggle", () => performWorktivityControl(paused ? "resume" : "pause"));
         }}
-        onClockOut={() => setClockOutConfirmation(true)}
+        onClockOut={() => { setClockOutExtendedPrompt(false); setClockOutConfirmation(true); }}
         onAddTask={() => void openTaskComposer()}
         taskFlight={taskFlight}
         onRetryPendingTask={retryPendingTask}
@@ -2803,8 +2871,8 @@ export default function App() {
         paused={paused}
         busy={busy}
         observedOnly={observedOnly}
-        canPause={sessionActive && !visibleDay?.breakPolicy?.worktivityAuthoritative}
-        canClockOut={sessionActive}
+        canPause={canControlWorktivity && !worktivityPending}
+        canClockOut={canControlWorktivity && !worktivityPending}
         onEditFocus={openPlanningSession}
         onAddTask={() => void openTaskComposer()}
         onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("unfinished"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
@@ -2816,9 +2884,9 @@ export default function App() {
         onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")}
         onPause={() => {
           if (syncBypassRef.current) { bypassAct("shift.pause_toggle", (base) => ({ ...base, session: base.session ? { ...base.session, state: paused ? "active" : "paused", paused_seconds: paused ? base.session.paused_seconds : (base.session.paused_seconds ?? 0) + 900 } : null })); return; }
-          void act("shift.pause_toggle", () => sendOrQueue("/api/work-os/me/workday", "PATCH", { action: paused ? "resume" : "pause" }));
+          void act("shift.pause_toggle", () => performWorktivityControl(paused ? "resume" : "pause"));
         }}
-        onClockOut={() => setClockOutConfirmation(true)}
+        onClockOut={() => { setClockOutExtendedPrompt(false); setClockOutConfirmation(true); }}
         kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
@@ -3001,7 +3069,7 @@ export default function App() {
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
-    {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => setClockOutConfirmation(false)}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
+    {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut || clockOutExtendedPrompt ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => { setClockOutConfirmation(false); setClockOutExtendedPrompt(false); }}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
   </div>;
 }
 
@@ -3090,9 +3158,15 @@ function ShiftDetailsFloatingCard({ view, progressPercent, shiftStart, remaining
   openTasks: number; reviews: number; attendance: DayData["attendance"] | null; timezone?: string; observedActive: string; providerBreak: string; onBack: () => void; onClose: () => void;
 }) {
   return <section className="shift-detail-popover" role="dialog" aria-label={view === "shift" ? "Workday status" : "Worktivity details"}>
-    <header><button className="detail-back" aria-label="Back to detail options" onClick={onBack}><ChevronLeft size={16} /></button><div><span>{view === "shift" ? <Clock3 size={15} /> : <Activity size={15} />}{view === "shift" ? "Workday status" : "Worktivity details"}</span><small>{view === "shift" ? "Schedule and Work OS session context" : "Observed provider context only"}</small></div><button aria-label="Close details" onClick={onClose}><X size={16} /></button></header>
-    {view === "shift" ? <><div className="shift-pulse-visual"><div className="shift-progress-ring" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}><span><small>Scheduled shift</small><strong>{Math.round(progressPercent)}%</strong><em>elapsed</em></span></div><div className="shift-track-summary"><div><span><small>Shift start</small><strong>{shiftStart}</strong></span><span><small>Time remaining</small><strong>{remaining}</strong></span><span><small>Shift end</small><strong>{shiftEnd}</strong></span></div><div className="shift-detail-track"><i style={{ width: `${progressPercent}%` }} /><b style={{ left: `${progressPercent}%` }} /></div></div></div><div className="shift-detail-grid"><span><small>Elapsed</small><strong>{elapsed}</strong></span><span><small>Open tasks</small><strong>{openTasks}</strong></span><span><small>Awaiting review</small><strong>{reviews}</strong></span></div></> : <><div className="worktivity-state"><span className={`presence ${attendance?.state === "active" ? "live" : ""}`} /><div><small>Worktivity observation</small><strong>{attendance?.status ? sentence(attendance.status) : "Unavailable"}</strong></div></div><div className="shift-detail-grid worktivity-grid"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{attendance?.clockedOutAt ? formatTime(attendance.clockedOutAt, timezone) : "Still active"}</strong></span><span><small>Last activity</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>Observed active time</small><strong>{observedActive}</strong></span><span><small>Provider refresh</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>OnBreak deducted</small><strong>{providerBreak}</strong></span></div></>}
+    <header><button className="detail-back" aria-label="Back to detail options" onClick={onBack}><ChevronLeft size={16} /></button><div><span>{view === "shift" ? <Clock3 size={15} /> : <Activity size={15} />}{view === "shift" ? "Workday status" : "Worktivity details"}</span><small>{view === "shift" ? "Schedule and mirrored session context" : "Provider attendance and activity details"}</small></div><button aria-label="Close details" onClick={onClose}><X size={16} /></button></header>
+    {view === "shift" ? <><div className="shift-pulse-visual"><div className="shift-progress-ring" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}><span><small>Scheduled shift</small><strong>{Math.round(progressPercent)}%</strong><em>elapsed</em></span></div><div className="shift-track-summary"><div><span><small>Shift start</small><strong>{shiftStart}</strong></span><span><small>Time remaining</small><strong>{remaining}</strong></span><span><small>Shift end</small><strong>{shiftEnd}</strong></span></div><div className="shift-detail-track"><i style={{ width: `${progressPercent}%` }} /><b style={{ left: `${progressPercent}%` }} /></div></div></div><div className="shift-detail-grid"><span><small>Elapsed</small><strong>{elapsed}</strong></span><span><small>Open tasks</small><strong>{openTasks}</strong></span><span><small>Awaiting review</small><strong>{reviews}</strong></span></div></> : <><div className="worktivity-state"><span className={`presence ${attendance?.state === "active" ? "live" : ""}`} /><div><small>Worktivity attendance</small><strong>{attendance?.status ? sentence(attendance.status) : "Unavailable"}</strong></div></div><div className="shift-detail-grid worktivity-grid"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{worktivityClockOutLabel(attendance, timezone)}</strong></span><span><small>Last activity</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>Observed active time</small><strong>{observedActive}</strong></span><span><small>Provider refresh</small><strong>{formatTime(attendance?.observedAt, timezone)}</strong></span><span><small>OnBreak deducted</small><strong>{providerBreak}</strong></span></div></>}
   </section>;
+}
+
+function worktivityClockOutLabel(attendance: DayData["attendance"] | null | undefined, timezone?: string) {
+  if (attendance?.clockedOutAt) return `${attendance.clockedOutAtInferred ? "Inferred · " : ""}${formatTime(attendance.clockedOutAt, timezone)}`;
+  if (attendance?.state === "active" || attendance?.state === "paused") return "Still active";
+  return attendance?.clockedInAt ? "Not observed" : "—";
 }
 
 function TaskLifecycleMenu({ task, busy, initialOpen = false, onEdit, onArchive, onDelete }: {
@@ -3413,9 +3487,7 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
       : attendance?.state === "active"
         ? "active"
         : "idle";
-  const providerClockOut = attendance?.clockedOutAt
-    ? formatTime(attendance.clockedOutAt, timezone)
-    : attendance?.state === "active" || attendance?.state === "paused" ? "Still active" : attendance?.clockedInAt ? "Not observed" : "—";
+  const providerClockOut = worktivityClockOutLabel(attendance, timezone);
   const scheduleLabel = pulse.schedulePhase === "upcoming" ? "Next shift" : "Scheduled shift";
   const scheduleStatus = pulse.schedulePhase === "upcoming" ? "upcoming" : pulse.schedulePhase === "complete" ? "complete" : "elapsed";
   const middleLabel = pulse.schedulePhase === "upcoming" ? "Starts in" : pulse.schedulePhase === "complete" ? "Shift status" : "Time remaining";
@@ -3450,13 +3522,13 @@ export function ShiftPulseCard({ pulse, now, shift, active, attendance, initialD
   }, [detailsOpen, menuOpen]);
 
   return <section className="pulse-card pre-shift-pulse">
-    <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><div className="pulse-card-controls"><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small><div className="pulse-disclosure" ref={disclosureRef}><button className="ellipsis-button pulse-more" aria-label="Shift pulse options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setDetailsOpen(false); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="pulse-menu" role="menu" onKeyDown={(event) => moveMenuFocus(event.nativeEvent)}><button role="menuitem" autoFocus onClick={() => { setMenuOpen(false); setDetailsOpen(true); }}><Activity size={15} /><span><strong>Worktivity status</strong><small>View observed attendance</small></span><ChevronRight size={14} /></button></div>}{detailsOpen && <section className={`pulse-provider-popover ${observationClass}`} role="dialog" aria-label="Worktivity status"><header><div><Activity size={16} /><span><small>Worktivity observation</small><strong>{providerState}</strong></span></div><button aria-label="Close Worktivity status" onClick={() => setDetailsOpen(false)}><X size={15} /></button></header><div className="pulse-provider-facts"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{providerClockOut}</strong></span><span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span><span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span><span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span><span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span></div><footer>Observed provider data remains separate from your Work OS session.</footer></section>}</div></div></div>
+    <div className="card-title pulse-title"><span><Activity size={17} /> Shift pulse</span><div className="pulse-card-controls"><small><i className={active ? "live" : attendance?.state === "active" ? "observed" : ""} />{state}</small><div className="pulse-disclosure" ref={disclosureRef}><button className="ellipsis-button pulse-more" aria-label="Shift pulse options" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => { setMenuOpen((value) => !value); setDetailsOpen(false); }}><MoreHorizontal size={17} /></button>{menuOpen && <div className="pulse-menu" role="menu" onKeyDown={(event) => moveMenuFocus(event.nativeEvent)}><button role="menuitem" autoFocus onClick={() => { setMenuOpen(false); setDetailsOpen(true); }}><Activity size={15} /><span><strong>Worktivity status</strong><small>View provider attendance</small></span><ChevronRight size={14} /></button></div>}{detailsOpen && <section className={`pulse-provider-popover ${observationClass}`} role="dialog" aria-label="Worktivity status"><header><div><Activity size={16} /><span><small>Worktivity attendance</small><strong>{providerState}</strong></span></div><button aria-label="Close Worktivity status" onClick={() => setDetailsOpen(false)}><X size={15} /></button></header><div className="pulse-provider-facts"><span><small>Clocked in</small><strong>{formatTime(attendance?.clockedInAt, timezone)}</strong></span><span><small>Clocked out</small><strong>{providerClockOut}</strong></span><span><small>Last activity</small><strong>{attendance?.activityObservedAt ? formatTime(attendance.activityObservedAt, timezone) : "—"}</strong></span><span><small>Observed active time</small><strong>{pulse.observedElapsedLabel}</strong></span><span><small>Provider refresh</small><strong>{attendance?.observedAt ? formatTime(attendance.observedAt, timezone) : "—"}</strong></span><span><small>OnBreak deducted</small><strong>{pulse.observedBreakLabel}</strong></span></div><footer>Worktivity is the attendance source; Work OS mirrors fresh provider status.</footer></section>}</div></div></div>
     <div className="pulse-countdown" role="img" aria-label={scheduleAria}>
       <div className="pulse-countdown-copy"><small>{middleLabel}</small><strong>{middleValue}</strong><span>{phaseCaption}</span></div>
       <div className="pulse-window"><CalendarDays size={17} /><div><small>{scheduleLabel}</small><strong>{formatTime(shift?.startsAt, timezone)} <i>to</i> {formatTime(shift?.endsAt, timezone)}</strong></div></div>
     </div>
     <div className="pulse-compact-track" aria-hidden="true"><div><i style={{ width: `${pulse.progressPercent}%` }} /><b style={{ left: `clamp(5px, ${pulse.progressPercent}%, calc(100% - 5px))` }} /></div><span><small>{formatTime(shift?.startsAt, timezone)}</small><small>{scheduleStatus}</small><small>{formatTime(shift?.endsAt, timezone)}</small></span></div>
-    <p className="pulse-separation-note"><Clock3 size={13} /> Clock in when you begin. Activity observation stays separate.</p>
+    <p className="pulse-separation-note"><Clock3 size={13} /> Worktivity owns clock actions; the Windows Companion waits for provider confirmation.</p>
   </section>;
 }
 

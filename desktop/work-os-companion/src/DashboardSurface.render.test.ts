@@ -32,6 +32,7 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("2h 52m remaining");
     expect(markup.match(/Your scheduled window is ready when you are\./g)?.length).toBe(1);
     expect(markup).toContain("Clock in");
+    expect(markup).toContain("Clock in with Worktivity from the Windows Companion");
     expect(markup).toContain("Updated August 26, 12:06 PM");
     expect(markup).not.toContain("Scheduled window");
     expect(markup).not.toContain("Observed context");
@@ -51,6 +52,8 @@ describe("dashboard surfaces", () => {
     expect(markup).toContain("Today’s queue");
     expect(markup).toContain("Yesterday");
     expect(markup).toContain("Clock out");
+    expect(markup).toContain("Worktivity confirms you are working; Work OS mirrors this session.");
+    expect(markup).toContain("Mirrored Worktivity time");
     expect(markup).toContain("Make the first task visible");
     expect(markup).toContain("active-summary-action");
     expect(markup).toContain('aria-label="Completing Make the first task visible"');

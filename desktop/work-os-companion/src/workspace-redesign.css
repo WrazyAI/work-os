@@ -954,6 +954,48 @@ body {
   margin-left: auto;
 }
 
+.notice.worktivity-starting {
+  gap: 10px;
+  background: var(--color-observed-soft, #edf6fd);
+  border-color: #cfe1ed;
+  color: var(--color-observed-ink, #235778);
+}
+
+.notice.worktivity-pending {
+  background: var(--color-observed-soft, #edf6fd);
+  border-color: #cfe1ed;
+  color: var(--color-observed-ink, #235778);
+}
+
+.notice.worktivity-pending span {
+  min-width: 0;
+  flex: 1;
+}
+
+.notice.worktivity-pending button {
+  min-height: 34px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-weight: 650;
+}
+
+@media (max-width: 560px) {
+  .notice.worktivity-starting {
+    align-items: flex-start;
+  }
+
+  .notice.worktivity-pending {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notice.worktivity-pending button {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
 .hero-card,
 .pulse-card,
 .capture-card,

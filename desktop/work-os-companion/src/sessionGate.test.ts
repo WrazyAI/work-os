@@ -28,7 +28,7 @@ describe("desktop session gate", () => {
   it("opens the active workspace while fresh Worktivity activity is syncing", () => {
     const syncing = day(null);
     syncing.attendance = { source: "worktivity", state: "active", status: "working", observedAt: "2026-08-14T09:02:00.000Z", clockedInAt: "2026-08-14T09:00:00.000Z", clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Activity observed." };
-    expect(sessionGate(syncing)).toEqual({ active: true, canClockIn: false, message: "Worktivity activity is active while the Work OS session synchronizes.", worktivitySynced: true });
+    expect(sessionGate(syncing)).toEqual({ active: true, canClockIn: false, message: "Worktivity confirms attendance while Work OS mirrors the session.", worktivitySynced: true });
   });
 
   it("lets fresh Worktivity activity supersede a stale closed-session view", () => {

@@ -11,6 +11,7 @@ import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, fir
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
+import { worktivityClockInChanged, worktivityProjectionClockOutBoundary } from "@/modules/work-os/worktivity-control";
 
 type Json = Record<string, unknown>;
 const db = () => createAdminClient();
@@ -334,18 +335,43 @@ export async function clockIn(access: WorkOsAccess, body: Json, idempotencyKey: 
 /** Converge a fresh provider attendance interval into the explicit session
  * ledger. Every restart creates a new row, so earlier closed time remains
  * intact and the one-active-session invariant still protects races. */
-export async function syncWorktivitySession(access: WorkOsAccess, projection: AttendanceProjection) {
+export async function syncWorktivitySession(access: WorkOsAccess, projection: AttendanceProjection, clockInContext?: Json) {
   if (projection.source !== "worktivity" || projection.stale) return activeSession(access);
   const existing = await activeSession(access);
   if (projection.state === "active" || projection.state === "paused") {
     if (existing) {
-      if (existing.source !== "worktivity") return existing;
+      let current = existing;
+      if (existing.source !== "worktivity" || worktivityClockInChanged(existing.clocked_in_at, projection.clockedInAt)) {
+        const providerStart = projection.clockedInAt && Number.isFinite(Date.parse(projection.clockedInAt))
+          ? new Date(projection.clockedInAt).toISOString()
+          : null;
+        const activityStart = projection.activityObservedAt && Number.isFinite(Date.parse(projection.activityObservedAt))
+          ? new Date(projection.activityObservedAt).toISOString()
+          : null;
+        const existingStart = typeof existing.clocked_in_at === "string" && Number.isFinite(Date.parse(existing.clocked_in_at))
+          ? new Date(existing.clocked_in_at).toISOString()
+          : null;
+        const observedStart = providerStart ?? activityStart ?? existingStart ?? projection.observedAt;
+        const { data, error } = await db().from("work_sessions").update({
+          source: "worktivity",
+          clocked_in_at: observedStart,
+          clocked_out_at: null,
+          attendance_status: projection.status,
+          attendance_observed_at: projection.observedAt,
+          updated_at: projection.observedAt,
+        }).eq("organization_id", access.organizationId).eq("id", existing.id).select("*").single();
+        if (error) throw new Error(`adopt Worktivity work session: ${error.message}`);
+        current = data;
+        await audit(access, String(existing.id), "worktivity_adopted", String(existing.state), String(current.state),
+          `worktivity:adopt:${existing.id}:${projection.observedAt}`, projection.observedAt,
+          { previousSource: existing.source, clockedInAt: observedStart, providerStatus: projection.status }, "worktivity");
+      }
       const action = projection.state === "paused"
-        ? existing.state === "paused" ? null : "pause"
-        : existing.state === "paused" ? "resume" : existing.state === "clocked_in" ? "mark_active" : null;
-      if (!action) return existing;
+        ? current.state === "paused" || current.state === "eod_due" ? null : "pause"
+        : current.state === "paused" ? "resume" : current.state === "clocked_in" ? "mark_active" : null;
+      if (!action) return current;
       return (await transitionSession(access, { action, observed_at: projection.observedAt },
-        `worktivity:${action}:${existing.id}:${projection.observedAt}`, "worktivity", true)).session;
+        `worktivity:${action}:${current.id}:${projection.observedAt}`, "worktivity", true)).session;
     }
     const context = await unscheduledSessionContext(access, new Date(projection.observedAt));
     const latestClosed = await db().from("work_sessions").select("clocked_out_at")
@@ -359,8 +385,12 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     if (Number.isFinite(priorEnd) && observed.getTime() <= priorEnd) observed.setTime(priorEnd + 1);
     const providerInterval = projection.clockedInAt ?? projection.activityObservedAt ?? projection.observedAt;
     const result = await clockIn(access, {
-      observed_at: observed.toISOString(), source: "worktivity", late_acknowledged: true,
-      exception_acknowledged: true, exception_reason: "Fresh Worktivity attendance observed",
+      late_acknowledged: true,
+      exception_acknowledged: true,
+      exception_reason: "Fresh Worktivity attendance observed",
+      ...(clockInContext ?? {}),
+      observed_at: observed.toISOString(),
+      source: "worktivity",
     }, `worktivity:clock-in:${access.personId}:${providerInterval}`);
     if (result.session.state === "clocked_in") {
       const action = projection.state === "paused" ? "pause" : "mark_active";
@@ -369,12 +399,19 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     }
     return result.session;
   }
-  if (projection.state === "off_shift" && existing?.source === "worktivity" && projection.clockedOutAt) {
-    const clockedOutAt = new Date(projection.clockedOutAt);
-    const clockedInAt = Date.parse(String(existing.clocked_in_at ?? ""));
-    if (Number.isFinite(clockedOutAt.getTime()) && Number.isFinite(clockedInAt) && clockedOutAt.getTime() > clockedInAt) {
-      return (await transitionSession(access, { action: "clock_out", observed_at: clockedOutAt.toISOString(), extended_acknowledged: true },
-        `worktivity:clock-out:${existing.id}:${clockedOutAt.toISOString()}`, "worktivity", true)).session;
+  if (projection.state === "off_shift" && existing) {
+    const boundary = worktivityProjectionClockOutBoundary({
+      clockedInAt: String(existing.clocked_in_at ?? ""),
+      clockedOutAt: projection.clockedOutAt,
+      clockedOutAtInferred: projection.clockedOutAtInferred,
+      observedAt: projection.observedAt,
+    });
+    if (boundary) {
+      return (await transitionSession(access, {
+        action: "clock_out", observed_at: boundary.at, extended_acknowledged: true,
+        worktivity_clock_out_inferred: boundary.inferred,
+      }, `worktivity:clock-out:${existing.id}:${boundary.at}`, "worktivity", true,
+      { providerBoundaryInferred: boundary.inferred, attendanceClockOutInferred: projection.clockedOutAtInferred === true, providerStatus: projection.status })).session;
     }
   }
   return existing;
@@ -428,7 +465,7 @@ export async function insertHistoricalWorktivitySession(access: WorkOsAccess, in
   if (event.error && !/duplicate/i.test(event.error.message)) throw new Error(`record historical session event: ${event.error.message}`);
 }
 
-export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" | "worktivity" = "desktop", allowProviderBreakTransitions = false) {
+export async function transitionSession(access: WorkOsAccess, body: Json, idempotencyKey: string, source: "web" | "desktop" | "agent" | "system" | "worktivity" = "desktop", allowProviderBreakTransitions = false, auditMetadata: Json = {}) {
   const existingEvent = await db().from("work_session_events").select("session_id")
     .eq("organization_id", access.organizationId).eq("idempotency_key", idempotencyKey).maybeSingle();
   if (existingEvent.error) throw new Error(`load idempotent session transition: ${existingEvent.error.message}`);
@@ -478,6 +515,7 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   let pausedSeconds = Number(session.paused_seconds || 0);
   if (session.state === "paused" && session.paused_at && action !== "pause") pausedSeconds += Math.max(0, Math.round((observed.getTime() - Date.parse(session.paused_at as string)) / 1000));
   const patch: Json = { state: next, updated_at: observed.toISOString(), paused_seconds: pausedSeconds };
+  if (source === "worktivity") patch.source = "worktivity";
   if (action === "pause") patch.paused_at = observed.toISOString();
   if (action === "resume") patch.paused_at = null;
   if (action === "clock_out") Object.assign(patch, { clocked_out_at: observed.toISOString(), clock_out_idempotency_key: idempotencyKey, paused_at: null, extended_acknowledged_at: overtime ? observed.toISOString() : null });
@@ -485,7 +523,7 @@ export async function transitionSession(access: WorkOsAccess, body: Json, idempo
   if (body.snoozed_until) patch.snoozed_until = body.snoozed_until;
   const { data, error } = await db().from("work_sessions").update(patch).eq("id", session.id).eq("organization_id", access.organizationId).select("*").single();
   if (error) throw new Error(`update work session: ${error.message}`);
-  await audit(access, session.id as string, action, session.state as string, next, idempotencyKey, observed.toISOString(), { overtime }, source);
+  await audit(access, session.id as string, action, session.state as string, next, idempotencyKey, observed.toISOString(), { overtime, ...auditMetadata }, source);
   if (next === "clocked_out") await db().from("work_daily_plans").update({ status: "closed", updated_at: observed.toISOString() }).eq("session_id", session.id);
   return { session: data, plan: await loadPlan(access, session.id as string) };
 }

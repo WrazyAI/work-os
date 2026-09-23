@@ -32,7 +32,7 @@ describe("offline action replay", () => {
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: false } });
   });
 
-  it("queues with an observed timestamp and replays idempotently after connectivity returns", async () => {
+  it("does not replay an old queued clock action after attendance moves to Worktivity", async () => {
     const offlineFetch = vi.fn(async () => { throw new TypeError("offline"); });
     vi.stubGlobal("fetch", offlineFetch);
     const queued = await sendOrQueue("/api/work-os/me/workday", "POST", { source: "desktop" });
@@ -43,12 +43,15 @@ describe("offline action replay", () => {
     expect(offlineFetch).toHaveBeenCalledTimes(1);
 
     Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    mockState.queue.push({ id: "late-reason", path: "/api/work-os/me/workday", method: "PATCH", body: { action: "late_reason", reason: "Traffic" }, createdAt: new Date().toISOString(), attempts: 0, status: "pending" });
     const onlineFetch = vi.fn(async (..._args: [RequestInfo | URL, RequestInit?]) => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", onlineFetch);
-    expect(await flushQueue()).toEqual({ sent: 1, remaining: 0, needsAttention: 0 });
+    expect(await flushQueue()).toEqual({ sent: 1, remaining: 0, needsAttention: 0, retiredAttendanceControls: 1 });
     expect(mockState.queue).toEqual([]);
     expect(onlineFetch).toHaveBeenCalledTimes(2);
+    expect(String(onlineFetch.mock.calls[0][0])).toContain("/api/work-os/desktop/session");
     expect(String(onlineFetch.mock.calls[1][0])).toContain("/api/work-os/me/workday");
+    expect((onlineFetch.mock.calls[1][1] as RequestInit).method).toBe("PATCH");
     expect((onlineFetch.mock.calls[1][1] as RequestInit).headers).toMatchObject({ "Idempotency-Key": expect.any(String) });
   });
 

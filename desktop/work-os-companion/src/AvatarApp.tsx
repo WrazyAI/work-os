@@ -21,7 +21,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -157,11 +157,13 @@ export default function AvatarApp(): React.ReactElement {
   // check the avatar's recorded-result rendering. Inert in production.
   const avatarAttentionFixture = avatarAttentionFixtureRequested(window.location.search);
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
+  const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture && !avatarSnoozeFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
+    : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
@@ -185,9 +187,11 @@ export default function AvatarApp(): React.ReactElement {
   const [mascotReceipt, setMascotReceipt] = useState<object | null>(null);
   const [proposedTaskIds, setProposedTaskIds] = useState<Set<string>>(() => new Set());
   const [snoozeCount, setSnoozeCount] = useState<number>(() => {
+    if (avatarSnoozeFixture) return 0;
     const s = readJson<{ count?: number; until?: number | null }>(SNOOZE_KEY, {});
     return typeof s.count === "number" ? s.count : 0;
   });
+  const [snoozeReplayId, setSnoozeReplayId] = useState(0);
   const [missed, setMissed] = useState(false);
   const notifiedKeys = useRef<Set<string>>(new Set(readJson<string[]>(NOTIFIED_KEY, [])));
   const deliveryKeys = useRef<Set<string>>(new Set());
@@ -583,6 +587,10 @@ export default function AvatarApp(): React.ReactElement {
 
   // ── Snooze expiry: re-prompt when the snooze window passes ──
   useEffect(() => {
+    if (avatarSnoozeFixture) writeJson(SNOOZE_KEY, { count: 0, until: Date.now() + 18_000 });
+  }, [avatarSnoozeFixture]);
+
+  useEffect(() => {
     if (missed || !facts.promptRequired) return;
     const snooze = readJson<{ count?: number; until?: number | null }>(SNOOZE_KEY, {});
     if (!snooze.until || Date.now() < snooze.until) return;
@@ -598,6 +606,7 @@ export default function AvatarApp(): React.ReactElement {
     } else {
       writeJson(SNOOZE_KEY, { count: nextCount, until });
       setSnoozeCount(nextCount);
+      setSnoozeReplayId((value) => value + 1);
       fireNotification({ kind: "hourly", key: `snooze-${until}`, title: "Update still due", body: "A few words is all it takes." }, notificationPermission.current);
     }
   }, [now, facts.promptRequired, missed]);
@@ -1206,7 +1215,7 @@ export default function AvatarApp(): React.ReactElement {
           title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
-          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" />
+          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
           <span className="avatar-orb-state">{mascotVisual.label}</span>
           {(showShiftTime || showBadge) && <span
             className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}

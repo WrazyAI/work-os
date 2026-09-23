@@ -15,6 +15,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const reports = await source("src/app/api/work-os/reports/[reportId]/submit/route.ts");
   const evidence = await source("src/app/api/work-os/evidence/route.ts");
   const workday = await source("src/app/api/work-os/me/workday/route.ts");
+  const worktivityControlRoute = await source("src/app/api/work-os/me/workday/worktivity-control/route.ts");
+  const worktivityControlService = await source("src/lib/work-os-worktivity-control.ts");
   const plan = await source("src/app/api/work-os/me/plan/route.ts");
   const planInterpret = await source("src/app/api/work-os/me/plan/interpret/route.ts");
   const planRefine = await source("src/app/api/work-os/me/plan/refine/route.ts");
@@ -53,6 +55,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(evidence, /idempotency-key/);
   assert.match(workday, /Idempotency-Key is required/);
   assert.match(workday, /requirePerson: true/);
+  assert.match(worktivityControlRoute, /x-work-os-desktop-control/);
+  assert.match(worktivityControlRoute, /A Worktivity control request object is required/);
+  assert.match(worktivityControlRoute, /key !== body\.operation_id/);
+  assert.match(worktivityControlService, /forceRefresh: true/);
+  assert.match(worktivityControlService, /phase === "confirm"/);
   assert.match(plan, /Idempotency-Key is required/);
   assert.match(plan, /requirePerson: true/);
   assert.match(plan, /export async function PUT/);
@@ -120,7 +127,14 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(nifty, /method: "DELETE"/);
   assert.match(workOs, /Nifty did not confirm.*requested assignee/);
   assert.match(workOs, /status: "deleted"/);
-  assert.match(workday, /clockIn\(auth\.access/);
+  assert.doesNotMatch(workday, /clockIn\(auth\.access/);
+  assert.match(workday, /Attendance is controlled by Worktivity from the Windows Companion/);
+  assert.match(worktivityControlRoute, /x-work-os-desktop-control/);
+  assert.match(worktivityControlRoute, /Idempotency-Key must match operation_id/);
+  assert.match(worktivityControlService, /forceRefresh: true/);
+  assert.match(worktivityControlService, /decideWorktivityAction/);
+  assert.match(worktivityControlService, /worktivityConfirmationRequirement/);
+  assert.match(worktivityControlService, /status: "pending"/);
   assert.match(workday, /loadPersistedWorktivityAttendance/);
   assert.doesNotMatch(workday, /observeWorktivityAttendance/);
   assert.doesNotMatch(workday, /work_os_fallback/);

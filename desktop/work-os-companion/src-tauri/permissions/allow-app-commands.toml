@@ -7,6 +7,8 @@ commands.allow = [
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
   "open_work_os_auth",
+  "worktivity_control",
+  "finish_worktivity_control",
   "open_debug_window",
   "diagnostics_emit",
   "diagnostics_snapshot",
