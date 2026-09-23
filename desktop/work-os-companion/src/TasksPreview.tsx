@@ -34,6 +34,7 @@ const historicalPlan: DailyPlan = {
   ],
 };
 
+/** Development preview for the Tasks workspace, including sorting and lifecycle scenarios. */
 export default function TasksPreview() {
   const params = new URLSearchParams(window.location.search);
   const history = params.has("history");
