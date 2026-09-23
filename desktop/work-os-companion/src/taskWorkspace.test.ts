@@ -143,6 +143,15 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(ordered).toEqual(["open-early", "done-late"]);
   });
 
+  it("keeps server-compatible tie-breakers stable across due directions", () => {
+    const tasks = [
+      { id: "zeta", title: "Zeta", due_date: "2026-09-20", completed: false, provider_updated_at: "2026-09-18T10:00:00Z", updated_at: "2026-09-22T10:00:00Z" },
+      { id: "alpha", title: "Alpha", due_date: "2026-09-20", completed: false, provider_updated_at: "2026-09-18T10:00:00Z", updated_at: "2026-09-23T10:00:00Z" },
+    ];
+    expect(sortTaskList(tasks, { key: "due", direction: "asc" }, today).map((task) => task.id)).toEqual(["alpha", "zeta"]);
+    expect(sortTaskList(tasks, { key: "due", direction: "desc" }, today).map((task) => task.id)).toEqual(["alpha", "zeta"]);
+  });
+
   it("keeps undated work last in both due-date directions", () => {
     const tasks = [
       { id: "dated-early", title: "Early", due_date: "2026-09-10", completed: false },
