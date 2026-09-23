@@ -149,6 +149,7 @@ function proposalFilingTransport() {
 }
 
 
+/** Main companion shell: coordinates cached workday data, task history, and routed workspaces. */
 export default function App() {
   const notifications = useNotifications();
   const [session, setSession] = useState<DesktopSession | null>(null);
@@ -1936,6 +1937,7 @@ export default function App() {
     setView(reference.type === "evidence" ? "evidence" : "day");
   }
 
+  /** Fetch the next page from whichever paginated task list is currently visible. */
   async function loadMoreTasks() {
     if (syncBypassRef.current || !activeTaskHistoryQuery.hasNextPage || activeTaskHistoryQuery.isFetchingNextPage) return;
     try {
@@ -3514,6 +3516,7 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
+/** Render the employee Tasks workspace with a shared history source and isolated paginated views. */
 export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, completedHistory = null, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
