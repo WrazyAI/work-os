@@ -72,6 +72,7 @@ export async function GET(req: Request) {
       includeCompleted: params.get("includeCompleted") === "true" || view === "history",
       includeLedgerHistory: view === "history" && !params.get("from") && !params.get("to"),
       order,
+      sortDate: date(params.get("sortDate")),
     })) ?? [];
     return NextResponse.json({ tasks, view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null, cursor: { next: null } });
   } catch (error) {
