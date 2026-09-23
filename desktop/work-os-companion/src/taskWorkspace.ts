@@ -94,7 +94,7 @@ export function readTaskSort(storageKey: string): TaskSort {
       // The active-day toolbar used to default to Status ascending. Migrate
       // that legacy day preference once, but keep Status ascending valid for
       // the Tasks workspace's new persisted column sort.
-      if (storageKey === DAY_SORT_STORAGE_KEY && parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
+      if (storageKey !== TASKS_SORT_STORAGE_KEY && parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
       return { key: parsed.key as TaskSortKey, direction: parsed.direction };
     }
   } catch { /* best effort: a corrupt preference never blocks the list */ }
