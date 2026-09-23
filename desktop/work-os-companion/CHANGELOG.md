@@ -24,7 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
-- Otto now nudges for five seconds, pauses for one, then repeats twice when an update needs your input; the halo is gone and the orange corner marker stays.
+## 0.3.54
+
+- Otto now repeats input-needed nudges three times, with a one-second pause; the orange alert dot remains without the halo.
 
 ## 0.3.53
 
