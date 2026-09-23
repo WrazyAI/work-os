@@ -25,6 +25,7 @@ async function access(req: Request) {
   });
 }
 
+/** Serve employee task views, validating workspace sort parameters before querying mirrored tasks. */
 export async function GET(req: Request) {
   try {
     const auth = await access(req);
