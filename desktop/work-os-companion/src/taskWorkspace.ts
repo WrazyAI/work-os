@@ -67,7 +67,7 @@ export type TaskSortDirection = "asc" | "desc";
 export type TaskSort = { key: TaskSortKey; direction: TaskSortDirection };
 
 export const DEFAULT_TASK_SORT: TaskSort = { key: "due", direction: "desc" };
-export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v1";
+export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v2";
 export const DAY_SORT_STORAGE_KEY = "work-os.day-sort.v1";
 
 export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
@@ -75,6 +75,12 @@ export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string;
   { key: "status", label: "Status", initialDirection: "asc" },
   { key: "due", label: "Due", initialDirection: "desc" },
   { key: "priority", label: "Priority", initialDirection: "asc" },
+];
+
+export const TASKS_WORKSPACE_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
+  { key: "title", label: "Name", initialDirection: "asc" },
+  { key: "due", label: "Date due", initialDirection: "desc" },
+  { key: "status", label: "Status", initialDirection: "asc" },
 ];
 
 const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
@@ -85,10 +91,10 @@ export function readTaskSort(storageKey: string): TaskSort {
     const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) as Partial<TaskSort> | null : null;
     if (parsed && TASK_SORT_KEYS.includes(parsed.key as TaskSortKey) && (parsed.direction === "asc" || parsed.direction === "desc")) {
-      // The previous default (Status ascending) and the retired Activity
-      // column both migrate to the current default instead of pinning users
-      // to an order they never chose explicitly.
-      if (parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
+      // The active-day toolbar used to default to Status ascending. Migrate
+      // that legacy day preference once, but keep Status ascending valid for
+      // the Tasks workspace's new persisted column sort.
+      if (storageKey === DAY_SORT_STORAGE_KEY && parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
       return { key: parsed.key as TaskSortKey, direction: parsed.direction };
     }
   } catch { /* best effort: a corrupt preference never blocks the list */ }
