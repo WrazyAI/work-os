@@ -423,13 +423,36 @@ export default function App() {
   const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
     taskRowId(task) === rowId ? { ...task, ...patch } : task;
 
-  /** Surgical cache updates: a task write patches exactly the cached rows it
-   * touched instead of invalidating every list and refetching the page. */
+  /** Update every loaded sorted-history variant, then revalidate active ones so
+   * completion filters and page boundaries stay authoritative after writes. */
+  const updateTaskHistoryVariants = useCallback((
+    updater: (current: InfiniteData<TaskHistoryPage>, completedOnly: boolean) => InfiniteData<TaskHistoryPage>,
+  ) => {
+    const queries = queryClient.getQueryCache().findAll({ queryKey: workOsKeys.taskHistory() });
+    for (const query of queries) {
+      const completedOnly = query.queryKey[2] === "completed";
+      queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(query.queryKey, (current) =>
+        current ? updater(current, completedOnly) : current);
+    }
+  }, [queryClient]);
+  const revalidateTaskHistoryVariants = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory(), refetchType: "active" });
+  }, [queryClient]);
+
+  /** Surgical cache updates: a task write patches loaded rows immediately, then
+   * active sorted pages revalidate so changed sort keys cannot stay misplaced. */
   const patchTaskCaches = useCallback((rowId: string, patch: Record<string, any>) => {
-    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+    updateTaskHistoryVariants((current, completedOnly) => ({
       ...current,
-      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.map((task) => patchTaskRow(task, rowId, patch)) })),
-    } : current);
+      pages: current.pages.map((page) => ({
+        ...page,
+        tasks: page.tasks.flatMap((task) => {
+          if (taskRowId(task) !== rowId) return [task];
+          const next = { ...task, ...patch };
+          return completedOnly && next.completed !== true ? [] : [next];
+        }),
+      })),
+    }));
     for (const variant of ["compact", "details"] as const) {
       queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
         ...current,
@@ -454,13 +477,14 @@ export default function App() {
       } : current);
       if (patch.completed === false) void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
     }
-  }, [queryClient]);
+    revalidateTaskHistoryVariants();
+  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
 
   const removeTaskFromCaches = useCallback((rowId: string) => {
-    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+    updateTaskHistoryVariants((current) => ({
       ...current,
       pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.filter((task) => taskRowId(task) !== rowId) })),
-    } : current);
+    }));
     for (const variant of ["compact", "details"] as const) {
       queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
         ...current,
@@ -474,15 +498,22 @@ export default function App() {
       const removed = current.tasks.length - tasks.length;
       return { tasks, counts: { ...current.counts, total: Math.max(0, current.counts.total - removed), open: Math.max(0, current.counts.open - removed) } };
     });
-  }, [queryClient]);
+    revalidateTaskHistoryVariants();
+  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
 
   /** Swap a pending row for the server row in the same slot, so the list
    * never loses or gains a row while the swap happens. */
   const replaceTaskInCaches = useCallback((rowId: string, task: Record<string, any>) => {
-    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => current ? {
+    updateTaskHistoryVariants((current, completedOnly) => ({
       ...current,
-      pages: current.pages.map((page) => ({ ...page, tasks: page.tasks.map((row) => taskRowId(row) === rowId ? task : row) })),
-    } : current);
+      pages: current.pages.map((page) => ({
+        ...page,
+        tasks: page.tasks.flatMap((row) => {
+          if (taskRowId(row) !== rowId) return [row];
+          return completedOnly && task.completed !== true ? [] : [task];
+        }),
+      })),
+    }));
     for (const variant of ["compact", "details"] as const) {
       queryClient.setQueryData<DayData>(workOsKeys.day(variant), (current) => current ? {
         ...current,
@@ -493,11 +524,13 @@ export default function App() {
       ...current,
       tasks: current.tasks.map((row) => taskRowId(row) === rowId ? task : row),
     } : current);
-  }, [queryClient]);
+    revalidateTaskHistoryVariants();
+  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
 
   const insertTaskIntoCaches = useCallback((task: Record<string, any>) => {
-    queryClient.setQueryData<InfiniteData<TaskHistoryPage>>(workOsKeys.taskHistory(), (current) => {
-      if (!current || !current.pages.length) return current;
+    updateTaskHistoryVariants((current, completedOnly) => {
+      if (completedOnly && task.completed !== true) return current;
+      if (!current.pages.length) return current;
       const exists = current.pages.some((page) => page.tasks.some((row) => taskRowId(row) === taskRowId(task)));
       if (exists) return current;
       return { ...current, pages: [{ ...current.pages[0], tasks: [task, ...current.pages[0].tasks] }, ...current.pages.slice(1)] };
@@ -514,7 +547,8 @@ export default function App() {
       if (!current.counts) return { ...current, tasks: [task, ...current.tasks] };
       return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
     });
-  }, [queryClient]);
+    revalidateTaskHistoryVariants();
+  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
   /** Optimistic adds are cache rows like any other, carrying `pending_status`
    * until the server record replaces them in place. Two commits (one for the
    * pending row, one for the real row) would move the list down and back up
@@ -685,7 +719,8 @@ export default function App() {
           await refresh({ refreshProviders: true, refreshAttendance: true });
           return;
         case "tasks": {
-          const work: Promise<unknown>[] = [refresh({ dayOnly: true, details: true }), historyQuery.refetch()];
+          const work: Promise<unknown>[] = [refresh({ dayOnly: true, details: true }), activeTaskHistoryQuery.refetch()];
+          if (taskView === "completed") work.push(historyQuery.refetch());
           if (planHistoryDate && planHistoryDate !== visibleDay?.shiftDate) work.push(historicalQuery.refetch());
           if (taskDetails) work.push(reloadOpenTaskDetails());
           await Promise.allSettled(work);
@@ -715,7 +750,7 @@ export default function App() {
     } finally {
       setRefreshing(false);
     }
-  }, [debugScenario.enabled, eodDate, historicalQuery, historyQuery, insightRange, insightsQuery, outstandingQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, reportDayQuery, setInsights, taskDetails, view, visibleDay]);
+  }, [activeTaskHistoryQuery, debugScenario.enabled, eodDate, historicalQuery, historyQuery, insightRange, insightsQuery, outstandingQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, reportDayQuery, setInsights, taskDetails, taskView, view, visibleDay]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
