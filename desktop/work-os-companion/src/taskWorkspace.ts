@@ -132,19 +132,26 @@ function statusRank(task: TaskRow, currentDate: string) {
   return isOverdueTask(task, currentDate) ? 0 : 1;
 }
 
+/** Stable recency tie-break shared with the server-side paginated sort. Mirror
+ * rewrite timestamps stay last so a provider sync cannot reorder old work. */
+function workspaceSortRecency(task: TaskRow) {
+  return timestamp(task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? task.updated_at);
+}
+
 export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, currentDate: string) {
   const direction = sort.direction === "asc" ? 1 : -1;
   const byTitle = () => safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task"));
+  const byWorkspaceRecency = () => workspaceSortRecency(right) - workspaceSortRecency(left);
   const byRecency = () => recency(right) - recency(left);
   const byStatus = () => (statusRank(left, currentDate) - statusRank(right, currentDate)) * direction;
   // Completed work always sits after open work when ordering by due date; the
   // due comparison then decides within each half and undated rows stay last.
   const openFirst = () => Number(left.completed === true) - Number(right.completed === true);
   switch (sort.key) {
-    case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "due": return openFirst() || compareDueDirectional(left, right, sort.direction) || byRecency() || byTitle();
+    case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byWorkspaceRecency() || byTitle();
+    case "due": return openFirst() || compareDueDirectional(left, right, sort.direction) || byWorkspaceRecency() || byTitle();
     case "priority": return (priorityRank(left.priority) - priorityRank(right.priority)) * direction || (statusRank(left, currentDate) - statusRank(right, currentDate)) || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "title": return byTitle() * direction || byRecency();
+    case "title": return byTitle() * direction || byWorkspaceRecency();
   }
 }
 
