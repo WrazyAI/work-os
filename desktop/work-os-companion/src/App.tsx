@@ -419,6 +419,7 @@ export default function App() {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
   }, [queryClient]);
 
+  /** Stable row identity shared by optimistic cache updates and provider-backed rows. */
   const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
   const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
     taskRowId(task) === rowId ? { ...task, ...patch } : task;
@@ -435,6 +436,7 @@ export default function App() {
         current ? updater(current, completedOnly) : current);
     }
   }, [queryClient]);
+  /** Refetch active sorted-history variants after a mutation changes membership or order. */
   const revalidateTaskHistoryVariants = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory(), refetchType: "active" });
   }, [queryClient]);
@@ -480,6 +482,7 @@ export default function App() {
     revalidateTaskHistoryVariants();
   }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
 
+  /** Remove a task from every loaded task-history, day, and backlog cache. */
   const removeTaskFromCaches = useCallback((rowId: string) => {
     updateTaskHistoryVariants((current) => ({
       ...current,
@@ -527,6 +530,7 @@ export default function App() {
     revalidateTaskHistoryVariants();
   }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
 
+  /** Optimistically insert a task into loaded list caches, respecting completed-only history variants. */
   const insertTaskIntoCaches = useCallback((task: Record<string, any>) => {
     updateTaskHistoryVariants((current, completedOnly) => {
       if (completedOnly && task.completed !== true) return current;
