@@ -438,18 +438,21 @@ export default function App() {
   useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
 
   const queryClient = useQueryClient();
+  /** Invalidate the day, backlog, and insight surfaces that depend on task mutations. */
   const invalidateDayData = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("details") });
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
     void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
   }, [queryClient]);
+  /** Refresh outstanding EOD state after actions that may change review readiness. */
   const invalidateOutstandingEods = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
   }, [queryClient]);
 
   /** Stable row identity shared by optimistic cache updates and provider-backed rows. */
   const taskRowId = (task: Record<string, any>) => String(task.provider_task_id || task.id);
+  /** Apply a partial task patch only to the matching provider-backed cache row. */
   const patchTaskRow = (task: Record<string, any>, rowId: string, patch: Record<string, any>) =>
     taskRowId(task) === rowId ? { ...task, ...patch } : task;
 
@@ -739,6 +742,7 @@ export default function App() {
 
   /** The masthead refresh revalidates the page the employee is looking at —
    * never a blanket app refresh. The Day view also asks the provider to sync. */
+  /** Refresh the data source currently backing the active workspace without swapping views. */
   const refreshActiveView = useCallback(async () => {
     if (syncBypassRef.current) {
       setRefreshing(true);
