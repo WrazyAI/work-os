@@ -540,7 +540,12 @@ export default function App() {
   const compactDayQuery = useDayQuery({ enabled: signedIn && !syncBypass, variant: "compact", pollMs: 60_000 });
   const detailsDayQuery = useDayQuery({ enabled: signedIn && !syncBypass && detailsViews, variant: "details" });
   const onboardingQuery = useOnboardingQuery({ enabled: signedIn && !syncBypass });
-  const historyQuery = useTaskHistoryQuery({ enabled: signedIn && !syncBypass, sort: taskWorkspaceSort });
+  const historyQuery = useTaskHistoryQuery({
+    enabled: signedIn && !syncBypass,
+    sort: taskWorkspaceSort,
+    currentDate: visibleDay?.shiftDate ?? "",
+    completedOnly: view === "tasks" && taskView === "completed",
+  });
   const backlogQuery = useTaskBacklogQuery({ enabled: signedIn && !syncBypass });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
