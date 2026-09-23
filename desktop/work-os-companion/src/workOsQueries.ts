@@ -13,6 +13,7 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -83,14 +84,23 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
   });
 }
 
-export function useTaskHistoryQuery(options: { enabled: boolean }) {
+export function useTaskHistoryQuery(options: { enabled: boolean; sort: TaskSort }) {
   return useInfiniteQuery({
-    queryKey: workOsKeys.taskHistory(),
+    queryKey: [...workOsKeys.taskHistory(), options.sort.key, options.sort.direction],
     enabled: options.enabled,
     staleTime: TASK_HISTORY_STALE_MS,
     initialPageParam: 0,
     getNextPageParam: (lastPage: TaskHistoryPage) => lastPage.nextOffset ?? undefined,
-    queryFn: ({ pageParam }) => apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?view=history&offset=${pageParam}&limit=100`),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        view: "history",
+        offset: String(pageParam),
+        limit: "100",
+        sort: options.sort.key,
+        direction: options.sort.direction,
+      });
+      return apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`);
+    },
   });
 }
 
