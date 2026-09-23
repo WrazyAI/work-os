@@ -148,6 +148,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
     .eq("user_id", userId)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
     .range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
   query = query.not("status", "in", "(archived,deleted)");
   if (opts.completed === "true") query = query.eq("completed", true);
@@ -169,6 +170,19 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   if (opts.fromDate) query = query.gte("provider_created_at", `${opts.fromDate}T00:00:00Z`);
   if (opts.toDate) query = query.lt("provider_created_at", `${opts.toDate}T00:00:00Z`);
   return ensureNoError(query, "load tasks");
+}
+
+/** Load every matching task page for a workspace sort before applying the
+ * cross-provenance comparator. This avoids silently dropping candidates after
+ * the provider-ordered first 1,000 rows. */
+async function listAllTaskCandidates(userId: string, opts: TaskListOptions) {
+  const rows: Record<string, any>[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await listTasks(userId, { ...opts, offset, limit: pageSize });
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[]) {
@@ -266,10 +280,11 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
   const workspaceOrder = typeof opts.order === "string" && /^(?:title|due|status)_(?:asc|desc)$/.test(opts.order);
-  // A paginated workspace sort must see the complete candidate window before
-  // slicing, otherwise page 1 would only sort the first provider-ordered page.
-  const candidateLimit = workspaceOrder ? 1000 : Math.min(1000, offset + limit);
+  const candidateLimit = Math.min(1000, offset + limit);
   const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
+  const loadCandidates = (options: TaskListOptions) => workspaceOrder
+    ? listAllTaskCandidates(userId, options)
+    : listTasks(userId, options);
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
   const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
@@ -288,10 +303,10 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
   const [assigned, providerAssigned, createdBy, subscriber] = await Promise.all([
-    listTasks(userId, { ...baseOptions, personId }),
-    niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
+    loadCandidates({ ...baseOptions, personId }),
+    niftyMemberId ? loadCandidates({ ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? loadCandidates({ ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? loadCandidates({ ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
   for (const task of assigned ?? []) rows.set(String(task.id), task);
