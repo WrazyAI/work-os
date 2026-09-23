@@ -85,6 +85,7 @@ export const TASKS_WORKSPACE_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; lab
 
 const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
 
+/** Read a persisted task sort, migrating retired defaults to the canonical order. */
 export function readTaskSort(storageKey: string): TaskSort {
   try {
     if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_TASK_SORT };
@@ -138,6 +139,7 @@ function workspaceSortRecency(task: TaskRow) {
   return timestamp(task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? task.updated_at);
 }
 
+/** Compare two task rows using the workspace sort contract and stable server-compatible tie-breakers. */
 export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, currentDate: string) {
   const direction = sort.direction === "asc" ? 1 : -1;
   const byTitle = () => safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task"));
@@ -155,6 +157,7 @@ export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, c
   }
 }
 
+/** Return a sorted copy of task rows without mutating cached query data. */
 export function sortTaskList(tasks: TaskRow[], sort: TaskSort = DEFAULT_TASK_SORT, currentDate = "") {
   return [...tasks].sort((left, right) => compareTaskSort(left, right, sort, currentDate));
 }
