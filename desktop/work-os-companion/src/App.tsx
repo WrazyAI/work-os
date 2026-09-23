@@ -241,8 +241,6 @@ export default function App() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
-  const [taskHistoryCursor, setTaskHistoryCursor] = useState<number | null>(null);
-  const [taskHistoryLoading, setTaskHistoryLoading] = useState(false);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [taskComposerClosing, setTaskComposerClosing] = useState(false);
   const [pendingTasks, setPendingTasks] = useState<Array<{ id: string; title: string; description: string; assignees: string[]; status: "syncing" | "failed"; error?: string }>>([]);
@@ -544,8 +542,15 @@ export default function App() {
     enabled: signedIn && !syncBypass,
     sort: taskWorkspaceSort,
     currentDate: visibleDay?.shiftDate ?? "",
-    completedOnly: view === "tasks" && taskView === "completed",
   });
+  const completedHistoryQuery = useTaskHistoryQuery({
+    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "completed",
+    sort: taskWorkspaceSort,
+    currentDate: visibleDay?.shiftDate ?? "",
+    completedOnly: true,
+  });
+  const completedTaskHistory = completedHistoryQuery.data?.pages.flatMap((page) => page.tasks) ?? [];
+  const activeTaskHistoryQuery = view === "tasks" && taskView === "completed" ? completedHistoryQuery : historyQuery;
   const backlogQuery = useTaskBacklogQuery({ enabled: signedIn && !syncBypass });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
@@ -571,14 +576,14 @@ export default function App() {
   }, [onboardingQuery.data]);
   useEffect(() => {
     if (!historyQuery.data) return;
-    const rows = historyQuery.data.pages.flatMap((page) => page.tasks);
-    setTaskHistory(rows);
-    setTaskHistoryCursor(historyQuery.hasNextPage ? rows.length : null);
-  }, [historyQuery.data, historyQuery.hasNextPage]);
-  useEffect(() => { setTaskHistoryLoading(historyQuery.isFetching && historyQuery.data !== undefined); }, [historyQuery.isFetching, historyQuery.data]);
+    setTaskHistory(historyQuery.data.pages.flatMap((page) => page.tasks));
+  }, [historyQuery.data]);
   useEffect(() => {
     if (historyQuery.error) showError(historyQuery.error, "Task history could not be loaded.", "Tasks unavailable");
   }, [historyQuery.error, showError]);
+  useEffect(() => {
+    if (completedHistoryQuery.error) showError(completedHistoryQuery.error, "Completed tasks could not be loaded.", "Tasks unavailable");
+  }, [completedHistoryQuery.error, showError]);
   useEffect(() => {
     if (insightsQuery.data) {
       setInsights(insightsQuery.data);
@@ -1471,7 +1476,7 @@ export default function App() {
   const tasksInitialLoading = !visibleDay
     || (viewingHistorical
       ? historicalQuery.isPending && !historicalQuery.data
-      : taskView !== "today" && historyQuery.isPending && !historyQuery.data);
+      : taskView !== "today" && activeTaskHistoryQuery.isPending && !activeTaskHistoryQuery.data);
 
   useEffect(() => {
     // Scenario/offline insights are computed on-device; live insights come
@@ -1928,9 +1933,9 @@ export default function App() {
   }
 
   async function loadMoreTasks() {
-    if (syncBypassRef.current || !historyQuery.hasNextPage || historyQuery.isFetchingNextPage) return;
+    if (syncBypassRef.current || !activeTaskHistoryQuery.hasNextPage || activeTaskHistoryQuery.isFetchingNextPage) return;
     try {
-      await historyQuery.fetchNextPage();
+      await activeTaskHistoryQuery.fetchNextPage();
     } catch (value) {
       showError(value, "More tasks could not be loaded.", "Task history unavailable");
     }
@@ -2828,7 +2833,7 @@ export default function App() {
         onClockOut={() => setClockOutConfirmation(true)}
         kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={taskHistoryLoading} hasMore={taskHistoryCursor !== null} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} completedHistory={completedTaskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
@@ -3505,10 +3510,10 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
+export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, completedHistory = null, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
-  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
+  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; completedHistory?: TaskRow[] | null; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
   backlog?: TaskBacklog | null; backlogLoading?: boolean; backlogError?: boolean;
   loadingMore: boolean; hasMore: boolean; busy: boolean; onTaskView: (view: TaskView) => void; onTaskSort: (sort: TaskSort) => void; onDate: (date: string) => Promise<void>;
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
@@ -3546,7 +3551,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const unfinishedTasks = backlog
     ? backlogParents.filter((task) => !myDayIds.has(rowId(task)))
     : taskHistory.filter((task) => task.completed !== true && !myDayIds.has(rowId(task)));
-  const completedTasks = taskHistory.filter((task) => task.completed === true);
+  const completedTasks = completedHistory ?? taskHistory.filter((task) => task.completed === true);
   const datedTasks = parentTasks(tasksForDate([...historicalTasks, ...surfaced], selectedDate, surfacedIds));
   const displayedCandidates = historical
     ? datedTasks
