@@ -181,8 +181,11 @@ describe("Tasks workspace ordering contract", () => {
     onLoadMore: () => undefined,
   };
 
-  it("keeps one flat list with the canonical due-latest-first order", () => {
-    const markup = renderToStaticMarkup(createElement(TasksWorkspace, props));
+  it("preserves the server-provided canonical due-latest-first order", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      taskHistory: [props.taskHistory[1], props.taskHistory[0], props.taskHistory[2]],
+    }));
 
     expect(markup).toContain('role="toolbar"');
     expect(markup).toContain("Name");
@@ -222,10 +225,11 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup).toContain("All tasks<em>3</em>");
   });
 
-  it("applies the requested Name sort and keeps an explicit Open status cell", () => {
+  it("preserves the server-provided Name sort and keeps an explicit Open status cell", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
       taskSort: { key: "title", direction: "asc" },
+      taskHistory: [props.taskHistory[2], props.taskHistory[0], props.taskHistory[1]],
     }));
     expect(markup.indexOf("Finished work")).toBeLessThan(markup.indexOf("Late work"));
     expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Soon work"));
