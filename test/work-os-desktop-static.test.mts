@@ -573,6 +573,10 @@ assert.match(app, /TASKS_WORKSPACE_SORT_COLUMNS/);
 assert.match(app, /className="tasks-column-sort"/);
 assert.match(app, /taskSort=\{taskWorkspaceSort\}/);
 assert.match(app, /onTaskSort=\{setTaskWorkspaceSort\}/);
+assert.match(app, /const completedHistoryQuery = useTaskHistoryQuery/);
+assert.match(app, /completedOnly: true/);
+assert.match(app, /completedHistory=\{completedTaskHistory\}/);
+assert.match(app, /const activeTaskHistoryQuery = view === "tasks" && taskView === "completed"/);
 assert.match(app, /TaskDateNavigator/);
 assert.match(app, /const displayedTasks = sortTaskList/);
 // One day scope and one overdue predicate; the old split sources must not return.
@@ -601,3 +605,7 @@ assert.match(styles, /\.active-task-sort-note/);
 const dashboardStyles = read("src/dashboard-overhaul.css");
 assert.match(dashboardStyles, /\.tasks-column-sort \{/);
 assert.match(dashboardStyles, /grid-template-columns: 30px minmax\(0, 1fr\) 36px 116px 100px 38px/);
+const taskServer = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-tasks.ts"), "utf8");
+assert.match(taskServer, /async function listAllTaskCandidates/);
+assert.match(taskServer, /for \(let offset = 0; ; offset \+= pageSize\)/);
+assert.match(taskServer, /\.order\("id", \{ ascending: true \}\)/);
