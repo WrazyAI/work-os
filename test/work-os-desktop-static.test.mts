@@ -568,7 +568,11 @@ assert.doesNotMatch(sortHeader, /aria-sort=/);
 assert.doesNotMatch(sortHeader, /role="columnheader"/);
 assert.match(app, /active-task-sort-note/);
 assert.match(app, /readTaskSort\(DAY_SORT_STORAGE_KEY\)/);
-assert.doesNotMatch(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
+assert.match(app, /readTaskSort\(TASKS_SORT_STORAGE_KEY\)/);
+assert.match(app, /TASKS_WORKSPACE_SORT_COLUMNS/);
+assert.match(app, /className="tasks-column-sort"/);
+assert.match(app, /taskSort=\{taskWorkspaceSort\}/);
+assert.match(app, /onTaskSort=\{setTaskWorkspaceSort\}/);
 assert.match(app, /TaskDateNavigator/);
 assert.match(app, /const displayedTasks = sortTaskList/);
 // One day scope and one overdue predicate; the old split sources must not return.
@@ -594,3 +598,6 @@ assert.match(app, /count: serverCounts\?\.total \?\? parentTasks\(uniqueTasks\(t
 assert.match(styles, /\.sort-header-row/);
 assert.match(styles, /\.sort-header-row \{\n  display: flex;\n  flex-wrap: wrap;/);
 assert.match(styles, /\.active-task-sort-note/);
+const dashboardStyles = read("src/dashboard-overhaul.css");
+assert.match(dashboardStyles, /\.tasks-column-sort \{/);
+assert.match(dashboardStyles, /grid-template-columns: 30px minmax\(0, 1fr\) 36px 116px 100px 38px/);
