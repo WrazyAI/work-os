@@ -173,19 +173,6 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   return ensureNoError(query, "load tasks");
 }
 
-/** Load every matching task page for a workspace sort before applying the
- * cross-provenance comparator. This avoids silently dropping candidates after
- * the provider-ordered first 1,000 rows. */
-async function listAllTaskCandidates(userId: string, opts: TaskListOptions) {
-  const rows: Record<string, any>[] = [];
-  const pageSize = 1000;
-  for (let offset = 0; ; offset += pageSize) {
-    const page = (await listTasks(userId, { ...opts, offset, limit: pageSize })) ?? [];
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
-  }
-}
-
 export async function hydrateTaskAssignees(userId: string, tasks: Record<string, any>[]) {
   const personIds = [...new Set(tasks.flatMap((task) => stringValues(task.assignee_person_ids)))];
   if (!personIds.length) return attachTaskAssigneeIdentities(tasks, []);
@@ -281,6 +268,31 @@ function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, 
   }
 }
 
+/** Use the database's single attributed query for the paginated Tasks workspace.
+ * Other callers keep their legacy provenance behavior below. */
+async function listPersonWorkspaceTaskPage(
+  userId: string,
+  personId: string,
+  niftyMemberId: string | null | undefined,
+  opts: Omit<TaskListOptions, "personId">,
+) {
+  const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
+  const sortDate = opts.sortDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.sortDate) ? opts.sortDate : today();
+  const result = await db().rpc("work_list_person_tasks_sorted", {
+    p_user_id: userId,
+    p_person_id: personId,
+    p_nifty_member_id: niftyMemberId ?? null,
+    p_completed: completed,
+    p_project_id: opts.projectId ?? null,
+    p_order: opts.order ?? "due_desc",
+    p_sort_date: sortDate,
+    p_offset: opts.offset ?? 0,
+    p_limit: opts.limit ?? 100,
+  });
+  if (result.error) throw new Error(`load sorted task history: ${result.error.message}`);
+  return (result.data ?? []) as Record<string, any>[];
+}
+
 /** Load all task provenance paths attributable to one person, then globally sort and page them. */
 export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
@@ -288,12 +300,35 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   const workspaceOrder = typeof opts.order === "string" && /^(?:title|due|status)_(?:asc|desc)$/.test(opts.order);
   const candidateLimit = Math.min(1000, offset + limit);
   const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
-  const loadCandidates = (options: TaskListOptions) => workspaceOrder
-    ? listAllTaskCandidates(userId, options)
-    : listTasks(userId, options);
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
   const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
+  // The Tasks workspace's All / Completed history is the only paginated path
+  // that needs global Name / Due / Status ordering. Keep that work in one SQL
+  // query so later pages do not reload the complete history through four
+  // attribution scans.
+  if (workspaceOrder && opts.includeLedgerHistory === true && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId) {
+    const selected = await listPersonWorkspaceTaskPage(userId, personId, niftyMemberId, opts);
+    const parentProviderIds = selected
+      .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
+      .map((task) => String(task.provider_task_id));
+    const childrenResult = parentProviderIds.length
+      ? await db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)").in("parent_provider_task_id", parentProviderIds)
+      : { data: [], error: null };
+    if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
+    const progress = new Map<string, { total: number; completed: number }>();
+    for (const child of childrenResult.data ?? []) {
+      const parentId = String(child.parent_provider_task_id);
+      const current = progress.get(parentId) ?? { total: 0, completed: 0 };
+      current.total += 1;
+      if (child.completed === true) current.completed += 1;
+      progress.set(parentId, current);
+    }
+    return hydrateTaskAssignees(userId, selected.map((task) => {
+      const childProgress = task.provider_task_id ? progress.get(String(task.provider_task_id)) : null;
+      return childProgress ? { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed } : task;
+    }));
+  }
   // Metadata-attributable work lives in every project, not only the ledger, so
   // the same attribution rule runs against each provenance path in SQL.
   const metadataOptions: TaskListOptions = { ...baseOptions };
@@ -309,10 +344,10 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     if (opts.includeCompleted !== true && !opts.completed) metadataOptions.completed = "false";
   }
   const [assigned, providerAssigned, createdBy, subscriber] = await Promise.all([
-    loadCandidates({ ...baseOptions, personId }),
-    niftyMemberId ? loadCandidates({ ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? loadCandidates({ ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
-    niftyMemberId ? loadCandidates({ ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
+    listTasks(userId, { ...baseOptions, personId }),
+    niftyMemberId ? listTasks(userId, { ...baseOptions, providerAssignee: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawCreatedBy: niftyMemberId }) : Promise.resolve([]),
+    niftyMemberId ? listTasks(userId, { ...metadataOptions, rawSubscriber: niftyMemberId }) : Promise.resolve([]),
   ]);
   const rows = new Map<string, Record<string, any>>();
   for (const task of assigned ?? []) rows.set(String(task.id), task);
