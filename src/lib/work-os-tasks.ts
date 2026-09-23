@@ -325,8 +325,10 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
       progress.set(parentId, current);
     }
     return hydrateTaskAssignees(userId, selected.map((task) => {
-      const childProgress = task.provider_task_id ? progress.get(String(task.provider_task_id)) : null;
-      return childProgress ? { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed } : task;
+      const childProgress = task.provider_task_id
+        ? progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 }
+        : { total: 0, completed: 0 };
+      return { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed };
     }));
   }
   // Metadata-attributable work lives in every project, not only the ledger, so
