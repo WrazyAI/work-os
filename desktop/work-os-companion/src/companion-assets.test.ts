@@ -72,6 +72,7 @@ describe("floating companion integration", () => {
   it("permits native dragging and uses direct day reads", () => {
     const capability = JSON.parse(readFileSync(resolve(root, "src-tauri/capabilities/avatar.json"), "utf8"));
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    const avatarLogic = readFileSync(resolve(root, "src/avatarLogic.ts"), "utf8");
 
     expect(capability.permissions).toContain("allow-avatar-commands");
     const avatarCommands = readFileSync(resolve(root, "src-tauri/permissions/allow-avatar-commands.toml"), "utf8");
@@ -97,10 +98,11 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('workOsKeys.day("compact")');
     expect(avatar).toContain('fetchDay({ variant: "compact" })');
     expect(avatar).toContain('fetchDay({ variant: "details" })');
-    expect(avatar).toContain('"Time unavailable"');
     expect(avatar).toContain("staleTime: force ? 0 : DAY_STALE_MS");
     expect(avatar).toContain("recoveredStartValue");
-    expect(avatar).toContain('remaining === "Time unavailable"');
+    expect(avatarLogic).toContain('remaining: "Time unavailable"');
+    expect(avatar).toContain('const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable"');
+    expect(avatar).toContain('const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable"');
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");
