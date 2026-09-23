@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto now nudges for five seconds, pauses for one, then repeats twice when an update needs your input; the halo is gone and the orange corner marker stays.
+
 ## 0.3.53
 
 - Your floating companion now shows elapsed shift time and an orange circle that fills with scheduled progress.

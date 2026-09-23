@@ -10,7 +10,7 @@ import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
 import { resolveDashboardShift } from "./dashboardModel";
-import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
+import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
@@ -21,7 +21,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -155,9 +155,10 @@ export default function AvatarApp(): React.ReactElement {
   // DEV-only visual fixture (see avatarFixture.ts): renders the recorded
   // completion without a session token so TestSprite or a plain browser can
   // check the avatar's recorded-result rendering. Inert in production.
+  const avatarAttentionFixture = avatarAttentionFixtureRequested(window.location.search);
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
@@ -760,8 +761,9 @@ export default function AvatarApp(): React.ReactElement {
       ]);
       const results = [...outcome.results, ...rejectionResults];
       if (outcome.recorded > 0 && !results.some((result) => result.status !== "recorded" && result.status !== "denied")) setMascotReceipt({});
+      const decided = [...approved, ...rejected];
       setChat((current) => current.map((entry) => entry.id === entryId
-        ? { ...entry, operations: entry.operations?.map((op) => ({ ...op, enabled: false })), toolResults: mergeToolResults(entry.toolResults ?? [], results), receipt: null }
+        ? { ...entry, operations: entry.operations ? disableDecidedOperations(entry.operations, decided) : undefined, toolResults: mergeToolResults(entry.toolResults ?? [], results), receipt: null }
         : entry));
       const filed = chatRef.current.find((entry) => entry.id === entryId);
       const entries = chatRef.current;
@@ -771,7 +773,7 @@ export default function AvatarApp(): React.ReactElement {
         reviewId: entryId,
         input: precedingUser?.text ?? "",
         reply: filed?.text,
-        operations: (filed?.operations ?? [...approved, ...rejected]).map((op) => ({ ...op, enabled: false })),
+        operations: disableDecidedOperations(filed?.operations ?? decided, decided),
         results: mergeToolResults(filed?.toolResults ?? [], results),
         taskOptions: [],
       });
@@ -1074,24 +1076,14 @@ export default function AvatarApp(): React.ReactElement {
       ? current
       : [...current, { id: promptTurnId, role: "assistant", text: `${contextualPrompt.heading}: ${contextualPrompt.body}`, createdAt: new Date().toISOString() }]);
   }, [contextualPrompt.body, promptTurnId]);
-  const showBadge = contextualPrompt.kind === "eod" || (contextualPrompt.kind === "check_in" && !missed);
   const taskContext = useMemo(
     () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
     [facts.loaded, facts.shiftDate, facts.taskOptions],
   );
-  // Single acknowledgement hop when a new prompt arrives — state-driven, never ambient.
-  const [hop, setHop] = useState(false);
-  useEffect(() => {
-    if (!promptTurnId) return;
-    setHop(true);
-    const timer = setTimeout(() => setHop(false), 650);
-    return () => clearTimeout(timer);
-  }, [promptTurnId]);
   const showShiftTime = hasOpenShiftSession(facts);
   const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
   const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
   const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable";
-  const ringClass = !showShiftTime ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
   const shiftLabel = showShiftTime
     ? facts.sessionState === "paused" ? (label ? `Paused · ${label}` : "Paused") : `On shift · ${label}`
     : "Off shift";
@@ -1120,12 +1112,14 @@ export default function AvatarApp(): React.ReactElement {
     working: thinking || filing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
     failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
-    needsInput: attentionDue || !!agendaReview || hasPendingMascotApproval(lastEntry?.operations, lastEntry?.toolResults),
+    needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
+      || chat.some((entry) => hasPendingMascotApproval(entry.operations, entry.toolResults)),
     completed: readyPulse,
     receipt: mascotReceipt,
   });
   const agentActivity: MascotAgentActivity = mascotVisual.activity;
   const workdayState: MascotWorkdayState = mascotVisual.workday;
+  const showBadge = mascotVisual.pose === "alert";
   const statusText = facts.lateReasonRequired
     ? "Late start — add a reason"
     : !facts.loaded
@@ -1184,8 +1178,7 @@ export default function AvatarApp(): React.ReactElement {
         {!expanded && (
           <div className="avatar-compact">
           <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
-          <button className="avatar-orb off" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
-            <svg viewBox="0 0 48 48" className="avatar-ring"><circle cx="24" cy="24" r="22" className="ring-track" /></svg>
+          <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
             <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
             <span className="avatar-orb-state">Connect</span>
           </button>
@@ -1208,20 +1201,16 @@ export default function AvatarApp(): React.ReactElement {
         {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
-          className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
+          className="avatar-orb"
           onClick={() => void toggleExpanded(true)}
           title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
-          aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : `Open ${MASCOT.name} companion`}
+          aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
-          <svg viewBox="0 0 48 48" className="avatar-ring">
-            <circle cx="24" cy="24" r="22" className="ring-track" />
-            <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={0} />
-          </svg>
           <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" />
           <span className="avatar-orb-state">{mascotVisual.label}</span>
           {(showShiftTime || showBadge) && <span
-            className={`avatar-badge${showShiftTime ? " avatar-badge-progress" : ""}${showShiftTime && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
-            style={showShiftTime && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
+            className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
+            style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
             aria-hidden="true"
           />}
         </button>

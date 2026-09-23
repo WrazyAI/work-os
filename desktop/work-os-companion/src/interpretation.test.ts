@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, partialFilingMessage, pendingApprovalCount, proposalApprovalCommand, sameToolCall, toolCallKey } from "./interpretation";
+import { disableDecidedOperations, fileApprovedOperations, interpretationFallbackReason, mergeToolResults, normalizeInterpretation, operationLabel, operationToolCall, partialFilingMessage, pendingApprovalCount, proposalApprovalCommand, sameToolCall, toolCallKey } from "./interpretation";
 
 const TASKS = [{ id: "t-1", title: "Ship the debugger fix" }, { id: "t-2", title: "Package the build" }];
 
@@ -379,5 +379,14 @@ describe("pendingApprovalCount", () => {
     const results = [{ op: { op: "complete_task", statement: "Done.", proposalId: "p-1" }, status: "recorded", message: "Recorded." }] as never;
     expect(pendingApprovalCount(operations, results)).toBe(0);
     expect(pendingApprovalCount(operations)).toBe(1);
+  });
+
+  it("keeps unsubmitted operations pending after a partial decision", () => {
+    const first = op({ taskId: "t-1" });
+    const second = op({ taskId: "t-2" });
+    const updated = disableDecidedOperations([first, second], [first]);
+
+    expect(updated).toMatchObject([{ enabled: false, taskId: "t-1" }, { enabled: true, taskId: "t-2" }]);
+    expect(pendingApprovalCount(updated)).toBe(1);
   });
 });

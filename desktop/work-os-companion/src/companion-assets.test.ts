@@ -39,6 +39,29 @@ describe("companion artwork", () => {
   it("uses an alpha PNG for the packaged app icon", () => {
     expect(pngColorType(resolve(root, "src-tauri/icons/icon.png"))).toBe(6);
   });
+
+  it("keeps the compact mascot free of a halo and repeats the shared alert pose", () => {
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    const pet = readFileSync(resolve(root, "src/MascotPet.tsx"), "utf8");
+    const avatarCss = readFileSync(resolve(root, "src/avatar.css"), "utf8");
+    const conversationCss = readFileSync(resolve(root, "src/chat/conversation.css"), "utf8");
+    const studioCss = readFileSync(resolve(root, "src/studio-otto.css"), "utf8");
+
+    expect(avatar).not.toContain("avatar-ring");
+    expect(conversationCss).not.toContain("avatar-ring");
+    expect(avatarCss).not.toContain(".avatar-orb::before");
+    expect(conversationCss).toMatch(/\.avatar-orb\s*\{[^}]*background:\s*transparent/s);
+    expect(avatar).toContain('const showBadge = mascotVisual.pose === "alert"');
+    expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
+    expect(avatar).toContain('className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress"');
+    expect(avatar).toContain("style={showShiftTime && !showBadge && progressAvailable");
+    expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced)');
+    expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
+    expect(avatar).toContain("chat.some((entry) => hasPendingMascotApproval");
+    expect(avatarCss).toContain("animation: avatarAttention 5s");
+    expect(avatarCss).toContain('.avatar-orb:has(.mascot-pet[data-attention-playing="true"]) { animation: none; }');
+    expect(studioCss).toContain("studio-attention-rig 5s steps(5, end) 1 both");
+  });
 });
 
 describe("companion launch window", () => {

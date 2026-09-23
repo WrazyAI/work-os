@@ -42,7 +42,7 @@
 .studio-otto[data-pose="think"] .dot-2 { animation-delay: .2s; }
 .studio-otto[data-pose="think"] .dot-3 { animation-delay: .4s; }
 .studio-otto[data-pose="think"] .studio-typing-hand { animation: studio-type 1.8s ease-in-out infinite; }
-.studio-otto[data-pose="alert"] .studio-arm-right { transform: rotate(-63deg); animation: studio-ask 650ms ease-out 1; }
+.studio-otto[data-pose="alert"] .studio-arm-right { transform: rotate(-63deg); }
 .studio-otto[data-pose="alert"] .studio-head { transform: rotate(2deg); }
 .studio-otto[data-pose="celebrate"] .studio-head { animation: studio-nod 700ms ease-out 1; }
 .studio-otto[data-pose="celebrate"] .studio-arm-right { transform: rotate(-48deg); animation: studio-done 700ms ease-out 1; }
@@ -57,7 +57,6 @@
 }
 @keyframes studio-process { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 @keyframes studio-type { 0%, 30%, 65%, 100% { transform: translateY(0); } 48% { transform: translateY(-2px); } }
-@keyframes studio-ask { from { transform: rotate(0); } to { transform: rotate(-63deg); } }
 @keyframes studio-done { from { transform: rotate(0); } to { transform: rotate(-48deg); } }
 @keyframes studio-nod { 0%, 100% { transform: rotate(0); } 45% { transform: rotate(3deg) translateY(1px); } }
 /* Tiny identity marks are static, light renderers, not hidden animated pets. */
@@ -115,16 +114,16 @@
   animation-timing-function: steps(3, end);
 }
 
-/* A due update should be noticeable in peripheral vision: Otto steps forward,
- * looks up, and gives one deliberate wave instead of only lighting the ring. */
-.studio-otto[data-pose="alert"] .studio-rig {
-  animation: studio-attention-rig 520ms steps(5, end) 3 both;
+/* One attention play uses the full five-second window. The shared runtime
+ * inserts a one-second cooldown and starts two more plays, then settles. */
+.mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-rig {
+  animation: studio-attention-rig 5s steps(5, end) 1 both;
 }
-.studio-otto[data-pose="alert"] .studio-head {
-  animation: studio-attention-head 520ms steps(5, end) 3 both;
+.mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-head {
+  animation: studio-attention-head 5s steps(5, end) 1 both;
 }
-.studio-otto[data-pose="alert"] .studio-arm-right {
-  animation: studio-attention-wave 520ms steps(5, end) 3 both;
+.mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-arm-right {
+  animation: studio-attention-wave 5s steps(5, end) 1 both;
 }
 
 /* Confirmed outcomes get a compact whole-body hop. It plays once, never as an

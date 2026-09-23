@@ -580,12 +580,19 @@ It may appear as:
 - a compact orb in the floating companion;
 - a thinking/recovering/celebrating state when the corresponding event is real.
 
-In the compact floating companion, the outer halo communicates the mascot's
-workday state. Keep elapsed session time visible while a shift is open, including
-while paused; subtract completed breaks and freeze the timer at the current pause.
-A small orange progress circle fills clockwise against the scheduled shift
-window, and the companion's accessible name gives its numeric percentage. This
-marker describes time only, never productivity or quality.
+The compact floating companion has no circular halo or backdrop behind the
+mascot. Keep elapsed session time visible while a shift is open, including while
+paused; subtract completed breaks and freeze the timer at the current pause. A
+small orange corner marker remains: it shows alerts when input is needed and
+fills clockwise against the scheduled shift window when progress is available.
+The companion's accessible name gives the numeric percentage. The marker
+describes time only, never productivity or quality.
+
+When an actionable update needs the employee's input, use the shared `alert`
+pose rather than checking for one prompt kind. Play one five-second attention
+gesture, rest for one second, and repeat twice; then return to the still alert
+pose until the employee responds. Never loop continuously, and remove all
+attention motion under reduced-motion preferences.
 
 Art uses the existing ink/paper/signal palette and never becomes a generic stock
 illustration. Do not create a new raster asset where the configured original

@@ -71,42 +71,23 @@ body.avatar-window {
 }
 .avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 7px 16px rgba(13, 15, 12, 0.38); }
 .avatar-orb:active { transform: translateY(1px) scale(0.985); box-shadow: 0 3px 8px rgba(13, 15, 12, 0.3); }
-.avatar-orb.pulse { animation: avatarPulse 1.8s ease-in-out infinite; }
-/* Single acknowledgement hop when a new prompt arrives — one iteration only,
- * never ambient. Rotation-free 6px lift keeps it inside the motion budget. */
-.avatar-orb.hop-once { animation: avatarHop 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 1; }
-.avatar-orb.hop-once.pulse { animation: avatarHop 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 1, avatarPulse 1.8s ease-in-out 0.55s infinite; }
-
-@keyframes avatarHop {
-  0% { transform: translateY(0); }
-  35% { transform: translateY(-6px); }
-  70% { transform: translateY(1px); }
-  100% { transform: translateY(0); }
+/* Each attention play runs for five seconds; the runtime then holds still for
+ * a one-second cooldown before restarting the movement. */
+.avatar-orb:has(.mascot-pet[data-attention-playing="true"]) {
+  animation: avatarAttention 5s cubic-bezier(0.2, 0.8, 0.2, 1) 1;
 }
 
-@keyframes avatarPulse {
-  0%, 100% { box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35), 0 0 0 0 rgba(139, 195, 74, 0.55); }
-  50% { box-shadow: 0 10px 28px rgba(13, 15, 12, 0.35), 0 0 0 14px rgba(139, 195, 74, 0); }
+@keyframes avatarAttention {
+  0%, 100% { transform: translateY(0); }
+  10% { transform: translateY(-6px); }
+  20% { transform: translateY(1px); }
+  30% { transform: translateY(0); }
+  42% { transform: translateY(-5px); }
+  52% { transform: translateY(1px); }
+  62% { transform: translateY(0); }
+  74% { transform: translateY(-3px); }
+  84% { transform: translateY(0); }
 }
-
-.avatar-ring {
-  position: absolute;
-  inset: 7px;
-  width: calc(100% - 14px);
-  height: calc(100% - 14px);
-  transform: rotate(-90deg);
-}
-.avatar-ring circle { fill: none; stroke-width: 3.8; }
-.avatar-ring .ring-track { stroke: rgba(255, 255, 255, 0.14); }
-.avatar-ring .ring-fill {
-  stroke: var(--avatar-signal);
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease;
-}
-.avatar-orb.off .ring-fill { stroke: #5a5d55; }
-.avatar-orb.paused .ring-fill { stroke: #d9a441; }
-.avatar-orb.due .ring-fill { stroke: #ff9d5c; }
-.avatar-orb.late .ring-fill { stroke: #e2604f; }
 
 .avatar-pet {
   position: relative;
@@ -705,22 +686,8 @@ body.avatar-window {
   background: transparent;
   box-shadow: none;
 }
-.avatar-orb::before {
-  content: "";
-  position: absolute;
-  inset: 14px 13px 18px;
-  z-index: 0;
-  border-radius: 38px;
-  background: radial-gradient(circle at 50% 38%, rgba(168, 241, 91, .2), rgba(24, 34, 25, .08) 58%, transparent 74%);
-  filter: blur(.2px);
-  pointer-events: none;
-}
 .avatar-orb:hover { transform: translateY(-2px); box-shadow: none; }
 .avatar-orb:focus-visible { outline: 2px solid #a8f15b; outline-offset: 3px; }
-.avatar-orb .avatar-ring { inset: 3px 4px auto; width: 108px; height: 108px; }
-.avatar-orb .avatar-ring circle { stroke-width: 2.2; }
-.avatar-orb .ring-track { stroke: rgba(76, 101, 73, .2); }
-.avatar-orb .ring-fill { filter: drop-shadow(0 0 3px rgba(168, 241, 91, .38)); }
 .avatar-pet {
   width: 100px;
   height: 100px;
@@ -768,14 +735,15 @@ body.avatar-window {
 .avatar-hide { top: 4px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
 
 @media (prefers-reduced-motion: reduce) {
-  .avatar-orb, .avatar-panel, .avatar-orb.pulse, .avatar-orb.hop-once,
+  .avatar-orb, .avatar-panel,
   .avatar-thinking-active, .avatar-thinking-spinner, .avatar-thinking-chevron,
   .avatar-thinking-trace-wrap { animation: none; transition: none; }
+  .avatar-orb:has(.mascot-pet[data-attention-playing="true"]) { animation: none; }
 }
 
 
 /* Collapsed companion: reserve enough native canvas for the full figure,
- * state halo, elapsed-time readout, and shift-progress marker. */
+ * elapsed-time readout, and shift-progress marker. */
 .avatar-compact {
   width: 200px;
   height: 276px;
@@ -786,14 +754,6 @@ body.avatar-window {
   margin: 76px 28px 0;
 }
 .avatar-prompt-bubble ~ .avatar-orb { margin-top: 76px; }
-.avatar-orb .avatar-ring {
-  inset: 4px 4px auto;
-  width: 136px;
-  height: 136px;
-}
-.avatar-orb .avatar-ring circle { stroke-width: 4.2; }
-.avatar-orb .ring-track { stroke: rgba(76, 101, 73, .28); }
-.avatar-orb .ring-fill { filter: drop-shadow(0 0 2px rgba(168, 241, 91, .24)); }
 .avatar-pet {
   width: 118px;
   height: 133px;

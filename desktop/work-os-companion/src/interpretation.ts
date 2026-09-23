@@ -186,6 +186,16 @@ export function pendingApprovalCount(
   ).length;
 }
 
+/** Disable only the operations included in this approval/skip submission. */
+export function disableDecidedOperations(
+  operations: readonly ProposedOperation[],
+  decided: readonly ProposedOperation[],
+): ProposedOperation[] {
+  return operations.map((op) => decided.some((decision) => sameToolCall(decision, op))
+    ? { ...op, enabled: false }
+    : op);
+}
+
 /** The exact Work OS request an approved assistant proposal will make. */
 export function operationToolCall(op: ProposedOperation, context: ApprovedOpContext): { tool: string; command: string } {
   if (isBatchToolOp(op)) {

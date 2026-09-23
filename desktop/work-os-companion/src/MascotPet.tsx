@@ -3,6 +3,7 @@ import { MASCOT } from "./mascot";
 import { deriveMascotVisualState, type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntimeSnapshot } from "./mascotRuntimeStore";
 import { cx } from "./chat/cx";
+import { useAttentionSequence } from "./attentionSequence";
 import "./mascot-runtime.css";
 
 export interface MascotPetProps {
@@ -25,6 +26,7 @@ export function MascotPet({ agent = "idle", workday = "active", className, artCl
   const runtime = isolated ? null : snapshot;
   const visual = runtime ?? deriveMascotVisualState({ agent, workday });
   const reduced = reducedMotion || runtime?.reducedMotion === true;
+  const attention = useAttentionSequence(visual.pose === "alert", reduced);
   const Pet = MASCOT.Pet;
   const updateGaze = (event: ReactPointerEvent<HTMLSpanElement>) => {
     if (reduced || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -41,6 +43,8 @@ export function MascotPet({ agent = "idle", workday = "active", className, artCl
   return <span className={cx("mascot-pet", className)} data-motion="renderer"
     data-activity={visual.activity} data-workday={visual.workday}
     data-source={runtime?.source ?? "isolated"} data-reduced-motion={reduced ? "true" : "false"}
+    data-attention-playing={attention.playing ? "true" : undefined}
+    data-attention-cycle={attention.playing ? attention.cycle : undefined}
     data-attention={visual.attention ? "true" : "false"} data-transient={visual.transient ? "true" : "false"}
     aria-hidden="true" onPointerMove={updateGaze} onPointerLeave={resetGaze}>
     <Pet key={runtime?.replay ?? replayKey} pose={visual.pose} tone={visual.tone} crop="full"

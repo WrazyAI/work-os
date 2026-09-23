@@ -759,17 +759,14 @@
   width: 124px;
   height: 124px;
   margin: 35px 26px 12px;
-  border: 1px solid rgba(213, 255, 84, 0.38);
+  border: 0;
   outline: 0;
-  border-radius: 50%;
-  background: var(--conversation-graphite);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.avatar-orb:hover { box-shadow: 0 24px 58px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(213, 255, 84, 0.12); }
-.avatar-orb .avatar-ring { inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); }
-.avatar-orb .ring-track { stroke: rgba(255, 252, 246, 0.14); }
-.avatar-orb .ring-fill { stroke: var(--conversation-signal); filter: none; }
+.avatar-orb:hover { box-shadow: none; }
 .avatar-pet.otto { width: 100px; height: 100px; margin-top: -7px; }
 .avatar-orb-state { bottom: 15px; color: rgba(255, 252, 246, 0.78); font-size: 8px; }
 .avatar-day-time { bottom: -1px; border: 0; background: var(--conversation-surface); color: var(--conversation-ink); box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16); }

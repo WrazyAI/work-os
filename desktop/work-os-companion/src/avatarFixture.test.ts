@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AVATAR_RECORDED_FIXTURE, AVATAR_SHIFT_PROGRESS_FIXTURE, avatarFixtureChat, avatarFixtureFacts,
-  avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
+  avatarAttentionFixtureRequested, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
 } from "./avatarFixture";
 
 describe("avatar recorded-completion fixture", () => {
@@ -44,5 +44,12 @@ describe("avatar recorded-completion fixture", () => {
     expect(facts.planStatus).toBe("confirmed");
     expect(now - Date.parse(facts.clockedInAt!)).toBe(90 * 60_000);
     expect((now - scheduledStart) / (scheduledEnd - scheduledStart)).toBe(0.5);
+  });
+
+  it("enables generic needs-input rendering only alongside a known avatar fixture", () => {
+    expect(avatarAttentionFixtureRequested(`?avatar-fixture=${AVATAR_RECORDED_FIXTURE}&avatar-attention=true`)).toBe(true);
+    expect(avatarAttentionFixtureRequested(`?avatar-fixture=${AVATAR_SHIFT_PROGRESS_FIXTURE}&avatar-attention=true`)).toBe(true);
+    expect(avatarAttentionFixtureRequested("?avatar-fixture=unknown&avatar-attention=true")).toBe(false);
+    expect(avatarAttentionFixtureRequested(`?avatar-fixture=${AVATAR_RECORDED_FIXTURE}`)).toBe(false);
   });
 });
