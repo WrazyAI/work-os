@@ -104,6 +104,7 @@ export interface TaskListOptions {
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
   order?: TaskListOrder;
+  sortDate?: string | null;
 }
 
 export const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
@@ -235,7 +236,7 @@ function workspaceStatusRank(task: Record<string, any>, currentDate: string) {
   return due && due < currentDate ? 0 : 1;
 }
 
-function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, any>, order: TaskListOrder) {
+function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, any>, order: TaskListOrder, currentDate: string) {
   switch (order) {
     case "title_asc":
       return String(left.title ?? "").localeCompare(String(right.title ?? "")) || compareTaskRecency(left, right);
@@ -246,11 +247,11 @@ function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, 
     case "due_desc":
       return compareWorkspaceDue(left, right, "desc");
     case "status_asc": {
-      const status = workspaceStatusRank(left, today()) - workspaceStatusRank(right, today());
+      const status = workspaceStatusRank(left, currentDate) - workspaceStatusRank(right, currentDate);
       return status || compareWorkspaceDue(left, right, "asc");
     }
     case "status_desc": {
-      const status = workspaceStatusRank(right, today()) - workspaceStatusRank(left, today());
+      const status = workspaceStatusRank(right, currentDate) - workspaceStatusRank(left, currentDate);
       return status || compareWorkspaceDue(left, right, "asc");
     }
     case "recency":
@@ -297,8 +298,9 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
+  const sortDate = opts.sortDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.sortDate) ? opts.sortDate : today();
   const selected = [...rows.values()]
-    .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due"))
+    .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due", sortDate))
     .slice(offset, offset + limit);
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
