@@ -84,9 +84,9 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
   });
 }
 
-export function useTaskHistoryQuery(options: { enabled: boolean; sort: TaskSort }) {
+export function useTaskHistoryQuery(options: { enabled: boolean; sort: TaskSort; currentDate?: string; completedOnly?: boolean }) {
   return useInfiniteQuery({
-    queryKey: [...workOsKeys.taskHistory(), options.sort.key, options.sort.direction],
+    queryKey: [...workOsKeys.taskHistory(), options.completedOnly ? "completed" : "all", options.currentDate ?? "", options.sort.key, options.sort.direction],
     enabled: options.enabled,
     staleTime: TASK_HISTORY_STALE_MS,
     initialPageParam: 0,
@@ -99,6 +99,8 @@ export function useTaskHistoryQuery(options: { enabled: boolean; sort: TaskSort 
         sort: options.sort.key,
         direction: options.sort.direction,
       });
+      if (options.currentDate) params.set("sortDate", options.currentDate);
+      if (options.completedOnly) params.set("completed", "true");
       return apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`);
     },
   });
