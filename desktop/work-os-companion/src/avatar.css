@@ -183,7 +183,6 @@ body.avatar-window {
   background: #ff9d5c;
   border: 2px solid var(--avatar-ink);
 }
-
 /* ── Expanded panel ────────────────────────────────────────────── */
 
 .avatar-panel {
@@ -761,7 +760,11 @@ body.avatar-window {
 .avatar-prompt-bubble + .avatar-drag-surface { top: 62px; left: 56px; width: 52px; height: 20px; color: rgba(231, 247, 202, .72); }
 .avatar-prompt-bubble ~ .avatar-orb { margin-top: 68px; }
 .avatar-day-time { bottom: 1px; border-color: rgba(83, 100, 81, .7); border-radius: 999px; background: rgba(251, 252, 248, .96); color: #344333; font: 750 9px/1 Manrope, Inter, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 9px rgba(13, 18, 12, .13); }
-.avatar-badge { top: 8px; right: 9px; z-index: 3; width: 13px; height: 13px; border-color: #1b241b; background: #ff8a55; box-shadow: 0 0 0 3px rgba(255, 138, 85, .15); }
+.avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
+.avatar-badge.avatar-badge-progress {
+  background: conic-gradient(from -90deg, #ff8a55 0 var(--shift-progress, 0%), rgba(255, 138, 85, .2) var(--shift-progress, 0%) 100%);
+}
+.avatar-badge.avatar-badge-progress-unavailable { background: rgba(255, 138, 85, .16); }
 .avatar-hide { top: 4px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -772,7 +775,7 @@ body.avatar-window {
 
 
 /* Collapsed companion: reserve enough native canvas for the full figure,
- * schedule progress, state label, and remaining-time readout. */
+ * state halo, elapsed-time readout, and shift-progress marker. */
 .avatar-compact {
   width: 200px;
   height: 276px;
@@ -825,4 +828,4 @@ body.avatar-window {
   left: 69px;
   width: 62px;
 }
-.avatar-badge { top: 11px; right: 11px; }
+.avatar-badge { top: 8px; right: 8px; }

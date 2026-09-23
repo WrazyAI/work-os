@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AVATAR_RECORDED_FIXTURE, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested } from "./avatarFixture";
+import {
+  AVATAR_RECORDED_FIXTURE, AVATAR_SHIFT_PROGRESS_FIXTURE, avatarFixtureChat, avatarFixtureFacts,
+  avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
+} from "./avatarFixture";
 
 describe("avatar recorded-completion fixture", () => {
   it("activates only for the recorded-completion parameter", () => {
@@ -29,5 +32,17 @@ describe("avatar recorded-completion fixture", () => {
     expect(facts.loaded).toBe(true);
     expect(facts.sessionState).toBeNull();
     expect(facts.taskOptions.map((task) => task.id)).toEqual(["fixture-new", "fixture-old"]);
+  });
+
+  it("provides a 90-minute elapsed session at half of its scheduled shift", () => {
+    const now = Date.parse("2026-09-23T12:00:00Z");
+    const facts = avatarShiftProgressFixtureFacts(now);
+    const scheduledStart = Date.parse(facts.shiftStartsAt!);
+    const scheduledEnd = Date.parse(facts.shiftEndsAt!);
+    expect(avatarFixtureRequested(`?avatar-fixture=${AVATAR_SHIFT_PROGRESS_FIXTURE}`)).toBe(true);
+    expect(avatarShiftProgressFixtureRequested(`?avatar-fixture=${AVATAR_SHIFT_PROGRESS_FIXTURE}`)).toBe(true);
+    expect(facts.planStatus).toBe("confirmed");
+    expect(now - Date.parse(facts.clockedInAt!)).toBe(90 * 60_000);
+    expect((now - scheduledStart) / (scheduledEnd - scheduledStart)).toBe(0.5);
   });
 });

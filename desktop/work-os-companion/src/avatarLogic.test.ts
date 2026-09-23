@@ -147,7 +147,7 @@ describe("shift elapsed fraction", () => {
     const { fraction, label } = shiftElapsedFraction(base, mid);
     expect(fraction).toBeGreaterThan(0.4);
     expect(fraction).toBeLessThan(0.6);
-    expect(label).toBe("4h 05m");
+    expect(label).toBe("4h 00m");
     expect(shiftElapsedFraction(base, mid).remaining).toBe("3h 55m left");
   });
   it("anchors the ring to the scheduled day instead of a late clock-in", () => {
@@ -155,13 +155,24 @@ describe("shift elapsed fraction", () => {
     expect(shiftElapsedFraction(lateClockIn, NOW).fraction).toBeCloseTo(0.25);
   });
   it("keeps scheduled progress truthful while the employee is paused", () => {
-    const paused = { ...base, sessionState: "paused", pausedSeconds: 45 * 60 };
+    const paused = { ...base, sessionState: "paused", pausedSeconds: 45 * 60, pausedAt: "2026-08-31T09:30:00Z" };
     expect(shiftElapsedFraction(paused, NOW).fraction).toBeCloseTo(0.25);
     expect(shiftElapsedFraction(paused, NOW).remaining).toBe("6h 00m left");
+    expect(shiftElapsedFraction(paused, NOW).label).toBe("40m");
+    expect(shiftElapsedFraction(paused, NOW + 60 * 60_000).label).toBe("40m");
   });
   it("does not invent zero minutes when the schedule end is unavailable", () => {
     const noEnd = { ...base, shiftEndsAt: null };
-    expect(shiftElapsedFraction(noEnd, NOW)).toMatchObject({ fraction: 0, remaining: "Time unavailable" });
+    expect(shiftElapsedFraction(noEnd, NOW)).toMatchObject({ fraction: 0, remaining: "Time unavailable", progressAvailable: false });
+  });
+  it("uses clock-in only for elapsed time when the scheduled start is unavailable", () => {
+    const noScheduleStart = { ...base, shiftStartsAt: null };
+    expect(shiftElapsedFraction(noScheduleStart, NOW)).toMatchObject({
+      fraction: 0,
+      label: "1h 55m",
+      remaining: "Time unavailable",
+      progressAvailable: false,
+    });
   });
   it("clamps to 1 after the scheduled end and names the completed shift", () => {
     const late = new Date("2026-08-31T20:00:00Z").getTime();

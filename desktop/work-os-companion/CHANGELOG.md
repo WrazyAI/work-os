@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.53
+
+- Your floating companion now shows elapsed shift time and an orange circle that fills with scheduled progress.
+
 ## 0.3.52
 
 - Tasks now keeps date navigation in the masthead, puts Add task beside search, and lets you edit or remove subtasks from their action menu.

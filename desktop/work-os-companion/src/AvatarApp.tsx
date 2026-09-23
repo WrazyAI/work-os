@@ -7,8 +7,9 @@ import { SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
-import { DAY_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { fetchDay, fetchTaskDetails } from "./workOsQueries";
+import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
+import { fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
+import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
@@ -20,7 +21,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested } from "./avatarFixture";
+import { avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -28,6 +29,7 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
+import type { WorkSession } from "./types";
 import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
@@ -153,10 +155,13 @@ export default function AvatarApp(): React.ReactElement {
   // DEV-only visual fixture (see avatarFixture.ts): renders the recorded
   // completion without a session token so TestSprite or a plain browser can
   // check the avatar's recorded-result rendering. Inert in production.
+  const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
-  const [facts, setFacts] = useState<DayFacts>(() => avatarFixture ? avatarFixtureFacts() : {
+  const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
+    ? avatarShiftProgressFixtureFacts()
+    : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
@@ -192,6 +197,8 @@ export default function AvatarApp(): React.ReactElement {
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const dayRef = useRef<DayFacts>(facts);
   const dayLoadInFlight = useRef(false);
+  const daySessionRevision = useRef(0);
+  const dayReloadRequested = useRef(false);
   const chatRef = useRef<ChatEntry[]>([]);
   const avatarToolsSig = useRef("");
   // The agenda auto-expand key last acted on, so a deliberate collapse is never
@@ -232,8 +239,12 @@ export default function AvatarApp(): React.ReactElement {
 
   // ── Day poll: the single source of shift/prompt facts ──
   const loadDay = useCallback(async (force = false) => {
-    if (dayLoadInFlight.current) return;
+    if (dayLoadInFlight.current) {
+      if (force) dayReloadRequested.current = true;
+      return;
+    }
     dayLoadInFlight.current = true;
+    const sessionRevision = daySessionRevision.current;
     try {
       if (force) await workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
       // Shared query cache: a fresh cached day is served without a network
@@ -287,6 +298,32 @@ export default function AvatarApp(): React.ReactElement {
           // rather than inventing 0m when the richer schedule cannot refresh.
         }
       }
+      const resolvedStart = Date.parse(String(day?.shift?.startsAt ?? ""));
+      const resolvedEnd = Date.parse(String(day?.shift?.endsAt ?? ""));
+      if (!Number.isFinite(resolvedStart) || !Number.isFinite(resolvedEnd) || resolvedEnd <= resolvedStart) {
+        try {
+          const onboarding = await workOsQueryClient.fetchQuery({
+            queryKey: workOsKeys.onboarding(),
+            queryFn: fetchOnboarding,
+            staleTime: force ? 0 : ONBOARDING_STALE_MS,
+          });
+          const schedule = onboarding.organizationSetup.officialSchedule
+            ?? (onboarding.employeeRequirements.scheduleProvided ? onboarding.profile.schedule : null);
+          const shift = resolveDashboardShift({
+            shift: null,
+            session: session as unknown as WorkSession,
+            schedule,
+            currentDate: String(day?.shiftDate ?? ""),
+            timezone: day?.shift?.timezone ?? onboarding.profile.timezone,
+            now: new Date(),
+          });
+          if (shift) day = { ...day, shift };
+        } catch (value) {
+          if (value instanceof ApiRequestError && value.status === 401) throw value;
+          // Keep the elapsed session clock even when schedule data is unavailable.
+        }
+      }
+      if (sessionRevision !== daySessionRevision.current) return;
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
         loaded: true,
@@ -300,6 +337,7 @@ export default function AvatarApp(): React.ReactElement {
         clockedInAt: session.clocked_in_at ?? null,
         clockedOutAt: session.clocked_out_at ?? null,
         pausedSeconds: Number(session.paused_seconds ?? 0) || 0,
+        pausedAt: typeof session.paused_at === "string" ? session.paused_at : null,
         lastSubstantiveUpdateAt: typeof session.last_substantive_update_at === "string" ? session.last_substantive_update_at : null,
         employeeUpdates: Number(day?.signals?.employeeUpdates ?? 0) || 0,
         completedTasks: Number(day?.signals?.completedTasks ?? 0) || 0,
@@ -343,10 +381,17 @@ export default function AvatarApp(): React.ReactElement {
       setConnected(true);
       setDaySyncState("ready");
     } catch (value) {
+      if (sessionRevision !== daySessionRevision.current) return;
       if (value instanceof ApiRequestError && value.status === 401) setConnected(false);
       // Retain usable facts but make the stale/failure boundary explicit.
       setDaySyncState(dayRef.current.loaded ? "stale" : "error");
-    } finally { dayLoadInFlight.current = false; }
+    } finally {
+      dayLoadInFlight.current = false;
+      if (dayReloadRequested.current) {
+        dayReloadRequested.current = false;
+        void loadDay(true);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -363,11 +408,14 @@ export default function AvatarApp(): React.ReactElement {
     let unlistenSession: (() => void) | undefined;
     void listen("work-os://main-day-changed", () => { void loadDay(true); }).then((fn) => { unlistenDay = fn; }).catch(() => undefined);
     void listen("work-os://main-session-changed", () => {
+      daySessionRevision.current += 1;
       void secureState.session().then((session) => {
         setDesktopSession(session);
         setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
-        void loadDay(true);
-      }).catch(() => undefined);
+      }).catch(() => {
+        setDesktopSession(null);
+        setConnected(false);
+      }).finally(() => { void loadDay(true); });
     }).then((fn) => { unlistenSession = fn; }).catch(() => undefined);
     return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
@@ -1025,7 +1073,9 @@ export default function AvatarApp(): React.ReactElement {
     return () => clearTimeout(timer);
   }, [promptTurnId]);
   const onShift = isOnShift(facts, now);
-  const { fraction, label, remaining } = shiftElapsedFraction(facts, now);
+  const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
+  const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
+  const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable";
   const ringClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
   const shiftLabel = onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift";
   const lastEntry = chat[chat.length - 1];
@@ -1143,18 +1193,22 @@ export default function AvatarApp(): React.ReactElement {
         <button
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
-          title={onShift ? `${label} into your scheduled day · ${remaining}` : "Work OS companion"}
-          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${remaining}.${remaining === "Time unavailable" ? "" : ` ${Math.round(fraction * 100)}% of shift complete.`}` : `Open ${MASCOT.name} companion`}
+          title={onShift ? `${elapsedText} · ${progressText}` : "Work OS companion"}
+          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : `Open ${MASCOT.name} companion`}
         >
           <svg viewBox="0 0 48 48" className="avatar-ring">
             <circle cx="24" cy="24" r="22" className="ring-track" />
-            <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={138.2 * (1 - fraction)} />
+            <circle cx="24" cy="24" r="22" className="ring-fill" strokeDasharray={138.2} strokeDashoffset={0} />
           </svg>
           <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" />
           <span className="avatar-orb-state">{mascotVisual.label}</span>
-          {showBadge && <span className="avatar-badge" />}
+          {(onShift || showBadge) && <span
+            className={`avatar-badge${onShift ? " avatar-badge-progress" : ""}${onShift && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
+            style={onShift && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
+            aria-hidden="true"
+          />}
         </button>
-        {onShift && remaining && <span className="avatar-day-time" aria-hidden="true">{remaining}</span>}
+        {onShift && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>
       )}
       {expanded && (

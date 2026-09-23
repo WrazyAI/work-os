@@ -16,6 +16,7 @@ export interface CompanionDayFacts {
   clockedInAt: string | null;
   clockedOutAt: string | null;
   pausedSeconds: number;
+  pausedAt?: string | null;
   timezone?: string | null;
   planIntent?: string | null;
   lastSubstantiveUpdateAt?: string | null;
@@ -247,7 +248,7 @@ export function collectNudges(facts: CompanionDayFacts, now: number, notifiedKey
 /** Scheduled-shift progress for the floating companion ring.
  * The ring follows the scheduled window exactly, matching the dashboard pulse:
  * pauses change session elapsed time, but they do not move the scheduled end. */
-export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { fraction: number; label: string; remaining: string } {
+export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { fraction: number; label: string; remaining: string; progressAvailable: boolean } {
   const validTime = (value: string | null | undefined) => {
     const parsed = value ? Date.parse(value) : Number.NaN;
     return Number.isFinite(parsed) ? parsed : null;
@@ -258,30 +259,40 @@ export function shiftElapsedFraction(facts: CompanionDayFacts, now: number): { f
     return hours > 0 ? `${hours}h ${String(safe % 60).padStart(2, "0")}m` : `${safe}m`;
   };
 
-  // Prefer the authoritative schedule. Clock-in is only a fallback when the
-  // compact day payload does not contain a scheduled start.
+  // Elapsed time follows the real session start, matching the main dashboard.
+  // The schedule remains the source for the completion fraction.
   const scheduledStart = validTime(facts.shiftStartsAt);
-  const start = scheduledStart ?? validTime(facts.clockedInAt);
+  const clockedInAt = validTime(facts.clockedInAt);
+  const elapsedStart = clockedInAt ?? scheduledStart;
+  const clockedOutAt = validTime(facts.clockedOutAt);
+  const pausedAt = facts.sessionState === "paused" ? validTime(facts.pausedAt) : null;
+  const elapsedEnd = clockedOutAt ?? pausedAt ?? now;
+  const pausedMs = Math.max(0, Number(facts.pausedSeconds) || 0) * 1000;
+  const elapsedMinutes = elapsedStart === null
+    ? 0
+    : Math.floor(Math.max(0, elapsedEnd - elapsedStart - pausedMs) / 60_000);
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  const pauseBoundaryMissing = facts.sessionState === "paused"
+    && clockedOutAt === null
+    && (pausedAt === null || elapsedStart === null || pausedAt < elapsedStart);
+  const label = elapsedStart === null || pauseBoundaryMissing
+    ? ""
+    : elapsedHours > 0
+      ? `${elapsedHours}h ${String(elapsedMinutes % 60).padStart(2, "0")}m`
+      : `${elapsedMinutes}m`;
+  const start = scheduledStart;
   const scheduledEnd = validTime(facts.shiftEndsAt);
-  if (start === null) return { fraction: 0, label: "", remaining: "Time unavailable" };
-  if (scheduledEnd === null || scheduledEnd <= start) {
-    const elapsedMinutes = Math.max(0, Math.floor((now - start) / 60_000));
-    const hours = Math.floor(elapsedMinutes / 60);
-    const label = hours > 0 ? `${hours}h ${String(elapsedMinutes % 60).padStart(2, "0")}m` : `${elapsedMinutes}m`;
-    return { fraction: 0, label, remaining: "Time unavailable" };
-  }
+  if (start === null) return { fraction: 0, label, remaining: "Time unavailable", progressAvailable: false };
+  if (scheduledEnd === null || scheduledEnd <= start) return { fraction: 0, label, remaining: "Time unavailable", progressAvailable: false };
 
   const total = Math.max(60_000, scheduledEnd - start);
   const elapsed = Math.max(0, Math.min(total, now - start));
-  const elapsedMinutes = Math.floor(elapsed / 60_000);
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  const label = elapsedHours > 0 ? `${elapsedHours}h ${String(elapsedMinutes % 60).padStart(2, "0")}m` : `${elapsedMinutes}m`;
   const remaining = now < start
     ? `${formatMinutes((start - now) / 60_000)} to start`
     : now >= scheduledEnd
       ? "Shift complete"
       : `${formatMinutes((scheduledEnd - now) / 60_000)} left`;
-  return { fraction: Math.max(0, Math.min(1, elapsed / total)), label, remaining };
+  return { fraction: Math.max(0, Math.min(1, elapsed / total)), label, remaining, progressAvailable: true };
 }
 
 /** Notification payload prefix per nudge kind (used by the scheduler tests). */
