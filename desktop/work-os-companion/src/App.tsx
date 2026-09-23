@@ -3621,14 +3621,14 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const viewTotal = historical ? null : taskView === "all" ? serverCounts?.total ?? null : taskView === "completed" ? serverCounts?.completed ?? null : null;
   const overflowNote = !hasFilters && viewTotal !== null && unfiltered.length < viewTotal ? `Showing ${unfiltered.length} of ${viewTotal}` : null;
   // My day is open work only: completed tasks move to the Completed view.
-  // History pagination is already ordered server-side with this same state;
-  // local sorting keeps complete views (My day, Unfinished, historical days)
-  // and optimistic/cache rows aligned with the visible column order.
-  const displayedTasks = sortTaskList(
-    taskView === "today" && !historical ? displayed.filter((task) => task.completed !== true) : displayed,
-    taskSort,
-    currentDate,
-  );
+  // All / Completed arrive globally ordered from SQL before pagination; do not
+  // re-sort flattened pages on the client or rows can cross page boundaries.
+  const rowsForDisplay = taskView === "today" && !historical
+    ? displayed.filter((task) => task.completed !== true)
+    : displayed;
+  const displayedTasks = !historical && (taskView === "all" || taskView === "completed")
+    ? rowsForDisplay
+    : sortTaskList(rowsForDisplay, taskSort, currentDate);
   const listRef = useRef<HTMLDivElement | null>(null);
   useListShift(listRef);
   const selectedIds = new Set((currentPlan?.items ?? []).filter((item) => item.disposition === "selected" && item.task_id).map((item) => String(item.task_id)));
