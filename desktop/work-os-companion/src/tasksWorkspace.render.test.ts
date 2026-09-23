@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { TasksWorkspace } from "./App";
+import { DEFAULT_TASK_SORT } from "./taskWorkspace";
 
 describe("Tasks workspace filters", () => {
   it("renders accessible search and date-range controls", () => {
@@ -16,6 +17,7 @@ describe("Tasks workspace filters", () => {
       suggestion: null,
       saveState: "saved",
       taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
       todayTasks: [],
       taskHistory: [{ id: "task-1", title: "Repair provider sync", due_date: "2026-08-26", completed: false }],
       carryOver: [],
@@ -25,6 +27,8 @@ describe("Tasks workspace filters", () => {
       busy: false,
       initialFiltersOpen: true,
       onTaskView: () => undefined,
+    onTaskSort: () => undefined,
+      onTaskSort: () => undefined,
       onDate: async () => undefined,
       onEditFocus: () => undefined,
       onAddTask: () => undefined,
@@ -56,6 +60,7 @@ describe("Tasks workspace filters", () => {
       suggestion: null,
       saveState: "saved" as const,
       taskView: "unfinished" as const,
+      taskSort: DEFAULT_TASK_SORT,
       todayTasks: [],
       taskHistory: [],
       carryOver: [],
@@ -64,6 +69,8 @@ describe("Tasks workspace filters", () => {
       hasMore: false,
       busy: false,
       onTaskView: () => undefined,
+    onTaskSort: () => undefined,
+      onTaskSort: () => undefined,
       onDate: async () => undefined,
       onEditFocus: () => undefined,
       onAddTask: () => undefined,
@@ -97,6 +104,7 @@ describe("Tasks workspace filters", () => {
       suggestion: null,
       saveState: "saved" as const,
       taskView: "today" as const,
+      taskSort: DEFAULT_TASK_SORT,
       todayTasks: [{ id: "pending-1", title: "Adding now", completed: false, due_date: "2026-08-26", pending_status: "syncing" }],
       taskHistory: [],
       carryOver: [],
@@ -105,6 +113,8 @@ describe("Tasks workspace filters", () => {
       hasMore: false,
       busy: false,
       onTaskView: () => undefined,
+    onTaskSort: () => undefined,
+      onTaskSort: () => undefined,
       onDate: async () => undefined,
       onEditFocus: () => undefined,
       onAddTask: () => undefined,
@@ -147,6 +157,7 @@ describe("Tasks workspace ordering contract", () => {
     suggestion: null,
     saveState: "saved" as const,
     taskView: "all" as const,
+    taskSort: DEFAULT_TASK_SORT,
     todayTasks: [],
     taskHistory: [
       { id: "late", title: "Late work", due_date: "2026-08-20", completed: false },
@@ -159,6 +170,7 @@ describe("Tasks workspace ordering contract", () => {
     hasMore: false,
     busy: false,
     onTaskView: () => undefined,
+    onTaskSort: () => undefined,
     onDate: async () => undefined,
     onEditFocus: () => undefined,
     onAddTask: () => undefined,
@@ -175,10 +187,13 @@ describe("Tasks workspace ordering contract", () => {
   it("keeps one flat list with the canonical due-latest-first order", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, props));
 
-    expect(markup).not.toContain('role="toolbar"');
+    expect(markup).toContain('role="toolbar"');
+    expect(markup).toContain("Name");
+    expect(markup).toContain("Date due");
+    expect(markup).toContain("Status");
     expect(markup).not.toContain("Task queue");
     expect(markup).not.toContain("Scheduled today");
-    expect(markup).not.toContain("Due, sorted descending.");
+    expect(markup).toContain("Date due, sorted descending.");
     expect(markup).toContain("Add task");
 
     const latestDueIndex = markup.indexOf("Soon work");
@@ -196,6 +211,16 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup).toContain("All tasks<em>3</em>");
     expect(markup).not.toContain("All tasks<em>3</em><em>");
   });
+
+  it("applies the requested Name sort and keeps an explicit Open status cell", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      taskSort: { key: "title", direction: "asc" },
+    }));
+    expect(markup.indexOf("Finished work")).toBeLessThan(markup.indexOf("Late work"));
+    expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Soon work"));
+    expect(markup).toContain('class="task-state open">Open</span>');
+  });
 });
 
 describe("Tasks workspace backlog reconciliation", () => {
@@ -210,6 +235,7 @@ describe("Tasks workspace backlog reconciliation", () => {
     suggestion: null,
     saveState: "saved" as const,
     taskView: "all" as const,
+    taskSort: DEFAULT_TASK_SORT,
     todayTasks: [],
     taskHistory: [
       { id: "late", title: "Late work", due_date: "2026-08-20", completed: false },
@@ -222,6 +248,7 @@ describe("Tasks workspace backlog reconciliation", () => {
     hasMore: false,
     busy: false,
     onTaskView: () => undefined,
+    onTaskSort: () => undefined,
     onDate: async () => undefined,
     onEditFocus: () => undefined,
     onAddTask: () => undefined,
@@ -250,7 +277,7 @@ describe("Tasks workspace backlog reconciliation", () => {
     }));
     expect(markup).toContain("Beyond the loaded window");
     expect(markup).toContain("Unfinished<em>2</em>");
-    expect(markup).not.toContain('role="toolbar"');
+    expect(markup).toContain('role="toolbar"');
   });
 
 it("discloses a backlog failure instead of silently using the loaded window", () => {
