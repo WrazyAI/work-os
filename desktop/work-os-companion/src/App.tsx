@@ -549,7 +549,9 @@ export default function App() {
     currentDate: visibleDay?.shiftDate ?? "",
     completedOnly: true,
   });
-  const completedTaskHistory = completedHistoryQuery.data?.pages.flatMap((page) => page.tasks) ?? [];
+  const completedTaskHistory = completedHistoryQuery.data
+    ? completedHistoryQuery.data.pages.flatMap((page) => page.tasks)
+    : syncBypass ? null : [];
   const activeTaskHistoryQuery = view === "tasks" && taskView === "completed" ? completedHistoryQuery : historyQuery;
   const backlogQuery = useTaskBacklogQuery({ enabled: signedIn && !syncBypass });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
