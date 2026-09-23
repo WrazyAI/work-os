@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listPersonOpenTasks, listPersonTasks } from "@/lib/work-os";
+import { listPersonOpenTasks, listPersonTasks, type TaskListOrder } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmployeeTaskSelection } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
     const sortKey = params.get("sort");
     const sortDirection = params.get("direction");
     const order = sortKey && ["title", "due", "status"].includes(sortKey) && (sortDirection === "asc" || sortDirection === "desc")
-      ? `${sortKey}_${sortDirection}` as const
+      ? `${sortKey}_${sortDirection}` as TaskListOrder
       : undefined;
     const tasks = (await listPersonTasks(ownerId, auth.access.personId as string, {
       completed: params.get("completed"),
