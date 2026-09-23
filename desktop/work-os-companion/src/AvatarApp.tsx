@@ -34,7 +34,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, isOnShift, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
+  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -298,9 +298,23 @@ export default function AvatarApp(): React.ReactElement {
           // rather than inventing 0m when the richer schedule cannot refresh.
         }
       }
-      const resolvedStart = Date.parse(String(day?.shift?.startsAt ?? ""));
-      const resolvedEnd = Date.parse(String(day?.shift?.endsAt ?? ""));
-      if (!Number.isFinite(resolvedStart) || !Number.isFinite(resolvedEnd) || resolvedEnd <= resolvedStart) {
+      const hasValidShiftWindow = (shift: { startsAt?: unknown; endsAt?: unknown } | null | undefined) => {
+        const start = Date.parse(String(shift?.startsAt ?? ""));
+        const end = Date.parse(String(shift?.endsAt ?? ""));
+        return Number.isFinite(start) && Number.isFinite(end) && end > start;
+      };
+      if (!hasValidShiftWindow(day?.shift)) {
+        const sessionShift = resolveDashboardShift({
+          shift: null,
+          session: session as unknown as WorkSession,
+          schedule: null,
+          currentDate: String(day?.shiftDate ?? ""),
+          timezone: day?.shift?.timezone,
+          now: new Date(),
+        });
+        if (hasValidShiftWindow(sessionShift)) day = { ...day, shift: sessionShift };
+      }
+      if (!hasValidShiftWindow(day?.shift)) {
         try {
           const onboarding = await workOsQueryClient.fetchQuery({
             queryKey: workOsKeys.onboarding(),
@@ -317,12 +331,13 @@ export default function AvatarApp(): React.ReactElement {
             timezone: day?.shift?.timezone ?? onboarding.profile.timezone,
             now: new Date(),
           });
-          if (shift) day = { ...day, shift };
+          if (hasValidShiftWindow(shift)) day = { ...day, shift };
         } catch (value) {
           if (value instanceof ApiRequestError && value.status === 401) throw value;
           // Keep the elapsed session clock even when schedule data is unavailable.
         }
       }
+      if (!hasValidShiftWindow(day?.shift)) day = { ...day, shift: null };
       if (sessionRevision !== daySessionRevision.current) return;
       const prompt = (day?.prompt ?? {}) as Record<string, any>;
       setFacts({
@@ -1072,12 +1087,14 @@ export default function AvatarApp(): React.ReactElement {
     const timer = setTimeout(() => setHop(false), 650);
     return () => clearTimeout(timer);
   }, [promptTurnId]);
-  const onShift = isOnShift(facts, now);
+  const showShiftTime = hasOpenShiftSession(facts);
   const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
   const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
   const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable";
-  const ringClass = !onShift ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
-  const shiftLabel = onShift ? `On shift · ${label}` : facts.sessionState === "paused" ? "Paused" : "Off shift";
+  const ringClass = !showShiftTime ? "off" : facts.lateReasonRequired ? "late" : facts.sessionState === "paused" ? "paused" : attentionDue ? "due" : "live";
+  const shiftLabel = showShiftTime
+    ? facts.sessionState === "paused" ? (label ? `Paused · ${label}` : "Paused") : `On shift · ${label}`
+    : "Off shift";
   const lastEntry = chat[chat.length - 1];
   const [readyPulse, setReadyPulse] = useState(false);
   useEffect(() => {
@@ -1193,8 +1210,8 @@ export default function AvatarApp(): React.ReactElement {
         <button
           className={`avatar-orb ${ringClass} ${attentionDue ? "pulse" : ""}${hop ? " hop-once" : ""}`}
           onClick={() => void toggleExpanded(true)}
-          title={onShift ? `${elapsedText} · ${progressText}` : "Work OS companion"}
-          aria-label={onShift ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : `Open ${MASCOT.name} companion`}
+          title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
+          aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : `Open ${MASCOT.name} companion`}
         >
           <svg viewBox="0 0 48 48" className="avatar-ring">
             <circle cx="24" cy="24" r="22" className="ring-track" />
@@ -1202,13 +1219,13 @@ export default function AvatarApp(): React.ReactElement {
           </svg>
           <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" />
           <span className="avatar-orb-state">{mascotVisual.label}</span>
-          {(onShift || showBadge) && <span
-            className={`avatar-badge${onShift ? " avatar-badge-progress" : ""}${onShift && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
-            style={onShift && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
+          {(showShiftTime || showBadge) && <span
+            className={`avatar-badge${showShiftTime ? " avatar-badge-progress" : ""}${showShiftTime && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
+            style={showShiftTime && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
             aria-hidden="true"
           />}
         </button>
-        {onShift && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
+        {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>
       )}
       {expanded && (

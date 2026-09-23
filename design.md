@@ -581,9 +581,11 @@ It may appear as:
 - a thinking/recovering/celebrating state when the corresponding event is real.
 
 In the compact floating companion, the outer halo communicates the mascot's
-workday state. A small orange progress circle fills clockwise to show the
-scheduled shift elapsed percentage; the companion's accessible name gives the
-numeric value. This marker describes time only, never productivity or quality.
+workday state. Keep elapsed session time visible while a shift is open, including
+while paused; subtract completed breaks and freeze the timer at the current pause.
+A small orange progress circle fills clockwise against the scheduled shift
+window, and the companion's accessible name gives its numeric percentage. This
+marker describes time only, never productivity or quality.
 
 Art uses the existing ink/paper/signal palette and never becomes a generic stock
 illustration. Do not create a new raster asset where the configured original

@@ -185,6 +185,11 @@ export function isOnShift(facts: CompanionDayFacts, now: number): boolean {
   return true;
 }
 
+/** An open shift keeps its elapsed-time readout visible while paused. */
+export function hasOpenShiftSession(facts: CompanionDayFacts): boolean {
+  return !facts.eodSubmitted && Boolean(facts.clockedInAt) && !facts.clockedOutAt;
+}
+
 /** Hourly prompt nudge: the server marked an update required and we have not
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {

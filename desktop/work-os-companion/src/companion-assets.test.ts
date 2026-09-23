@@ -101,6 +101,9 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("staleTime: force ? 0 : DAY_STALE_MS");
     expect(avatar).toContain("recoveredStartValue");
     expect(avatarLogic).toContain('remaining: "Time unavailable"');
+    expect(avatar).toContain("hasValidShiftWindow");
+    expect(avatar).toContain("schedule: null");
+    expect(avatar).toContain("hasOpenShiftSession(facts)");
     expect(avatar).toContain('const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable"');
     expect(avatar).toContain('const progressText = progressAvailable ? `${Math.round(fraction * 100)}% of shift complete` : "Shift progress unavailable"');
     expect(avatar).not.toContain('"/api/work-os/me/day", { method: "POST"');

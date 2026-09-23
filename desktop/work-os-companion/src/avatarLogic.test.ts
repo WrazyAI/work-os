@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, eodNudge, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
+  clockInNudge, collectNudges, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -27,6 +27,16 @@ describe("isOnShift", () => {
     expect(isOnShift({ ...base, clockedOutAt: "2026-08-31T09:00:00Z" }, NOW)).toBe(false);
     expect(isOnShift({ ...base, sessionState: "paused" }, NOW)).toBe(false);
     expect(isOnShift({ ...base, clockedInAt: null }, NOW)).toBe(false);
+  });
+});
+
+describe("hasOpenShiftSession", () => {
+  it("keeps a paused open session eligible for the elapsed-time display", () => {
+    expect(hasOpenShiftSession({ ...base, sessionState: "paused" })).toBe(true);
+  });
+  it("hides the shift display after clock-out or EOD", () => {
+    expect(hasOpenShiftSession({ ...base, clockedOutAt: "2026-08-31T09:00:00Z" })).toBe(false);
+    expect(hasOpenShiftSession({ ...base, eodSubmitted: true })).toBe(false);
   });
 });
 
