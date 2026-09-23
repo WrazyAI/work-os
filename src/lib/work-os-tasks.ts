@@ -74,9 +74,17 @@ async function mirrorExtendedTaskFields(taskId: string, values: Json) {
   return selectFirst(db().from("work_tasks").update(patch).eq("id", taskId).select("*"), "mirror extended task fields");
 }
 
-/** `due` is the workspace default (soonest due first). `recency` puts the most
- * recently active task first, for surfaces that mirror the assistant's view. */
-export type TaskListOrder = "due" | "recency";
+/** Server-side task ordering. Workspace variants are used by the paginated
+ * Tasks surface so sorting applies to the full result set, not only loaded rows. */
+export type TaskListOrder =
+  | "due"
+  | "recency"
+  | "title_asc"
+  | "title_desc"
+  | "due_asc"
+  | "due_desc"
+  | "status_asc"
+  | "status_desc";
 
 export interface TaskListOptions {
   completed?: string | null;
@@ -196,17 +204,70 @@ export function compareTaskRecency(left: Record<string, any>, right: Record<stri
     || String(left.title ?? "").localeCompare(String(right.title ?? ""));
 }
 
-/** The workspace default: soonest due first, undated last, newest created next. */
+/** The API's legacy due order: soonest due first, undated last. */
 function compareTaskDueOrder(left: Record<string, any>, right: Record<string, any>) {
   const leftDue = String(left.due_date ?? "9999-12-31");
   const rightDue = String(right.due_date ?? "9999-12-31");
   return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
 }
 
+function normalizedTaskDue(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+function compareWorkspaceDue(left: Record<string, any>, right: Record<string, any>, direction: "asc" | "desc") {
+  // Match the companion contract: open work before completed work, and undated
+  // rows after dated rows in either direction.
+  const completion = Number(left.completed === true) - Number(right.completed === true);
+  if (completion) return completion;
+  const leftDue = normalizedTaskDue(left.due_date);
+  const rightDue = normalizedTaskDue(right.due_date);
+  if (!leftDue && !rightDue) return compareTaskRecency(left, right);
+  if (!leftDue) return 1;
+  if (!rightDue) return -1;
+  const due = direction === "asc" ? leftDue.localeCompare(rightDue) : rightDue.localeCompare(leftDue);
+  return due || compareTaskRecency(left, right);
+}
+
+function workspaceStatusRank(task: Record<string, any>, currentDate: string) {
+  if (task.completed === true) return 2;
+  const due = normalizedTaskDue(task.due_date);
+  return due && due < currentDate ? 0 : 1;
+}
+
+function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, any>, order: TaskListOrder) {
+  switch (order) {
+    case "title_asc":
+      return String(left.title ?? "").localeCompare(String(right.title ?? "")) || compareTaskRecency(left, right);
+    case "title_desc":
+      return String(right.title ?? "").localeCompare(String(left.title ?? "")) || compareTaskRecency(left, right);
+    case "due_asc":
+      return compareWorkspaceDue(left, right, "asc");
+    case "due_desc":
+      return compareWorkspaceDue(left, right, "desc");
+    case "status_asc": {
+      const status = workspaceStatusRank(left, today()) - workspaceStatusRank(right, today());
+      return status || compareWorkspaceDue(left, right, "asc");
+    }
+    case "status_desc": {
+      const status = workspaceStatusRank(right, today()) - workspaceStatusRank(left, today());
+      return status || compareWorkspaceDue(left, right, "asc");
+    }
+    case "recency":
+      return compareTaskRecency(left, right);
+    case "due":
+    default:
+      return compareTaskDueOrder(left, right);
+  }
+}
+
 export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
-  const candidateLimit = Math.min(1000, offset + limit);
+  const workspaceOrder = typeof opts.order === "string" && /^(?:title|due|status)_(?:asc|desc)$/.test(opts.order);
+  // A paginated workspace sort must see the complete candidate window before
+  // slicing, otherwise page 1 would only sort the first provider-ordered page.
+  const candidateLimit = workspaceOrder ? 1000 : Math.min(1000, offset + limit);
   const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
@@ -237,7 +298,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
   const selected = [...rows.values()]
-    .sort(opts.order === "recency" ? compareTaskRecency : compareTaskDueOrder)
+    .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due"))
     .slice(offset, offset + limit);
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
