@@ -32,13 +32,13 @@ export function startAttentionSequence(onChange: AttentionPlaybackChange): () =>
   };
 }
 
-export function useAttentionSequence(enabled: boolean, reducedMotion = false): { playing: boolean; cycle: number } {
+export function useAttentionSequence(enabled: boolean, reducedMotion = false, replayKey = 0): { playing: boolean; cycle: number } {
   const [playback, setPlayback] = useState<{ playing: boolean; cycle: number }>(INACTIVE_ATTENTION);
 
   useEffect(() => {
     if (!enabled || reducedMotion) return;
     return startAttentionSequence((playing, cycle) => setPlayback({ playing, cycle }));
-  }, [enabled, reducedMotion]);
+  }, [enabled, reducedMotion, replayKey]);
 
   return enabled && !reducedMotion ? playback : INACTIVE_ATTENTION;
 }

@@ -5,6 +5,7 @@ mod session_guard;
 use base64::Engine;
 use rand::RngCore;
 use tauri::menu::{Menu, MenuItem};
+use tauri::path::BaseDirectory;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 #[cfg(any(target_os = "linux", windows))]
@@ -259,6 +260,85 @@ fn disarm_update_exit_watchdog() {
     EXIT_WATCHDOG_GENERATION.fetch_add(1, Ordering::SeqCst);
 }
 
+static WORKTIVITY_CONTROL_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Performs a user-requested Worktivity desktop action. The provider API
+/// preflights and verifies the resulting attendance state; this local command
+/// only controls the installed Worktivity UI through its loopback CDP target.
+#[tauri::command]
+async fn worktivity_control(app: tauri::AppHandle, action: String) -> serde_json::Value {
+    if action != "finish" && !["clock_in", "clock_out", "pause", "resume"].contains(&action.as_str()) {
+        return serde_json::json!({ "status": "error", "message": "Invalid Worktivity clock action." });
+    }
+    #[cfg(windows)]
+    {
+        let script = match app.path().resolve(
+            "resources/worktivity-controller.ps1",
+            BaseDirectory::Resource,
+        ) {
+            Ok(path) => path,
+            Err(error) => {
+                return serde_json::json!({ "status": "error", "message": format!("Worktivity controller resource is unavailable: {error}") })
+            }
+        };
+        let run = tauri::async_runtime::spawn_blocking(move || {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _guard = WORKTIVITY_CONTROL_MUTEX
+                .lock()
+                .map_err(|_| "Worktivity control is already running.".to_string())?;
+            let output = std::process::Command::new("powershell.exe")
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-File")
+                .arg(&script)
+                .arg("-Action")
+                .arg(&action)
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|error| format!("Could not start the Worktivity controller: {error}"))?;
+            if !output.status.success() {
+                return Err("The Worktivity controller did not complete.".to_string());
+            }
+            serde_json::from_slice::<serde_json::Value>(&output.stdout)
+                .map_err(|_| "The Worktivity controller returned an invalid result.".to_string())
+        });
+        return match run.await {
+            Ok(Ok(result)) => result,
+            Ok(Err(message)) => serde_json::json!({ "status": "error", "message": message }),
+            Err(error) => {
+                serde_json::json!({ "status": "error", "message": format!("Worktivity control failed: {error}") })
+            }
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, action);
+        serde_json::json!({ "status": "not_supported", "message": "Worktivity clock controls are available from the Windows Companion." })
+    }
+}
+
+#[tauri::command]
+async fn finish_worktivity_control(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let result = worktivity_control(app, "finish".to_string()).await;
+        if result.get("status").and_then(serde_json::Value::as_str) == Some("restored") {
+            Ok(())
+        } else {
+            Err(result.get("message").and_then(serde_json::Value::as_str)
+                .unwrap_or("Worktivity could not close its temporary local control connection.").to_string())
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
 #[cfg(not(windows))]
 fn arm_exit_watchdog(_grace_seconds: u64) {}
 
@@ -290,6 +370,8 @@ pub fn run() {
             hide_avatar,
             show_avatar,
             open_work_os_auth,
+            worktivity_control,
+            finish_worktivity_control,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,
             diagnostics::diagnostics_snapshot,

@@ -751,14 +751,14 @@
 
 /* Collapsed Otto is a clean signal object, not a tiny dashboard. */
 .avatar-compact {
-  width: 176px;
-  height: 176px;
+  width: 200px;
+  height: 276px;
 }
 
 .avatar-orb {
-  width: 124px;
-  height: 124px;
-  margin: 35px 26px 12px;
+  width: 144px;
+  height: 154px;
+  margin: 76px 28px 0;
   border: 0;
   outline: 0;
   border-radius: 0;
@@ -770,7 +770,9 @@
 .avatar-pet.otto { width: 100px; height: 100px; margin-top: -7px; }
 .avatar-orb-state { bottom: 15px; color: rgba(255, 252, 246, 0.78); font-size: 8px; }
 .avatar-day-time { bottom: -1px; border: 0; background: var(--conversation-surface); color: var(--conversation-ink); box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16); }
-.avatar-drag-surface { top: 9px; left: 64px; width: 48px; height: 20px; border: 0; background: transparent; color: rgba(255, 252, 246, 0.52); box-shadow: none; }
+.avatar-drag-surface { top: 6px; left: 50%; width: 72px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, 0.25); border-radius: 999px; background: rgba(32, 36, 33, 0.9); color: rgba(255, 252, 246, 0.82); font-size: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22); }
+.avatar-prompt-bubble + .avatar-drag-surface { top: 63px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, 0.25); border-radius: 999px; background: rgba(32, 36, 33, 0.9); color: rgba(255, 252, 246, 0.82); font-size: 12px; }
+.avatar-prompt-bubble ~ .avatar-orb { margin-top: 99px; }
 .avatar-prompt-bubble { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
 .avatar-prompt-bubble::after { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
 

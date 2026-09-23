@@ -26,8 +26,8 @@ const listShift = readText(resolve(root, "src/listShift.ts"));
 
 describe("operational visualizations", () => {
   it("keeps schedule, activity, and outcomes visibly separate", () => {
-    expect(app).toContain("Clock in when you begin. Activity observation stays separate.");
-    expect(app).toContain("Worktivity observation");
+    expect(app).toContain("Worktivity owns clock actions; the Windows Companion waits for provider confirmation.");
+    expect(app).toContain("Worktivity attendance");
     expect(workspaceStyles).toContain(".pulse-provider-popover.active");
     expect(app).toContain("Observed time and planned commitments · separate scales, named in the legend");
     expect(insightChartStyles).toContain("Every series keeps its own scale");
@@ -142,7 +142,10 @@ describe("operational visualizations", () => {
     expect(app).toContain("Due from yesterday");
     expect(app).toContain('type ComposerMode = "progress" | "agenda"');
     expect(app).toContain('mode={sessionActive && view === "day" ? "progress" : "agenda"}');
-    expect(app).toContain('label === "shift.clock_in" && /workday is already closed/i.test(message)');
+    expect(app).toContain('performWorktivityControl("clock_in")');
+    expect(app).toContain('performWorktivityControl("clock_out"');
+    expect(app).toContain("retryWorktivityConfirmation");
+    expect(app).not.toContain('sendOrQueue("/api/work-os/me/workday", "POST"');
     expect(app).toContain("Add a task — planning doesn't clock you in…");
     expect(app).toContain("Added from the Work OS daily composer.");
     expect(app).toContain("Share an update, a blocker, or add a task…");

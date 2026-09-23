@@ -8,6 +8,7 @@ export interface AttendanceProjection {
   observedAt: string;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  clockedOutAtInferred?: boolean;
   activityObservedAt?: string | null;
   providerBreakSeconds?: number;
   stale: boolean;

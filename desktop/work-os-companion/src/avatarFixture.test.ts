@@ -1,15 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
-  AVATAR_RECORDED_FIXTURE, AVATAR_SHIFT_PROGRESS_FIXTURE, avatarFixtureChat, avatarFixtureFacts,
+  AVATAR_RECORDED_FIXTURE, AVATAR_SHIFT_PROGRESS_FIXTURE, AVATAR_SNOOZE_FIXTURE, avatarFixtureChat, avatarFixtureFacts,
   avatarAttentionFixtureRequested, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
+  avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested,
 } from "./avatarFixture";
 
-describe("avatar recorded-completion fixture", () => {
-  it("activates only for the recorded-completion parameter", () => {
+describe("avatar visual fixtures", () => {
+  it("activates only for a supported fixture value", () => {
     expect(avatarFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_RECORDED_FIXTURE}`)).toBe(true);
+    expect(avatarFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_SNOOZE_FIXTURE}`)).toBe(true);
     expect(avatarFixtureRequested("?window=avatar")).toBe(false);
     expect(avatarFixtureRequested("?window=avatar&avatar-fixture=other")).toBe(false);
     expect(avatarFixtureRequested("")).toBe(false);
+  });
+
+  it("provides an active due prompt for snooze reminder checks", () => {
+    const facts = avatarSnoozeFixtureFacts(Date.parse("2026-09-23T12:00:00.000Z"));
+    expect(facts).toMatchObject({
+      promptRequired: true,
+      promptKind: "hourly_fallback",
+      sessionState: "active",
+      clockedInAt: expect.any(String),
+    });
+    expect(avatarSnoozeFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_SNOOZE_FIXTURE}`)).toBe(true);
   });
 
   it("carries the production shapes the renderers must classify correctly", () => {

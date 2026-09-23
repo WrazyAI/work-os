@@ -55,22 +55,33 @@ describe("buildWorkdayDashboardModel", () => {
   });
 
   it("distinguishes paused sessions and stale provider data", () => {
-    const model = buildWorkdayDashboardModel(input({ active: true, paused: true, attendance, niftySync: { fresh: false, syncing: false, syncedAt: null, error: "timeout" } }));
+    const pausedAttendance = { ...attendance, state: "paused" as const, status: "break" as const };
+    const model = buildWorkdayDashboardModel(input({ active: true, paused: true, attendance: pausedAttendance, niftySync: { fresh: false, syncing: false, syncedAt: null, error: "timeout" } }));
     expect(model.state).toBe("paused");
     expect(model.stateTone).toBe("warning");
+    expect(model.stateDetail).toContain("Worktivity confirms your break");
     expect(model.sync).toMatchObject({ label: "Sync delayed", tone: "danger" });
   });
 
   it("uses an explicit observed-only state without converting it to a session", () => {
     const model = buildWorkdayDashboardModel(input({ observedOnly: true, attendance }));
     expect(model.state).toBe("observed");
-    expect(model.stateDetail).toContain("separate");
+    expect(model.stateLabel).toBe("Worktivity status");
+    expect(model.stateDetail).toContain("Worktivity confirms active attendance");
+    expect(model.stateDetail).toContain("has not mirrored its session yet");
   });
 
   it("keeps observed-only state authoritative when a session flag is also present", () => {
     const model = buildWorkdayDashboardModel(input({ active: true, observedOnly: true, attendance }));
     expect(model.state).toBe("observed");
-    expect(model.stateLabel).toBe("Activity observed");
+    expect(model.stateLabel).toBe("Worktivity status");
+  });
+
+  it("does not describe a stale provider session as confirmed", () => {
+    const staleAttendance = { ...attendance, stale: true };
+    const model = buildWorkdayDashboardModel(input({ active: true, attendance: staleAttendance }));
+    expect(model.stateDetail).toContain("has not confirmed the current session");
+    expect(model.stateTone).toBe("warning");
   });
 
   it("does not invent a remaining time when a schedule is missing", () => {

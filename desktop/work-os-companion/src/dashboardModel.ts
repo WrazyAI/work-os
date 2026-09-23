@@ -190,6 +190,7 @@ function remainingLabel(endsAt: string | null, now = Date.now()) {
 
 export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Date.now()): WorkdayDashboardModel {
   const attendance = input.attendance ?? null;
+  const confirmedProviderState = attendance?.source === "worktivity" && !attendance.stale;
   const state: DashboardState = input.observedOnly
     ? "observed"
     : input.active
@@ -199,9 +200,29 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
   const stateMeta: Record<DashboardState, Pick<WorkdayDashboardModel, "stateLabel" | "stateDetail" | "stateTone">> = {
     off_shift: { stateLabel: "Off shift", stateDetail: "Your workday has not started.", stateTone: "quiet" },
     ready: { stateLabel: "Ready to begin", stateDetail: "Your scheduled window is ready when you are.", stateTone: "signal" },
-    active: { stateLabel: "On shift", stateDetail: "Work OS is recording the active workday.", stateTone: "signal" },
-    paused: { stateLabel: "Shift paused", stateDetail: "Your session is paused until you resume.", stateTone: "warning" },
-    observed: { stateLabel: "Activity observed", stateDetail: "Worktivity is separate from a Work OS session.", stateTone: "quiet" },
+    active: {
+      stateLabel: "On shift",
+      stateDetail: confirmedProviderState && attendance?.state === "active"
+        ? "Worktivity confirms you are working; Work OS mirrors this session."
+        : "Worktivity has not confirmed the current session. Check provider status in the Companion.",
+      stateTone: confirmedProviderState && attendance?.state === "active" ? "signal" : "warning",
+    },
+    paused: {
+      stateLabel: "Shift paused",
+      stateDetail: confirmedProviderState && attendance?.state === "paused"
+        ? "Worktivity confirms your break; Work OS mirrors the paused state."
+        : "Worktivity has not confirmed the current break. Check provider status in the Companion.",
+      stateTone: confirmedProviderState && attendance?.state === "paused" ? "warning" : "danger",
+    },
+    observed: {
+      stateLabel: "Worktivity status",
+      stateDetail: confirmedProviderState && attendance?.state === "active"
+        ? "Worktivity confirms active attendance; Work OS has not mirrored its session yet."
+        : confirmedProviderState && attendance?.state === "paused"
+          ? "Worktivity confirms a break; Work OS has not mirrored its session yet."
+          : "Worktivity has not confirmed an active workday.",
+      stateTone: confirmedProviderState ? "warning" : "quiet",
+    },
   };
 
   const open = input.tasks.filter((task) => task.completed !== true).length;

@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
-import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
+import { lateReasonRequired } from "@/lib/work-os-late-start";
 import { EmployeeEodOutstandingBell, calendarDateLabel, type OutstandingEodDay, type OutstandingEodsResponse } from "@/modules/work-os/EmployeeEodOutstanding";
 
 type AnyRow = Record<string, any>;
@@ -128,9 +128,7 @@ export default function EmployeeWorkOsHome() {
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
   const [taskCreateTitle, setTaskCreateTitle] = useState("");
   const [taskCreateDescription, setTaskCreateDescription] = useState("");
-  const [clockExceptionReason, setClockExceptionReason] = useState<string | null>(null);
   const [lateReasonDraft, setLateReasonDraft] = useState("");
-  const [clockConfirmKind, setClockConfirmKind] = useState<"late" | "exception" | null>(null);
   const [expandedEvidence, setExpandedEvidence] = useState(false);
   const [reportMarkdown, setReportMarkdown] = useState("");
   const [goalLoomOpen, setGoalLoomOpen] = useState(false);
@@ -267,8 +265,8 @@ export default function EmployeeWorkOsHome() {
     },
   });
   const sessionAction = useMutation({
-    mutationFn: ({ method, body }: { method: "POST" | "PATCH"; body: AnyRow }) => fetchJson("/api/work-os/me/workday", {
-      method,
+    mutationFn: ({ body }: { method: "PATCH"; body: AnyRow }) => fetchJson("/api/work-os/me/workday", {
+      method: "PATCH",
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify(body),
     }),
@@ -400,20 +398,11 @@ export default function EmployeeWorkOsHome() {
   const timezone = day.data?.shift?.timezone;
   const workSession = day.data?.session;
   const sessionIsActive = !!workSession && !["scheduled", "clocked_out"].includes(String(workSession.state));
-  const shiftStartsAt = day.data?.shift ? Date.parse(day.data.shift.startsAt) : Number.NaN;
-  const shiftEndsAt = day.data?.shift ? Date.parse(day.data.shift.endsAt) : Number.NaN;
-  const shiftStartable = Number.isFinite(shiftStartsAt) && Date.now() >= shiftStartsAt - 30 * 60_000 && Date.now() < shiftEndsAt;
   const organizationSetup = onboarding.data?.organizationSetup;
   const officialSchedule = organizationSetup?.officialSchedule;
   const officialScheduleLabel = officialSchedule
     ? `${officialSchedule.shiftStart}–${officialSchedule.shiftEnd} · ${officialSchedule.timezone}`
     : "Pending manager setup";
-  const beginClockIn = () => {
-    if (!shiftStartable) { setClockExceptionReason(""); setClockConfirmKind("exception"); return; }
-    if (Date.now() > shiftStartsAt + 15 * 60_000) { setClockExceptionReason(""); setClockConfirmKind("late"); return; }
-    sessionAction.mutate({ method: "POST", body: { source: "web" } });
-  };
-  const lateStartProlonged = clockConfirmKind === "late" && Number.isFinite(shiftStartsAt) && Date.now() >= shiftStartsAt + PROLONGED_ABSENCE_MINUTES * 60_000;
   const lateReasonMissing = !historical && lateReasonRequired(day.data?.session);
   const error = onboarding.error || saveOnboarding.error || changeConsent.error || day.error || sessionAction.error || checkIn.error || review.error || saveGoal.error || changeTask.error || createTask.error || draftEod.error || submitEod.error;
 
@@ -510,20 +499,12 @@ export default function EmployeeWorkOsHome() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="flex items-center gap-2 text-sm font-semibold"><Clock3 size={16} style={{ color: "var(--accent)" }} /> Workday session</h2>
-                <p className="mt-1 text-[12px] text-[var(--text-secondary)]">{workSession ? `State: ${operationLabel(workSession.state)}` : "No Work OS session is active."}</p>
-                {day.data?.attendance?.message ? <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">Observed context only: {day.data.attendance.message}</p> : null}
+                <p className="mt-1 text-[12px] text-[var(--text-secondary)]">Worktivity status: {day.data?.attendance?.source === "worktivity" ? operationLabel(String(day.data.attendance.state || "unknown")) : "Not observed"}{day.data?.attendance?.stale ? " · last observation is stale" : ""}</p>
+                {day.data?.attendance?.observedAt ? <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Last observed {formatTime(day.data.attendance.observedAt, timezone)}{day.data?.attendance?.clockedOutAtInferred ? " · clock-out boundary inferred from this observation" : ""}</p> : null}
+                <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">{workSession ? `Work OS session: ${operationLabel(String(workSession.state))}.` : "No Work OS session is currently mirrored."} Clock in, pause, resume, and clock out from the Windows Work OS Companion; it opens Worktivity if needed and waits for Worktivity to confirm each change.</p>
+                {day.data?.attendance?.message ? <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">{day.data.attendance.message}</p> : null}
               </div>
-              <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>{sessionIsActive ? "Employee-owned" : "Clock-in required"}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {!sessionIsActive ? (
-                <button disabled={sessionAction.isPending} onClick={beginClockIn} className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}><Check size={14} /> Clock in</button>
-              ) : (
-                <>
-                  {!day.data?.breakPolicy?.worktivityAuthoritative && workSession?.state !== "eod_due" ? <button disabled={sessionAction.isPending} onClick={() => sessionAction.mutate({ method: "PATCH", body: { action: workSession?.state === "paused" ? "resume" : "pause" } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: "var(--border)" }}>{workSession?.state === "paused" ? "Resume" : "Pause"}</button> : null}
-                  <button disabled={sessionAction.isPending} onClick={() => window.confirm("Clock out and close today’s workspace?") && sessionAction.mutate({ method: "PATCH", body: { action: "clock_out", extended_acknowledged: true } })} className="inline-flex items-center gap-2 border px-3 py-2 text-[12px] font-semibold text-[var(--status-warn)] disabled:opacity-50" style={{ borderColor: "var(--status-warn)" }}>Clock out</button>
-                </>
-              )}
+              <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>{sessionIsActive ? "Mirrored session" : "Status only"}</span>
             </div>
           </section>
           <section className="border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
@@ -756,8 +737,6 @@ export default function EmployeeWorkOsHome() {
 
       {taskEdit ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-lg border p-4 shadow-xl" role="dialog" aria-modal="true" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Edit {taskEdit && String(taskEdit.provider ?? "") === "local" ? "Work OS" : "Nifty"} task</h2><button aria-label="Close" onClick={() => setTaskEdit(null)}><X size={16} /></button></div><label className="mt-4 block text-[11px] text-[var(--text-secondary)]">Title<input autoFocus value={taskEditTitle} onChange={(event) => setTaskEditTitle(event.target.value)} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><label className="mt-3 block text-[11px] text-[var(--text-secondary)]">Description<textarea value={taskEditDescription} onChange={(event) => setTaskEditDescription(event.target.value)} rows={5} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><div className="mt-4 flex justify-end gap-2"><button onClick={() => setTaskEdit(null)} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={!taskEditTitle.trim() || changeTask.isPending} onClick={() => changeTask.mutate({ task: taskEdit, body: { name: taskEditTitle.trim(), description: taskEditDescription } })} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Save changes</button></div></section></div> : null}
        {taskCreateOpen ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-lg border p-4 shadow-xl" role="dialog" aria-modal="true" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Create task</h2><button aria-label="Close" onClick={() => setTaskCreateOpen(false)}><X size={16} /></button></div><label className="mt-4 block text-[11px] text-[var(--text-secondary)]">Title<input autoFocus value={taskCreateTitle} onChange={(event) => setTaskCreateTitle(event.target.value)} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><label className="mt-3 block text-[11px] text-[var(--text-secondary)]">Description<textarea value={taskCreateDescription} onChange={(event) => setTaskCreateDescription(event.target.value)} rows={5} className="mt-1 w-full border bg-transparent px-3 py-2 text-[13px]" style={{ borderColor: "var(--border)" }} /></label><div className="mt-4 flex justify-end gap-2"><button onClick={() => setTaskCreateOpen(false)} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={!taskCreateTitle.trim() || createTask.isPending} onClick={() => createTask.mutate()} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Create task</button></div></section></div> : null}
-      {clockConfirmKind ? <div className="fixed inset-0 z-40 grid place-items-center bg-black/50 p-4"><section className="w-full max-w-md border p-4 shadow-xl" role="alertdialog" aria-modal="true" style={{ borderColor: "var(--status-warn)", background: "var(--bg-card)" }}><h2 className="text-sm font-semibold">{clockConfirmKind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p className="mt-2 text-[12px] leading-5 text-[var(--text-secondary)]">{clockConfirmKind === "late" ? lateStartProlonged ? "This start is 30+ minutes after your scheduled time. Add the reason now, or from the reminder in your workspace." : "This start is after the scheduled time. Your acknowledgement will be audited." : "No shift is startable now. Explain why you are starting an exception workday."}</p>{clockConfirmKind === "exception" || lateStartProlonged ? <textarea autoFocus value={clockExceptionReason ?? ""} onChange={(event) => setClockExceptionReason(event.target.value)} rows={3} className="mt-3 w-full border bg-transparent px-3 py-2 text-[12px]" style={{ borderColor: "var(--border)" }} placeholder={clockConfirmKind === "late" ? "Reason for the late start (optional)" : "Exception reason"} /> : null}<div className="mt-4 flex justify-end gap-2"><button onClick={() => { setClockConfirmKind(null); setClockExceptionReason(null); }} className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--border)" }}>Cancel</button><button disabled={sessionAction.isPending || (clockConfirmKind === "exception" && !clockExceptionReason?.trim())} onClick={() => { sessionAction.mutate({ method: "POST", body: clockConfirmKind === "late" ? { source: "web", late_acknowledged: true, late_reason: clockExceptionReason?.trim() || undefined } : { source: "web", exception_acknowledged: true, exception_reason: clockExceptionReason?.trim() } }); setClockConfirmKind(null); setClockExceptionReason(null); }} className="px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>Confirm clock-in</button></div></section></div> : null}
-
       {error ? (
         <div className="fixed bottom-5 right-5 flex max-w-md items-start gap-2 border px-4 py-3 text-[12px] text-[var(--status-err)] shadow-lg" style={{ borderColor: "var(--status-err)", background: "var(--bg-card)" }}>
           <AlertCircle size={16} className="mt-0.5 shrink-0" /> {(error as Error).message}

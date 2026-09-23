@@ -26,6 +26,12 @@ they change what the employee sees or does.
 
 - Tasks now has sortable Name, Date due, and Status columns so you can reorder the full task list without losing your place.
 
+## 0.3.55
+
+- The Windows Companion now controls Worktivity clock in/out and pause/resume, restarting an app it cannot control and waiting for provider confirmation.
+- Snoozed check-ins replay all three attention nudges when they return; Otto then stays still until you respond.
+- The floating companion’s drag handle is 50% larger and centered, clear of the hide control and mascot.
+
 ## 0.3.54
 
 - Otto now repeats input-needed nudges three times, with a one-second pause; the orange alert dot remains without the halo.

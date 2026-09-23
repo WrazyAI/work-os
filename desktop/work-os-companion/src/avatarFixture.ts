@@ -8,6 +8,8 @@
  * at a deterministic half-shift point for elapsed-time and progress checks.
  * Add `&avatar-attention=true` to either fixture to preview generic actionable
  * attention without coupling the visual state to a check-in prompt.
+ * `?window=avatar&avatar-fixture=snooze-reminder` renders a due check-in in the
+ * compact window so its snooze reminder and attention motion can be exercised.
  * The shapes mirror production exactly: the display result carries a real
  * `tasks` array, and the recorded mutation carries the proposal row's
  * `provider_result` object (jsonb `{}`) that must never render as a card
@@ -19,6 +21,7 @@ export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
 export const AVATAR_RECORDED_FIXTURE = "recorded-completion";
 export const AVATAR_SHIFT_PROGRESS_FIXTURE = "shift-progress";
 export const AVATAR_ATTENTION_PARAM = "avatar-attention";
+export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -56,7 +59,7 @@ export interface AvatarFixtureTurn {
 export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
-  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE;
+  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE;
 }
 
 export function avatarShiftProgressFixtureRequested(search: string): boolean {
@@ -67,6 +70,11 @@ export function avatarShiftProgressFixtureRequested(search: string): boolean {
 export function avatarAttentionFixtureRequested(search: string): boolean {
   if (!avatarFixtureRequested(search)) return false;
   return new URLSearchParams(search).get(AVATAR_ATTENTION_PARAM) === "true";
+}
+
+export function avatarSnoozeFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_SNOOZE_FIXTURE;
 }
 
 export function avatarShiftProgressFixtureFacts(now = Date.now()): AvatarFixtureFacts {
@@ -82,6 +90,15 @@ export function avatarShiftProgressFixtureFacts(now = Date.now()): AvatarFixture
     pausedSeconds: 0,
     pausedAt: null,
     planStatus: "confirmed",
+  };
+}
+
+export function avatarSnoozeFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarShiftProgressFixtureFacts(now),
+    promptRequired: true,
+    nextPromptAt: new Date(now - 60_000).toISOString(),
+    promptKind: "hourly_fallback",
   };
 }
 
