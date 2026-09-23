@@ -25,7 +25,10 @@ they change what the employee sees or does.
 ## Unreleased
 
 - Tasks now has sortable Name, Date due, and Status columns so you can reorder the full task list without losing your place.
-- Otto now nudges for five seconds, pauses for one, then repeats twice when an update needs your input; the halo is gone and the orange corner marker stays.
+
+## 0.3.54
+
+- Otto now repeats input-needed nudges three times, with a one-second pause; the orange alert dot remains without the halo.
 
 ## 0.3.53
 
