@@ -209,6 +209,19 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup).not.toContain("All tasks<em>3</em><em>");
   });
 
+  it("keeps shared history intact while Completed renders its dedicated page", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      taskView: "completed",
+      completedHistory: [props.taskHistory[2]],
+    }));
+    expect(markup).toContain("Finished work");
+    expect(markup).not.toContain(">Late work</h3>");
+    expect(markup).not.toContain(">Soon work</h3>");
+    expect(markup).toContain("Unfinished<em>2</em>");
+    expect(markup).toContain("All tasks<em>3</em>");
+  });
+
   it("applies the requested Name sort and keeps an explicit Open status cell", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
