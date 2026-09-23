@@ -84,6 +84,7 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
   });
 }
 
+/** Load a globally sorted task-history stream, optionally scoped to completed work. */
 export function useTaskHistoryQuery(options: { enabled: boolean; sort: TaskSort; currentDate?: string; completedOnly?: boolean }) {
   return useInfiniteQuery({
     queryKey: [...workOsKeys.taskHistory(), options.completedOnly ? "completed" : "all", options.currentDate ?? "", options.sort.key, options.sort.direction],
