@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -176,6 +176,23 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
       expect(readTaskSort("sort")).toEqual(DEFAULT_TASK_SORT);
       store.set("sort", JSON.stringify({ key: "priority", direction: "asc" }));
       expect(readTaskSort("sort")).toEqual({ key: "priority", direction: "asc" });
+    } finally {
+      (globalThis as { window?: unknown }).window = originalWindow;
+    }
+  });
+
+  it("defines the Tasks workspace columns and preserves an explicit Status sort", () => {
+    expect(TASKS_WORKSPACE_SORT_COLUMNS.map(({ key, label }) => [key, label])).toEqual([
+      ["title", "Name"],
+      ["due", "Date due"],
+      ["status", "Status"],
+    ]);
+    const store = new Map<string, string>([[TASKS_SORT_STORAGE_KEY, JSON.stringify({ key: "status", direction: "asc" })]]);
+    const fakeWindow = { localStorage: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value) } };
+    const originalWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = fakeWindow;
+    try {
+      expect(readTaskSort(TASKS_SORT_STORAGE_KEY)).toEqual({ key: "status", direction: "asc" });
     } finally {
       (globalThis as { window?: unknown }).window = originalWindow;
     }
