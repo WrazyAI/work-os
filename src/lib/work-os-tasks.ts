@@ -13,6 +13,7 @@ import {
   updateNiftyTaskField,
 } from "@/lib/integrations/nifty";
 import { attachTaskAssigneeIdentities } from "@/lib/work-os-task-assignees";
+import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 import { todayIso as today } from "@/lib/work-os-dates";
 import {
   dateOnly,
@@ -74,9 +75,17 @@ async function mirrorExtendedTaskFields(taskId: string, values: Json) {
   return selectFirst(db().from("work_tasks").update(patch).eq("id", taskId).select("*"), "mirror extended task fields");
 }
 
-/** `due` is the workspace default (soonest due first). `recency` puts the most
- * recently active task first, for surfaces that mirror the assistant's view. */
-export type TaskListOrder = "due" | "recency";
+/** Server-side task ordering. Workspace variants are used by the paginated
+ * Tasks surface so sorting applies to the full result set, not only loaded rows. */
+export type TaskListOrder =
+  | "due"
+  | "recency"
+  | "title_asc"
+  | "title_desc"
+  | "due_asc"
+  | "due_desc"
+  | "status_asc"
+  | "status_desc";
 
 export interface TaskListOptions {
   completed?: string | null;
@@ -96,6 +105,7 @@ export interface TaskListOptions {
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
   order?: TaskListOrder;
+  sortDate?: string | null;
 }
 
 export const DEFAULT_NIFTY_LEDGER_PROJECT_ID = "czFZk9928z";
@@ -132,6 +142,7 @@ export function isNiftyTaskAttributableToMember(task: Record<string, any>, nifty
     || stringValues(raw.subscribers).includes(niftyMemberId);
 }
 
+/** Query one stable page of mirrored tasks using provider-neutral filters. */
 export async function listTasks(userId: string, opts: TaskListOptions = {}) {
   let query = db()
     .from("work_tasks")
@@ -139,6 +150,7 @@ export async function listTasks(userId: string, opts: TaskListOptions = {}) {
     .eq("user_id", userId)
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
     .range(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 100) - 1);
   query = query.not("status", "in", "(archived,deleted)");
   if (opts.completed === "true") query = query.eq("completed", true);
@@ -172,6 +184,17 @@ export async function hydrateTaskAssignees(userId: string, tasks: Record<string,
   return attachTaskAssigneeIdentities(tasks, people ?? []);
 }
 
+async function hydrateTaskProjects(userId: string, tasks: Record<string, any>[]) {
+  const projectIds = [...new Set(tasks.map((task) => task.project_id).filter((id) => id != null).map(String))];
+  if (!projectIds.length) return tasks.map((task) => ({ ...task, project: null }));
+  const projects = await ensureNoError(
+    db().from("work_projects").select("*").eq("user_id", userId).in("id", projectIds),
+    "load task projects",
+  );
+  const byId = new Map((projects ?? []).map((project) => [String(project.id), project]));
+  return tasks.map((task) => ({ ...task, project: byId.get(String(task.project_id)) ?? null }));
+}
+
 /**
  * Loads work attributable to a person. Nifty's API permits creator-owned ledger
  * tasks without assignees, so strict assignee filtering alone hides the agent's
@@ -196,21 +219,131 @@ export function compareTaskRecency(left: Record<string, any>, right: Record<stri
     || String(left.title ?? "").localeCompare(String(right.title ?? ""));
 }
 
-/** The workspace default: soonest due first, undated last, newest created next. */
+/** The API's legacy due order: soonest due first, undated last. */
 function compareTaskDueOrder(left: Record<string, any>, right: Record<string, any>) {
   const leftDue = String(left.due_date ?? "9999-12-31");
   const rightDue = String(right.due_date ?? "9999-12-31");
   return leftDue.localeCompare(rightDue) || String(right.provider_created_at ?? right.created_at ?? "").localeCompare(String(left.provider_created_at ?? left.created_at ?? ""));
 }
 
+/** Normalize a task due value to a comparable calendar date. */
+function normalizedTaskDue(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/** Compare workspace rows by due date while keeping completed and undated work in canonical positions. */
+function compareWorkspaceDue(left: Record<string, any>, right: Record<string, any>, direction: "asc" | "desc") {
+  // Match the companion contract: open work before completed work, and undated
+  // rows after dated rows in either direction.
+  const completion = Number(left.completed === true) - Number(right.completed === true);
+  if (completion) return completion;
+  const leftDue = normalizedTaskDue(left.due_date);
+  const rightDue = normalizedTaskDue(right.due_date);
+  if (!leftDue && !rightDue) return compareTaskRecency(left, right);
+  if (!leftDue) return 1;
+  if (!rightDue) return -1;
+  const due = direction === "asc" ? leftDue.localeCompare(rightDue) : rightDue.localeCompare(leftDue);
+  return due || compareTaskRecency(left, right);
+}
+
+/** Rank overdue, open, and completed rows for Status sorting. */
+function workspaceStatusRank(task: Record<string, any>, currentDate: string) {
+  if (task.completed === true) return 2;
+  const due = normalizedTaskDue(task.due_date);
+  return due && due < currentDate ? 0 : 1;
+}
+
+/** Apply the server-side ordering contract used before paginating Tasks workspace results. */
+function compareWorkspaceOrder(left: Record<string, any>, right: Record<string, any>, order: TaskListOrder, currentDate: string) {
+  switch (order) {
+    case "title_asc":
+      return String(left.title ?? "").localeCompare(String(right.title ?? "")) || compareTaskRecency(left, right);
+    case "title_desc":
+      return String(right.title ?? "").localeCompare(String(left.title ?? "")) || compareTaskRecency(left, right);
+    case "due_asc":
+      return compareWorkspaceDue(left, right, "asc");
+    case "due_desc":
+      return compareWorkspaceDue(left, right, "desc");
+    case "status_asc": {
+      const status = workspaceStatusRank(left, currentDate) - workspaceStatusRank(right, currentDate);
+      return status || compareWorkspaceDue(left, right, "asc");
+    }
+    case "status_desc": {
+      const status = workspaceStatusRank(right, currentDate) - workspaceStatusRank(left, currentDate);
+      return status || compareWorkspaceDue(left, right, "asc");
+    }
+    case "recency":
+      return compareTaskRecency(left, right);
+    case "due":
+    default:
+      return compareTaskDueOrder(left, right);
+  }
+}
+
+/** Use the database's single attributed query for the paginated Tasks workspace.
+ * Other callers keep their legacy provenance behavior below. */
+async function listPersonWorkspaceTaskPage(
+  userId: string,
+  personId: string,
+  niftyMemberId: string | null | undefined,
+  opts: Omit<TaskListOptions, "personId">,
+) {
+  const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
+  const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
+  const result = await db().rpc("work_list_person_tasks_sorted", {
+    p_user_id: userId,
+    p_person_id: personId,
+    p_nifty_member_id: niftyMemberId ?? null,
+    p_completed: completed,
+    p_project_id: opts.projectId ?? null,
+    p_order: opts.order ?? "due_desc",
+    p_sort_date: sortDate,
+    p_offset: opts.offset ?? 0,
+    p_limit: opts.limit ?? 100,
+  });
+  if (result.error) throw new Error(`load sorted task history: ${result.error.message}`);
+  return (result.data ?? []) as Record<string, any>[];
+}
+
+/** Load all task provenance paths attributable to one person, then globally sort and page them. */
 export async function listPersonTasks(userId: string, personId: string, opts: Omit<TaskListOptions, "personId"> = {}): Promise<Record<string, any>[]> {
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 100;
+  const workspaceOrder = typeof opts.order === "string" && /^(?:title|due|status)_(?:asc|desc)$/.test(opts.order);
   const candidateLimit = Math.min(1000, offset + limit);
   const baseOptions = { ...opts, offset: 0, limit: candidateLimit };
   const personResult = await db().from("work_people").select("nifty_member_id").eq("user_id", userId).eq("id", personId).maybeSingle();
   if (personResult.error) throw new Error(`load task person mapping: ${personResult.error.message}`);
   const niftyMemberId = personResult.data?.nifty_member_id as string | null | undefined;
+  // The Tasks workspace's All / Completed history is the only paginated path
+  // that needs global Name / Due / Status ordering. Keep that work in one SQL
+  // query so later pages do not reload the complete history through four
+  // attribution scans.
+  if (workspaceOrder && opts.includeLedgerHistory === true && !opts.todayOnly && !opts.fromDate && !opts.toDate && !opts.providerProjectId) {
+    const selected = await listPersonWorkspaceTaskPage(userId, personId, niftyMemberId, opts);
+    const parentProviderIds = selected
+      .filter((task) => !task.parent_provider_task_id && task.provider_task_id)
+      .map((task) => String(task.provider_task_id));
+    const childrenResult = parentProviderIds.length
+      ? await db().from("work_tasks").select("parent_provider_task_id,completed").eq("user_id", userId).not("status", "in", "(archived,deleted)").in("parent_provider_task_id", parentProviderIds)
+      : { data: [], error: null };
+    if (childrenResult.error) throw new Error(`load task subtask progress: ${childrenResult.error.message}`);
+    const progress = new Map<string, { total: number; completed: number }>();
+    for (const child of childrenResult.data ?? []) {
+      const parentId = String(child.parent_provider_task_id);
+      const current = progress.get(parentId) ?? { total: 0, completed: 0 };
+      current.total += 1;
+      if (child.completed === true) current.completed += 1;
+      progress.set(parentId, current);
+    }
+    const withProgress = selected.map((task) => {
+      const childProgress = task.provider_task_id
+        ? progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 }
+        : { total: 0, completed: 0 };
+      return { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed };
+    });
+    return hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress));
+  }
   // Metadata-attributable work lives in every project, not only the ledger, so
   // the same attribution rule runs against each provenance path in SQL.
   const metadataOptions: TaskListOptions = { ...baseOptions };
@@ -236,8 +369,9 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
+  const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
   const selected = [...rows.values()]
-    .sort(opts.order === "recency" ? compareTaskRecency : compareTaskDueOrder)
+    .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due", sortDate))
     .slice(offset, offset + limit);
   const parentProviderIds = selected
     .filter((task) => !task.parent_provider_task_id && task.provider_task_id)

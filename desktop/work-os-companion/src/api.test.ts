@@ -112,6 +112,18 @@ describe("offline action replay", () => {
     expect(mockState.queue).toEqual([]);
   });
 
+  it("preserves caller cancellation instead of wrapping it as a network failure", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    const controller = new AbortController();
+    const abortError = Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      controller.abort();
+      throw abortError;
+    }));
+
+    await expect(apiRequest("/api/work-os/me/tasks?view=history", { signal: controller.signal })).rejects.toBe(abortError);
+  });
+
   it("reconciles a lost completion response from Nifty-backed task detail", async () => {
     Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
     const onlineFetch = vi.fn()

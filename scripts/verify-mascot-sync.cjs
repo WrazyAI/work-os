@@ -17,7 +17,7 @@ const fs = require('node:fs');
   context.on('page', page => page.on('pageerror', error => errors.push(error.message)));
   const main = await context.newPage(); const debug = await context.newPage();
   const avatar = await context.newPage(); const readiness = await context.newPage();
-  const orb = await context.newPage();
+  const orb = await context.newPage(); const progress = await context.newPage();
   async function attr(page, selector, name, expected) {
     try { await page.waitForFunction(({ selector, name, expected }) => document.querySelector(selector)?.getAttribute(name) === expected, { selector, name, expected }, { timeout: 12000 }); }
     catch (e) { console.log('ATTR_FAILED', selector, name, expected, await page.locator(selector).first().evaluate(el => el.outerHTML.slice(0,900)).catch(() => 'missing')); throw e; }
@@ -36,8 +36,16 @@ const fs = require('node:fs');
     });
     assert(orbMotion.name.includes('studio-attention-rig'), JSON.stringify(orbMotion)); checks++;
     assert(orbMotion.timing.includes('steps(5'), JSON.stringify(orbMotion)); checks++;
-    const ringOffset = Number(await orb.locator('.ring-fill').getAttribute('stroke-dashoffset'));
-    assert(ringOffset > 0 && ringOffset < 138.2, String(ringOffset)); checks++;
+    // Exercise the deterministic token-free fixture that uses the live shift badge.
+    await progress.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=shift-progress');
+    await progress.locator('.avatar-badge.avatar-badge-progress').waitFor();
+    const shiftProgress = await progress.locator('.avatar-badge-progress').evaluate(el => ({
+      value: getComputedStyle(el).getPropertyValue('--shift-progress').trim(),
+      image: getComputedStyle(el).backgroundImage,
+    }));
+    assert(Math.abs(Number.parseFloat(shiftProgress.value) - 50) < 0.1, JSON.stringify(shiftProgress)); checks++;
+    assert(shiftProgress.image.includes('conic-gradient'), JSON.stringify(shiftProgress)); checks++;
+    assert.equal((await progress.locator('.avatar-day-time').innerText()).trim(), '1h 30m elapsed'); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
     await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
@@ -51,7 +59,7 @@ const fs = require('node:fs');
     await debug.getByLabel('Mascot activity', { exact: true }).waitFor();
     await debug.waitForFunction(() => document.querySelector('.debug-mascot-controls')?.disabled === false, null, { timeout: 12000 });
     await avatar.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=recorded-completion');
-    await avatar.getByRole('button', { name: 'Minimize to orb', exact: true }).click();
+    await avatar.getByRole('button', { name: 'Collapse companion', exact: true }).click();
     await avatar.locator('.avatar-pet .studio-otto').waitFor();
     for (const [activity, pose] of [['idle','focus'],['working','think'],['needs-input','alert'],['ready','celebrate'],['blocked','recover']]) {
       await debug.getByLabel('Mascot activity', { exact: true }).selectOption(activity);

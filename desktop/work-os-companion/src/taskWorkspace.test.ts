@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -143,6 +143,15 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(ordered).toEqual(["open-early", "done-late"]);
   });
 
+  it("keeps server-compatible tie-breakers stable across due directions", () => {
+    const tasks = [
+      { id: "zeta", title: "Zeta", due_date: "2026-09-20", completed: false, provider_updated_at: "2026-09-18T10:00:00Z", updated_at: "2026-09-22T10:00:00Z" },
+      { id: "alpha", title: "Alpha", due_date: "2026-09-20", completed: false, provider_updated_at: "2026-09-18T10:00:00Z", updated_at: "2026-09-23T10:00:00Z" },
+    ];
+    expect(sortTaskList(tasks, { key: "due", direction: "asc" }, today).map((task) => task.id)).toEqual(["alpha", "zeta"]);
+    expect(sortTaskList(tasks, { key: "due", direction: "desc" }, today).map((task) => task.id)).toEqual(["alpha", "zeta"]);
+  });
+
   it("keeps undated work last in both due-date directions", () => {
     const tasks = [
       { id: "dated-early", title: "Early", due_date: "2026-09-10", completed: false },
@@ -176,6 +185,23 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
       expect(readTaskSort("sort")).toEqual(DEFAULT_TASK_SORT);
       store.set("sort", JSON.stringify({ key: "priority", direction: "asc" }));
       expect(readTaskSort("sort")).toEqual({ key: "priority", direction: "asc" });
+    } finally {
+      (globalThis as { window?: unknown }).window = originalWindow;
+    }
+  });
+
+  it("defines the Tasks workspace columns and preserves an explicit Status sort", () => {
+    expect(TASKS_WORKSPACE_SORT_COLUMNS.map(({ key, label }) => [key, label])).toEqual([
+      ["title", "Name"],
+      ["due", "Date due"],
+      ["status", "Status"],
+    ]);
+    const store = new Map<string, string>([[TASKS_SORT_STORAGE_KEY, JSON.stringify({ key: "status", direction: "asc" })]]);
+    const fakeWindow = { localStorage: { getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => store.set(key, value) } };
+    const originalWindow = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = fakeWindow;
+    try {
+      expect(readTaskSort(TASKS_SORT_STORAGE_KEY)).toEqual({ key: "status", direction: "asc" });
     } finally {
       (globalThis as { window?: unknown }).window = originalWindow;
     }

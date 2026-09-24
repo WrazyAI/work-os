@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { listPersonOpenTasks, listPersonTasks } from "@/lib/work-os";
+import { listPersonOpenTasks, listPersonTasks, type TaskListOrder } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmployeeTaskSelection } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
+import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ async function access(req: Request) {
   });
 }
 
+/** Serve employee task views, validating workspace sort parameters before querying mirrored tasks. */
 export async function GET(req: Request) {
   try {
     const auth = await access(req);
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
     const limit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
     const offset = integer(params.get("offset"), 0, 100000);
     const requestedDate = date(params.get("date"));
+    const sortDate = params.has("sortDate") ? validateWorkOsDate(params.get("sortDate"), "sortDate") : null;
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
     if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, limit));
@@ -55,6 +58,11 @@ export async function GET(req: Request) {
         nextOffset: null,
       });
     }
+    const sortKey = params.get("sort");
+    const sortDirection = params.get("direction");
+    const order = sortKey && ["title", "due", "status"].includes(sortKey) && (sortDirection === "asc" || sortDirection === "desc")
+      ? `${sortKey}_${sortDirection}` as TaskListOrder
+      : undefined;
     const tasks = (await listPersonTasks(ownerId, auth.access.personId as string, {
       completed: params.get("completed"),
       projectId: params.get("projectId"),
@@ -66,6 +74,8 @@ export async function GET(req: Request) {
       limit,
       includeCompleted: params.get("includeCompleted") === "true" || view === "history",
       includeLedgerHistory: view === "history" && !params.get("from") && !params.get("to"),
+      order,
+      sortDate,
     })) ?? [];
     return NextResponse.json({ tasks, view, date: requestedDate, offset, nextOffset: tasks.length === limit ? offset + tasks.length : null, cursor: { next: null } });
   } catch (error) {

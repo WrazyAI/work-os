@@ -13,6 +13,7 @@ import {
   workOsKeys,
 } from "./queryClient";
 import type { DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
   task: Record<string, any>;
@@ -83,14 +84,33 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
   });
 }
 
-export function useTaskHistoryQuery(options: { enabled: boolean }) {
+/** Load shared task history or a workspace-specific, globally sorted stream. */
+export function useTaskHistoryQuery(options: { enabled: boolean; workspace?: boolean; sort?: TaskSort; currentDate?: string; completedOnly?: boolean }) {
+  const workspace = options.workspace === true;
   return useInfiniteQuery({
-    queryKey: workOsKeys.taskHistory(),
+    // Keep the unsorted key stable for Today, carry-over, interpretation, and
+    // Stronghold snapshots. Sorted pages are separate workspace-only queries.
+    queryKey: workspace
+      ? [...workOsKeys.taskHistory(), options.completedOnly ? "completed" : "all", options.currentDate ?? "", options.sort?.key ?? "due", options.sort?.direction ?? "desc"]
+      : workOsKeys.taskHistory(),
     enabled: options.enabled,
     staleTime: TASK_HISTORY_STALE_MS,
     initialPageParam: 0,
     getNextPageParam: (lastPage: TaskHistoryPage) => lastPage.nextOffset ?? undefined,
-    queryFn: ({ pageParam }) => apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?view=history&offset=${pageParam}&limit=100`),
+    queryFn: ({ pageParam, signal }) => {
+      const params = new URLSearchParams({
+        view: "history",
+        offset: String(pageParam),
+        limit: "100",
+      });
+      if (workspace) {
+        params.set("sort", options.sort?.key ?? "due");
+        params.set("direction", options.sort?.direction ?? "desc");
+        if (options.currentDate) params.set("sortDate", options.currentDate);
+        if (options.completedOnly) params.set("completed", "true");
+      }
+      return apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`, { signal });
+    },
   });
 }
 

@@ -67,7 +67,7 @@ export type TaskSortDirection = "asc" | "desc";
 export type TaskSort = { key: TaskSortKey; direction: TaskSortDirection };
 
 export const DEFAULT_TASK_SORT: TaskSort = { key: "due", direction: "desc" };
-export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v1";
+export const TASKS_SORT_STORAGE_KEY = "work-os.tasks-sort.v2";
 export const DAY_SORT_STORAGE_KEY = "work-os.day-sort.v1";
 
 export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
@@ -77,18 +77,25 @@ export const TASK_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string;
   { key: "priority", label: "Priority", initialDirection: "asc" },
 ];
 
+export const TASKS_WORKSPACE_SORT_COLUMNS: ReadonlyArray<{ key: TaskSortKey; label: string; initialDirection: TaskSortDirection }> = [
+  { key: "title", label: "Name", initialDirection: "asc" },
+  { key: "due", label: "Date due", initialDirection: "desc" },
+  { key: "status", label: "Status", initialDirection: "asc" },
+];
+
 const TASK_SORT_KEYS = TASK_SORT_COLUMNS.map((column) => column.key);
 
+/** Read a persisted task sort, migrating retired defaults to the canonical order. */
 export function readTaskSort(storageKey: string): TaskSort {
   try {
     if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_TASK_SORT };
     const raw = window.localStorage.getItem(storageKey);
     const parsed = raw ? JSON.parse(raw) as Partial<TaskSort> | null : null;
     if (parsed && TASK_SORT_KEYS.includes(parsed.key as TaskSortKey) && (parsed.direction === "asc" || parsed.direction === "desc")) {
-      // The previous default (Status ascending) and the retired Activity
-      // column both migrate to the current default instead of pinning users
-      // to an order they never chose explicitly.
-      if (parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
+      // The active-day toolbar used to default to Status ascending. Migrate
+      // that legacy day preference once, but keep Status ascending valid for
+      // the Tasks workspace's new persisted column sort.
+      if (storageKey !== TASKS_SORT_STORAGE_KEY && parsed.key === "status" && parsed.direction === "asc") return { ...DEFAULT_TASK_SORT };
       return { key: parsed.key as TaskSortKey, direction: parsed.direction };
     }
   } catch { /* best effort: a corrupt preference never blocks the list */ }
@@ -126,22 +133,31 @@ function statusRank(task: TaskRow, currentDate: string) {
   return isOverdueTask(task, currentDate) ? 0 : 1;
 }
 
+/** Stable recency tie-break shared with the server-side paginated sort. Mirror
+ * rewrite timestamps stay last so a provider sync cannot reorder old work. */
+function workspaceSortRecency(task: TaskRow) {
+  return timestamp(task.provider_updated_at ?? task.provider_created_at ?? task.created_at ?? task.updated_at);
+}
+
+/** Compare two task rows using the workspace sort contract and stable server-compatible tie-breakers. */
 export function compareTaskSort(left: TaskRow, right: TaskRow, sort: TaskSort, currentDate: string) {
   const direction = sort.direction === "asc" ? 1 : -1;
   const byTitle = () => safeTaskText(left.title, "Untitled task").localeCompare(safeTaskText(right.title, "Untitled task"));
+  const byWorkspaceRecency = () => workspaceSortRecency(right) - workspaceSortRecency(left);
   const byRecency = () => recency(right) - recency(left);
   const byStatus = () => (statusRank(left, currentDate) - statusRank(right, currentDate)) * direction;
   // Completed work always sits after open work when ordering by due date; the
   // due comparison then decides within each half and undated rows stay last.
   const openFirst = () => Number(left.completed === true) - Number(right.completed === true);
   switch (sort.key) {
-    case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "due": return openFirst() || compareDueDirectional(left, right, sort.direction) || byRecency() || byTitle();
+    case "status": return byStatus() || compareDueDirectional(left, right, "asc") || byWorkspaceRecency() || byTitle();
+    case "due": return openFirst() || compareDueDirectional(left, right, sort.direction) || byWorkspaceRecency() || byTitle();
     case "priority": return (priorityRank(left.priority) - priorityRank(right.priority)) * direction || (statusRank(left, currentDate) - statusRank(right, currentDate)) || compareDueDirectional(left, right, "asc") || byRecency() || byTitle();
-    case "title": return byTitle() * direction || byRecency();
+    case "title": return byTitle() * direction || byWorkspaceRecency();
   }
 }
 
+/** Return a sorted copy of task rows without mutating cached query data. */
 export function sortTaskList(tasks: TaskRow[], sort: TaskSort = DEFAULT_TASK_SORT, currentDate = "") {
   return [...tasks].sort((left, right) => compareTaskSort(left, right, sort, currentDate));
 }

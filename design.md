@@ -335,10 +335,12 @@ Use a flat, readable list:
     completion | task + metadata | progress | due | status | actions
 
 The Tasks page has one date navigator in the masthead, one search/filter
-toolbar, and one task list. Do not repeat a Task queue heading, status section
-headers, or a second sort/header toolbar inside the list. Keep the canonical
-default order visible through the row sequence: due date latest-first, open
-work above completed work, and undated items last.
+toolbar, and one task list. Do not repeat a Task queue heading or status section
+headers. The list begins with one quiet sortable column row for Name, Date due,
+and Status; it aligns to the task, due, and status tracks rather than introducing
+a second boxed toolbar. Keep the canonical default order visible through the row
+sequence: due date latest-first, open work above completed work, and undated
+items last.
 
 At wide widths, the title column absorbs available space. Progress, due date,
 status, and menu columns remain intrinsic and aligned. At narrow widths, hide
@@ -383,9 +385,13 @@ set. Counts describe the rendered list, or state Showing N of M when
 pagination is involved.
 
 The default order is due date latest-first, with open work above completed and
-undated items last. The active-day dashboard may expose its own real sort
-controls, but the Tasks page does not duplicate those controls inside the task
-list.
+undated items last. The Tasks column row exposes Name, Date due, and Status
+sorting. Activating a column starts in its natural direction, toggles on the
+second activation, and restores the default on the third. The choice persists
+for the Tasks workspace, and paginated All tasks / Completed results must be
+sorted before pagination so the visible order represents the complete result
+set rather than only the loaded page. The active-day dashboard keeps its own
+sort preference.
 
 Overdue means an open task with a valid due date before the current workday.
 Undated old work is carryover, not overdue. All surfaces use the same selector
