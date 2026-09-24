@@ -43,7 +43,7 @@ describe("companion artwork", () => {
     expect(pngColorType(resolve(root, "src-tauri/icons/icon.png"))).toBe(6);
   });
 
-  it("keeps the compact mascot free of a halo and repeats the shared alert pose", () => {
+  it("keeps the compact mascot free of a halo and uses bounded alert motion", () => {
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
     const orb = readFileSync(resolve(root, "src/CompanionOrb.tsx"), "utf8");
     const pet = readFileSync(resolve(root, "src/MascotPet.tsx"), "utf8");
@@ -144,7 +144,7 @@ describe("floating companion integration", () => {
     expect(avatar).toContain('"work-os://main-day-changed"');
     expect(avatar).toContain("facts.taskOptions");
     expect(avatar).toContain("ApprovalFlow");
-    expect(avatar).toContain("avatar-drag-surface");
+    expect(companionOrb).toContain("avatar-drag-surface");
     expect(avatar).toContain("setSnoozeReplayId((value) => value + 1)");
     expect(avatar).toContain("replayKey={snoozeReplayId}");
     const mascotPet = readFileSync(resolve(root, "src/MascotPet.tsx"), "utf8");
