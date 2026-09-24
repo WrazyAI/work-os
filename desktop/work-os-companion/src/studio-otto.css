@@ -41,7 +41,6 @@
 .studio-otto[data-pose="think"] .studio-dot { animation: studio-process 1.8s ease-in-out infinite; }
 .studio-otto[data-pose="think"] .dot-2 { animation-delay: .2s; }
 .studio-otto[data-pose="think"] .dot-3 { animation-delay: .4s; }
-.studio-otto[data-pose="think"] .studio-typing-hand { animation: studio-type 1.8s ease-in-out infinite; }
 .studio-otto[data-pose="alert"] .studio-arm-right { transform: rotate(-63deg); }
 .studio-otto[data-pose="alert"] .studio-head { transform: rotate(2deg); }
 .studio-otto[data-pose="celebrate"] .studio-head { animation: studio-nod 700ms ease-out 1; }
@@ -56,7 +55,6 @@
   46% { transform: scaleY(.1); }
 }
 @keyframes studio-process { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
-@keyframes studio-type { 0%, 30%, 65%, 100% { transform: translateY(0); } 48% { transform: translateY(-2px); } }
 @keyframes studio-done { from { transform: rotate(0); } to { transform: rotate(-48deg); } }
 @keyframes studio-nod { 0%, 100% { transform: rotate(0); } 45% { transform: rotate(3deg) translateY(1px); } }
 /* Tiny identity marks are static, light renderers, not hidden animated pets. */
@@ -66,6 +64,16 @@
 .studio-otto[data-crop="head"] .studio-head,
 .studio-otto[data-crop="head"] .studio-gaze,
 .studio-otto[data-static="true"] .studio-gaze { transform: none !important; }
+
+/* The floating companion uses a tighter crop and stronger primary marks while
+ * deliberately omitting the tiny props/texture in StudioOtto.tsx. */
+.studio-otto[data-crop="orb"] .studio-face { stroke-width: 4.8; }
+.studio-otto[data-crop="orb"] .studio-screen-spill { opacity: .2; }
+.studio-otto .studio-screen-spill { transition: opacity 180ms ease, stroke 180ms ease; }
+.studio-otto[data-pose="think"] .studio-screen-spill,
+.studio-otto[data-pose="alert"] .studio-screen-spill { opacity: .3; }
+.studio-otto[data-pose="celebrate"] .studio-screen-spill { opacity: .34; }
+.studio-otto[data-pose="recover"] .studio-screen-spill { opacity: .28; }
 /* Preserve the posed hands and terminal glyphs when motion is removed. */
 .mascot-lab.reduced-motion .studio-otto *,
 [data-reduced-motion="true"] .studio-otto * { animation: none !important; transition: none !important; }
@@ -100,73 +108,59 @@
 .studio-otto .studio-working-arms,
 .studio-otto .studio-taskpad { transform-origin: 80px 128px; }
 
-/* Active work: five held drawings per cycle instead of smooth 60fps drift. */
-.studio-otto[data-pose="think"] .studio-rig {
-  animation: studio-work-rig 600ms steps(5, end) infinite;
-}
-.studio-otto[data-pose="think"] .studio-working-arms {
-  animation: studio-work-arms 600ms steps(5, end) infinite;
-}
+/* Active work stays planted. Only the terminal/taskpad interaction loops so
+ * Otto reads as focused work rather than a full-body loading indicator. */
 .studio-otto[data-pose="think"] .studio-typing-hand {
-  animation: studio-type-stop 600ms steps(5, end) infinite;
+  animation: studio-type-stop 900ms steps(4, end) infinite;
 }
 .studio-otto[data-pose="think"] .studio-dot {
   animation-timing-function: steps(3, end);
 }
 
-/* Loop the familiar fast gesture during each five-second attention window.
- * The shared runtime inserts a one-second cooldown between three windows. */
+/* Needs-input is one concise event-driven gesture, then a static alert pose.
+ * Persistent urgency lives in the glyph/badge instead of repeated motion. */
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-rig {
-  animation: studio-attention-rig 520ms steps(5, end) infinite;
+  animation: studio-attention-rig 780ms steps(5, end) 1 both;
 }
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-head {
-  animation: studio-attention-head 520ms steps(5, end) infinite;
+  animation: studio-attention-head 780ms steps(5, end) 1 both;
 }
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-arm-right {
-  animation: studio-attention-wave 520ms steps(5, end) infinite;
+  animation: studio-attention-wave 780ms steps(5, end) 1 both;
 }
 
 /* Confirmed outcomes get a compact whole-body hop. It plays once, never as an
  * ambient celebration loop. */
 .studio-otto[data-pose="celebrate"] .studio-rig {
-  animation: studio-celebrate-rig 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-rig 520ms steps(5, end) 1 both;
+}
+.studio-otto[data-pose="celebrate"] .studio-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: studio-shadow-hop 520ms steps(5, end) 1 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-head {
-  animation: studio-celebrate-head 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-head 520ms steps(5, end) 1 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-left {
-  animation: studio-celebrate-left 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-left 520ms steps(5, end) 1 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-right {
-  animation: studio-celebrate-right 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-right 520ms steps(5, end) 1 both;
 }
 
 /* Failure/blocker: a visible shake and settle, again bounded to one gesture. */
 .studio-otto[data-pose="recover"] .studio-rig {
-  animation: studio-recover-rig 560ms steps(5, end) 2 both;
+  animation: studio-recover-rig 560ms steps(5, end) 1 both;
 }
 .studio-otto[data-pose="recover"] .studio-head {
-  animation: studio-recover-head 560ms steps(5, end) 2 both;
+  animation: studio-recover-head 560ms steps(5, end) 1 both;
 }
 .studio-otto[data-pose="recover"] .studio-arm-left,
 .studio-otto[data-pose="recover"] .studio-arm-right {
-  animation: studio-recover-arms 560ms steps(5, end) 2 both;
+  animation: studio-recover-arms 560ms steps(5, end) 1 both;
 }
 
-@keyframes studio-work-rig {
-  0%, 100% { transform: translate(0, 0); }
-  20% { transform: translate(-1px, -1px) rotate(-.8deg); }
-  40% { transform: translate(1px, 0) rotate(.5deg); }
-  60% { transform: translate(0, -2px) rotate(-.4deg); }
-  80% { transform: translate(1px, -1px) rotate(.7deg); }
-}
-@keyframes studio-work-arms {
-  0%, 100% { transform: translateY(0) rotate(0); }
-  20% { transform: translateY(1px) rotate(-2deg); }
-  40% { transform: translateY(-1px) rotate(2deg); }
-  60% { transform: translateY(1px) rotate(1deg); }
-  80% { transform: translateY(-1px) rotate(-1deg); }
-}
 @keyframes studio-type-stop {
   0%, 100% { transform: translateY(0); }
   20% { transform: translate(-1px, -2px); }
@@ -245,4 +239,9 @@
   40% { transform: rotate(-7deg); }
   60% { transform: rotate(4deg); }
   80%, 100% { transform: rotate(0); }
+}
+
+@keyframes studio-shadow-hop {
+  0%, 100% { transform: scaleX(1); opacity: 1; }
+  40%, 60% { transform: scaleX(.78); opacity: .55; }
 }
