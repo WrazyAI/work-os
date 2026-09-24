@@ -71,22 +71,16 @@ body.avatar-window {
 }
 .avatar-orb:hover { transform: translateY(-1px); box-shadow: 0 7px 16px rgba(13, 15, 12, 0.38); }
 .avatar-orb:active { transform: translateY(1px) scale(0.985); box-shadow: 0 3px 8px rgba(13, 15, 12, 0.3); }
-/* Each attention play runs for five seconds; the runtime then holds still for
- * a one-second cooldown before restarting the movement. */
+/* Keep the familiar quick hop moving during each five-second attention window;
+ * the runtime inserts the one-second still cooldown between three windows. */
 .avatar-orb:has(.mascot-pet[data-attention-playing="true"]) {
-  animation: avatarAttention 5s cubic-bezier(0.2, 0.8, 0.2, 1) 1;
+  animation: avatarAttention 550ms cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
 @keyframes avatarAttention {
   0%, 100% { transform: translateY(0); }
-  10% { transform: translateY(-6px); }
-  20% { transform: translateY(1px); }
-  30% { transform: translateY(0); }
-  42% { transform: translateY(-5px); }
-  52% { transform: translateY(1px); }
-  62% { transform: translateY(0); }
-  74% { transform: translateY(-3px); }
-  84% { transform: translateY(0); }
+  35% { transform: translateY(-6px); }
+  70% { transform: translateY(1px); }
 }
 
 .avatar-pet {

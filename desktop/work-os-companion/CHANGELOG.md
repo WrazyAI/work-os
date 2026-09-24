@@ -26,6 +26,10 @@ they change what the employee sees or does.
 
 - Tasks now has sortable Name, Date due, and Status columns so you can reorder the full task list without losing your place.
 
+## 0.3.56
+
+- Otto now repeats its quick alert motion for three five-second bursts, with a one-second pause between bursts.
+
 ## 0.3.55
 
 - The Windows Companion now controls Worktivity clock in/out and pause/resume, restarting an app it cannot control and waiting for provider confirmation.

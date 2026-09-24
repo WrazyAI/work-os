@@ -114,16 +114,16 @@
   animation-timing-function: steps(3, end);
 }
 
-/* One attention play uses the full five-second window. The shared runtime
- * inserts a one-second cooldown and starts two more plays, then settles. */
+/* Loop the familiar fast gesture during each five-second attention window.
+ * The shared runtime inserts a one-second cooldown between three windows. */
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-rig {
-  animation: studio-attention-rig 5s steps(5, end) 1 both;
+  animation: studio-attention-rig 520ms steps(5, end) infinite;
 }
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-head {
-  animation: studio-attention-head 5s steps(5, end) 1 both;
+  animation: studio-attention-head 520ms steps(5, end) infinite;
 }
 .mascot-pet[data-attention-playing="true"] .studio-otto[data-pose="alert"] .studio-arm-right {
-  animation: studio-attention-wave 5s steps(5, end) 1 both;
+  animation: studio-attention-wave 520ms steps(5, end) infinite;
 }
 
 /* Confirmed outcomes get a compact whole-body hop. It plays once, never as an
