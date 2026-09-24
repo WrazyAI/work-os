@@ -94,9 +94,9 @@
 .mascot-lab.studio-lab button:focus-visible { outline: 2px solid var(--color-ink, #182018); outline-offset: 3px; }
 
 
-/* Event-driven stop-motion body acting.
- * Otto stays calm at rest; working may loop while real work is in flight and
- * attention/result states play a short 3-5-frame gesture when they arrive.\n * Attention repeats only a few times so peripheral motion is noticeable, then stops. */
+/* Event-driven stop-motion acting.
+ * Otto stays calm at rest. Working loops only small task/terminal details;
+ * attention and result states play one short gesture and then settle. */
 .studio-otto .studio-rig,
 .studio-otto .studio-chassis,
 .studio-otto .studio-working-arms,
