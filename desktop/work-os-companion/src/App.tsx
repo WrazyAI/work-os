@@ -583,8 +583,7 @@ export default function App() {
       if (!current.counts) return { ...current, tasks: [task, ...current.tasks] };
       return { tasks: [task, ...current.tasks], counts: { ...current.counts, total: current.counts.total + 1, open: current.counts.open + 1 } };
     });
-    revalidateTaskHistoryVariants();
-  }, [queryClient, revalidateTaskHistoryVariants, updateTaskHistoryVariants]);
+  }, [queryClient, updateTaskHistoryVariants]);
   /** Optimistic adds are cache rows like any other, carrying `pending_status`
    * until the server record replaces them in place. Two commits (one for the
    * pending row, one for the real row) would move the list down and back up
@@ -611,21 +610,31 @@ export default function App() {
   const onboardingQuery = useOnboardingQuery({ enabled: signedIn && !syncBypass });
   const historyQuery = useTaskHistoryQuery({
     enabled: signedIn && !syncBypass,
+  });
+  const workspaceHistoryQuery = useTaskHistoryQuery({
+    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "all",
+    workspace: true,
     sort: taskWorkspaceSort,
     currentDate: visibleDay?.shiftDate ?? "",
   });
   const completedHistoryQuery = useTaskHistoryQuery({
     enabled: signedIn && !syncBypass && view === "tasks" && taskView === "completed",
+    workspace: true,
     sort: taskWorkspaceSort,
     currentDate: visibleDay?.shiftDate ?? "",
     completedOnly: true,
   });
-  const completedTaskHistory = taskView === "completed"
-    ? completedHistoryQuery.data
-      ? completedHistoryQuery.data.pages.flatMap((page) => page.tasks)
-      : syncBypass ? null : []
-    : null;
-  const activeTaskHistoryQuery = view === "tasks" && taskView === "completed" ? completedHistoryQuery : historyQuery;
+  const workspaceTaskHistory = syncBypass ? taskHistory : workspaceHistoryQuery.data?.pages.flatMap((page) => page.tasks) ?? [];
+  const completedTaskHistory = syncBypass
+    ? null
+    : taskView === "completed"
+      ? completedHistoryQuery.data
+        ? completedHistoryQuery.data.pages.flatMap((page) => page.tasks)
+        : []
+      : null;
+  const activeTaskHistoryQuery = view === "tasks" && taskView === "completed"
+    ? completedHistoryQuery
+    : view === "tasks" && taskView === "all" ? workspaceHistoryQuery : historyQuery;
   const backlogQuery = useTaskBacklogQuery({ enabled: signedIn && !syncBypass });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
@@ -656,6 +665,9 @@ export default function App() {
   useEffect(() => {
     if (historyQuery.error) showError(historyQuery.error, "Task history could not be loaded.", "Tasks unavailable");
   }, [historyQuery.error, showError]);
+  useEffect(() => {
+    if (workspaceHistoryQuery.error) showError(workspaceHistoryQuery.error, "Task history could not be loaded.", "Tasks unavailable");
+  }, [workspaceHistoryQuery.error, showError]);
   useEffect(() => {
     if (completedHistoryQuery.error) showError(completedHistoryQuery.error, "Completed tasks could not be loaded.", "Tasks unavailable");
   }, [completedHistoryQuery.error, showError]);
@@ -1572,7 +1584,7 @@ export default function App() {
   const tasksInitialLoading = !visibleDay
     || (viewingHistorical
       ? historicalQuery.isPending && !historicalQuery.data
-      : taskView !== "today" && activeTaskHistoryQuery.isPending && !activeTaskHistoryQuery.data);
+      : taskView !== "today" && !syncBypass && activeTaskHistoryQuery.isPending && !activeTaskHistoryQuery.data);
 
   useEffect(() => {
     // Scenario/offline insights are computed on-device; live insights come
@@ -2098,8 +2110,7 @@ export default function App() {
     if (result.task) replaceTaskInCaches(pending.id, result.task);
     setPendingTasks((current) => current.filter((item) => item.id !== pending.id));
     // Draw the server record into the open lists without waiting on a manual
-    // refresh; the surgical insert above already rendered it instantly.
-    void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });
+    // refresh; replaceTaskInCaches revalidates the active history variants.
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
     if (result.providerStatus !== "work_os_confirmed" && result.providerStatus !== "nifty_confirmed") notifications.info(`Task submitted · ${result.mirrorStatus}`, "Task processing");
   }
@@ -2129,8 +2140,10 @@ export default function App() {
     }
     const pending = { id: `pending-${crypto.randomUUID()}`, title, description, assignees, status: "syncing" as const };
     setPendingTasks((current) => [pending, ...current]);
-    insertPendingTaskIntoCaches({ id: pending.id, title, description, dueDate: visibleDay?.shiftDate ?? null });
-    void sendPendingTask(pending).catch((value) => failPendingTask(pending.id, value));
+    void queryClient.cancelQueries({ queryKey: workOsKeys.taskHistory() }).then(() => {
+      insertPendingTaskIntoCaches({ id: pending.id, title, description, dueDate: visibleDay?.shiftDate ?? null });
+      return sendPendingTask(pending);
+    }).catch((value) => failPendingTask(pending.id, value));
   }
 
   function retryPendingTask(task: TaskRow) {
@@ -2950,7 +2963,7 @@ export default function App() {
         onClockOut={() => { setClockOutExtendedPrompt(false); setClockOutConfirmation(true); }}
         kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
-      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} completedHistory={completedTaskHistory} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
+      {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} workspaceHistory={workspaceTaskHistory} completedHistory={completedTaskHistory} historyOrder={syncBypass ? "local" : "server"} historyError={!viewingHistorical && (taskView === "all" ? workspaceHistoryQuery.isError : taskView === "completed" ? completedHistoryQuery.isError : false)} historyHasData={Boolean(activeTaskHistoryQuery.data)} onRetryHistory={() => void activeTaskHistoryQuery.refetch()} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
@@ -3631,11 +3644,13 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
   </main>;
 }
 
-/** Render the employee Tasks workspace with a shared history source and isolated paginated views. */
-export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, completedHistory = null, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
+/** Render the employee Tasks workspace with shared day history and sorted paginated views. */
+export function TasksWorkspace({ currentDate, historyDate, backlog = null, backlogLoading = false, backlogError = false, currentPlan, historicalPlan, historicalTasks, goal, goalProvenance, suggestion, saveState, taskView, taskSort, todayTasks, taskHistory, workspaceHistory = taskHistory, completedHistory = null, historyOrder = "local", historyError = false, historyHasData = false, carryOver, carryOverOpen, loadingMore, hasMore, busy, initialTaskMenuId = null, initialSearch = "", initialFiltersOpen = false, loading = false, onTaskView, onTaskSort, onDate, onEditFocus, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask = () => undefined, onSurfaceTask, onTaskCompletion, onCarryOverOpen, onLoadMore, onRetryHistory, onRetryPendingTask, onDismissPendingTask, onRetryGoalSave, taskFlight }: {
   currentDate: string; historyDate: string; currentPlan: DailyPlan | null; historicalPlan: DailyPlan | null; historicalTasks: TaskRow[]; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; suggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
-  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; completedHistory?: TaskRow[] | null; carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
+  taskView: TaskView; taskSort: TaskSort; todayTasks: TaskRow[]; taskHistory: TaskRow[]; workspaceHistory?: TaskRow[]; completedHistory?: TaskRow[] | null;
+  historyOrder?: "server" | "local"; historyError?: boolean; historyHasData?: boolean; onRetryHistory?: () => void;
+  carryOver: ReturnType<typeof unfinishedBefore>; carryOverOpen: boolean;
   backlog?: TaskBacklog | null; backlogLoading?: boolean; backlogError?: boolean;
   loadingMore: boolean; hasMore: boolean; busy: boolean; onTaskView: (view: TaskView) => void; onTaskSort: (sort: TaskSort) => void; onDate: (date: string) => Promise<void>;
   onEditFocus: () => void; onAddTask: () => void; onOpenTask: (task: TaskRow, readOnly: boolean) => void;
@@ -3654,7 +3669,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const historical = selectedDate !== currentDate;
   const shownPlan = historical ? historicalPlan : currentPlan;
   const historyById = new Map<string, TaskRow>();
-  for (const task of [...taskHistory, ...historicalTasks]) {
+  for (const task of [...taskHistory, ...workspaceHistory, ...(completedHistory ?? []), ...historicalTasks]) {
     historyById.set(String(task.id), task);
     if (task.provider_task_id) historyById.set(String(task.provider_task_id), task);
   }
@@ -3680,7 +3695,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     : taskView === "today" ? myDayTasks
       : taskView === "unfinished" ? unfinishedTasks
         : taskView === "completed" ? completedTasks
-          : taskHistory;
+          : workspaceHistory;
   const unfiltered = parentTasks(uniqueTasks(displayedCandidates));
   const displayed = filterWorkspaceTasks(unfiltered, currentDate, { query: taskSearch, from: filterFrom, to: filterTo });
   const hasFilters = taskSearch.trim().length > 0 || filterFrom.length > 0 || filterTo.length > 0;
@@ -3694,7 +3709,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     { id: "today", label: "My day", count: myDayTasks.filter((task) => task.completed !== true).length },
     { id: "unfinished", label: "Unfinished", count: parentTasks(uniqueTasks(unfinishedTasks)).length },
     { id: "completed", label: "Completed", count: serverCounts?.completed ?? parentTasks(uniqueTasks(completedTasks)).length },
-    { id: "all", label: "All tasks", count: serverCounts?.total ?? parentTasks(uniqueTasks(taskHistory)).length },
+    { id: "all", label: "All tasks", count: serverCounts?.total ?? parentTasks(uniqueTasks(workspaceHistory)).length },
   ];
   // Paginated views say how much of the server total is on screen so a chip
   // can never look like it disagrees with its own list.
@@ -3706,7 +3721,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const rowsForDisplay = taskView === "today" && !historical
     ? displayed.filter((task) => task.completed !== true)
     : displayed;
-  const displayedTasks = !historical && (taskView === "all" || taskView === "completed")
+  const displayedTasks = !historical && historyOrder === "server" && (taskView === "all" || taskView === "completed")
     ? rowsForDisplay
     : sortTaskList(rowsForDisplay, taskSort, currentDate);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -3778,7 +3793,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     </section>
     {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{hasFilters ? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}` : overflowNote}</p>}
     <section className="panel task-list-panel" aria-label="Task list"><h2 className="sr-only">{historical ? `Tasks from ${formatWorkOsDate(selectedDate)}` : viewLabel}</h2>{!historical && taskView === "unfinished" && backlogError && <div className="task-backlog-warning" role="status">The full backlog could not be loaded — this list shows only the tasks already loaded.</div>}
-      <div className="evidence-list task-records" ref={listRef}>{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <><SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{displayedTasks.map((task) => {
+      <div className="evidence-list task-records" ref={listRef}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <><SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{displayedTasks.map((task) => {
       const attribution = taskDateAttribution(task, currentDate);
       const taskId = rowId(task);
       const menuOpen = taskMenuId === taskId;
@@ -3799,7 +3814,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       const syncPending = !task.completed && (Boolean(task.sync_error) || !task.synced_at);
       const flight = taskFlight?.get(taskId) ?? null;
       return <article className={`task-record workspace-task ${task.completed ? "is-completed" : ""}${flight === "leaving" ? " is-leaving" : ""}`} role="button" tabIndex={0} key={taskId} data-list-key={taskId} aria-selected={isSelected} onClick={() => { if (!pendingStatus && !flight) onOpenTask(task, historical); }} onKeyDown={(event) => { if (pendingStatus || flight) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpenTask(task, historical); } }}><button className={`task-check${flight === "completing" ? " is-completing" : ""}`} aria-label={flight === "completing" ? `Completing ${title}` : task.completed ? `Reopen ${title}` : `Complete ${title}`} aria-busy={flight === "completing"} disabled={historical || pendingStatus !== null} onClick={(event) => { event.stopPropagation(); if (!pendingStatus && !flight) onTaskCompletion(task, !task.completed); }}>{flight === "completing" ? <FadeArc size={13} /> : (task.completed || flight === "leaving") ? <Check size={14} /> : null}</button><div className="task-row-body"><div className="task-row-line primary-line"><h3>{title}</h3>{isSelected && <span className="surfaced-tag">On today</span>}</div>{(metaParts.length > 0 || description || syncPending) && <div className="task-row-line secondary-line"><AssigneeTags task={task} />{metaParts.length > 0 && <small>{metaParts.join(" · ")}</small>}{syncPending && <small className="sync-warn">sync pending</small>}</div>}{description && <p className="task-row-desc">{description}</p>}</div>{!pendingStatus && progress.total > 0 && <span className="task-row-ring"><ProgressRing completed={progress.completed} total={progress.total} label="subtasks" /></span>}{!pendingStatus && dueDate && <span className={`task-due ${state === "overdue" ? "danger" : ""}`}>{formatWorkOsDate(dueDate)}</span>}{pendingStatus ? <PendingTaskControls status={pendingStatus} error={task.pending_error} onRetry={() => onRetryPendingTask?.(task)} onDismiss={() => onDismissPendingTask?.(task)} /> : <span className={`task-state ${state}`}>{stateLabel}</span>}{!historical && !pendingStatus && <div className={`workspace-task-menu ${menuOpen ? "open" : ""}`} onClick={(event) => event.stopPropagation()}><EllipsisMenu open={menuOpen} label={`Actions for ${title}`} disabled={busy} onToggle={() => setTaskMenuId(menuOpen ? null : taskId)} onClose={() => setTaskMenuId(null)}>{!task.completed && !isSelected && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task); }}><Plus size={14} /> Add to today</button>}{!task.completed && <button role="menuitem" onClick={() => { setTaskMenuId(null); onSurfaceTask(task, "deferred"); }}><CirclePause size={14} /> Defer</button>}<button role="menuitem" onClick={() => { setTaskMenuId(null); onTaskCompletion(task, !task.completed); }}>{task.completed ? <RotateCcw size={14} /> : <Check size={14} />} {task.completed ? "Reopen task" : "Mark task done"}</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onEditTask(task); }}><Pencil size={14} /> Edit task</button><button role="menuitem" onClick={() => { setTaskMenuId(null); onArchiveTask(task); }}><Archive size={14} /> Archive <small>reversible</small></button><button className="danger" role="menuitem" onClick={() => { setTaskMenuId(null); onDeleteTask(task); }}><Trash2 size={14} /> Delete permanently</button>{attribution.date && attribution.date < currentDate && <button role="menuitem" onClick={() => { setTaskMenuId(null); void onDate(attribution.date!); }}><ChevronLeft size={14} /> Open original day</button>}</EllipsisMenu></div>}</article>;
-    })}</> : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading older tasks…</> : "Load older tasks"}</button>}</section>
+    })}</> : historyError && !historyHasData ? null : <div className="task-empty"><Empty title={emptyCopy.title} body={emptyCopy.body} />{taskView === "today" && !hasFilters && carryOver.length > 0 && <button className="task-empty-action" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={14} aria-hidden="true" /> Review unfinished work</button>}</div>}</div>{loadingMore && <TaskListSkeleton rows={2} />}{!historical && hasMore && <button className="task-load-more" disabled={loadingMore} onClick={onLoadMore}>{loadingMore ? <><FadeArc size={13} /> Loading older tasks…</> : "Load older tasks"}</button>}</section>
     {carryOverOpen && <TaskCarryOverFlyout groups={carryGroups} busy={busy} onClose={() => onCarryOverOpen(false)} onSurfaceTask={onSurfaceTask} onTaskCompletion={onTaskCompletion} taskFlight={taskFlight} onOpenDay={(date) => { onCarryOverOpen(false); void onDate(date); }} />}
   </main>;
 }

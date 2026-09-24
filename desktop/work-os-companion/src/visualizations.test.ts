@@ -228,7 +228,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("function closeTaskComposer");
     expect(app).toContain("closing={taskComposerClosing}");
     expect(styles).toContain(".task-modal-backdrop.is-closing");
-    expect(app).toContain("void queryClient.invalidateQueries({ queryKey: workOsKeys.taskHistory() });");
+    expect(app).toContain("cancelQueries({ queryKey: workOsKeys.taskHistory() })");
+    expect(app).toContain("replaceTaskInCaches revalidates the active history variants.");
     expect(app).toContain("void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });");
   });
 

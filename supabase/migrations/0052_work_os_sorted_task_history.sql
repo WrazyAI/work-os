@@ -1,6 +1,7 @@
 -- 0052: page the Tasks workspace from one attributed, database-sorted query.
 -- This keeps global sorting truthful without reloading every matching task for
--- every page request.
+-- every page request. Apply during a planned maintenance window: the transactional
+-- index builds block writes to work_tasks, so this runner cannot use CONCURRENTLY.
 
 create index if not exists work_tasks_person_assignees_idx
   on public.work_tasks using gin (assignee_person_ids);
@@ -34,13 +35,13 @@ as $$
     and (p_completed is null or t.completed = p_completed)
     and (p_project_id is null or t.project_id::text = p_project_id)
     and (
-      p_person_id = any(t.assignee_person_ids)
+      t.assignee_person_ids @> array[p_person_id]
       or (
         p_nifty_member_id is not null
         and (
-          p_nifty_member_id = any(t.assignee_provider_ids)
+          t.assignee_provider_ids @> array[p_nifty_member_id]
           or t.raw ->> 'created_by' = p_nifty_member_id
-          or coalesce(t.raw -> 'subscribers', '[]'::jsonb) ? p_nifty_member_id
+          or (t.raw -> 'subscribers') ? p_nifty_member_id
         )
       )
     )
@@ -69,6 +70,6 @@ as $$
     coalesce(t.provider_updated_at, t.provider_created_at, t.created_at, t.updated_at) desc nulls last,
     lower(t.title) asc,
     t.id asc
-  limit greatest(coalesce(p_limit, 100), 1)
+  limit least(greatest(coalesce(p_limit, 100), 1), 1000)
   offset greatest(coalesce(p_offset, 0), 0);
 $$;

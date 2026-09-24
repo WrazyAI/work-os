@@ -184,6 +184,7 @@ describe("Tasks workspace ordering contract", () => {
   it("preserves the server-provided canonical due-latest-first order", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
+      historyOrder: "server",
       taskHistory: [props.taskHistory[1], props.taskHistory[0], props.taskHistory[2]],
     }));
 
@@ -225,14 +226,26 @@ describe("Tasks workspace ordering contract", () => {
     expect(markup).toContain("All tasks<em>3</em>");
   });
 
-  it("preserves the server-provided Name sort and keeps an explicit Open status cell", () => {
+  it("sorts local preview history by Name before rendering", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
       taskSort: { key: "title", direction: "asc" },
-      taskHistory: [props.taskHistory[2], props.taskHistory[0], props.taskHistory[1]],
+      taskHistory: [props.taskHistory[2], props.taskHistory[1], props.taskHistory[0]],
     }));
+
     expect(markup.indexOf("Finished work")).toBeLessThan(markup.indexOf("Late work"));
     expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Soon work"));
+  });
+
+  it("preserves the server-provided Name sort and keeps an explicit Open status cell", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      historyOrder: "server",
+      taskSort: { key: "title", direction: "asc" },
+      taskHistory: [props.taskHistory[1], props.taskHistory[0], props.taskHistory[2]],
+    }));
+    expect(markup.indexOf("Soon work")).toBeLessThan(markup.indexOf("Late work"));
+    expect(markup.indexOf("Late work")).toBeLessThan(markup.indexOf("Finished work"));
     expect(markup).toContain('class="task-state open">Open</span>');
   });
 });
@@ -302,6 +315,31 @@ it("discloses a backlog failure instead of silently using the loaded window", ()
       taskHistory: [props.taskHistory[0]],
     }));
     expect(markup).toContain("The full backlog could not be loaded");
+  });
+
+  it("shows a retryable history failure without presenting an empty result", () => {
+    const initialFailure = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      workspaceHistory: [],
+      taskHistory: [],
+      historyError: true,
+      historyHasData: false,
+      onRetryHistory: () => undefined,
+    }));
+    expect(initialFailure).toContain('role="alert"');
+    expect(initialFailure).toContain("Task history could not be loaded.");
+    expect(initialFailure).toContain("Try again");
+    expect(initialFailure).not.toContain('class="task-empty"');
+
+    const staleFailure = renderToStaticMarkup(createElement(TasksWorkspace, {
+      ...props,
+      workspaceHistory: [{ id: "saved", title: "Saved task", completed: false }],
+      historyError: true,
+      historyHasData: true,
+      onRetryHistory: () => undefined,
+    }));
+    expect(staleFailure).toContain("Task history could not be refreshed. Showing saved results.");
+    expect(staleFailure).toContain("Saved task");
   });
 
   it("counts All tasks from the server total and says how much is on screen", () => {

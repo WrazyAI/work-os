@@ -13,6 +13,7 @@ import {
   updateNiftyTaskField,
 } from "@/lib/integrations/nifty";
 import { attachTaskAssigneeIdentities } from "@/lib/work-os-task-assignees";
+import { validateWorkOsDate } from "@/lib/work-os-schedule-validation";
 import { todayIso as today } from "@/lib/work-os-dates";
 import {
   dateOnly,
@@ -183,6 +184,17 @@ export async function hydrateTaskAssignees(userId: string, tasks: Record<string,
   return attachTaskAssigneeIdentities(tasks, people ?? []);
 }
 
+async function hydrateTaskProjects(userId: string, tasks: Record<string, any>[]) {
+  const projectIds = [...new Set(tasks.map((task) => task.project_id).filter((id) => id != null).map(String))];
+  if (!projectIds.length) return tasks.map((task) => ({ ...task, project: null }));
+  const projects = await ensureNoError(
+    db().from("work_projects").select("*").eq("user_id", userId).in("id", projectIds),
+    "load task projects",
+  );
+  const byId = new Map((projects ?? []).map((project) => [String(project.id), project]));
+  return tasks.map((task) => ({ ...task, project: byId.get(String(task.project_id)) ?? null }));
+}
+
 /**
  * Loads work attributable to a person. Nifty's API permits creator-owned ledger
  * tasks without assignees, so strict assignee filtering alone hides the agent's
@@ -277,7 +289,7 @@ async function listPersonWorkspaceTaskPage(
   opts: Omit<TaskListOptions, "personId">,
 ) {
   const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
-  const sortDate = opts.sortDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.sortDate) ? opts.sortDate : today();
+  const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
   const result = await db().rpc("work_list_person_tasks_sorted", {
     p_user_id: userId,
     p_person_id: personId,
@@ -324,12 +336,13 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
       if (child.completed === true) current.completed += 1;
       progress.set(parentId, current);
     }
-    return hydrateTaskAssignees(userId, selected.map((task) => {
+    const withProgress = selected.map((task) => {
       const childProgress = task.provider_task_id
         ? progress.get(String(task.provider_task_id)) ?? { total: 0, completed: 0 }
         : { total: 0, completed: 0 };
       return { ...task, subtask_total: childProgress.total, subtask_completed: childProgress.completed };
-    }));
+    });
+    return hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress));
   }
   // Metadata-attributable work lives in every project, not only the ledger, so
   // the same attribution rule runs against each provenance path in SQL.
@@ -356,7 +369,7 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
   for (const task of [...(providerAssigned ?? []), ...(createdBy ?? []), ...(subscriber ?? [])]) {
     if (isTaskAttributableToPerson(task, personId, niftyMemberId)) rows.set(String(task.id), task);
   }
-  const sortDate = opts.sortDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.sortDate) ? opts.sortDate : today();
+  const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
   const selected = [...rows.values()]
     .sort((left, right) => compareWorkspaceOrder(left, right, opts.order ?? "due", sortDate))
     .slice(offset, offset + limit);

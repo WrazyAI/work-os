@@ -63,6 +63,7 @@ const migrations = [
     "neon/migrations/0039_work_screenshot_schedule.sql",
     "supabase/migrations/0050_work_os_profile_atomicity.sql",
     "supabase/migrations/0051_work_os_employee_schedule_settings.sql",
+    "supabase/migrations/0052_work_os_sorted_task_history.sql",
 ];
 
 test("Work OS companion migration is complete and idempotent", async () => {

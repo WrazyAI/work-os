@@ -111,6 +111,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
         },
       });
     } catch (error) {
+      if (init.signal?.aborted && error instanceof Error && error.name === "AbortError") throw error;
       const failure = classifyRequestFailure(error);
       throw new ApiRequestError(failure.message, null, true);
     }
