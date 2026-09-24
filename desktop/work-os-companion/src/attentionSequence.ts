@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-export const ATTENTION_ANIMATION_MS = 5_000;
-export const ATTENTION_COOLDOWN_MS = 1_000;
-export const ATTENTION_PLAY_COUNT = 3;
+export const ATTENTION_ANIMATION_MS = 1_000;
+export const ATTENTION_COOLDOWN_MS = 0;
+export const ATTENTION_PLAY_COUNT = 1;
 const INACTIVE_ATTENTION = { playing: false, cycle: 0 } as const;
 
 export type AttentionPlaybackChange = (playing: boolean, cycle: number) => void;
