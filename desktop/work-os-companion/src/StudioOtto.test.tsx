@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { StudioOtto } from "./StudioOtto";
-import { MASCOT_POSES } from "./mascotTypes";
+import { MASCOT_POSES, type MascotCrop } from "./mascotTypes";
 import { MASCOT } from "./mascot";
 import { MascotPet } from "./MascotPet";
 import { studioOttoPalette } from "./studioOttoPalette";
 
-const render = (pose: (typeof MASCOT_POSES)[number], crop: "full" | "head" = "full", tone: "signal" | "late" = "signal") =>
+const render = (pose: (typeof MASCOT_POSES)[number], crop: MascotCrop = "full", tone: "signal" | "late" = "signal") =>
   renderToStaticMarkup(<StudioOtto pose={pose} crop={crop} tone={tone} />);
 
 describe("Studio Otto", () => {
@@ -18,8 +18,8 @@ describe("Studio Otto", () => {
     expect(MASCOT.Pet).toBe(StudioOtto);
   });
 
-  it.each(MASCOT_POSES)("renders %s across both crops and tones", (pose) => {
-    for (const crop of ["full", "head"] as const) {
+  it.each(MASCOT_POSES)("renders %s across all crops and tones", (pose) => {
+    for (const crop of ["full", "orb", "head"] as const) {
       for (const tone of ["signal", "late"] as const) {
         const html = render(pose, crop, tone);
         expect(html).toContain(`data-pose="${pose}"`);
@@ -56,6 +56,16 @@ describe("Studio Otto", () => {
       expect(html).toContain("studio-head");
       expect(html).not.toMatch(/studio-chassis|studio-taskpad|studio-late|studio-shadow|studio-screen-texture|<filter/);
     }
+  });
+
+  it("uses a simplified full-silhouette crop for the floating orb", () => {
+    const html = render("think", "orb", "late");
+    expect(html).toContain('data-crop="orb"');
+    expect(html).toContain('viewBox="10 8 140 168"');
+    expect(html).toContain("studio-chassis");
+    expect(html).toContain("studio-terminal-working");
+    expect(html).toContain("studio-late");
+    expect(html).not.toMatch(/studio-taskpad|studio-working-arms|studio-screen-texture|studio-vents|<filter/);
   });
 
   it("conveys activity with glyphs and gestures, not color alone", () => {
@@ -102,6 +112,8 @@ describe("Studio Otto", () => {
     expect(css).toContain(".mascot-lab.reduced-motion");
     expect(css).toContain('[data-crop="head"] *');
     expect(css).toContain('data-motion="renderer"');
+    expect(css).not.toContain("studio-work-rig 600ms");
+    expect(css).toContain("studio-attention-rig 780ms steps(5, end) 1 both");
     expect(css).not.toMatch(/will-change:\s*transform/);
   });
 });

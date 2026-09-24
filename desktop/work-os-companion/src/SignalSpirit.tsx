@@ -1,8 +1,10 @@
 import { useId } from "react";
 import type { MascotRendererProps } from "./mascotTypes";
+import "./signal-spirit.css";
 
 const VIEWBOX = {
   full: "0 0 112 112",
+  orb: "5 2 102 106",
   head: "18 12 76 72",
 } as const;
 
@@ -27,7 +29,7 @@ export function SignalSpirit({
   const faceGradient = `spirit-face-${uid}`;
   const glow = `spirit-glow-${uid}`;
   const softGlow = `spirit-soft-glow-${uid}`;
-  const full = crop === "full";
+  const full = crop !== "head";
 
   return (
     <svg

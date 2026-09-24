@@ -10,7 +10,7 @@ import { WhatsNewModal } from "./WhatsNewModal";
 import { displayUpdateVersion } from "./updater";
 import { changelogHistory, updateInstalledCopy } from "./whatsNew";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
-import { MascotPet } from "./MascotPet";
+import { CompanionOrb } from "./CompanionOrb";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
@@ -160,17 +160,21 @@ function HistorySection() {
   if (isolate === "orb") {
     return (
       <div style={{ minHeight: 300, padding: 28, background: "#dde3d8" }}>
-        <div className="avatar-compact">
-          {params.has("prompt") ? <button className="avatar-prompt-bubble"><strong>Quick check-in</strong><span>What changed since your last update?</span></button> : null}
-          <span className="avatar-drag-surface" aria-hidden="true">•••</span>
-          <button className="avatar-hide" aria-label="Hide companion" title="Hide companion"><X size={13} /></button>
-          <button className="avatar-orb" aria-label={`Open ${MASCOT.name} companion`}>
-            <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
-            <span className="avatar-orb-state">{params.has("prompt") ? "Check in" : "Focused"}</span>
-            <span className="avatar-badge" />
-          </button>
-          <span className="avatar-day-time">3h 12m left</span>
-        </div>
+        <CompanionOrb
+          isolated
+          agent={params.has("prompt") ? "needs-input" : "idle"}
+          workday={params.has("prompt") ? "check-in-due" : "active"}
+          label={params.has("prompt") ? "Check in" : "Focused"}
+          prompt={params.has("prompt") ? { heading: "Quick check-in", compact: "What changed since your last update?" } : undefined}
+          showShiftTime
+          elapsedText="3h 12m left"
+          progressText="62% of shift complete"
+          showBadge={params.has("prompt")}
+          progressAvailable
+          fraction={0.62}
+          onOpen={() => undefined}
+          onHide={() => undefined}
+        />
       </div>
     );
   }

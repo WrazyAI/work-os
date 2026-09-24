@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto now gives one quick input-needed nudge, stays calmer while working, and renders more clearly in the floating companion.
+
 ## 0.3.56
 
 - Otto now repeats its quick alert motion for three five-second bursts, with a one-second pause between bursts.

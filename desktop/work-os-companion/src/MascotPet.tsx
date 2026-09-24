@@ -1,5 +1,5 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { MASCOT } from "./mascot";
+import { MASCOT, type MascotCrop } from "./mascot";
 import { deriveMascotVisualState, type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntimeSnapshot } from "./mascotRuntimeStore";
 import { cx } from "./chat/cx";
@@ -12,15 +12,16 @@ export interface MascotPetProps {
   className?: string;
   artClassName?: string;
   style?: CSSProperties;
+  crop?: MascotCrop;
   /** Labs opt out of the application runtime so each sample is independent. */
   isolated?: boolean;
   reducedMotion?: boolean;
   replayKey?: number;
 }
 
-/** All live full-size surfaces consume one resolved presentation per window.
+/** All live pet surfaces consume one resolved presentation per window.
  * The isolated path also keeps server rendering and fixture tests deterministic. */
-export function MascotPet({ agent = "idle", workday = "active", className, artClassName, style,
+export function MascotPet({ agent = "idle", workday = "active", className, artClassName, style, crop = "full",
   isolated = false, reducedMotion = false, replayKey = 0 }: MascotPetProps) {
   const snapshot = useMascotRuntimeSnapshot();
   const runtime = isolated ? null : snapshot;
@@ -47,7 +48,7 @@ export function MascotPet({ agent = "idle", workday = "active", className, artCl
     data-attention-cycle={attention.playing ? attention.cycle : undefined}
     data-attention={visual.attention ? "true" : "false"} data-transient={visual.transient ? "true" : "false"}
     aria-hidden="true" onPointerMove={updateGaze} onPointerLeave={resetGaze}>
-    <Pet key={runtime?.replay ?? replayKey} pose={visual.pose} tone={visual.tone} crop="full"
+    <Pet key={runtime?.replay ?? replayKey} pose={visual.pose} tone={visual.tone} crop={crop}
       className={cx("mascot-pet-art", artClassName)} style={style}
       ariaLabel={`${MASCOT.name}, ${MASCOT.role}, ${visual.label}`} />
   </span>;

@@ -30,7 +30,7 @@ import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import type { WorkSession } from "./types";
-import { MascotPet } from "./MascotPet";
+import { CompanionOrb } from "./CompanionOrb";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
@@ -1185,13 +1185,14 @@ export default function AvatarApp(): React.ReactElement {
     return (
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
-          <div className="avatar-compact">
-          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
-          <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
-            <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
-            <span className="avatar-orb-state">Connect</span>
-          </button>
-          </div>
+          <CompanionOrb
+            workday="disconnected"
+            label="Connect"
+            title="Connect Work OS from the main window"
+            ariaLabel={`${MASCOT.name}: Connect. Open companion to connect Work OS.`}
+            onOpen={() => void toggleExpanded(true)}
+            onHide={() => void invoke("hide_avatar").catch(() => undefined)}
+          />
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
@@ -1206,25 +1207,21 @@ export default function AvatarApp(): React.ReactElement {
   return (
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
-        <div className="avatar-compact">
-        {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
-        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
-        <button
-          className="avatar-orb"
-          onClick={() => void toggleExpanded(true)}
-          title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
-          aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
-        >
-          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
-          <span className="avatar-orb-state">{mascotVisual.label}</span>
-          {(showShiftTime || showBadge) && <span
-            className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
-            style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}
-            aria-hidden="true"
-          />}
-        </button>
-        {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
-        </div>
+        <CompanionOrb
+          agent={agentActivity}
+          workday={workdayState}
+          label={mascotVisual.label}
+          prompt={attentionDue ? { heading: contextualPrompt.heading, compact: contextualPrompt.compact } : undefined}
+          showShiftTime={showShiftTime}
+          elapsedText={elapsedText}
+          progressText={progressText}
+          showBadge={showBadge}
+          progressAvailable={progressAvailable}
+          fraction={fraction}
+          replayKey={snoozeReplayId}
+          onOpen={() => void toggleExpanded(true)}
+          onHide={() => void invoke("hide_avatar").catch(() => undefined)}
+        />
       )}
       {expanded && (
         <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">

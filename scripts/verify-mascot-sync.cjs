@@ -29,15 +29,21 @@ const fs = require('node:fs');
     await orb.locator('.avatar-pet .studio-otto').waitFor();
     const orbFigure = await orb.locator('.avatar-pet .studio-otto').boundingBox();
     assert(orbFigure.width >= 116 && orbFigure.height >= 130, JSON.stringify(orbFigure)); checks++;
+    assert.equal(await orb.locator('.avatar-pet .studio-otto').getAttribute('data-crop'), 'orb'); checks++;
     assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m left'); checks++;
+    await orb.waitForFunction(() => document.querySelector('.avatar-pet')?.getAttribute('data-attention-playing') === 'true');
     const orbMotion = await orb.locator('.studio-rig').evaluate(el => {
       const style = getComputedStyle(el);
-      return { name: style.animationName, timing: style.animationTimingFunction };
+      return { name: style.animationName, timing: style.animationTimingFunction, count: style.animationIterationCount };
     });
     assert(orbMotion.name.includes('studio-attention-rig'), JSON.stringify(orbMotion)); checks++;
     assert(orbMotion.timing.includes('steps(5'), JSON.stringify(orbMotion)); checks++;
-    const ringOffset = Number(await orb.locator('.ring-fill').getAttribute('stroke-dashoffset'));
-    assert(ringOffset > 0 && ringOffset < 138.2, String(ringOffset)); checks++;
+    assert.equal(orbMotion.count, '1', JSON.stringify(orbMotion)); checks++;
+    await orb.waitForFunction(() => document.querySelector('.avatar-pet')?.getAttribute('data-attention-playing') !== 'true');
+    await orb.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb');
+    await orb.locator('.avatar-badge-progress').waitFor();
+    const shiftProgress = await orb.locator('.avatar-badge-progress').evaluate(el => getComputedStyle(el).getPropertyValue('--shift-progress').trim());
+    assert.equal(shiftProgress, '62%'); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
     await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
@@ -51,7 +57,7 @@ const fs = require('node:fs');
     await debug.getByLabel('Mascot activity', { exact: true }).waitFor();
     await debug.waitForFunction(() => document.querySelector('.debug-mascot-controls')?.disabled === false, null, { timeout: 12000 });
     await avatar.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=recorded-completion');
-    await avatar.getByRole('button', { name: 'Minimize to orb', exact: true }).click();
+    await avatar.getByRole('button', { name: 'Collapse companion', exact: true }).click();
     await avatar.locator('.avatar-pet .studio-otto').waitFor();
     for (const [activity, pose] of [['idle','focus'],['working','think'],['needs-input','alert'],['ready','celebrate'],['blocked','recover']]) {
       await debug.getByLabel('Mascot activity', { exact: true }).selectOption(activity);
