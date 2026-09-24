@@ -12,8 +12,9 @@ No agent, approval, receipt, notification timer, or attendance logic changes.
 `StudioOtto.tsx` is the actual SVG renderer, not a raster concept sheet. `MASCOT`
 selects it for both pet and mark. The component imports its own scoped styles,
 so every entrypoint that imports it gets the same artwork. The pet wrapper
-sets `data-motion="renderer"` to prevent the old generic wrapper animations
-from doubling the new rig's motions. Existing production sizes are preserved.
+sets `data-motion="renderer"` to prevent generic wrapper animations from
+doubling the rig. The floating companion requests the dedicated `orb` crop,
+which keeps Otto's silhouette while dropping details that disappear at small sizes.
 
 The design is a vector interpretation of the approved 3D concept, not a 3D
 model or a Rive asset. No new production dependency or network request is added.
@@ -26,18 +27,19 @@ model or a Rive asset. No new production dependency or network request is added.
 | think | Yellow terminal prompt, dots, workpad | Small typing gesture |
 | alert | Yellow question glyph | One hand raise, then a static wait |
 | celebrate | Green expression and check | One nod and acknowledgement |
-| recover | Coral-red error glyph | Settled head tilt, no shaking |
+| recover | Coral-red error glyph | One short recoil, then a settled head tilt |
 | sleep / rest | White dimmed eyes | Static relaxed posture |
 
-Color is never the only cue. `tone=late` remains a red clock on the full pet;
+Color is never the only cue. `tone=late` remains a red clock on full/orb pets;
 work/input stays yellow and completion stays green even while late. An idle
-late state retains the previous red-attention convention. Compact marks omit
-limbs, pads, shadows, clock badges, texture and blur filters and never animate.
+late state retains the previous red-attention convention. Head marks omit limbs,
+pads, shadows, clock badges, texture and blur filters and never animate. The orb
+crop keeps the body but drops the workpad, vents, texture and phosphor blur.
 
 Intentional design-blueprint deviations approved by the user: yellow means
 agent work/input and green means actual completion, rather than using green
-for all agent activity. The character has a restrained blink/typing loop;
-page/dashboard surfaces are not animated. Hardware stays ivory throughout.
+for all agent activity. The character has a restrained blink/typing loop; the body stays planted while
+work is in flight, and attention/success/error gestures are one-shot. Hardware stays ivory throughout.
 
 ## Preview and exports
 
