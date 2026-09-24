@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.56
+
 - Otto now repeats its quick alert motion for three five-second bursts, with a one-second pause between bursts.
 
 ## 0.3.55
