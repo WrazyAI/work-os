@@ -31,7 +31,10 @@ describe("companion artwork", () => {
     const main = readFileSync(resolve(root, "src/main.tsx"), "utf8");
     expect(main).toContain('import "./styles.css"');
     expect(main).toContain('import "./workspace-redesign.css"');
-    expect(main).toContain('import "./otto.css"');
+    expect(main).not.toContain('import "./otto.css"');
+    expect(main).not.toContain('import "./signal-spirit.css"');
+    expect(readFileSync(resolve(root, "src/Otto.tsx"), "utf8")).toContain('import "./otto.css"');
+    expect(readFileSync(resolve(root, "src/SignalSpirit.tsx"), "utf8")).toContain('import "./signal-spirit.css"');
     expect(readFileSync(resolve(root, "src/App.tsx"), "utf8")).toContain('import "./plan-insights.css"');
     expect(readFileSync(resolve(root, "src/workspace-redesign.css"), "utf8")).toContain(".workspace");
   });
@@ -42,6 +45,7 @@ describe("companion artwork", () => {
 
   it("keeps the compact mascot free of a halo and repeats the shared alert pose", () => {
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    const orb = readFileSync(resolve(root, "src/CompanionOrb.tsx"), "utf8");
     const pet = readFileSync(resolve(root, "src/MascotPet.tsx"), "utf8");
     const avatarCss = readFileSync(resolve(root, "src/avatar.css"), "utf8");
     const conversationCss = readFileSync(resolve(root, "src/chat/conversation.css"), "utf8");
@@ -52,17 +56,19 @@ describe("companion artwork", () => {
     expect(avatarCss).not.toContain(".avatar-orb::before");
     expect(conversationCss).toMatch(/\.avatar-orb\s*\{[^}]*background:\s*transparent/s);
     expect(avatar).toContain('const showBadge = mascotVisual.pose === "alert"');
-    expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
-    expect(avatar).toContain('className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress"');
-    expect(avatar).toContain("style={showShiftTime && !showBadge && progressAvailable");
+    expect(avatar).toContain("<CompanionOrb");
+    expect(orb).toContain('crop="orb"');
+    expect(orb).toContain('showBadge');
+    expect(orb).toContain('avatar-badge-progress');
+    expect(orb).toContain('"--shift-progress"');
     expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
     expect(avatar).toContain("chat.some((entry) => hasPendingMascotApproval");
-    expect(avatarCss).toMatch(/animation: avatarAttention 550ms cubic-bezier\(0\.2, 0\.8, 0\.2, 1\) infinite;/);
-    expect(avatarCss).toContain('.avatar-orb:has(.mascot-pet[data-attention-playing="true"]) { animation: none; }');
-    expect(studioCss).toMatch(/studio-attention-rig 520ms steps\(5, end\) infinite;/);
-    expect(studioCss).toMatch(/studio-attention-head 520ms steps\(5, end\) infinite;/);
-    expect(studioCss).toMatch(/studio-attention-wave 520ms steps\(5, end\) infinite;/);
+    expect(avatarCss).not.toContain("avatarAttention");
+    expect(studioCss).toMatch(/studio-attention-rig 780ms steps\(5, end\) 1 both;/);
+    expect(studioCss).toMatch(/studio-attention-head 780ms steps\(5, end\) 1 both;/);
+    expect(studioCss).toMatch(/studio-attention-wave 780ms steps\(5, end\) 1 both;/);
+    expect(studioCss).not.toMatch(/studio-work-rig 600ms/);
   });
 });
 
@@ -111,7 +117,9 @@ describe("floating companion integration", () => {
     expect(rustShell).toMatch(/fn show_avatar[\s\S]*sync_companion_item/);
     expect(rustShell).toContain('"companion"');
     expect(avatar).toContain('invoke("hide_avatar")');
-    expect(avatar).toContain("avatar-hide");
+    const companionOrb = readFileSync(resolve(root, "src/CompanionOrb.tsx"), "utf8");
+    expect(companionOrb).toContain("avatar-hide");
+    expect(companionOrb).toContain('crop="orb"');
     expect(avatar).toContain("avatar-head-actions");
     expect(avatar.match(/aria-label="Collapse companion"/g)).toHaveLength(2);
     expect(avatar).toContain('title="Collapse companion"');
