@@ -19,7 +19,7 @@ export interface MascotPetProps {
   replayKey?: number;
 }
 
-/** All live full-size surfaces consume one resolved presentation per window.
+/** All live pet surfaces consume one resolved presentation per window.
  * The isolated path also keeps server rendering and fixture tests deterministic. */
 export function MascotPet({ agent = "idle", workday = "active", className, artClassName, style, crop = "full",
   isolated = false, reducedMotion = false, replayKey = 0 }: MascotPetProps) {
