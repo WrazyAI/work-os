@@ -48,7 +48,8 @@ function TerminalFace({ pose }: { pose: MascotPose }) {
 
 /** Approved Studio Otto: large retro monitor, compact ivory chassis.
  * Local SVG renderer; no network, random values, timers, or animation runtime.
- * Full/orb/head crops share identity. Orb keeps the full silhouette while\n * dropping small-detail props and filters that do not survive compact sizing. */
+ * Full/orb/head crops share identity. Orb keeps the full silhouette while
+ * dropping small-detail props and filters that do not survive compact sizing. */
 export function StudioOtto({
   pose = "idle", tone = "signal", crop = "full", className = "", style, ariaLabel,
 }: MascotRendererProps) {
@@ -123,7 +124,9 @@ export function StudioOtto({
         </g>}
         <path d="M60 109Q80 106 99 109Q109 115 111 137Q113 153 101 158Q81 164 58 157Q48 154 49 140Q50 117 60 109Z" fill={fill("shell")} stroke="#abb0a6" strokeWidth=".8" />
         <path d="M61 115Q79 112 99 115" stroke="#fffef7" strokeWidth="1.3" fill="none" />
-        {detailed && <g className="studio-vents" stroke="#46504f" strokeWidth="2.5" strokeLinecap="round">\n          <path d="M62 127h17m-17 5h17m-17 5h17" />\n        </g>}
+        {detailed && <g className="studio-vents" stroke="#46504f" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M62 127h17m-17 5h17m-17 5h17" />
+        </g>}
         <circle cx="95" cy="130" r="7" fill={fill("metal")} />
         <circle className="studio-power" cx="95" cy="130" r="4.5" fill="var(--studio-phosphor)" />
         <path d="M57 150Q81 157 103 151" stroke="#a1a89e" strokeWidth=".8" fill="none" opacity=".5" />
@@ -158,7 +161,8 @@ export function StudioOtto({
             </g>
           </g>
         </g>
-        <path className="studio-screen-spill" d="M47 31Q80 26 113 31Q127 33 127 49L127 85Q127 100 113 102Q80 107 47 102Q32 100 32 85V49Q32 33 47 31Z" fill="none" stroke="var(--studio-accent)" strokeWidth="1.2" opacity=".16" />\n        <path d="M48 103Q80 108 113 103" stroke="#fffef6" strokeWidth="1.3" fill="none" opacity=".8" />
+        <path className="studio-screen-spill" d="M47 31Q80 26 113 31Q127 33 127 49L127 85Q127 100 113 102Q80 107 47 102Q32 100 32 85V49Q32 33 47 31Z" fill="none" stroke="var(--studio-accent)" strokeWidth="1.2" opacity=".16" />
+        <path d="M48 103Q80 108 113 103" stroke="#fffef6" strokeWidth="1.3" fill="none" opacity=".8" />
       </g>
 
       {detailed && working && <g className="studio-taskpad">
