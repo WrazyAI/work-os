@@ -448,7 +448,7 @@ region. The sheet closes on Escape and returns focus to the launcher.
 The floating companion uses the same white window border/header treatment and
 the same composer anatomy. The window remains inside the viewport, grows the
 composer with the draft, and uses detached menus that cannot be clipped by a
-scroll region. Minimize-to-orb and hide-window remain distinct and truthfully
+scroll region. Collapse-to-companion and hide-window remain distinct and truthfully
 named.
 
 Both chat surfaces use the configured mascot head crop through
