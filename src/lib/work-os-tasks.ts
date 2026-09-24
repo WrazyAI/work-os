@@ -290,7 +290,7 @@ async function listPersonWorkspaceTaskPage(
 ) {
   const completed = opts.completed === "true" ? true : opts.completed === "false" ? false : null;
   const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
-  const result = await db().rpc("work_list_person_tasks_sorted", {
+  const data = await ensureNoError(db().rpc("work_list_person_tasks_sorted", {
     p_user_id: userId,
     p_person_id: personId,
     p_nifty_member_id: niftyMemberId ?? null,
@@ -300,9 +300,8 @@ async function listPersonWorkspaceTaskPage(
     p_sort_date: sortDate,
     p_offset: opts.offset ?? 0,
     p_limit: opts.limit ?? 100,
-  });
-  if (result.error) throw new Error(`load sorted task history: ${result.error.message}`);
-  return (result.data ?? []) as Record<string, any>[];
+  }), "load sorted task history");
+  return (data ?? []) as Record<string, any>[];
 }
 
 /** Load all task provenance paths attributable to one person, then globally sort and page them. */

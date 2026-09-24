@@ -599,6 +599,8 @@ assert.match(app, /className="tasks-column-sort"/);
 assert.match(app, /taskSort=\{taskWorkspaceSort\}/);
 assert.match(app, /onTaskSort=\{setTaskWorkspaceSort\}/);
 assert.match(app, /const completedHistoryQuery = useTaskHistoryQuery/);
+assert.match(app, /enabled: signedIn && !syncBypass && view === "tasks" && taskView === "all" && !!visibleDay\?\.shiftDate/);
+assert.match(app, /enabled: signedIn && !syncBypass && view === "tasks" && taskView === "completed" && !!visibleDay\?\.shiftDate/);
 assert.match(app, /completedOnly: true/);
 assert.match(app, /completedHistory=\{completedTaskHistory\}/);
 assert.match(app, /const activeTaskHistoryQuery = view === "tasks" && taskView === "completed"/);

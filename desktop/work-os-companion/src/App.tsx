@@ -612,13 +612,13 @@ export default function App() {
     enabled: signedIn && !syncBypass,
   });
   const workspaceHistoryQuery = useTaskHistoryQuery({
-    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "all",
+    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "all" && !!visibleDay?.shiftDate,
     workspace: true,
     sort: taskWorkspaceSort,
     currentDate: visibleDay?.shiftDate ?? "",
   });
   const completedHistoryQuery = useTaskHistoryQuery({
-    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "completed",
+    enabled: signedIn && !syncBypass && view === "tasks" && taskView === "completed" && !!visibleDay?.shiftDate,
     workspace: true,
     sort: taskWorkspaceSort,
     currentDate: visibleDay?.shiftDate ?? "",

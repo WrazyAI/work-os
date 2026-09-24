@@ -25,6 +25,7 @@ function missingWorkOsSchema(message: string) {
   return (
     /relation "work_[^"]+" does not exist/i.test(message) ||
     /Could not find the table 'public\.work_/i.test(message) ||
+    /function\s+(?:(?:"?public"?)\.)?"?work_[a-z0-9_]+"?\s*\([^)]*\)\s+does not exist/i.test(message) ||
     /schema cache/i.test(message) && /work_/i.test(message)
   );
 }
