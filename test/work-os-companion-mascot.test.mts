@@ -49,14 +49,14 @@ assert.match(state, /agent === "ready"/);
 const mascotTypes = read("mascotTypes.ts");
 assert.match(mascotTypes, /export type MascotCrop = "full" \| "head"/);
 const spirit = read("StudioOtto.tsx");
-assert.match(spirit, /head: "9 10 142 110"/);
+assert.match(spirit, /orb: "10 8 140 168"/);\nassert.match(spirit, /head: "9 10 142 110"/);
 assert.match(spirit, /data-pose=\{pose\}/);
 assert.match(spirit, /data-tone=\{tone\}/);
 assert.match(spirit, /studio-chassis/);
 assert.match(spirit, /studio-head/);
 assert.match(spirit, /studio-terminal-working/);
 const studioMotion = read("studio-otto.css");
-assert.match(studioMotion, /studio-work-rig/);
+assert.doesNotMatch(studioMotion, /studio-work-rig 600ms/, "working should not loop the whole body");\nassert.match(studioMotion, /studio-type-stop/);
 assert.match(studioMotion, /studio-attention-rig/);
 assert.match(studioMotion, /studio-celebrate-rig/);
 assert.match(studioMotion, /studio-recover-rig/);
@@ -90,7 +90,11 @@ assert.match(lab, /MASCOT\.Mark pose=\{MASCOT\.idlePose\}/);
 assert.doesNotMatch(lab, /<Otto pose="idle" style=\{\{ width: size/);
 
 const avatar = read("AvatarApp.tsx");
-assert.match(avatar, /import \{ MascotPet \} from "\.\/MascotPet"/);
+const companionOrb = read("CompanionOrb.tsx");
+assert.match(avatar, /import \{ CompanionOrb \} from "\.\/CompanionOrb"/);
+assert.match(avatar, /<CompanionOrb/);
+assert.match(companionOrb, /import \{ MascotPet \} from "\.\/MascotPet"/);
+assert.match(companionOrb, /crop="orb"/);
 assert.match(avatar, /useMascotRuntime/);
 assert.match(avatar, /agentActivity/);
 assert.match(avatar, /workdayState/);
@@ -105,6 +109,7 @@ for (const [name, source] of Object.entries({
   "MascotPet.tsx": mascotPet,
   "App.tsx": app,
   "AvatarApp.tsx": avatar,
+  "CompanionOrb.tsx": companionOrb,
 })) {
   for (const asset of ["work-os-companion.png", "work-os-mark.svg"]) {
     assert.ok(!source.includes(asset), `${name} hardcodes mascot asset ${asset}; route it through mascot.ts`);
