@@ -4,7 +4,7 @@ export const MASCOT_POSES = ["idle", "sleep", "focus", "alert", "rest", "think",
 
 export type MascotPose = (typeof MASCOT_POSES)[number];
 export type MascotTone = "signal" | "late";
-export type MascotCrop = "full" | "head";
+export type MascotCrop = "full" | "orb" | "head";
 
 export interface MascotRendererProps {
   pose?: MascotPose;
