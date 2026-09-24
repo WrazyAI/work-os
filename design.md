@@ -571,10 +571,11 @@ approximately .985 press scale. No ambient loops, bouncing, overshoot, or
 theatrical dashboard animation.
 
 The floating companion starts a bounded three-play attention sequence when an
-actionable prompt needs input: five seconds of movement, one second still, then
-repeat twice. A snoozed prompt replays the same sequence when it returns. The
-mascot then stays still in its alert pose until the employee responds. Never
-loop continuously, and remove attention motion under reduced-motion preferences.
+actionable prompt needs input: repeat the familiar quick movement during each
+five-second active window, hold still for one second, then repeat twice. A
+snoozed prompt replays the same sequence when it returns. The mascot then stays
+still in its alert pose until the employee responds. Never loop continuously,
+and remove attention motion under reduced-motion preferences.
 
 Respect prefers-reduced-motion. Remove transforms, shimmer, and nonessential
 animation while preserving state, labels, and final geometry.
@@ -639,10 +640,11 @@ The companion's accessible name gives the numeric percentage. The marker
 describes time only, never productivity or quality.
 
 When an actionable update needs the employee's input, use the shared `alert`
-pose rather than checking for one prompt kind. Play one five-second attention
-gesture, rest for one second, and repeat twice; then return to the still alert
-pose until the employee responds. Never loop continuously, and remove all
-attention motion under reduced-motion preferences.
+pose rather than checking for one prompt kind. Repeat the familiar quick
+attention gesture during a five-second active window, rest for one second, and
+repeat twice; then return to the still alert pose until the employee responds.
+Never loop continuously, and remove all attention motion under reduced-motion
+preferences.
 
 Art uses the existing ink/paper/signal palette and never becomes a generic stock
 illustration. Do not create a new raster asset where the configured original

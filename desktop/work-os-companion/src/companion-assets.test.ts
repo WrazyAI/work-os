@@ -58,9 +58,11 @@ describe("companion artwork", () => {
     expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
     expect(avatar).toContain("chat.some((entry) => hasPendingMascotApproval");
-    expect(avatarCss).toContain("animation: avatarAttention 5s");
+    expect(avatarCss).toMatch(/animation: avatarAttention 550ms cubic-bezier\(0\.2, 0\.8, 0\.2, 1\) infinite;/);
     expect(avatarCss).toContain('.avatar-orb:has(.mascot-pet[data-attention-playing="true"]) { animation: none; }');
-    expect(studioCss).toContain("studio-attention-rig 5s steps(5, end) 1 both");
+    expect(studioCss).toMatch(/studio-attention-rig 520ms steps\(5, end\) infinite;/);
+    expect(studioCss).toMatch(/studio-attention-head 520ms steps\(5, end\) infinite;/);
+    expect(studioCss).toMatch(/studio-attention-wave 520ms steps\(5, end\) infinite;/);
   });
 });
 

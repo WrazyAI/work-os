@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto now repeats its quick alert motion for three five-second bursts, with a one-second pause between bursts.
+
 ## 0.3.55
 
 - The Windows Companion now controls Worktivity clock in/out and pause/resume, restarting an app it cannot control and waiting for provider confirmation.
