@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
+import { workOsKeys } from "./queryClient";
+import type { ActivityInterval } from "./types";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -184,10 +187,42 @@ function HistorySection() {
   );
 }
 
+/** Deterministic recap so the Focus tab's embedded interval stream renders
+ * without a backend in the preview and TestSprite fixtures. */
+const PREVIEW_INTERVALS: ActivityInterval[] = [{
+  id: "preview-interval-1",
+  windowStart: "2026-09-28T14:17:00.000Z",
+  windowEnd: "2026-09-28T15:17:00.000Z",
+  label: "2:17–3:17 PM",
+  promptKind: "hourly_fallback",
+  generationStatus: "ready",
+  reviewStatus: "inferred",
+  headline: "Implementation and verification in the Work OS codebase",
+  detail: "Worked in VS Code with terminal verification, then inspected the companion UI in the browser.",
+  employeeFeedback: null,
+  failureReason: null,
+  generatedAt: "2026-09-28T15:18:00.000Z",
+  reviewedAt: null,
+  evidenceExpired: false,
+  evidenceCount: 2,
+  evidence: [
+    { summaryId: "preview-frame-1", capturedAt: "2026-09-28T14:20:00.000Z", visibleApp: "VS Code", frameSummary: "Editing the focus stream.", usedInModel: true, rawImageShown: true, selectionReason: "first+raw", retained: true },
+    { summaryId: "preview-frame-2", capturedAt: "2026-09-28T15:10:00.000Z", visibleApp: "Google Chrome", frameSummary: "Checking the companion Tasks tab.", usedInModel: true, rawImageShown: false, selectionReason: "last", retained: true },
+  ],
+}];
+
 function InAppSection() {
   const params = new URLSearchParams(window.location.search);
   const focusParam = params.get("focus");
   const empty = params.has("empty");
+  const activityDate = focusParam ? "2026-09-28" : null;
+  // Seed before the stream mounts so its first render reads the fixture instead
+  // of racing a real (unauthenticated) fetch into the error state.
+  const fixtureClient = useMemo(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    if (activityDate) client.setQueryData(workOsKeys.activityIntervals(activityDate), { date: activityDate, intervals: PREVIEW_INTERVALS }, { updatedAt: Date.now() });
+    return client;
+  }, [activityDate]);
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(() => !params.has("collapsed"));
   const [panel, setPanel] = useState<"update" | "goal">(focusParam ? "goal" : "update");
@@ -224,6 +259,7 @@ function InAppSection() {
     kind: "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
   } | null>(null);
   return (
+    <QueryClientProvider client={fixtureClient}>
     <section aria-label="In-app composer preview" style={{ display: "grid", gap: 12 }}>
       <h2 style={{ margin: 0, fontSize: 14 }}>In-app launcher</h2>
       {/* Stand-in for the page content that remains in normal flow while the
@@ -248,6 +284,8 @@ function InAppSection() {
         goalProvenance="employee"
         goalSuggestion={goalSuggestion}
         saveState="saved"
+        activityDate={activityDate}
+        activityTimezone="UTC"
         onInput={setInput}
         onOpen={() => {
           setPanel("update");
@@ -290,6 +328,7 @@ function InAppSection() {
         loomEnabled={false}
       />
     </section>
+    </QueryClientProvider>
   );
 }
 

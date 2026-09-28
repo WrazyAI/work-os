@@ -465,6 +465,12 @@ existing goal only changes its wording and never creates tasks or subtasks.
 The card keeps the provenance and save-state line, with an inline retry when a
 save is queued offline or conflicted.
 
+Beneath the goal, the Focus tab carries the same Recent activity interval
+stream as the floating Tasks tab — recaps newest first, each with its evidence
+disclosure and confirm/amend actions — so the day's goal and its interval
+check-ins read as one record. The stream is separated by a hairline and scrolls
+with the rest of the sheet.
+
 ### 7.3 Floating Otter chat
 
 The floating companion uses the same white window border/header treatment and
@@ -605,7 +611,10 @@ The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance
 chip (`Not reviewed`, `Confirmed`, `Updated by you`), a concise headline, the
 detail, and a collapsed `Evidence · N screenshots` disclosure showing the exact
-analyzed frames with capture time and neutral frame summary. Expired images say
+analyzed frames with capture time and neutral frame summary. The floating
+stream's header carries a dark `View in app` action on the right that opens the
+dock's Focus tab in the main window, where the same stream sits beneath the
+daily goal. Expired images say
 so honestly without deleting the recap; there are no charts, scores, or hours
 totals. The prompt turn offers `Looks right` and `Add or correct`, never a
 mutation of anything other than the recap.

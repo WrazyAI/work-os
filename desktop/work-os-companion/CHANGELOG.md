@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The Focus tab now lists your interval check-ins beneath the daily goal, with the screenshots behind each one.
+- The floating Tasks tab's Recent activity header has a View in app button that opens the Focus tab in the main window.
+
 ## 0.3.58
 
 - The Focus panel now shows your goal as a card with an edit button once it is set, and saves only when you press Apply.

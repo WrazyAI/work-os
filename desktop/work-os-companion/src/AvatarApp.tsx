@@ -675,6 +675,14 @@ export default function AvatarApp(): React.ReactElement {
     await toggleExpanded(false);
   }, [toggleExpanded]);
 
+  // "View in app" on the Recent activity header opens the dock's Focus tab,
+  // where the same recaps live beneath the daily goal.
+  const openFocusInApp = useCallback(async (): Promise<void> => {
+    void emit("work-os://avatar-open-focus");
+    await invoke("focus_main").catch(() => undefined);
+    await toggleExpanded(false);
+  }, [toggleExpanded]);
+
   const navigateToPage = useCallback(async (page: NavigatePage): Promise<void> => {
     void emit("work-os://avatar-navigate", { view: page });
     await invoke("focus_main").catch(() => undefined);
@@ -1343,6 +1351,7 @@ export default function AvatarApp(): React.ReactElement {
               onDecide={decideActivityPrompt}
               decidingId={decidingIntervalId}
               pollMs={DAY_POLL_MS}
+              onViewInApp={() => void openFocusInApp()}
             />
             <TaskSelectionCard
               title="Open tasks"

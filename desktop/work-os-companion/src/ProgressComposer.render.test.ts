@@ -1,8 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { ProgressComposer } from "./App";
+import { workOsKeys } from "./queryClient";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
+import type { ActivityInterval } from "./types";
 
 const operations: ProposedOperation[] = [
   { op: "complete_task", statement: "Done.", taskId: "t-1", taskTitle: "T", proposalId: "p-1", enabled: false },
@@ -180,5 +183,40 @@ describe("ProgressComposer focus panel goal card", () => {
     }));
     expect(markup).toContain("Retry saving the goal");
     expect(markup).toContain("Queued offline");
+  });
+
+  it("lists interval check-ins beneath the goal card when a date is available", () => {
+    const interval: ActivityInterval = {
+      id: "preview-interval-1",
+      windowStart: "2026-09-28T14:17:00.000Z",
+      windowEnd: "2026-09-28T15:17:00.000Z",
+      label: "2:17–3:17 PM",
+      promptKind: "hourly_fallback",
+      generationStatus: "ready",
+      reviewStatus: "inferred",
+      headline: "Implementation and verification in the Work OS codebase",
+      detail: "Worked in VS Code with terminal verification.",
+      employeeFeedback: null,
+      failureReason: null,
+      generatedAt: "2026-09-28T15:18:00.000Z",
+      reviewedAt: null,
+      evidenceExpired: false,
+      evidenceCount: 0,
+      evidence: [],
+    };
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), { date: "2026-09-28", intervals: [interval] });
+    const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+      createElement(ProgressComposer, {
+        ...focusBase,
+        goal: "Ship the focus card.",
+        activityDate: "2026-09-28",
+        activityTimezone: "UTC",
+      }),
+    ));
+    expect(markup).toContain("Ship the focus card.");
+    expect(markup).toContain("Recent activity");
+    expect(markup).toContain("Implementation and verification in the Work OS codebase");
+    expect(markup.indexOf("Ship the focus card.")).toBeLessThan(markup.indexOf("Recent activity"));
   });
 });

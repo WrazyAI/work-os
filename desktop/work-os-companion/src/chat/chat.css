@@ -970,6 +970,40 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.chat-activity-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 11px;
+  background: var(--color-ink, #182018);
+  color: var(--color-white, #ffffff);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, transform 120ms ease;
+}
+.chat-activity-view:hover { background: #2b362b; }
+.chat-activity-view:active { transform: translateY(1px) scale(0.985); }
+.chat-activity-view:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 2px;
+}
+.chat-activity-error {
+  margin: 0;
+  border: 1px solid #eec0b8;
+  border-radius: 10px;
+  padding: 6px 9px;
+  background: #fbe7e3;
+  color: #a0372b;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
 .chat-activity-list { display: grid; gap: var(--chat-space-2, 8px); }
 .chat-activity-card {
   display: grid;

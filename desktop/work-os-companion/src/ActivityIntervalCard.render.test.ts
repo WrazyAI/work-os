@@ -142,4 +142,30 @@ describe("ActivityIntervalList", () => {
     ));
     expect(empty).toContain("No activity recaps yet.");
   });
+
+  it("shows the View in app action only when the surface provides a handler", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), { date: "2026-09-28", intervals: [baseInterval] });
+    const withHandler = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+      createElement(ActivityIntervalList, {
+        date: "2026-09-28",
+        enabled: true,
+        timezone: "UTC",
+        onDecide: async () => undefined,
+        decidingId: null,
+        onViewInApp: () => undefined,
+      }),
+    ));
+    expect(withHandler).toContain("View in app");
+    const withoutHandler = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+      createElement(ActivityIntervalList, {
+        date: "2026-09-28",
+        enabled: true,
+        timezone: "UTC",
+        onDecide: async () => undefined,
+        decidingId: null,
+      }),
+    ));
+    expect(withoutHandler).not.toContain("View in app");
+  });
 });

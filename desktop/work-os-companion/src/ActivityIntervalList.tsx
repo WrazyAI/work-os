@@ -1,11 +1,14 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
-import { useActivityIntervalsQuery } from "./workOsQueries";
+import { decideActivityIntervalReview, useActivityIntervalsQuery } from "./workOsQueries";
+import { workOsKeys } from "./queryClient";
 import type { PreviewResolver } from "./ScreenshotGallery";
 
 /** The Tasks tab's Recent activity stream: Activity Interval Reviews newest
  * first, oldest last, each able to reveal the exact frames it was built from.
  * Reads its own cached query so a new recap appears without reopening the tab. */
-export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc }: {
+export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc, onViewInApp }: {
   date: string | null;
   enabled: boolean;
   timezone?: string | null;
@@ -13,6 +16,8 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
   decidingId: string | null;
   pollMs?: number;
   resolveSrc?: PreviewResolver;
+  /** Floating companion only: jump to the Focus tab in the main window. */
+  onViewInApp?: () => void;
 }) {
   const query = useActivityIntervalsQuery({ enabled, date, pollMs });
   const intervals = query.data?.intervals ?? [];
@@ -22,6 +27,7 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
       <header className="chat-activity-stream-head">
         <span className="chat-activity-eyebrow">Recent activity</span>
         {intervals.length > 0 ? <span className="chat-activity-count">{intervals.length}</span> : null}
+        {onViewInApp ? <button type="button" className="chat-activity-view" onClick={onViewInApp}>View in app</button> : null}
       </header>
       {!date || query.isPending ? (
         <div className="chat-activity-skeletons" aria-hidden="true">
@@ -55,4 +61,34 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
       )}
     </section>
   );
+}
+
+/** Self-contained stream for the in-app Focus tab: owns its decision calls and
+ * cache invalidation so the dock can embed the same list without App-level
+ * wiring. Renders only while a workday date is available. */
+export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs }: {
+  date: string | null;
+  enabled?: boolean;
+  timezone?: string | null;
+  pollMs?: number;
+}) {
+  const queryClient = useQueryClient();
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const decide = async (id: string, action: "confirm" | "amend", feedback?: string) => {
+    setDecidingId(id);
+    setError(null);
+    try {
+      await decideActivityIntervalReview(id, action, feedback);
+      await queryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(date ?? "none") });
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "The recap decision could not be saved.");
+    } finally {
+      setDecidingId(null);
+    }
+  };
+  return <>
+    {error ? <p className="chat-activity-error" role="alert">{error}</p> : null}
+    <ActivityIntervalList date={date} enabled={enabled} timezone={timezone} onDecide={decide} decidingId={decidingId} pollMs={pollMs} />
+  </>;
 }
