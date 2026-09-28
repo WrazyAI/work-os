@@ -31,7 +31,7 @@ describe("ProgressComposer post-approve state", () => {
       toolContext: { shiftDate: null, personId: null, promptKind: "optional" },
       aiUnavailable: null,
       onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
-      onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+      onClassify: noop, onApplyGoal: noop,
     }));
     expect(markup).toContain("Action results");
     expect(markup).toContain("Pending tasks");
@@ -63,7 +63,7 @@ describe("ProgressComposer post-approve state", () => {
       toolContext: { shiftDate: null, personId: null, promptKind: "optional" },
       aiUnavailable: null,
       onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
-      onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+      onClassify: noop, onApplyGoal: noop,
     }));
     expect((markup.match(/chat-task-card/g) ?? []).length).toBe(1);
   });
@@ -75,7 +75,7 @@ describe("ProgressComposer simplified chrome", () => {
     displayName: "David Zahemen",
     busy: false, required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
     onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
-    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+    onClassify: noop, onApplyGoal: noop,
   };
 
   it("offers one new-chat action and no intent strip for a plain update", () => {
@@ -133,5 +133,52 @@ describe("ProgressComposer simplified chrome", () => {
       interpretation: { status: "ready", operations: [], taskOptions: [], reply: "I'm your Work OS assistant." },
     }));
     expect(markup.match(/I&#x27;m your Work OS assistant\./g)?.length ?? 0).toBe(1);
+  });
+});
+
+describe("ProgressComposer focus panel goal card", () => {
+  const focusBase = {
+    input: "", open: true, panel: "goal" as const, pending: "", receipt: null, history: [],
+    busy: false, required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
+    onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
+    onClassify: noop, onApplyGoal: noop,
+  };
+
+  it("shows the editor with an explicit Apply goal when no goal is set", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase }));
+    expect(markup).toContain("daily-focus-input");
+    expect(markup).toContain("Apply goal");
+    expect(markup).not.toContain("goal-card");
+    expect(markup).not.toContain(">Apply<");
+  });
+
+  it("shows a goal card with a pen instead of the editor once a goal is set", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase, goal: "Ship the focus card." }));
+    expect(markup).toContain("goal-card");
+    expect(markup).toContain("Edit today’s focus");
+    expect(markup).toContain("Ship the focus card.");
+    expect(markup).not.toContain("daily-focus-input");
+    expect(markup).not.toContain("Apply goal");
+  });
+
+  it("keeps the task suggestion in the empty editor and hides it once a goal exists", () => {
+    const suggestion = { text: "From today's tasks: ship the focus card.", taskIds: ["preview-task-1"] };
+    const empty = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase, goalSuggestion: suggestion }));
+    expect(empty).toContain("Suggested from today’s tasks");
+    expect(empty).toContain("Use suggestion");
+    expect(empty).toContain("Apply goal");
+    const set = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase, goal: "Ship the focus card.", goalSuggestion: suggestion }));
+    expect(set).not.toContain("Suggested from today’s tasks");
+  });
+
+  it("offers an inline retry when the goal save is offline or conflicted", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, {
+      ...focusBase,
+      goal: "Ship the focus card.",
+      saveState: "offline" as const,
+      onRetryGoalSave: noop,
+    }));
+    expect(markup).toContain("Retry saving the goal");
+    expect(markup).toContain("Queued offline");
   });
 });

@@ -2368,6 +2368,94 @@ body {
   margin: 0;
 }
 
+/* A saved goal reads as a card with one edit affordance; the editor only
+   appears when there is no goal or the employee chose to change it. */
+.goal-card {
+  position: relative;
+  border: 1px solid #d4dacd;
+  border-radius: 11px;
+  background: #fff;
+  padding: 13px 40px 13px 13px;
+}
+
+.goal-card-edit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.goal-card-edit:hover {
+  background: var(--hover, rgba(24, 32, 24, 0.055));
+  color: var(--ink);
+}
+
+.goal-card-edit:focus-visible,
+.goal-editor-actions button:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+}
+
+.goal-card-text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.goal-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.goal-editor-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 9px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.goal-editor-actions button.primary {
+  border: 1px solid transparent;
+  background: var(--signal, #a8f15b);
+  color: var(--ink);
+}
+
+.goal-editor-actions button.primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.goal-editor-actions button.secondary {
+  border: 1px solid #d4dacd;
+  background: #fff;
+  color: var(--muted);
+}
+
+.goal-editor-actions button.secondary:hover {
+  color: var(--ink);
+}
+
 .progress-message,
 .progress-welcome {
   display: flex;

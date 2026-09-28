@@ -106,6 +106,7 @@ export function PlanningSession({
   onInterpret,
   onRefine,
   onConfirm,
+  seedInput,
   loomEnabled = false,
   onLoomPreview,
   lateReasonRequired = false,
@@ -119,6 +120,9 @@ export function PlanningSession({
   onInterpret: (input: string, loom?: { url: string; transcript?: string }) => Promise<PlanningInterpretation>;
   onRefine: (input: string, draft: PlanningInterpretation, annotations: PlanAnnotation[], edits: PlanDraftEdit[]) => Promise<PlanningInterpretation>;
   onConfirm: (input: string, interpretation: PlanningInterpretation | null, clarificationAnswers: Record<string, string>) => Promise<"confirmed" | "saved" | "queued" | "conflict" | "failed" | "rebuild">;
+  /** Goal text handed off from the dock Focus panel. Takes precedence over the
+   * saved plan when the modal opens, so Apply lands on the same intent. */
+  seedInput?: string;
   /** True while this workday started 30+ minutes late with no recorded reason. */
   lateReasonRequired?: boolean;
   onSaveLateReason?: (reason: string) => Promise<void>;
@@ -155,7 +159,7 @@ export function PlanningSession({
 
   useEffect(() => {
     if (!open) return;
-    setInput(plan?.focus_summary ?? plan?.freeform_intent ?? "");
+    setInput(seedInput?.trim() ? seedInput : plan?.focus_summary ?? plan?.freeform_intent ?? "");
     setLoomOpen(false);
     setLoomUrl("");
     setLoomTranscript("");

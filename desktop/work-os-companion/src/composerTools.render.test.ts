@@ -23,8 +23,7 @@ const base = {
   onClose: () => undefined,
   onSubmit: () => undefined,
   onClassify: () => undefined,
-  onGoal: () => undefined,
-  onAcceptSuggestion: () => undefined,
+  onApplyGoal: () => undefined,
 };
 
 describe("ProgressComposer tool rendering", () => {

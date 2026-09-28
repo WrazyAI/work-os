@@ -44,6 +44,8 @@ const styles = read("src/styles.css");
 assert.match(styles, /prefers-reduced-motion/);
 const redesignStyles = read("src/workspace-redesign.css");
 assert.match(redesignStyles, /\.goal-composer-panel/);
+assert.match(redesignStyles, /\.goal-card-edit/);
+assert.match(redesignStyles, /\.goal-editor-actions/);
 assert.match(redesignStyles, /\.focus-edit-button/);
 
 const app = read("src/App.tsx");
@@ -81,6 +83,11 @@ assert.match(app, /task-agenda-strip/);
 assert.match(app, /formatWorkOsDate\(task\.due_date\)/);
 assert.match(app, /Suggested from your tasks/);
 assert.match(app, /What is the goal for today\?/);
+assert.match(app, /goal-card-edit/);
+assert.match(app, /Apply goal/);
+assert.match(app, /seedInput=\{planningSeed/);
+assert.match(read("src/PlanningSession.tsx"), /seedInput\?: string/);
+assert.doesNotMatch(app, /onGoal=\{/, "the Focus editor commits on Apply, never per keystroke");
 assert.match(app, /Scheduled today/);
 assert.match(app, /Due from yesterday/);
 assert.match(app, /Add a task — planning doesn't clock you in/);
@@ -411,7 +418,7 @@ assert.match(avatar, /planIntent: day\?\.plan\?\.focus_summary \?\? day\?\.plan\
 assert.doesNotMatch(avatar, /goal_provenance: "employee",\s*\n\s*focus_summary: interpretation\.summary/);
 
 const planner = read("src/PlanningSession.tsx");
-assert.match(planner, /setInput\(plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
+assert.match(planner, /setInput\(seedInput\?\.trim\(\) \? seedInput : plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);
 
 const planItemsModule = read("src/planItems.ts");
 assert.match(planItemsModule, /export function buildPlanItemsFromInterpretation/);

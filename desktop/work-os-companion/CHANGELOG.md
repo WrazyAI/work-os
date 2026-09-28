@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The Focus panel now shows your goal as a card with an edit button once it is set, and saves only when you press Apply.
+- Setting your first goal of the day now opens the same plan builder as shift start, so it can create your tasks and subtasks.
+- Editing a goal you already set only updates the wording; it never creates tasks or subtasks.
+
 ## 0.3.57
 
 - Check-ins now start with a recap of your last work interval: review it, confirm it, or add anything missing.

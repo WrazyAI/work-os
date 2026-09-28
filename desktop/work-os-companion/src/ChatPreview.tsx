@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SquarePen, X } from "lucide-react";
 import { ProgressComposer } from "./App";
+import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, workOsChatCommands } from "./WorkOsChat";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -111,7 +112,7 @@ function HistorySection() {
     input: "", open: true, panel: "update" as const, receipt: null, pending: "", busy: false,
     required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
     onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
-    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+    onClassify: noop, onApplyGoal: noop,
   };
   return (
     <section aria-label="Persisted history preview" style={{ display: "grid", gap: 12 }}>
@@ -184,11 +185,34 @@ function HistorySection() {
 }
 
 function InAppSection() {
+  const params = new URLSearchParams(window.location.search);
+  const focusParam = params.get("focus");
+  const empty = params.has("empty");
   const [input, setInput] = useState("");
-  const [open, setOpen] = useState(() => !new URLSearchParams(window.location.search).has("collapsed"));
-  const [panel, setPanel] = useState<"update" | "goal">("update");
-  const [goal, setGoal] = useState("Ship a clear, dependable workday experience.");
-  const empty = new URLSearchParams(window.location.search).has("empty");
+  const [open, setOpen] = useState(() => !params.has("collapsed"));
+  const [panel, setPanel] = useState<"update" | "goal">(focusParam ? "goal" : "update");
+  const [goal, setGoal] = useState(focusParam === "empty" ? "" : "Ship a clear, dependable workday experience.");
+  const [planningOpen, setPlanningOpen] = useState(false);
+  const [planningSeed, setPlanningSeed] = useState<string | null>(null);
+  // Offline stub so the first-goal handoff can be exercised without a backend.
+  const previewInterpretation: PlanningInterpretation = {
+    buildId: "preview-plan-build",
+    rawIntent: planningSeed ?? goal,
+    summary: "Ship the focus card and verify the Apply flow.",
+    commitments: [{
+      clientId: "preview-commitment-1",
+      title: "Add the focus goal card",
+      objective: "The dock Focus panel shows a goal card with an edit affordance once a goal is set.",
+      successCriteria: ["The card renders with a pen action", "Apply saves the goal text only"],
+      sourceRefs: [{ provider: "employee", type: "intent", id: "raw_intent", label: "Employee planning input" }],
+      confidence: 0.9,
+    }],
+    clarifications: [],
+    readiness: "ready",
+  };
+  const goalSuggestion = focusParam === "empty"
+    ? { text: "From today’s tasks: ship the focus card and verify the flow.", taskIds: ["preview-task-1"] }
+    : null;
   const [history, setHistory] = useState<WorkOsConversationTurn[]>(() => empty ? [] : [
     { id: "preview-1", role: "user", text: "Finished the chat revamp draft and started verification.", createdAt: "2026-09-08T00:30:00Z" },
     { id: "preview-2", role: "assistant", text: "Nice — share what is left and I will turn it into records.", meta: "recorded", createdAt: "2026-09-08T00:31:00Z" },
@@ -222,7 +246,7 @@ function InAppSection() {
         required={false}
         goal={goal}
         goalProvenance="employee"
-        goalSuggestion={null}
+        goalSuggestion={goalSuggestion}
         saveState="saved"
         onInput={setInput}
         onOpen={() => {
@@ -243,8 +267,27 @@ function InAppSection() {
           setReceipt({ text: pending, kind, message: `Recorded “${pending}” as ${kind.replaceAll("_", " ")} for today.` });
           setPending("");
         }}
-        onGoal={setGoal}
-        onAcceptSuggestion={() => undefined}
+        onApplyGoal={(value) => {
+          const firstGoal = !goal.trim();
+          setGoal(value);
+          if (firstGoal && value) {
+            setPlanningSeed(value);
+            setPlanningOpen(true);
+          }
+        }}
+      />
+      <PlanningSession
+        open={planningOpen}
+        plan={null}
+        active={false}
+        busy={false}
+        seedInput={planningSeed ?? undefined}
+        onClose={() => setPlanningOpen(false)}
+        onInterpret={async () => previewInterpretation}
+        onRefine={async () => previewInterpretation}
+        onConfirm={async () => "saved" as const}
+        lateReasonRequired={false}
+        loomEnabled={false}
       />
     </section>
   );
@@ -333,7 +376,7 @@ function InAppToolsSection() {
     input: "", open: true, panel: "update" as const, receipt: null, history: [], busy: false,
     required: false, goal: "", goalProvenance: null, goalSuggestion: null, saveState: "saved" as const,
     onInput: noop, onOpen: noop, onOpenGoal: noop, onClose: noop, onSubmit: noop,
-    onClassify: noop, onGoal: noop, onAcceptSuggestion: noop,
+    onClassify: noop, onApplyGoal: noop,
   };
   return (
     <section aria-label="In-app tool surfaces preview" style={{ display: "grid", gap: 12 }}>

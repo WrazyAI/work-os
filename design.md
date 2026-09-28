@@ -449,6 +449,22 @@ tall at desktop, with safe insets on narrow screens. Header, thread, and
 auto-growing composer are one coherent surface. The thread is the only scrolling
 region. The sheet closes on Escape and returns focus to the launcher.
 
+#### 7.2.1 Focus panel goal card
+
+The sheet's Focus tab is the day's goal editor. With no goal set it is the
+editor: the goal field, the "tasks remain the source of work intent" note, and
+an optional suggestion from today's tasks. Typing never saves; one `Apply goal`
+action commits the text, and `Use suggestion` only fills the field for review.
+
+Applying the first goal of the day hands off to the plan builder with the text
+seeded, so it follows the same build → review/refine → confirm flow as shift
+start and can create the day's tasks and subtasks. Once a goal is set, the tab
+shows a goal card — the goal text with a single pen action in its top-right
+corner. The pen reveals the same editor with `Apply` and `Cancel`; editing an
+existing goal only changes its wording and never creates tasks or subtasks.
+The card keeps the provenance and save-state line, with an inline retry when a
+save is queued offline or conflicted.
+
 ### 7.3 Floating Otter chat
 
 The floating companion uses the same white window border/header treatment and
