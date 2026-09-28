@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  activityIntervalCardView,
   activityIntervalConfig,
   activityIntervalSlotKey,
   formatIntervalRange,
+  isoInstant,
   intervalHourStarts,
   intervalProvenanceLabel,
   intervalSourceHash,
@@ -137,6 +139,29 @@ test("interval hour coverage drives EOD deduplication", () => {
   assert.deepEqual(intervalHourStarts("2026-09-28T14:00:00.000Z", "2026-09-28T15:00:00.000Z", "UTC"), [14]);
   assert.deepEqual(intervalHourStarts("2026-09-28T23:30:00.000Z", "2026-09-29T00:30:00.000Z", "UTC"), [23, 0]);
   assert.deepEqual(intervalHourStarts("not-a-date", "2026-09-28T15:00:00.000Z", "UTC"), []);
+});
+
+test("API payload timestamps always serialize as ISO instants", () => {
+  assert.equal(isoInstant(new Date("2026-09-28T14:05:40.000Z")), "2026-09-28T14:05:40.000Z");
+  assert.equal(isoInstant("2026-09-28T15:19:29.000Z"), "2026-09-28T15:19:29.000Z");
+  assert.equal(isoInstant("not-a-date"), "not-a-date");
+  assert.equal(isoInstant(null), null);
+  const view = activityIntervalCardView({
+    id: "interval-1",
+    window_start: new Date("2026-09-28T14:05:40.000Z"),
+    window_end: new Date("2026-09-28T15:19:29.000Z"),
+    timezone: "UTC",
+    prompt_kind: "hourly_fallback",
+    generation_status: "ready",
+    review_status: "inferred",
+    generated_at: new Date("2026-09-28T16:24:38.000Z"),
+    reviewed_at: null,
+  });
+  assert.equal(view.windowStart, "2026-09-28T14:05:40.000Z");
+  assert.equal(view.windowEnd, "2026-09-28T15:19:29.000Z");
+  assert.equal(view.generatedAt, "2026-09-28T16:24:38.000Z");
+  assert.equal(view.reviewedAt, null);
+  assert.equal(view.label, "2:05–3:19 PM");
 });
 
 test("provenance labels never present inference as employee-confirmed fact", () => {

@@ -750,14 +750,28 @@ export type ActivityIntervalView = {
   evidence: ActivityIntervalEvidenceView[];
 };
 
+/** The Postgres shim returns timestamptz columns as Date objects, but every
+ * API payload must carry ISO instants so clients on any runtime parse them
+ * identically. Invalid values stay as their original text rather than throwing. */
+export function isoInstant(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  const text = String(value);
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : text;
+}
+
 /** Compact card shape for the prompt turn and tool responses; the evidence
  * list for the Tasks stream comes from listActivityIntervals. */
 export function activityIntervalCardView(row: ActivityIntervalRecord) {
+  const windowStart = isoInstant(row.window_start) ?? "";
+  const windowEnd = isoInstant(row.window_end) ?? "";
   return {
     id: String(row.id),
-    windowStart: String(row.window_start),
-    windowEnd: String(row.window_end),
-    label: formatIntervalRange(String(row.window_start), String(row.window_end), String(row.timezone ?? "UTC")),
+    windowStart,
+    windowEnd,
+    label: formatIntervalRange(windowStart, windowEnd, String(row.timezone ?? "UTC")),
     promptKind: String(row.prompt_kind),
     generationStatus: String(row.generation_status),
     reviewStatus: String(row.review_status),
@@ -765,17 +779,19 @@ export function activityIntervalCardView(row: ActivityIntervalRecord) {
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
     employeeFeedback: row.employee_feedback ? String(row.employee_feedback) : null,
     failureReason: row.failure_reason ? String(row.failure_reason) : null,
-    generatedAt: row.generated_at ? String(row.generated_at) : null,
-    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    generatedAt: isoInstant(row.generated_at),
+    reviewedAt: isoInstant(row.reviewed_at),
   };
 }
 
 function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvidenceView[]): ActivityIntervalView {
+  const windowStart = isoInstant(row.window_start) ?? "";
+  const windowEnd = isoInstant(row.window_end) ?? "";
   return {
     id: String(row.id),
-    windowStart: String(row.window_start),
-    windowEnd: String(row.window_end),
-    label: formatIntervalRange(String(row.window_start), String(row.window_end), String(row.timezone ?? "UTC")),
+    windowStart,
+    windowEnd,
+    label: formatIntervalRange(windowStart, windowEnd, String(row.timezone ?? "UTC")),
     promptKind: String(row.prompt_kind) as ActivityIntervalView["promptKind"],
     generationStatus: String(row.generation_status),
     reviewStatus: String(row.review_status) as ActivityIntervalView["reviewStatus"],
@@ -783,8 +799,8 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
     employeeFeedback: row.employee_feedback ? String(row.employee_feedback) : null,
     failureReason: row.failure_reason ? String(row.failure_reason) : null,
-    generatedAt: row.generated_at ? String(row.generated_at) : null,
-    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    generatedAt: isoInstant(row.generated_at),
+    reviewedAt: isoInstant(row.reviewed_at),
     evidenceExpired: Boolean(row.evidence_expired_at) || evidence.some((entry) => !entry.retained),
     evidenceCount: evidence.filter((entry) => entry.usedInModel).length,
     evidence,
@@ -822,7 +838,7 @@ export async function listActivityIntervals(
     const summaries = await db().from("work_screenshot_summaries").select("id,storage_path,expires_at,deleted_at").in("id", summaryIds);
     if (summaries.error) throw new Error(`load activity interval screenshots: ${summaries.error.message}`);
     for (const summary of (summaries.data ?? []) as Array<Record<string, any>>) {
-      const expires = summary.expires_at ? Date.parse(String(summary.expires_at)) : Number.NaN;
+      const expires = Date.parse(isoInstant(summary.expires_at) ?? "");
       retained.set(String(summary.id), Boolean(summary.storage_path) && !summary.deleted_at && Number.isFinite(expires) && expires > Date.now());
     }
   }
@@ -908,14 +924,16 @@ export async function listActivityIntervalActivityLines(organizationId: string, 
     const detail = String(row.final_detail ?? row.ai_detail ?? "").trim();
     if (!detail) return [];
     const timezone = String(row.timezone ?? "UTC");
+    const startIso = isoInstant(row.window_start) ?? "";
+    const endIso = isoInstant(row.window_end) ?? "";
     return [{
-      startIso: String(row.window_start),
-      endIso: String(row.window_end),
-      label: formatIntervalRange(String(row.window_start), String(row.window_end), timezone),
+      startIso,
+      endIso,
+      label: formatIntervalRange(startIso, endIso, timezone),
       provenance: String(row.review_status) as ActivityIntervalActivityLine["provenance"],
       detail,
       headline: row.headline ? String(row.headline) : null,
-      hourStarts: intervalHourStarts(String(row.window_start), String(row.window_end), timezone),
+      hourStarts: intervalHourStarts(startIso, endIso, timezone),
     }];
   });
 }
