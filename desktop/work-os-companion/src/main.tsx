@@ -9,6 +9,7 @@ import ChatPreview from "./ChatPreview";
 import EodPreview from "./EodPreview";
 import InsightsSynthesisPreview from "./InsightsSynthesisPreview";
 import EodOutstandingPreview from "./EodOutstandingPreview";
+import ActivityIntervalPreview from "./ActivityIntervalPreview";
 import TasksPreview from "./TasksPreview";
 import TaskDesignGallery from "./TaskDesignGallery";
 import TodayPreview from "./TodayPreview";
@@ -61,6 +62,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview
               : import.meta.env.DEV && params.has("preview-insights-synthesis") ? InsightsSynthesisPreview
                 : import.meta.env.DEV && params.has("preview-outstanding") ? EodOutstandingPreview
+                  : import.meta.env.DEV && params.has("preview-activity-intervals") ? ActivityIntervalPreview
               : App;
 
 if (params.get("window") !== "avatar") startWorkOsQueryPersistence(workOsQueryClient);
