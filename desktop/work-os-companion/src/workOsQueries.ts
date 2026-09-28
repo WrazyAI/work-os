@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "./api";
 import {
+  ACTIVITY_INTERVALS_STALE_MS,
   DAY_DETAILS_STALE_MS,
   DAY_STALE_MS,
   HISTORICAL_STALE_MS,
@@ -12,7 +13,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
@@ -224,5 +225,39 @@ export function prepareEodScreenshots(date: string, signal?: AbortSignal) {
     method: "POST",
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     body: JSON.stringify({ date, max_frames: 6 }),
+  });
+}
+
+/** The employee's Activity Interval Review stream, newest interval first.
+ * Bounded to the trailing 30 days so the Tasks tab can scroll history. */
+export function useActivityIntervalsQuery(options: { enabled: boolean; date: string | null; pollMs?: number }) {
+  return useQuery({
+    queryKey: workOsKeys.activityIntervals(options.date ?? "none"),
+    enabled: options.enabled && !!options.date,
+    staleTime: ACTIVITY_INTERVALS_STALE_MS,
+    refetchInterval: options.pollMs ?? false,
+    queryFn: () => apiRequest<ActivityIntervalsData>(`/api/work-os/me/activity-intervals?date=${encodeURIComponent(options.date!)}&days=30`),
+  });
+}
+
+/** Ensures the recap for the prompt the companion is about to show. The server
+ * owns the window and evidence; the client only identifies the prompt slot. */
+export function ensureActivityIntervalReview(promptDueAt: string | null, signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(90_000);
+  return apiRequest<ActivityIntervalEnsureResult>("/api/work-os/me/activity-intervals/ensure", {
+    method: "POST",
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    body: JSON.stringify({ prompt_due_at: promptDueAt }),
+  });
+}
+
+/** Looks right (confirm) or add/correct context (amend) on the employee's own
+ * recap. Nothing here creates a check-in or advances the prompt cadence. */
+export function decideActivityIntervalReview(intervalId: string, action: "confirm" | "amend", feedback?: string) {
+  return apiRequest<{ interval: ActivityIntervalCard }>(`/api/work-os/me/activity-intervals/${encodeURIComponent(intervalId)}/decision`, {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({ action, ...(feedback ? { feedback } : {}) }),
   });
 }

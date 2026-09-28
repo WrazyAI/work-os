@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Check-ins now start with a recap of your last work interval: review it, confirm it, or add anything missing.
+- The Tasks tab shows your recent activity recaps, and expanding one reveals the screenshots behind it.
+- Recaps stay marked Not reviewed until you decide, and the screenshots behind them are kept for 30 days.
+
 - Tasks now has sortable Name, Date due, and Status columns so you can reorder the full task list without losing your place.
 
 ## 0.3.56

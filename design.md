@@ -562,6 +562,45 @@ Dates, instants, timezone identifiers, durations, and range endpoints are
 validated before formatting. Invalid values render —, Unavailable, or specific
 fallback copy; they never throw.
 
+### 9.1 Activity Interval Reviews
+
+A progress prompt may arrive as an Activity Interval Review: a grounded recap
+of the interval since the last update, built from the existing secure
+Worktivity screenshot pipeline. The interval is the server-resolved prompt slot
+(session + due time), never a clock hour, so pauses, manual updates, and cadence
+drift cannot split or repeat the same window.
+
+The recap is descriptive and evidence-bounded. It may describe visible apps,
+tools, artifacts, and an apparent work sequence, and it must state what the
+evidence does not establish. It may not claim productivity, effort, pay
+eligibility, completion, deployment, or quality; the synthesizer always
+receives the ordered per-frame observations and only a bounded representative
+subset of raw frames.
+
+Review adds provenance without creating employee-authored truth:
+
+- `inferred` — the AI recap as generated; silence leaves it here, and it still
+  never advances the employee's substantive-update cadence.
+- `confirmed` — the employee said “Looks right”.
+- `amended` — the employee added or corrected context; the original AI text is
+  preserved and a reviewed recap is frozen against later evidence.
+
+The floating companion's Tasks tab renders these as a Recent activity stream in
+the chat card language, newest interval first: interval label, quiet provenance
+chip (`Not reviewed`, `Confirmed`, `Updated by you`), a concise headline, the
+detail, and a collapsed `Evidence · N screenshots` disclosure showing the exact
+analyzed frames with capture time and neutral frame summary. Expired images say
+so honestly without deleting the recap; there are no charts, scores, or hours
+totals. The prompt turn offers `Looks right` and `Add or correct`, never a
+mutation of anything other than the recap.
+
+The EOD uses a confirmed, amended, or inferred recap as activity context for
+the hours it covers, labeled with its provenance, and falls back to the hourly
+rollups elsewhere. A confirmed recap is still activity context: it never proves
+task completion. Recap text outlives raw images under the report-retention
+policy, and raw preview access keeps its existing own-frame or flagged/dispute
+rule and audit.
+
 ## 10. Motion
 
 Motion explains a state change:

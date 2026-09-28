@@ -46,14 +46,19 @@ test("gallery list and preview routes keep person scope, gating, and audit", asy
   assert.match(lib, /sharp\(/);
 });
 
-test("EOD activity context is hourly, not per frame", async () => {
+test("EOD activity context prefers interval recaps and never repeats an hour", async () => {
   const aiEod = await source("src/lib/aiEod.ts");
   const aiDraft = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
+  const eod = await source("src/lib/work-os-eod.ts");
   assert.match(aiEod, /ensureHourlyScreenshotSummaries/);
   assert.match(aiEod, /type EodScreenshotHour/);
-  assert.match(aiEod, /hours/);
-  assert.match(aiDraft, /screenshots\.hours\.map/);
+  assert.match(aiDraft, /listActivityIntervalActivityLines/);
+  assert.match(aiDraft, /intervalProvenanceLabel/);
+  assert.match(aiDraft, /coveredHours/);
   assert.match(aiDraft, /hour\.label/);
+  assert.match(eod, /listActivityIntervalActivityLines/);
+  assert.match(eod, /hourStarts/);
+  assert.match(eod, /intervalProvenanceLabel/);
 });
 
 test("the gallery reports pending and total frames honestly", async () => {

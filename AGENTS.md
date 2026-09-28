@@ -50,9 +50,18 @@ cover. Reconcile unfamiliar files with that context instead of guessing, and
 call out any interaction with a recent change in the handoff. Add a changelog
 entry when the change is release-facing.
 
-The active Work OS check-in cadence defaults to five minutes. Set
-`WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `1` through `240` to
-override it for a deployment; invalid values fall back to five minutes.
+The active Work OS check-in cadence defaults to sixty minutes (the first
+follow-up lands 75 minutes after plan confirmation or clock-in). Set
+`WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `15` through `240` to
+override it for a deployment; invalid values fall back to sixty minutes.
+
+Activity Interval Reviews build the evidence-backed recap for each due check-in
+from Worktivity frames. Their bounds are `WORK_OS_ACTIVITY_INTERVALS_ENABLED`
+(default on), `WORK_OS_ACTIVITY_INTERVAL_MAX_MINUTES` (120),
+`WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES` (12),
+`WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES` (5), and
+`WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY` (10). AI inference never creates a
+`work_check_ins` row and never advances `last_substantive_update_at`.
 
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.

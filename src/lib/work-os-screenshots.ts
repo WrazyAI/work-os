@@ -316,6 +316,135 @@ export async function personTimezone(organizationId: string, personId: string, f
   return typeof data?.timezone === "string" && data.timezone ? data.timezone : fallback;
 }
 
+type ScreenshotPolicyConfig = { sensitiveApps: string[]; sensitiveDomains: string[] };
+
+/** Analyzes one Worktivity frame through the existing secure pipeline: policy
+ * exclusion, encrypted retention, neutral observation, evidence event, and the
+ * work_evidence mirror. Extracted so window-scoped preparation and the
+ * day-scoped pipeline share exactly one behavior. A frame that fails is
+ * recorded as failed (and stays retryable); it never throws past this point
+ * unless the failure record itself cannot be written. */
+async function processScreenshotLog(
+  access: ScreenshotScope,
+  personId: string,
+  date: string,
+  log: ScreenshotLog,
+  config: ScreenshotPolicyConfig,
+  timezone: string,
+) {
+  const event = await createEvidenceEvent(access, personId, log);
+  const sourceReference = `worktivity:screenshot:${log.ID}`;
+  if (isExcludedScreenshot(log, config)) {
+    const { data, error } = await db().from("work_screenshot_summaries").upsert({
+      organization_id: access.organizationId,
+      evidence_event_id: event.id,
+      source_reference: sourceReference,
+      processing_status: "excluded",
+      visible_context: { exclusionKind: "policy" },
+      failure_reason: "Excluded by sensitive app/domain policy.",
+      prompt_version: PROMPT_VERSION,
+      storage_path: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "evidence_event_id" }).select("*").single();
+    if (error) throw new Error(`record excluded screenshot: ${error.message}`);
+    return data;
+  }
+  let storagePath: string | null = null;
+  let storageRetained = false;
+  try {
+    const imageResponse = await fetch(log.Screenshot as string, { signal: AbortSignal.timeout(SCREENSHOT_DOWNLOAD_TIMEOUT_MS) });
+    if (!imageResponse.ok) throw new Error(`download Worktivity screenshot ${log.ID}: ${imageResponse.status}`);
+    const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
+    const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const bytes = new Uint8Array(await imageResponse.arrayBuffer());
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    storagePath = `${access.organizationId}/${personId}/${date}/${log.ID}-${digest.slice(0, 12)}.enc`;
+    const encrypted = encryptScreenshot(bytes);
+    const uploaded = await getStorageBackend().upload(BUCKET, storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
+    if (uploaded.error) throw new Error(`store Worktivity screenshot: ${uploaded.error.message}`);
+    storageRetained = true;
+    const observation = await neutralSummary(log.Screenshot as string, log);
+    if (observation.containsSensitiveContent) {
+      const removed = await getStorageBackend().remove(BUCKET, [storagePath]);
+      if (removed.error) throw new Error(`remove sensitive screenshot: ${removed.error.message}`);
+      storageRetained = false;
+      const { data, error } = await db().from("work_screenshot_summaries").upsert({
+        organization_id: access.organizationId,
+        evidence_event_id: event.id,
+        storage_path: null,
+        source_reference: sourceReference,
+        summary: "Screenshot excluded after sensitive-content detection.",
+        visible_context: { exclusionKind: "sensitive", sensitiveReason: observation.sensitiveReason },
+        confidence: observation.confidence,
+        processing_status: "excluded",
+        model: MODEL,
+        prompt_version: PROMPT_VERSION,
+        failure_reason: observation.sensitiveReason
+          ? `Excluded after sensitive-content detection: ${observation.sensitiveReason}.`
+          : "Excluded after sensitive-content detection.",
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "evidence_event_id" }).select("*").single();
+      if (error) throw new Error(`record sensitive screenshot exclusion: ${error.message}`);
+      await db().from("work_evidence_events").update({
+        summary: "Screenshot excluded after sensitive-content detection.",
+        metadata: { worktivityLogId: log.ID, needsReview: false, excludedSensitive: true, sensitiveReason: observation.sensitiveReason },
+        updated_at: new Date().toISOString(),
+      }).eq("id", event.id);
+      return data;
+    }
+    const needsReview = observation.confidence < 0.6;
+    const { data, error } = await db().from("work_screenshot_summaries").upsert({
+      organization_id: access.organizationId,
+      evidence_event_id: event.id,
+      storage_path: storageRetained ? storagePath : null,
+      source_reference: sourceReference,
+      summary: observation.summary,
+      visible_context: {
+        visibleApp: observation.visibleApp,
+        workContext: observation.workContext,
+        possibleTaskReference: observation.possibleTaskReference,
+        containsSensitiveContent: observation.containsSensitiveContent,
+      },
+      confidence: observation.confidence,
+      encryption_metadata: { algorithm: "AES-256-GCM", contentType, originalExtension: extension },
+      processing_status: "processed",
+      model: MODEL,
+      prompt_version: PROMPT_VERSION,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "evidence_event_id" }).select("*").single();
+    if (error) throw new Error(`save screenshot summary: ${error.message}`);
+    await db().from("work_evidence_events").update({
+      summary: observation.summary,
+      metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
+      updated_at: new Date().toISOString(),
+    }).eq("id", event.id);
+    // The capture instant, not the provider's create date, decides the
+    // evidence day — the same value the evidence event is recorded with.
+    await mirrorSummary(access, personId, event.id, captureAt(log), observation.summary, MODEL, timezone);
+    return data;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Screenshot analysis failed";
+    const { data, error: failureRecordError } = await db().from("work_screenshot_summaries").upsert({
+      organization_id: access.organizationId,
+      evidence_event_id: event.id,
+      storage_path: storageRetained ? storagePath : null,
+      source_reference: sourceReference,
+      processing_status: "failed",
+      failure_reason: reason,
+      model: MODEL,
+      prompt_version: PROMPT_VERSION,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "evidence_event_id" }).select("*").single();
+    if (failureRecordError || !data) {
+      if (storageRetained && storagePath) await getStorageBackend().remove(BUCKET, [storagePath]);
+      throw new Error(`record screenshot processing failure: ${failureRecordError?.message ?? "no row returned"}`);
+    }
+    return data;
+  }
+}
+
 export async function summarizeWorktivityScreenshots(
   access: ScreenshotScope,
   personId: string,
@@ -352,122 +481,9 @@ export async function summarizeWorktivityScreenshots(
   const results = [];
   const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? DEFAULT_SCREENSHOTS_PER_RUN)));
   for (const log of sampleScreenshots(pending, maxScreenshots)) {
-    const event = await createEvidenceEvent(access, personId, log);
-    const sourceReference = `worktivity:screenshot:${log.ID}`;
-    if (isExcludedScreenshot(log, config)) {
-      const { data, error } = await db().from("work_screenshot_summaries").upsert({
-        organization_id: access.organizationId,
-        evidence_event_id: event.id,
-        source_reference: sourceReference,
-        processing_status: "excluded",
-        visible_context: { exclusionKind: "policy" },
-        failure_reason: "Excluded by sensitive app/domain policy.",
-        prompt_version: PROMPT_VERSION,
-        storage_path: null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "evidence_event_id" }).select("*").single();
-      if (error) throw new Error(`record excluded screenshot: ${error.message}`);
-      terminalAfter.add(`screenshot:${log.ID}`);
-      results.push(data);
-      continue;
-    }
-    let storagePath: string | null = null;
-    let storageRetained = false;
-    try {
-      const imageResponse = await fetch(log.Screenshot as string, { signal: AbortSignal.timeout(SCREENSHOT_DOWNLOAD_TIMEOUT_MS) });
-      if (!imageResponse.ok) throw new Error(`download Worktivity screenshot ${log.ID}: ${imageResponse.status}`);
-      const contentType = imageResponse.headers.get("content-type") || "image/jpeg";
-      const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
-      const bytes = new Uint8Array(await imageResponse.arrayBuffer());
-      const digest = createHash("sha256").update(bytes).digest("hex");
-      storagePath = `${access.organizationId}/${personId}/${date}/${log.ID}-${digest.slice(0, 12)}.enc`;
-      const encrypted = encryptScreenshot(bytes);
-      const uploaded = await getStorageBackend().upload(BUCKET, storagePath, encrypted, { contentType: "application/octet-stream", upsert: true });
-      if (uploaded.error) throw new Error(`store Worktivity screenshot: ${uploaded.error.message}`);
-      storageRetained = true;
-      const observation = await neutralSummary(log.Screenshot as string, log);
-      if (observation.containsSensitiveContent) {
-        const removed = await getStorageBackend().remove(BUCKET, [storagePath]);
-        if (removed.error) throw new Error(`remove sensitive screenshot: ${removed.error.message}`);
-        storageRetained = false;
-        const { data, error } = await db().from("work_screenshot_summaries").upsert({
-          organization_id: access.organizationId,
-          evidence_event_id: event.id,
-          storage_path: null,
-          source_reference: sourceReference,
-          summary: "Screenshot excluded after sensitive-content detection.",
-          visible_context: { exclusionKind: "sensitive", sensitiveReason: observation.sensitiveReason },
-          confidence: observation.confidence,
-          processing_status: "excluded",
-          model: MODEL,
-          prompt_version: PROMPT_VERSION,
-          failure_reason: observation.sensitiveReason
-            ? `Excluded after sensitive-content detection: ${observation.sensitiveReason}.`
-            : "Excluded after sensitive-content detection.",
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "evidence_event_id" }).select("*").single();
-        if (error) throw new Error(`record sensitive screenshot exclusion: ${error.message}`);
-        terminalAfter.add(`screenshot:${log.ID}`);
-        await db().from("work_evidence_events").update({
-          summary: "Screenshot excluded after sensitive-content detection.",
-          metadata: { worktivityLogId: log.ID, needsReview: false, excludedSensitive: true, sensitiveReason: observation.sensitiveReason },
-          updated_at: new Date().toISOString(),
-        }).eq("id", event.id);
-        results.push(data);
-        continue;
-      }
-      const needsReview = observation.confidence < 0.6;
-      const { data, error } = await db().from("work_screenshot_summaries").upsert({
-        organization_id: access.organizationId,
-        evidence_event_id: event.id,
-        storage_path: storageRetained ? storagePath : null,
-        source_reference: sourceReference,
-        summary: observation.summary,
-        visible_context: {
-          visibleApp: observation.visibleApp,
-          workContext: observation.workContext,
-          possibleTaskReference: observation.possibleTaskReference,
-          containsSensitiveContent: observation.containsSensitiveContent,
-        },
-        confidence: observation.confidence,
-        encryption_metadata: { algorithm: "AES-256-GCM", contentType, originalExtension: extension },
-        processing_status: "processed",
-        model: MODEL,
-        prompt_version: PROMPT_VERSION,
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "evidence_event_id" }).select("*").single();
-      if (error) throw new Error(`save screenshot summary: ${error.message}`);
-      terminalAfter.add(`screenshot:${log.ID}`);
-      await db().from("work_evidence_events").update({
-        summary: observation.summary,
-        metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
-        updated_at: new Date().toISOString(),
-      }).eq("id", event.id);
-      // The capture instant, not the provider's create date, decides the
-      // evidence day — the same value the evidence event is recorded with.
-      await mirrorSummary(access, personId, event.id, captureAt(log), observation.summary, MODEL, timezone);
-      results.push(data);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Screenshot analysis failed";
-      const { data, error: failureRecordError } = await db().from("work_screenshot_summaries").upsert({
-        organization_id: access.organizationId,
-        evidence_event_id: event.id,
-        storage_path: storageRetained ? storagePath : null,
-        source_reference: sourceReference,
-        processing_status: "failed",
-        failure_reason: reason,
-        model: MODEL,
-        prompt_version: PROMPT_VERSION,
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "evidence_event_id" }).select("*").single();
-      if (failureRecordError || !data) {
-        if (storageRetained && storagePath) await getStorageBackend().remove(BUCKET, [storagePath]);
-        throw new Error(`record screenshot processing failure: ${failureRecordError?.message ?? "no row returned"}`);
-      }
-      results.push(data);
-    }
+    const row = await processScreenshotLog(access, personId, date, log, config, timezone);
+    if (String((row as any)?.processing_status ?? "") !== "failed") terminalAfter.add(`screenshot:${log.ID}`);
+    results.push(row);
   }
   // Frames still lacking a terminal summary after this batch (failed frames are
   // retried, so they stay pending). Callers use this to keep an interactive
@@ -537,6 +553,189 @@ export async function prepareEodScreenshots(
   })().finally(() => prepareInFlight.delete(key));
   prepareInFlight.set(key, run);
   return run;
+}
+
+export type ScreenshotWindowCandidate = {
+  summaryId: string;
+  evidenceEventId: string;
+  /** `screenshot:<Worktivity frame id>`, the stable external event identity. */
+  externalId: string;
+  capturedAt: string;
+  summary: string;
+  visibleApp: string | null;
+  workContext: string | null;
+  possibleTaskReference: string | null;
+  confidence: number;
+  /** True when the encrypted frame is still retained and previewable. */
+  retained: boolean;
+};
+
+export type ScreenshotWindowPreparation = {
+  window: { startIso: string; endIso: string; timezone: string };
+  /** Terminal, non-excluded frames usable as interval evidence, oldest first. */
+  candidates: ScreenshotWindowCandidate[];
+  counts: {
+    providerFrames: number;
+    processed: number;
+    retained: number;
+    excludedPolicy: number;
+    excludedSensitive: number;
+    /** Failed analysis, or a processed frame whose raw image left retention. */
+    unavailable: number;
+    pending: number;
+    analyzedThisCall: number;
+  };
+};
+
+const MAX_WINDOW_MS = 6 * 60 * 60_000;
+const WINDOW_PREPARE_MAX_FRAMES = 12;
+
+type WindowSummaryRecord = {
+  eventId: string;
+  occurredAt: string;
+  summary: Record<string, any>;
+};
+
+/** Every screenshot evidence event recorded in [start, end), keyed by its
+ * `screenshot:<id>` external id, with the terminal (or pending) summary row. */
+async function windowSummaries(organizationId: string, personId: string, bounds: { startIso: string; endIso: string }) {
+  const events = await db().from("work_evidence_events").select("id,external_event_id,occurred_at")
+    .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
+    .like("external_event_id", "screenshot:%")
+    .gte("occurred_at", bounds.startIso).lt("occurred_at", bounds.endIso);
+  if (events.error) throw new Error(`load window screenshot events: ${events.error.message}`);
+  const records = new Map<string, WindowSummaryRecord>();
+  if (!events.data?.length) return records;
+  const summaries = await db().from("work_screenshot_summaries")
+    .select("id,evidence_event_id,processing_status,failure_reason,storage_path,expires_at,deleted_at,summary,visible_context,confidence")
+    .in("evidence_event_id", (events.data as Array<Record<string, any>>).map((row) => String(row.id)));
+  if (summaries.error) throw new Error(`load window screenshot summaries: ${summaries.error.message}`);
+  const summaryByEvent = new Map((summaries.data ?? []).map((row: any) => [String(row.evidence_event_id), row]));
+  for (const event of events.data as Array<Record<string, any>>) {
+    records.set(String(event.external_event_id), {
+      eventId: String(event.id),
+      occurredAt: event.occurred_at instanceof Date ? event.occurred_at.toISOString() : String(event.occurred_at ?? ""),
+      summary: summaryByEvent.get(String(event.id)) ?? { processing_status: "pending" },
+    });
+  }
+  return records;
+}
+
+function terminalWindowIds(records: Map<string, WindowSummaryRecord>) {
+  return new Set([...records.entries()]
+    .filter(([, record]) => ["processed", "excluded"].includes(String(record.summary.processing_status)))
+    .map(([external]) => external));
+}
+
+/** Window-scoped preparation through the existing secure screenshot pipeline.
+ * Reuses terminally analyzed frames, processes only missing eligible frames
+ * (bounded), and returns the exact persisted summary records available for an
+ * activity interval. Never writes scheduled hourly/EOD ledger markers. */
+export async function prepareScreenshotWindow(input: {
+  organizationId: string;
+  personId: string;
+  windowStart: string;
+  windowEnd: string;
+  maxFrames?: number;
+  timezone?: string;
+}): Promise<ScreenshotWindowPreparation> {
+  const startMs = Date.parse(input.windowStart);
+  const endMs = Date.parse(input.windowEnd);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) throw new Error("activity interval window timestamps must be valid ISO instants");
+  if (endMs <= startMs) throw new Error("activity interval window must end after it starts");
+  if (endMs - startMs > MAX_WINDOW_MS) throw new Error("activity interval window is longer than the supported maximum");
+  const access: ScreenshotScope = { organizationId: input.organizationId };
+  await assertScreenshotExecutionAllowed(access.organizationId, "feature");
+  const consent = await employeeTrackingConsent(access.organizationId, input.personId);
+  if (!consent.tracking) throw new Error("current work-tracking consent is required before Worktivity evidence can be processed");
+  if (!consent.screenshotAnalysis) throw new Error("employee screenshot-analysis consent is required");
+  const { data: person, error: personError } = await db().from("work_people")
+    .select("id, worktivity_employee_id")
+    .eq("organization_id", access.organizationId)
+    .eq("id", input.personId)
+    .single();
+  if (personError) throw new Error(`load Worktivity person: ${personError.message}`);
+  if (!person.worktivity_employee_id) throw new Error("person has no Worktivity mapping");
+  const timezone = input.timezone ?? await personTimezone(access.organizationId, input.personId);
+  const bounds = { startIso: new Date(startMs).toISOString(), endIso: new Date(endMs).toISOString() };
+  const dates = [localDateForTimezone(new Date(startMs), timezone)];
+  const lastDate = localDateForTimezone(new Date(endMs - 1), timezone);
+  if (lastDate !== dates[0]) dates.push(lastDate);
+
+  const fetched = new Map<string, WtScreenshot>();
+  for (const date of dates) {
+    for (const frame of await fetchScreenshotsForDay(person.worktivity_employee_id, date, timezone)) fetched.set(frame.ID, frame);
+  }
+  const frames = framesWithinBounds([...fetched.values()], bounds)
+    .sort((left, right) => captureAt(left).localeCompare(captureAt(right)));
+  const config = await screenshotConfig(access.organizationId, input.personId);
+  const existing = await windowSummaries(access.organizationId, input.personId, bounds);
+  const pending = frames.filter((frame) => !terminalWindowIds(existing).has(`screenshot:${frame.ID}`));
+
+  await ensureBucket();
+  const maxFrames = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(input.maxFrames ?? WINDOW_PREPARE_MAX_FRAMES)));
+  let analyzedThisCall = 0;
+  for (const log of sampleScreenshots(pending, maxFrames)) {
+    const captureDate = localDateForTimezone(new Date(captureAt(log)), timezone);
+    const row = await processScreenshotLog(access, input.personId, captureDate, log, config, timezone);
+    if (String((row as any)?.processing_status ?? "") !== "failed") analyzedThisCall += 1;
+  }
+
+  const refreshed = await windowSummaries(access.organizationId, input.personId, bounds);
+  const candidates: ScreenshotWindowCandidate[] = [];
+  const counts = { providerFrames: frames.length, processed: 0, retained: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, analyzedThisCall };
+  for (const [external, record] of refreshed) {
+    const row = record.summary;
+    const status = String(row.processing_status);
+    if (status === "excluded") {
+      if (screenshotExclusionKind(row.visible_context, row.failure_reason) === "policy") counts.excludedPolicy += 1;
+      else counts.excludedSensitive += 1;
+      continue;
+    }
+    if (status === "failed") { counts.unavailable += 1; continue; }
+    const context = (row.visible_context ?? {}) as Record<string, unknown>;
+    const retained = isRetainedScreenshotAvailable(row);
+    if (!retained) counts.unavailable += 1;
+    counts.processed += 1;
+    if (retained) counts.retained += 1;
+    candidates.push({
+      summaryId: String(row.id),
+      evidenceEventId: record.eventId,
+      capturedAt: record.occurredAt,
+      summary: String(row.summary ?? ""),
+      visibleApp: context.visibleApp != null ? String(context.visibleApp) : null,
+      workContext: context.workContext != null ? String(context.workContext) : null,
+      possibleTaskReference: context.possibleTaskReference != null ? String(context.possibleTaskReference) : null,
+      confidence: Number(row.confidence ?? 0),
+      retained,
+      externalId: external,
+    });
+  }
+  const terminalAfter = terminalWindowIds(refreshed);
+  counts.pending = frames.filter((frame) => !terminalAfter.has(`screenshot:${frame.ID}`)).length;
+  candidates.sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+  return { window: { ...bounds, timezone }, candidates, counts };
+}
+
+/** Internal decrypt-and-resize for the interval synthesizer. This is system
+ * processing, not a human viewing a frame, so it is not written to the
+ * screenshot access log (which records employee/manager preview views). */
+export async function retainedScreenshotImage(summaryId: string) {
+  const { data: summary, error } = await db().from("work_screenshot_summaries")
+    .select("id,storage_path,expires_at,deleted_at,encryption_metadata")
+    .eq("id", summaryId).maybeSingle();
+  if (error) throw new Error(`load retained screenshot: ${error.message}`);
+  if (!summary || !isRetainedScreenshotAvailable(summary)) return null;
+  const { data: encrypted, error: downloadError } = await getStorageBackend().download(BUCKET, summary.storage_path as string);
+  if (downloadError || !encrypted) return null;
+  const plaintext = Buffer.from(decryptScreenshot(new Uint8Array(encrypted.arrayBuffer)));
+  const contentType = String((summary.encryption_metadata as Json | null)?.contentType || "image/jpeg");
+  try {
+    const resized = await sharp(plaintext).rotate().resize({ width: 1024, withoutEnlargement: true }).jpeg({ quality: 72 }).toBuffer();
+    return { bytes: resized, contentType: "image/jpeg" };
+  } catch {
+    return { bytes: plaintext, contentType };
+  }
 }
 
 /**
@@ -868,6 +1067,18 @@ export async function deleteExpiredWorkOsScreenshots() {
       .update({ storage_path: null, deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .in("id", ids);
     if (updateError) throw new Error(`mark expired screenshots deleted: ${updateError.message}`);
+    // Activity Interval Reviews keep their text after the raw image expires;
+    // the interval only records that its evidence left retention.
+    const { data: affected, error: affectedError } = await db().from("work_activity_interval_evidence")
+      .select("interval_id").in("screenshot_summary_id", ids);
+    if (affectedError) throw new Error(`load interval evidence for retention: ${affectedError.message}`);
+    const intervalIds = [...new Set((affected ?? []).map((row: any) => String(row.interval_id)))];
+    if (intervalIds.length) {
+      const { error: intervalError } = await db().from("work_activity_intervals")
+        .update({ evidence_expired_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .in("id", intervalIds).is("evidence_expired_at", null);
+      if (intervalError) throw new Error(`mark activity interval evidence expired: ${intervalError.message}`);
+    }
   }
   // Derived hourly rollups follow the images out: a frame retained for 30 days
   // has a local date at or before this cutoff, so every hour that can no longer

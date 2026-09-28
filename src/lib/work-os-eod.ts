@@ -4,9 +4,10 @@ import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
 import { addDaysIso } from "@/lib/work-os-dates";
 import { audit, dateOnly, db, nonEmptyString as text, organizationOwnerId, type Json } from "@/lib/work-os-internal";
 import { recordWorkMemory } from "@/lib/work-memory";
-import { localDateForTimezone } from "@/modules/work-os/companion";
+import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
+import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
   collapseAutomation,
@@ -167,9 +168,31 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     date: reportDate,
     timezone,
   });
-  // Fallback grouping only when no hourly rollup exists (for example the AI
-  // provider is unavailable and no cache was written yet).
-  const activityGroups = activityHours.length ? [] : groupActivityFrames(gallery.viewable);
+  // Employee-reviewed intervals are richer than the one-line rollups; where an
+  // interval covers an hour, its provenance-labeled recap replaces that hour's
+  // line so the same time window is never described twice.
+  const intervalLines = await listActivityIntervalActivityLines(access.organizationId, personId, reportDate).catch(() => []);
+  const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
+  const uncoveredHours = activityHours.filter((hour) => !coveredHours.has(hour.hourStart));
+  const activityEntries = [
+    ...intervalLines.map((line) => ({
+      at: Date.parse(line.startIso),
+      line: `- ${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${clipText(line.detail, 320)}`,
+    })),
+    ...uncoveredHours.map((hour) => {
+      let at = Number.NaN;
+      try {
+        at = Date.parse(zonedDateTimeToUtc(reportDate, `${String(hour.hourStart).padStart(2, "0")}:00`, timezone).toISOString());
+      } catch {
+        at = Number.NaN;
+      }
+      return { at, line: `- ${hour.label} — ${clipText(hour.summary, 240)}` };
+    }),
+  ].sort((left, right) => (Number.isFinite(left.at) ? left.at : Number.MAX_SAFE_INTEGER) - (Number.isFinite(right.at) ? right.at : Number.MAX_SAFE_INTEGER));
+  const activityContextLines = activityEntries.map((entry) => entry.line);
+  // Fallback grouping only when no interval or hourly rollup exists (for
+  // example the AI provider is unavailable and no cache was written yet).
+  const activityGroups = activityContextLines.length ? [] : groupActivityFrames(gallery.viewable);
   const activityCounts = [
     `${gallery.processed} analyzed`,
     gallery.excludedSensitive > 0 ? `${gallery.excludedSensitive} flagged as sensitive (images deleted)` : "",
@@ -219,8 +242,8 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     ...eodLineItems(outputEvidence, "No output artifacts (files, videos, or links) were linked to this day."),
     "",
     "## Activity Context",
-    ...(activityHours.length
-      ? activityHours.map((hour) => `- ${hour.label} — ${clipText(hour.summary, 240)}`)
+    ...(activityContextLines.length
+      ? activityContextLines
       : activityGroups.length
         ? activityGroups.map((group) => {
             const first = formatLocalTime(group.firstAt, timezone);

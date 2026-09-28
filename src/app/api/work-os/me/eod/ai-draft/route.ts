@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refineEodNarrative, sanitizeEodAnnotations } from "@/lib/aiEod";
+import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
 import type { EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
@@ -99,9 +100,21 @@ export async function POST(req: Request) {
     } catch {
       screenshotSyncUnavailable = true;
     }
+    // Employee-reviewed interval recaps are the stronger activity context;
+    // hourly rollups only fill hours an interval does not already cover.
+    const intervalLines = await listActivityIntervalActivityLines(auth.access.organizationId, personId, date).catch(() => []);
+    const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
+    const observedHours = screenshots.hours.filter((hour) => !coveredHours.has(hour.hourStart));
     const groundingWithObserved = {
       ...grounding,
-      observed: screenshots.hours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
+      observed: [
+        ...intervalLines.map((line) => ({
+          at: null,
+          text: `${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${line.detail}`,
+          app: null,
+        })),
+        ...observedHours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
+      ],
     };
     const result = hasRefinement
       ? await refineEodNarrative(groundingWithObserved, body.draft as string, feedback, annotations)

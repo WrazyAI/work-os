@@ -938,3 +938,163 @@ body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ── Activity Interval Reviews (design §29.1f extension) ──────────────────
+   The Tasks tab's Recent activity stream. Text-first, chat-like cards with a
+   quiet provenance chip and a collapsed evidence disclosure; no charts, no
+   scores, no productivity language. */
+.chat-activity-stream {
+  display: grid;
+  gap: var(--chat-space-2, 8px);
+  margin-bottom: var(--chat-space-3, 12px);
+}
+.chat-activity-stream-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+.chat-activity-eyebrow {
+  color: var(--ink-3, #7b8278);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.chat-activity-count {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: var(--inset, #edf0ea);
+  color: var(--ink-2, #626a61);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chat-activity-list { display: grid; gap: var(--chat-space-2, 8px); }
+.chat-activity-card {
+  display: grid;
+  gap: 6px;
+  position: relative;
+  border: 1px solid var(--line, #e2e6df);
+  border-radius: 14px;
+  background: var(--color-white, #ffffff);
+  padding: 10px 12px;
+}
+.chat-activity-card.is-unavailable { background: var(--inset, #edf0ea); }
+.chat-activity-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-activity-when { display: grid; min-width: 0; flex: 1 1 auto; }
+.chat-activity-when small { color: var(--ink-3, #7b8278); font-size: 9.5px; font-weight: 600; }
+.chat-activity-label { color: var(--ink, #182018); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chat-activity-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--inset, #edf0ea);
+  color: var(--ink-2, #626a61);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.chat-activity-status.is-confirmed { background: #e8f4da; color: #3f6520; }
+.chat-activity-status.is-amended { background: #edf6fd; color: var(--color-observed-ink, #235778); }
+.chat-activity-status.is-unavailable { background: #fff3d1; color: #7a5a12; }
+.chat-activity-headline { margin: 0; color: var(--ink, #182018); font-size: 12.5px; font-weight: 650; line-height: 1.35; }
+.chat-activity-detail { margin: 0; color: var(--ink-2, #626a61); font-size: 11.5px; line-height: 1.55; white-space: pre-line; }
+.chat-activity-provenance { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
+.chat-activity-note {
+  margin: 0;
+  border-left: 2px solid var(--line, #e2e6df);
+  padding: 2px 0 2px 8px;
+  color: var(--ink-2, #626a61);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.chat-activity-note strong { color: var(--ink, #182018); font-weight: 700; }
+.chat-activity-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-activity-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border-radius: 9px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-activity-confirm { border: 1px solid transparent; background: var(--signal, #a8f15b); color: var(--ink, #182018); }
+.chat-activity-confirm:hover:not(:disabled) { filter: brightness(1.03); }
+.chat-activity-confirm:disabled { opacity: .55; cursor: default; }
+.chat-activity-quiet { border: 1px solid var(--line, #d9ded5); background: var(--color-white, #ffffff); color: var(--ink-2, #626a61); }
+.chat-activity-quiet:hover:not(:disabled) { color: var(--ink, #182018); }
+.chat-activity-quiet:disabled { opacity: .55; cursor: default; }
+.chat-activity-actions button:focus-visible,
+.chat-activity-frame:focus-visible,
+.chat-activity-evidence summary:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+}
+.chat-activity-amend { display: grid; gap: 6px; }
+.chat-activity-amend textarea {
+  width: 100%;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 9px;
+  padding: 8px 10px;
+  color: var(--ink, #182018);
+  font: 11.5px/1.5 Manrope, Inter, sans-serif;
+  resize: vertical;
+}
+.chat-activity-evidence { border-top: 1px solid var(--line, #e2e6df); padding-top: 6px; }
+.chat-activity-evidence summary {
+  color: var(--ink-2, #626a61);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.chat-activity-evidence[open] summary { margin-bottom: 4px; }
+.chat-activity-evidence ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.chat-activity-frame {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-activity-frame:hover { background: var(--hover, rgba(24, 32, 24, .04)); }
+.chat-activity-frame.is-static { cursor: default; }
+.chat-activity-frame > time { flex: 0 0 auto; color: var(--ink-3, #7b8278); font-size: 9.5px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.chat-activity-frame-copy { display: grid; min-width: 0; gap: 1px; color: var(--ink-2, #626a61); font-size: 10.5px; line-height: 1.45; }
+.chat-activity-frame-copy small { color: var(--ink-3, #7b8278); font-size: 9.5px; }
+.chat-activity-expired { display: block; color: var(--ink-3, #7b8278); font-size: 9.5px; line-height: 1.4; }
+.chat-activity-empty { display: grid; gap: 2px; border: 1px dashed var(--line, #d9ded5); border-radius: 14px; padding: 12px; }
+.chat-activity-empty p { margin: 0; color: var(--ink, #182018); font-size: 11.5px; font-weight: 650; }
+.chat-activity-empty small { color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.45; }
+.chat-activity-empty .chat-activity-quiet { justify-self: start; margin-top: 4px; }
+.chat-activity-skeletons { display: grid; gap: var(--chat-space-2, 8px); }
+.chat-activity-skeleton {
+  height: 86px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--inset, #edf0ea) 25%, var(--hover, rgba(24, 32, 24, .04)) 37%, var(--inset, #edf0ea) 63%);
+  background-size: 400% 100%;
+  animation: chat-activity-shimmer 1.4s ease infinite;
+}
+@keyframes chat-activity-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-activity-skeleton { animation: none; }
+}

@@ -8,13 +8,15 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { secureState } from "./vault";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
+import { decideActivityIntervalReview, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ApprovalFlow } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
+import { ActivityIntervalList } from "./ActivityIntervalList";
+import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
@@ -29,7 +31,7 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
-import type { WorkSession } from "./types";
+import type { WorkSession, ActivityIntervalCard as ActivityIntervalCardData } from "./types";
 import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
@@ -90,6 +92,9 @@ interface ChatEntry {
   receipt?: string | null;
   trace?: AvatarTrace | null;
   createdAt?: string;
+  /** The live recap card for this prompt turn (local-only; the Tasks tab
+   * carries the durable stream). */
+  activityInterval?: ActivityIntervalCardData;
 }
 
 interface AgendaReview {
@@ -179,6 +184,9 @@ export default function AvatarApp(): React.ReactElement {
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>(null);
+  const [activityPreparing, setActivityPreparing] = useState(false);
+  const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
   const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
@@ -560,23 +568,49 @@ export default function AvatarApp(): React.ReactElement {
       if (nudge.kind === "hourly") {
         if (deliveryKeys.current.has(nudge.key)) continue;
         deliveryKeys.current.add(nudge.key);
-        void apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
-          method: "POST",
-          headers: { "Idempotency-Key": nudge.key },
-          body: JSON.stringify({}),
-        }).then(({ delivered }) => {
-          if (!delivered || notifiedKeys.current.has(nudge.key)) return;
-          notifiedKeys.current.add(nudge.key);
-          writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
-          fireNotification(nudge, notificationPermission.current);
-          setMissed(false);
-          setExpanded((current) => {
-            if (!current) void toggleExpanded(true);
-            return true;
-          });
-          if (win) win.setFocus().catch(() => { /* best effort */ });
-          void loadDay();
-        }).catch(() => undefined).finally(() => deliveryKeys.current.delete(nudge.key));
+        // Interval-first check-in: build the evidence-backed recap for the due
+        // prompt before claiming delivery, so the notification can say the
+        // recap is ready. Any failure falls back to the generic prompt.
+        void (async () => {
+          let recap: ActivityIntervalCardData | null = null;
+          try {
+            setActivityPreparing(true);
+            const ensured = await ensureActivityIntervalReview(facts.nextPromptAt);
+            if (ensured.status === "ready" && ensured.interval) recap = ensured.interval;
+          } catch { /* recap is optional; the generic prompt still fires */ }
+          finally { setActivityPreparing(false); }
+          try {
+            const { delivered } = await apiRequest<{ delivered: boolean }>("/api/work-os/me/prompt-delivery", {
+              method: "POST",
+              headers: { "Idempotency-Key": nudge.key },
+              body: JSON.stringify({}),
+            });
+            if (!delivered || notifiedKeys.current.has(nudge.key)) return;
+            notifiedKeys.current.add(nudge.key);
+            writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
+            if (recap) {
+              setActivityPrompt(recap);
+              fireNotification({
+                kind: "hourly",
+                key: `recap:${recap.id}`,
+                title: "Your activity recap is ready",
+                body: `${recap.label}: ${(recap.headline ?? "Review what your screenshots show.").slice(0, 140)}`,
+              }, notificationPermission.current);
+            } else {
+              fireNotification(nudge, notificationPermission.current);
+            }
+            setMissed(false);
+            setExpanded((current) => {
+              if (!current) void toggleExpanded(true);
+              return true;
+            });
+            if (win) win.setFocus().catch(() => { /* best effort */ });
+            void loadDay();
+            if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
+          } finally {
+            deliveryKeys.current.delete(nudge.key);
+          }
+        })();
         continue;
       }
       notifiedKeys.current.add(nudge.key);
@@ -645,6 +679,30 @@ export default function AvatarApp(): React.ReactElement {
     void emit("work-os://avatar-navigate", { view: page });
     await invoke("focus_main").catch(() => undefined);
   }, []);
+
+  // Confirm/amend an Activity Interval Review. The AI inference never becomes
+  // an employee check-in and never advances the check-in cadence; only the
+  // employee's own decision on this recap is recorded.
+  const decideActivityPrompt = useCallback(async (id: string, action: "confirm" | "amend", feedback?: string): Promise<void> => {
+    setDecidingIntervalId(id);
+    try {
+      await decideActivityIntervalReview(id, action, feedback);
+      setActivityPrompt(null);
+      setFacts((current) => clearRecordedUpdatePrompt(current));
+      setChat((current) => current.map((entry) => entry.activityInterval?.id === id
+        ? { ...entry, activityInterval: undefined, text: entry.text, receipt: action === "confirm" ? "Recap confirmed" : "Recap updated with your note" }
+        : entry));
+      if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
+      void loadDay();
+    } catch (value) {
+      setChat((current) => [...current, {
+        id: `activity-decision-error-${Date.now()}`, role: "system",
+        text: value instanceof Error ? value.message : "The recap decision could not be saved.",
+      }]);
+    } finally {
+      setDecidingIntervalId(null);
+    }
+  }, [facts.shiftDate, loadDay]);
 
   // ── Persist position after drags settle ──
   useEffect(() => {
@@ -1081,10 +1139,25 @@ export default function AvatarApp(): React.ReactElement {
   const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
   useEffect(() => {
     if (!promptTurnId) return;
-    setChat((current) => current.some((entry) => entry.id === promptTurnId)
-      ? current
-      : [...current, { id: promptTurnId, role: "assistant", text: `${contextualPrompt.heading}: ${contextualPrompt.body}`, createdAt: new Date().toISOString() }]);
-  }, [contextualPrompt.body, promptTurnId]);
+    setChat((current) => {
+      const recap = activityPrompt;
+      const text = recap ? (recap.headline ?? "Here is what I observed.") : `${contextualPrompt.heading}: ${contextualPrompt.body}`;
+      const existing = current.find((entry) => entry.id === promptTurnId);
+      if (existing) {
+        if (!recap || existing.activityInterval?.id === recap.id) return current;
+        return current.map((entry) => entry.id === promptTurnId ? { ...entry, activityInterval: recap, text } : entry);
+      }
+      return [...current, {
+        id: promptTurnId, role: "assistant" as const, text, createdAt: new Date().toISOString(),
+        ...(recap ? { activityInterval: recap } : {}),
+      }];
+    });
+  }, [contextualPrompt.body, promptTurnId, activityPrompt]);
+  // A recap only belongs to its prompt instance; drop it once the prompt has
+  // been answered or the cadence moves on.
+  useEffect(() => {
+    if (activityPrompt && !facts.promptRequired && facts.loaded) setActivityPrompt(null);
+  }, [activityPrompt, facts.promptRequired, facts.loaded]);
   const taskContext = useMemo(
     () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
     [facts.loaded, facts.shiftDate, facts.taskOptions],
@@ -1207,7 +1280,7 @@ export default function AvatarApp(): React.ReactElement {
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
         <div className="avatar-compact">
-        {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
+        {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><span>{activityPreparing ? "Otto is analyzing your recent frames." : contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"
@@ -1261,8 +1334,16 @@ export default function AvatarApp(): React.ReactElement {
           </header>
            <div className="conversation-scroll-region">
            <div className="avatar-chat" ref={chatScroll}>
-            {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={contextualPrompt.heading}><strong>{contextualPrompt.heading}</strong><small>{contextualPrompt.body}</small>{contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
-          {avatarTab === "tasks" ? (
+            {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={activityPreparing ? "Reviewing your last hour" : contextualPrompt.heading}><strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><small>{activityPreparing ? "Otto is analyzing your recent Worktivity frames to summarize the interval." : contextualPrompt.body}</small>{!activityPreparing && contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
+          {avatarTab === "tasks" ? (<>
+            <ActivityIntervalList
+              date={facts.shiftDate || null}
+              enabled={facts.loaded}
+              timezone={facts.timezone}
+              onDecide={decideActivityPrompt}
+              decidingId={decidingIntervalId}
+              pollMs={DAY_POLL_MS}
+            />
             <TaskSelectionCard
               title="Open tasks"
               status={facts.loaded ? "ready" : "loading"}
@@ -1277,7 +1358,7 @@ export default function AvatarApp(): React.ReactElement {
               emptyTitle="No open tasks"
               emptyMessage="Tasks waiting to be completed will appear here."
             />
-          ) : (<>
+          </>) : (<>
           {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
             <div className="avatar-task-context">
               <TaskSelectionCard
@@ -1317,6 +1398,14 @@ export default function AvatarApp(): React.ReactElement {
                             startedAt={0}
                             settledMs={entry.trace.elapsedMs}
                             result={entry.trace.result}
+                          />
+                        )}
+                        {entry.activityInterval && (
+                          <ActivityIntervalCard
+                            interval={entry.activityInterval}
+                            timezone={facts.timezone}
+                            onDecide={decideActivityPrompt}
+                            deciding={decidingIntervalId === entry.activityInterval.id}
                           />
                         )}
                         {entry.toolResults?.map((result, resultIndex) => {
@@ -1390,7 +1479,7 @@ export default function AvatarApp(): React.ReactElement {
               value={input}
               onChange={setInput}
               onSend={() => void (agendaDue ? submitAgenda() : sendUpdate())}
-              placeholder={agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
+              placeholder={agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : activityPrompt ? "Add context to the recap above…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
               ariaLabel={agendaDue ? "Describe your goal for today" : "Share an update or instruct the assistant"}
               canSend={!!input.trim() && !thinking && !filing && !agendaReview}
               busy={thinking || filing}

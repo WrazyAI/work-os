@@ -12,6 +12,7 @@ export const INSIGHTS_STALE_MS = 5 * 60_000;
 export const ONBOARDING_STALE_MS = 30 * 60_000;
 export const TASK_OPTIONS_STALE_MS = 10 * 60_000;
 export const HISTORICAL_STALE_MS = 10 * 60_000;
+export const ACTIVITY_INTERVALS_STALE_MS = 60_000;
 
 export const workOsKeys = {
   day: (variant: "compact" | "details") => ["work-os", "day", variant] as const,
@@ -25,6 +26,7 @@ export const workOsKeys = {
   eodScreenshots: (date: string) => ["work-os", "eod-screenshots", date] as const,
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
+  activityIntervals: (date: string) => ["work-os", "activity-intervals", date] as const,
 };
 
 const PERSISTED_ROOT = "work-os";

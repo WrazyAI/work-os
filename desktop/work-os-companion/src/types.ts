@@ -381,3 +381,57 @@ export interface EodScreenshotPreparation {
   /** The provider serves no retrievable frames for this day; stop waiting. */
   unavailable: boolean;
 }
+
+/** One analyzed frame behind an Activity Interval Review. Snapshots survive
+ * raw-image retention; `retained: false` means the image is gone. */
+export interface ActivityIntervalEvidence {
+  summaryId: string | null;
+  capturedAt: string;
+  visibleApp: string | null;
+  frameSummary: string | null;
+  usedInModel: boolean;
+  rawImageShown: boolean;
+  selectionReason: string | null;
+  retained: boolean;
+}
+
+/** An evidence-backed recap of one progress interval. `reviewStatus` is
+ * provenance: inferred = AI only, confirmed = employee accepted, amended =
+ * employee corrected/added context. */
+export interface ActivityInterval {
+  id: string;
+  windowStart: string;
+  windowEnd: string;
+  label: string;
+  promptKind: "follow_up" | "hourly_fallback";
+  generationStatus: "preparing" | "ready" | "unavailable" | "failed";
+  reviewStatus: "inferred" | "confirmed" | "amended";
+  headline: string | null;
+  detail: string | null;
+  employeeFeedback: string | null;
+  failureReason: string | null;
+  generatedAt: string | null;
+  reviewedAt: string | null;
+  evidenceExpired: boolean;
+  evidenceCount: number;
+  evidence: ActivityIntervalEvidence[];
+}
+
+export interface ActivityIntervalsData {
+  date: string;
+  intervals: ActivityInterval[];
+}
+
+/** Card shape returned by `/activity-intervals/ensure` and the decision route
+ * (no evidence list; the Tasks stream carries the full record). */
+export type ActivityIntervalCard = Pick<
+  ActivityInterval,
+  "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
+  | "headline" | "detail" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
+>;
+
+export interface ActivityIntervalEnsureResult {
+  status: "ready" | "preparing" | "unavailable" | "failed" | "no_prompt";
+  reason: string | null;
+  interval: ActivityIntervalCard | null;
+}

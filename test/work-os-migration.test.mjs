@@ -64,7 +64,9 @@ const migrations = [
     "supabase/migrations/0050_work_os_profile_atomicity.sql",
     "supabase/migrations/0051_work_os_employee_schedule_settings.sql",
     "supabase/migrations/0052_work_os_sorted_task_history.sql",
-];
+    "supabase/migrations/0053_work_activity_intervals.sql",
+    "neon/migrations/0041_work_activity_intervals.sql",
+  ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
   const db = new PGlite();
@@ -92,6 +94,7 @@ test("Work OS companion migration is complete and idempotent", async () => {
     "work_report_versions", "work_desktop_sessions", "work_audit_log",
     "work_employee_onboarding", "work_consent_records",
     "work_sessions", "work_daily_plans", "work_daily_plan_items", "work_daily_plan_builds", "work_session_events", "work_task_day_events",
+    "work_activity_intervals", "work_activity_interval_evidence",
   ];
   const tables = await db.query(`
     select table_name from information_schema.tables
@@ -108,6 +111,22 @@ test("Work OS companion migration is complete and idempotent", async () => {
       and column_name = any($1)
   `, [["screenshot_analysis_enabled", "screenshot_analysis_interval_minutes", "screenshot_analysis_start", "screenshot_analysis_end", "screenshot_analysis_eod_lead_minutes"]]);
   assert.equal(screenshotScheduleColumns.rows.length, 5);
+  const activityIntervalColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_activity_intervals'
+      and column_name = any($1)
+  `, [["slot_key", "prompt_kind", "prompt_due_at", "window_start", "window_end", "generation_status", "review_status", "headline", "ai_detail", "final_detail", "employee_feedback", "evidence_expired_at"]]);
+  assert.equal(activityIntervalColumns.rows.length, 12);
+  const activityIntervalUnique = await db.query(`
+    select conname from pg_constraint where conname = 'work_activity_intervals_organization_id_person_id_slot_key_key'
+  `);
+  assert.equal(activityIntervalUnique.rows.length, 1);
+  const activityIntervalEvidenceColumns = await db.query(`
+    select column_name from information_schema.columns
+    where table_schema='public' and table_name='work_activity_interval_evidence'
+      and column_name = any($1)
+  `, [["interval_id", "screenshot_summary_id", "evidence_event_id", "captured_at", "ordinal", "used_in_model", "raw_image_shown", "selection_reason", "visible_app_snapshot", "frame_summary_snapshot"]]);
+  assert.equal(activityIntervalEvidenceColumns.rows.length, 10);
 
   const policies = await db.query(`
     select count(*)::int as count from pg_policies where schemaname='public'
@@ -491,6 +510,30 @@ test("Work OS companion migration is complete and idempotent", async () => {
     reports: 0, report_versions: 0, provider_connections: 0, provider_credentials: 0,
     source_accounts: 0, audit_rows: 0,
   });
+
+  await db.query(`
+    insert into work_activity_intervals(
+      organization_id, person_id, work_session_id, local_date, slot_key, prompt_kind, prompt_due_at,
+      window_start, window_end, generation_status, review_status, headline, ai_detail, final_detail
+    )
+    values ($1,$2,$3,'2026-08-11','interval-a','hourly_fallback','2026-08-11T10:00:00Z','2026-08-11T09:00:00Z','2026-08-11T10:00:00Z','ready','inferred','Worked in the editor','Detail A','Detail A'),
+           ($4,$5,$6,'2026-08-11','interval-b','hourly_fallback','2026-08-11T10:00:00Z','2026-08-11T09:00:00Z','2026-08-11T10:00:00Z','ready','confirmed','Worked on B','Detail B','Detail B')
+  `, [orgA, personA, workSessionA, orgB, personB, workSessions.rows.find((row) => row.organization_id === orgB).id]);
+  await db.query(`
+    insert into work_activity_interval_evidence(interval_id, organization_id, captured_at, ordinal, visible_app_snapshot, frame_summary_snapshot)
+    select id, organization_id, '2026-08-11T09:30:00Z', 0, 'VS Code', 'Editing a file.' from work_activity_intervals where organization_id=$1
+  `, [orgA]);
+  const intervalVisibility = await asUser(employeeA.id, () => db.query(`
+    select
+      (select count(*) from work_activity_intervals where organization_id=$1)::int as own_intervals,
+      (select count(*) from work_activity_intervals where organization_id=$2)::int as other_intervals,
+      (select count(*) from work_activity_interval_evidence)::int as own_evidence
+  `, [orgA, orgB]));
+  assert.deepEqual(intervalVisibility.rows[0], { own_intervals: 1, other_intervals: 0, own_evidence: 1 });
+  await assert.rejects(() => db.query(`
+    insert into work_activity_intervals(organization_id, person_id, local_date, slot_key, prompt_kind, prompt_due_at, window_start, window_end)
+    values ($1,$2,'2026-08-11','interval-a','hourly_fallback','2026-08-11T10:00:00Z','2026-08-11T09:00:00Z','2026-08-11T10:00:00Z')
+  `, [orgA, personA]));
 
   const adminAVisibility = await asUser(adminA.id, () => db.query(`
     select
