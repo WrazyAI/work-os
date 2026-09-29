@@ -172,7 +172,6 @@ function HistorySection() {
             <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
             <span className="avatar-badge" />
           </button>
-          <span className="avatar-day-time">3h 12m left</span>
         </div>
       </div>
     );
