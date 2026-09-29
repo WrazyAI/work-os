@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 10,
+    "summary": "Step 10 'The left sidebar is missing the required agent tabs (Claude, Codex, Work OS, SEO OS, Worktivity).' failed. Error: TEST FAILURE\n\nThe left sidebar does not contain the required agent tabs, so the app shell regression is present and the test's main assertion failed.\n\nObservations:\n- Left sidebar shows: Mission Control, Studio, Chat & Notes, Kanban, Downloads, Memory, Build Guide — the required tabs ('Claude', 'Codex', 'Work OS', 'SEO OS', 'Worktivity') are not present as sidebar anchors.\n- The Kanban workspace loaded successfully (columns and empty-state cards are visible); no literal \"This page could not be found\" text or Next.js overlay was observed.\n- The browser tab title contains 'WrazyOS'.",
+    "path": "steps/10-snapshot.html"
+  }
+]

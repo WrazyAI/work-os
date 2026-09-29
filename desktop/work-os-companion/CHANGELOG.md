@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The microphone only appears when the workspace can actually transcribe, and a slow transcription now says so instead of failing silently.
+
 ## 0.3.72
 
 - The recap bubble now sits directly above Otto’s head at any mascot size, with its tail pointing at him.

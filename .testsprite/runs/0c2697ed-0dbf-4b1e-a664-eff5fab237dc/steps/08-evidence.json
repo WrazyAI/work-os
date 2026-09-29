@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 8,
+    "summary": "Step 8 'Workspace pairing was blocked by a desktop-only 'Sign-in could not open' notification, so the assistant never produced or confirmed an agenda.' failed. Error: TEST BLOCKED\n\nThe workspace pairing could not be completed — the sign-in flow requires the WrazyOS desktop authorization URL which cannot be opened in this browser-based test environment.\n\nObservations:\n- Clicking 'Connect workspace' produced a persistent notification: 'Sign-in could not open — Only the WrazyOS desktop authorization URL can be opened.'\n- The Server settings field is already set to 'https://srv1726015.tailbf7608.ts.net' and the page confirmed 'Settings saved', so server configuration is correct but pairing is blocked by desktop-only authorization.",
+    "path": "steps/08-snapshot.html"
+  }
+]
