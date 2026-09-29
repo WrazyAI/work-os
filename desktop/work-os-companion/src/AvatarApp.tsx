@@ -6,6 +6,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
+import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
 import { decideActivityIntervalReview, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
@@ -447,6 +448,16 @@ export default function AvatarApp(): React.ReactElement {
     }).then((fn) => { unlistenSession = fn; }).catch(() => undefined);
     return () => { unlistenDay?.(); unlistenSession?.(); };
   }, [loadDay]);
+
+  // Appearance is per-device and shared with the main window: apply what the
+  // vault holds on boot, then follow the main window's broadcast live. This
+  // window never writes, so both windows always agree on one stored value.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void secureState.settings().then((settings) => applyAppearance(normalizeAppearance(settings))).catch(() => undefined);
+    void listen<{ textSize?: unknown; mascotSize?: unknown }>(APPEARANCE_EVENT, (event) => applyAppearance(normalizeAppearance(event.payload))).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
 
   const avatarConversationScope = desktopSession?.organizationId && facts.personId && facts.shiftDate
     ? `workday:${desktopSession.organizationId}:${facts.personId}:${facts.shiftDate}`

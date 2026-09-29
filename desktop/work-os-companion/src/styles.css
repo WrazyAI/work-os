@@ -2182,6 +2182,34 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* Settings choice: one segmented control for two-value preferences. The
+   selected pill carries the ink state and mirrors `aria-checked`. */
+.settings-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #efeee7;
+}
+.settings-choice button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.settings-choice button:hover { color: var(--ink); }
+.settings-choice button[aria-checked="true"] {
+  background: var(--ink);
+  color: #f3f1e8;
+  box-shadow: 0 1px 3px rgba(23, 25, 20, 0.18);
+}
 .settings-switch.on .settings-switch-state { color: #436a1c; }
 .settings-switch:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {

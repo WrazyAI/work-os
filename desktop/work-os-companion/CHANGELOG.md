@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.61
+
+- Settings has a new Reading & display section: choose Small or Medium text to make the whole app easier to read.
+- You can also set Otto to Small so he takes up less room everywhere he appears, including the floating companion.
+- Both display choices apply straight away and are remembered on this device.
+
 ## 0.3.60
 
 - Otto can use memories inferred during the day as temporary context for that day without treating them as saved long-term facts.

@@ -5,11 +5,15 @@ import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 import { mergeConversationTurns } from "./avatarLogic";
+import { APPEARANCE_DEFAULTS, appearanceFromChange, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 
 export interface WorkOsSettings {
   apiBase: string;
   /** Launch update check. Absent historically means on. */
   autoCheckUpdates: boolean;
+  /** Accessibility appearance, per device; see `appearance.ts`. */
+  textSize: TextSize;
+  mascotSize: MascotSize;
 }
 
 export interface WorkOsConversationTurn {
@@ -194,22 +198,24 @@ export const secureState = {
   savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => isTauri() ? set("pending-auth", value) : Promise.resolve(),
   clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
   settings: async (): Promise<WorkOsSettings> => {
-    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true };
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean }>("settings");
+    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true, ...APPEARANCE_DEFAULTS };
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
     const autoCheckUpdates = settings?.autoCheckUpdates !== false;
-    try { return { autoCheckUpdates, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase) }; }
+    const appearance = normalizeAppearance(settings);
+    try { return { autoCheckUpdates, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
     catch {
-      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates };
+      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates, ...appearance };
       await set("settings", fallback);
       return fallback;
     }
   },
-  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean }) => {
+  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; textSize?: TextSize; mascotSize?: MascotSize }) => {
     if (!isTauri()) return;
-    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean }>("settings");
+    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
     await set("settings", {
       apiBase: httpsOrigin(settings.apiBase ?? current?.apiBase ?? defaultApiBase),
       autoCheckUpdates: settings.autoCheckUpdates ?? current?.autoCheckUpdates !== false,
+      ...appearanceFromChange(normalizeAppearance(current), settings),
     });
   },
 };

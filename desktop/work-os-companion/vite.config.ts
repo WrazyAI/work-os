@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
+import { textScalePlugin } from "./src/textScale";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -10,8 +11,9 @@ export default defineConfig({
   // The monorepo root has its own postcss.config.mjs (for the web app). This
   // inline config stops Vite/Vitest from searching upward and trying to load
   // plugins that the companion package does not install. Tailwind here comes
-  // from @tailwindcss/vite, not PostCSS.
-  css: { postcss: { plugins: [] } },
+  // from @tailwindcss/vite, not PostCSS. The text-scale seam rides this inline
+  // config so every px text size follows `--text-scale` (appearance.ts).
+  css: { postcss: { plugins: [textScalePlugin()] } },
   clearScreen: false,
   server: {
     port: 1420,

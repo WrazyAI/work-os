@@ -60,6 +60,9 @@ import { WorktivityControlNotice } from "./WorktivityControlNotice";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemorySettings } from "./MemorySettings";
 import { SettingsSwitch } from "./SettingsSwitch";
+import { Setting } from "./Setting";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
@@ -268,6 +271,8 @@ export default function App() {
   const [vaultReady, setVaultReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [textSize, setTextSize] = useState<TextSize>("small");
+  const [mascotSize, setMascotSize] = useState<MascotSize>("large");
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
@@ -808,6 +813,7 @@ export default function App() {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
       const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates);
+      const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
       if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
         // Seed the cache with the last workday snapshot for an instant first
         // paint; the live query revalidates it in the background.
@@ -1509,6 +1515,37 @@ export default function App() {
     } catch (value) {
       setAutoCheckUpdates(previous);
       showError(errorMessage(value, "The update setting could not be saved."), "The update setting could not be saved.", "Setting not saved");
+    }
+  }
+
+  /** Apply first, persist second: the choice must land instantly in both
+   * windows, and a failed save rolls the visible state back rather than
+   * leaving the control and the rendering disagreeing. */
+  async function chooseTextSize(next: TextSize) {
+    const previous = textSize;
+    setTextSize(next);
+    applyAppearance({ textSize: next, mascotSize });
+    try {
+      await secureState.saveSettings({ textSize: next });
+      void emit(APPEARANCE_EVENT, { textSize: next, mascotSize });
+    } catch (value) {
+      setTextSize(previous);
+      applyAppearance({ textSize: previous, mascotSize });
+      showError(errorMessage(value, "The text size could not be saved."), "The text size could not be saved.", "Setting not saved");
+    }
+  }
+
+  async function chooseMascotSize(next: MascotSize) {
+    const previous = mascotSize;
+    setMascotSize(next);
+    applyAppearance({ textSize, mascotSize: next });
+    try {
+      await secureState.saveSettings({ mascotSize: next });
+      void emit(APPEARANCE_EVENT, { textSize, mascotSize: next });
+    } catch (value) {
+      setMascotSize(previous);
+      applyAppearance({ textSize, mascotSize: previous });
+      showError(errorMessage(value, "The mascot size could not be saved."), "The mascot size could not be saved.", "Setting not saved");
     }
   }
 
@@ -3096,7 +3133,14 @@ export default function App() {
             </section>
            </section>
 
-           <section className="settings-group" aria-labelledby="settings-workday-title">
+           <AppearanceSettings
+            textSize={textSize}
+            mascotSize={mascotSize}
+            onTextSize={(value) => void chooseTextSize(value)}
+            onMascotSize={(value) => void chooseMascotSize(value)}
+          />
+
+          <section className="settings-group" aria-labelledby="settings-workday-title">
              <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3></header>
             <section className="settings-panel">
               <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-chip">Avatar</span></Setting>
@@ -4080,4 +4124,4 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;
 }
-export function Setting({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) { return <div className="setting"><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>; }
+

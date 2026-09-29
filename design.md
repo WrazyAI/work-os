@@ -573,6 +573,32 @@ beneath the copy, and below 640px the modal takes the viewport inset. Keep,
 reject, and forget keep their exact existing behavior and states; nothing is
 remembered without a keep.
 
+### 8.6 Appearance settings: text and mascot size
+
+Reading & display sits with the Settings groups and holds exactly two
+preferences. Both are per-device, apply instantly in every window, and are
+remembered locally rather than synced to the workspace:
+
+- **Text size** — `Small` (default, the historical rendering) or `Medium`,
+  which scales text 15% through one root custom property (`--text-scale`).
+  Every px `font-size`, `font` shorthand size, and fixed `line-height` is
+  compiled to `calc(px * var(--text-scale))` by the companion's build seam, so
+  text scales without moving layout, icons, or spacing.
+- **Mascot size** — `Large` (default, the historical rendering) or `Small`
+  (62% of current). One scale rule over the shared art class follows
+  `--mascot-scale`, so every surface — chat marks, the thinking trace, hero
+  and EOD art, the connect screen, the dashboard, the memory tile, and the
+  floating companion orb — changes together. Only the art scales; labels,
+  progress rings, and status text keep their size and legibility.
+
+Both preferences render as a two-option segmented radio group
+(`role="radiogroup"` with `role="radio"`, roving tabindex, and arrow keys),
+state the current value, and normalize unknown or missing stored values back to
+the historical default — never to the larger setting. The main window applies
+and persists a change (rolling the visible state back if the save fails) and
+broadcasts it with `work-os://appearance-changed`; the floating companion
+window reads the stored value on boot and follows the broadcast live.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:
@@ -732,6 +758,8 @@ Accessibility is part of each module's interface:
 - Meaningful async receipts announced without raw payloads.
 - No essential information available only on hover.
 - Text zoom and narrow-width resilience.
+- Appearance preferences scale text and mascot art without shrinking labels or
+  status text (see §8.6).
 
 ## 13. Mascot and custom assets
 

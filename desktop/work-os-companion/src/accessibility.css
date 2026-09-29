@@ -1,0 +1,61 @@
+/* Accessibility appearance preferences — see design.md §19.9.
+   Defaults reproduce the historical rendering, so existing installs are
+   pixel-identical until someone opts in. */
+:root {
+  --text-scale: 1;
+  --mascot-scale: 1;
+}
+html[data-text-size="medium"] {
+  --text-scale: 1.15;
+}
+html[data-mascot-size="small"] {
+  --mascot-scale: 0.62;
+}
+
+/* One rule scales every mascot art surface: chat marks, the thinking trace,
+   hero and EOD art, the connect screen, the memory tile, the dashboard, and
+   the floating companion. Only the art scales — bubble labels, progress
+   rings, and layout keep their size and legibility. `scale` is a separate
+   transform property, so it composes with each surface's existing
+   `transform` animations instead of replacing them. */
+html[data-mascot-size="small"] .studio-otto,
+html[data-mascot-size="small"] .otto {
+  scale: var(--mascot-scale, 1);
+  transform-origin: center;
+}
+
+/* Dev fixture (?preview-settings) samples. Real surfaces get their sizes from
+   the app stylesheets; these only exist so the rendered result is visible. */
+.settings-preview-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .settings-preview-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.settings-preview-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-elevated, #fbfaf5);
+}
+.settings-preview-card h4 {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.settings-preview-sample {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+.settings-preview-pet {
+  width: 96px;
+  height: 96px;
+}
