@@ -99,3 +99,26 @@ import { rewritePlanSteps } from "../scripts/rotate-e2e-fixture.mts";
   assert.equal(outcome.emailRewrites, 0);
   assert.equal(outcome.steps[0].description, "Fill 'e2e-verify@maigreeks.com' into email field");
 }
+
+// 8. Re-running a rewrite with current values is a no-op.
+{
+  const steps = [
+    { description: "Fill 'e2e-verify@wrazyos.com' into email field" },
+    { description: "Fill 'NewPass456' into password field" },
+  ];
+  const outcome = rewritePlanSteps(steps, { email: "e2e-verify@wrazyos.com", newPassword: "NewPass456" });
+  assert.equal(outcome.changed, false);
+  assert.equal(outcome.passwordSteps, 0);
+  assert.deepEqual(outcome.steps, steps);
+}
+
+// 9. Platform secret references resolve at run time and are left untouched.
+{
+  const steps = [
+    { description: "Fill 'e2e-verify@wrazyos.com' into email field" },
+    { description: "Fill '<secret>credential</secret>' into password field" },
+  ];
+  const outcome = rewritePlanSteps(steps, { email: "e2e-verify@wrazyos.com", newPassword: "NewPass456" });
+  assert.equal(outcome.changed, false);
+  assert.deepEqual(outcome.steps, steps);
+}

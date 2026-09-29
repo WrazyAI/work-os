@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import bcrypt from "bcryptjs";
 import { Client } from "pg";
 
-const DEFAULT_EMAIL = "e2e-verify@maigreeks.com";
+const DEFAULT_EMAIL = "e2e-verify@wrazyos.com";
 const DEFAULT_BASE = "https://app.wrazyos.com";
 const DEFAULT_PROJECT = "e8fa6d35-586c-47a7-a69c-13e6b8552a0b";
 const DEFAULT_TESTSRITE = "/home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite";
@@ -59,14 +59,19 @@ export function rewritePlanSteps(
       const candidate = rewritten[index + offset];
       const candidateDescription = typeof candidate.description === "string" ? candidate.description : "";
       if (!/password/i.test(candidateDescription)) continue;
+      if (/<secret>|VAR_\{/.test(candidateDescription)) break;
       const oldPassword =
         (typeof candidate.input === "string" && candidate.input) || parseFill(candidateDescription)?.value || "";
       if (!oldPassword) break;
+      if (/<secret>|VAR_\{/.test(oldPassword)) break;
+      const changedPassword =
+        (typeof candidate.input === "string" && candidate.input !== options.newPassword) ||
+        (candidateDescription.includes(oldPassword) && oldPassword !== options.newPassword);
       if (typeof candidate.input === "string") candidate.input = options.newPassword;
       if (candidateDescription.includes(oldPassword)) {
         candidate.description = candidateDescription.split(oldPassword).join(options.newPassword);
       }
-      passwordSteps += 1;
+      if (changedPassword) passwordSteps += 1;
       break;
     }
   }

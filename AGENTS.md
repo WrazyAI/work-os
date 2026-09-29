@@ -210,8 +210,13 @@ Frontend runs use the project's configured environment URL (V3 routing ignores
 frontend plans log in with the `e2e-verify@wrazyos.com` fixture; when that
 sign-in fails with `Invalid email or password`, rotate it with
 `tsx scripts/rotate-e2e-fixture.mts --password-file <secret> --apply` (updates
-the credential and rewrites every stored plan that embeds it) instead of
-declaring the app broken. `tsx scripts/e2e-cleanup.mts <user-id> [--dry-run]`
+the credential and rewrites every stored plan that embeds it; plans using the
+platform's `<secret>` reference are left alone) and refresh the frontend
+project credential so the stored scripts' `VAR_{credential}` resolves:
+`testsprite project credential e8fa6d35-586c-47a7-a69c-13e6b8552a0b --type
+"API key" --credential-file <secret>`. Note frontend scripts hardcode the
+sign-in email, so keep the fixture on `e2e-verify@wrazyos.com` until those
+tests are regenerated. `tsx scripts/e2e-cleanup.mts <user-id> [--dry-run]`
 removes a disposable e2e user, its auto-created legacy org, and its memory
 rows. Backend tests need a project credential and at least one literal `assert`
 in the Python; run the script directly as well before reporting the verdict.
