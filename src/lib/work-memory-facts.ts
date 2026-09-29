@@ -58,7 +58,8 @@ export function factSourceId(personId: string, draft: FactDraft): string {
 }
 
 /** Proposes candidate profile facts from recent episodic memory. Candidates
- * never reach agent prompts until the employee confirms them. */
+ * may serve as same-day tentative context on their local workday, but only
+ * confirmed candidates become durable cross-day profile facts. */
 export async function extractProfileFactCandidates(
   scope: MemoryScope,
   options: { sinceDays?: number; now?: Date; localDate?: string } = {},
