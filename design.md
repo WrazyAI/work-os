@@ -638,9 +638,12 @@ recalled-history block retrieved for the interval's own work (the day's stated
 focus plus the observed apps and possible task references). That context exists
 only so the recap understands what the employee is currently working on. It is
 labeled informational, is never screenshot evidence, can never add completion,
-progress, or activity claims, and can never contradict the frames. A memory
-recall failure degrades silently to an evidence-only recap, and interval
-coverage records whether memory context was used.
+progress, or activity claims, and can never contradict the frames. It is
+treated as data, never as instructions, and a structured activity or workflow
+phase that cites no frame is dropped, so every retained claim stays traceable
+to the interval's observations. A memory recall failure degrades silently to an
+evidence-only recap, and interval coverage records whether memory context was
+used.
 
 Review adds provenance without creating employee-authored truth:
 
