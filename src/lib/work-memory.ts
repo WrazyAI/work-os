@@ -39,15 +39,24 @@ export interface RecallOptions {
   from?: string;
   to?: string;
   limit?: number;
+  /** Local workday being analyzed. Candidate profile facts are only usable on this date. */
+  analysisLocalDate?: string;
+  /** Defaults to true when an analysis date is available. */
+  includeSameDayCandidates?: boolean;
 }
 
 export interface RecallResult {
   items: ScoredMemoryItem[];
   profileFacts: MemoryItem[];
+  sameDayCandidates: MemoryItem[];
   vectorUsed: boolean;
 }
 
 const MEMORY_ITEM_COLUMNS = "id,kind,content,summary,occurred_at,local_date,source_table,source_id";
+
+function validLocalDate(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 /** Best-effort episodic write: never fails the caller's primary workflow.
  * Content is hash-deduplicated; embedding happens asynchronously in the drain. */
@@ -171,11 +180,16 @@ export async function drainWorkMemoryJobs(limit = 5): Promise<MemoryDrainResult>
 
 /** Hybrid recall: vector + lexical candidates fused with recency decay.
  * Degrades to lexical-only when embeddings are not configured reachable. */
-export async function recallWorkMemory(scope: MemoryScope, query: string, options: RecallOptions = {}): Promise<RecallResult> {
+export async function recallWorkMemory(scope: MemoryScope & { localDate?: string }, query: string, options: RecallOptions = {}): Promise<RecallResult> {
   const db = createAdminClient();
   const limit = Math.min(Math.max(options.limit ?? 12, 1), 25);
   const candidateLimit = Math.max(limit * 3, 24);
   const kinds = options.kinds?.length ? options.kinds : null;
+  const analysisLocalDate = validLocalDate(options.analysisLocalDate)
+    ? options.analysisLocalDate
+    : validLocalDate(scope.localDate)
+      ? scope.localDate
+      : null;
 
   const { data: facts } = await db
     .from("work_memory_items")
@@ -188,8 +202,23 @@ export async function recallWorkMemory(scope: MemoryScope, query: string, option
     .limit(12);
   const profileFacts = (facts ?? []) as MemoryItem[];
 
+  let sameDayCandidates: MemoryItem[] = [];
+  if (analysisLocalDate && options.includeSameDayCandidates !== false) {
+    const { data: candidates } = await db
+      .from("work_memory_items")
+      .select(MEMORY_ITEM_COLUMNS)
+      .eq("organization_id", scope.organizationId)
+      .eq("person_id", scope.personId)
+      .eq("kind", "profile_fact")
+      .eq("review_status", "candidate")
+      .eq("local_date", analysisLocalDate)
+      .order("occurred_at", { ascending: false })
+      .limit(8);
+    sameDayCandidates = (candidates ?? []) as MemoryItem[];
+  }
+
   const trimmed = query.replace(/\s+/g, " ").trim().slice(0, 2_000);
-  if (!trimmed) return { items: [], profileFacts, vectorUsed: false };
+  if (!trimmed) return { items: [], profileFacts, sameDayCandidates, vectorUsed: false };
 
   let vectorHits: MemoryItem[] = [];
   let vectorUsed = false;
@@ -200,6 +229,7 @@ export async function recallWorkMemory(scope: MemoryScope, query: string, option
         `select ${MEMORY_ITEM_COLUMNS}
            from work_memory_items
           where organization_id = $2 and person_id = $3 and embedding is not null
+            and kind <> 'profile_fact'
             and ($4::text[] is null or kind = any($4))
             and ($5::timestamptz is null or occurred_at >= $5)
             and ($6::timestamptz is null or occurred_at <= $6)
@@ -218,6 +248,7 @@ export async function recallWorkMemory(scope: MemoryScope, query: string, option
     `select ${MEMORY_ITEM_COLUMNS}
        from work_memory_items
       where organization_id = $2 and person_id = $3 and search @@ plainto_tsquery('english', $1)
+        and kind <> 'profile_fact'
         and ($4::text[] is null or kind = any($4))
         and ($5::timestamptz is null or occurred_at >= $5)
         and ($6::timestamptz is null or occurred_at <= $6)
@@ -227,12 +258,12 @@ export async function recallWorkMemory(scope: MemoryScope, query: string, option
   );
 
   const items = fuseMemoryRanks({ vector: vectorHits, lexical: lexical.rows as MemoryItem[], limit });
-  return { items, profileFacts, vectorUsed };
+  return { items, profileFacts, sameDayCandidates, vectorUsed };
 }
 
-export async function buildMemoryPromptBlock(scope: MemoryScope, query: string, options: RecallOptions = {}): Promise<string> {
-  const { items, profileFacts } = await recallWorkMemory(scope, query, options);
-  return formatMemoryContext({ items, profileFacts });
+export async function buildMemoryPromptBlock(scope: MemoryScope & { localDate?: string }, query: string, options: RecallOptions = {}): Promise<string> {
+  const { items, profileFacts, sameDayCandidates } = await recallWorkMemory(scope, query, options);
+  return formatMemoryContext({ items, profileFacts, sameDayCandidates });
 }
 
 export function memoryEnabled(featureFlags: Record<string, boolean> = {}): boolean {
