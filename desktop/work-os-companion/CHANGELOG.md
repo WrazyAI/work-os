@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Memory settings now explains that today's suggested facts can help Otto temporarily; only facts you keep carry across days.
+
 ## 0.3.60
 
 - Otto can use memories inferred during the day as temporary context for that day without treating them as saved long-term facts.
