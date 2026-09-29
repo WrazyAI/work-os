@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.70
+
+- The plan window no longer pops up when you open the app if your agenda is already set.
+
 ## 0.3.69
 
 - The floating companion no longer opens the chat on its own — a bubble above Otto shows your recap when it’s ready, and View more opens it in the chat.

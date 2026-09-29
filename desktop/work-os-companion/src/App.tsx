@@ -77,6 +77,7 @@ import SidebarNav, { type SidebarView } from "./SidebarNav";
 import { TaskDateNavigator } from "./TaskDateNavigator";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
+import { shouldAutoOpenPlanning, shouldCloseAutoOpenedPlanning } from "./planningGate";
 import { attendanceWatchExpectation, attendanceWatchInput } from "./attendanceWatch";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import "./plan-insights.css";
@@ -187,6 +188,10 @@ export default function App() {
   const notifications = useNotifications();
   const [session, setSession] = useState<DesktopSession | null>(null);
   const [day, setDay] = useState<DayData | null>(null);
+  /** True once a live server day payload has landed this session. The launch
+   * snapshot can look like an unresolved plan; auto-open waits for this. */
+  const [dayLive, setDayLive] = useState(false);
+  const planningAutoOpenedRef = useRef(false);
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
@@ -776,6 +781,7 @@ export default function App() {
     }
     const nextDay = dayResult.value;
     applyDayPayload(nextDay);
+    setDayLive(true);
     if (options.details) setDayDetailsLoaded(true);
     return nextDay;
   }, [applyDayPayload, queryClient, showError]);
@@ -1630,7 +1636,7 @@ export default function App() {
     } finally {
       await secureState.clearAccount();
       queryClient.clear();
-      setSession(null); setDay(null); setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
+      setSession(null); setDay(null); setDayLive(false); planningAutoOpenedRef.current = false; setOnboarding(null); setQueueCount(0); setQueueAttentionCount(0); setView("day"); setProfileOpen(false);
       setScenario(DEFAULT_DEBUG_SCENARIO); setBusy(false);
     }
   }
@@ -1982,8 +1988,16 @@ export default function App() {
   const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
-    if (active && (debugScenario.planningState === "required" || visibleDay?.prompt.kind === "plan" && visibleDay.prompt.required && visibleDay.plan?.status !== "confirmed")) {
+    const autoOpen = shouldAutoOpenPlanning({
+      active,
+      dayLive,
+      promptKind: visibleDay?.prompt.kind,
+      promptRequired: visibleDay?.prompt.required,
+      planStatus: visibleDay?.plan?.status,
+    });
+    if (debugScenario.planningState === "required" || autoOpen) {
       openPlanningSession();
+      planningAutoOpenedRef.current = autoOpen;
     }
     // Debugger-only: choosing the Shift start scenario opens the Plan modal directly
     // so the plan/build/refine flow can be exercised from fixtures. Production behavior
@@ -1993,7 +2007,15 @@ export default function App() {
       openPlanningSession();
     }
     if (!debugScenario.enabled || debugScenario.dayState !== "shift_start") shiftStartScenarioOpened.current = false;
-  }, [active, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
+  }, [active, dayLive, debugScenario.planningState, debugScenario.enabled, debugScenario.dayState, visibleDay?.plan?.status, visibleDay?.prompt.kind, visibleDay?.prompt.required]);
+
+  // The launch snapshot can auto-open the modal for a plan that the live read
+  // then proves confirmed; close it again instead of leaving a stale demand.
+  useEffect(() => {
+    if (!shouldCloseAutoOpenedPlanning({ open: planningSessionOpen, autoOpened: planningAutoOpenedRef.current, planStatus: visibleDay?.plan?.status })) return;
+    planningAutoOpenedRef.current = false;
+    setPlanningSessionOpen(false);
+  }, [planningSessionOpen, visibleDay?.plan?.status]);
 
   function editPlan(mutator: () => void) {
     planEditVersion.current += 1;
@@ -2164,7 +2186,7 @@ export default function App() {
     }
   }
 
-  function openPlanningSession() { setPlanningSeed(null); setPlanningSessionOpen(true); }
+  function openPlanningSession() { planningAutoOpenedRef.current = false; setPlanningSeed(null); setPlanningSessionOpen(true); }
 
   async function loadPlanHistory(date: string) {
     setPlanHistoryDate(date);
@@ -3299,7 +3321,7 @@ export default function App() {
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
       {profileOpen && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Workspace settings</span><h2 id="profile-settings-title">Profile settings</h2><p id="profile-settings-description">Only your identity, workday preferences, notifications, privacy exclusions, and work profile live here.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
-     <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => setPlanningSessionOpen(false)} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
+     <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut || clockOutExtendedPrompt ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => { setClockOutConfirmation(false); setClockOutExtendedPrompt(false); }}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
