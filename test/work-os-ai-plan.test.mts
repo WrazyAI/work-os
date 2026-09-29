@@ -49,7 +49,7 @@ test("includes bounded GitHub evidence as context but not a linkable task source
 
 test("planning prompt embeds live snapshot and recalled memory only when provided", () => {
   const plain = buildPlanningPrompt("Prepare the release.", context, []);
-  assert.doesNotMatch(plain, /todayContext|memoryContext|dated recalled history/);
+  assert.doesNotMatch(plain, /todayContext|memoryContext|same-day tentative context/);
   const enriched = buildPlanningPrompt("Prepare the release.", context, [], {
     todayBlock: "Today so far (2026-09-14) — live facts:\n- Shift: on shift",
     memoryBlock: "Recalled history (dated context, not current facts):\n- [2026-09-10 · task_event] Closed the migration task",
@@ -57,7 +57,8 @@ test("planning prompt embeds live snapshot and recalled memory only when provide
   assert.match(enriched, /todayContext/);
   assert.match(enriched, /memoryContext/);
   assert.match(enriched, /Shift: on shift/);
-  assert.match(enriched, /never treat it as evidence of completion/);
+  assert.match(enriched, /same-day tentative context awaiting review/);
+  assert.match(enriched, /never as evidence of completion/);
 });
 
 test("a Loom attachment can supply the planning intent", () => {
