@@ -408,6 +408,11 @@ export interface ActivityInterval {
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
+  /** Structured recap fields from the synthesis; older payloads omit them and
+   * the card falls back to the lead text alone. */
+  activities?: string[];
+  workflow?: string[];
+  uncertainties?: string[];
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;
@@ -427,7 +432,7 @@ export interface ActivityIntervalsData {
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
   "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
-  | "headline" | "detail" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
+  | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
 >;
 
 export interface ActivityIntervalEnsureResult {

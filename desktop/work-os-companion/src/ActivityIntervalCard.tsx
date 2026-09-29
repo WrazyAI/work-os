@@ -161,6 +161,15 @@ export function ActivityIntervalCard({
       {leadIn ? <p className="chat-activity-lead">{leadIn}</p> : null}
       {interval.headline ? <p className="chat-activity-headline">{interval.headline}</p> : null}
       {interval.detail ? <p className="chat-activity-detail">{interval.detail}</p> : null}
+      {interval.activities?.length ? (
+        <ul className="chat-activity-bullets">
+          {interval.activities.map((activity, index) => <li key={`${index}-${activity.slice(0, 24)}`}>{activity}</li>)}
+        </ul>
+      ) : null}
+      {interval.workflow && interval.workflow.length > 1 ? <p className="chat-activity-flow"><strong>Flow:</strong> {interval.workflow.join(" → ")}</p> : null}
+      {interval.uncertainties?.length ? (
+        <p className="chat-activity-uncertainty"><strong>Not established:</strong> {interval.uncertainties.join("; ")}</p>
+      ) : null}
       {interval.reviewStatus === "amended" && interval.employeeFeedback ? (
         <p className="chat-activity-note"><strong>Your note:</strong> {interval.employeeFeedback}</p>
       ) : null}

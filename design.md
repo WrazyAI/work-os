@@ -753,6 +753,13 @@ eligibility, completion, deployment, or quality; the synthesizer always
 receives the ordered per-frame observations and only a bounded representative
 subset of raw frames.
 
+Read the recap, don't wade through it. It presents as one short lead sentence,
+then short activity bullets (one observable activity each, with its clock time
+when known), an ordered `Flow:` line only when the evidence supports a sequence,
+and an explicit `Not established:` line for the evidence gaps. A dense
+multi-sentence paragraph is a contract violation, never a rendering fallback
+for new intervals.
+
 When Work Memory is enabled for the person, the synthesizer also receives a
 bounded additional-context block: the live day snapshot (focus, agenda,
 completed and deferred items, recent substantive updates, shift state) and a

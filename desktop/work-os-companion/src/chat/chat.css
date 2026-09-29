@@ -1119,6 +1119,16 @@ body {
 .chat-activity-status.is-unavailable { background: #fff3d1; color: #7a5a12; }
 .chat-activity-headline { margin: 0; color: var(--ink, #182018); font-size: 12.5px; font-weight: 650; line-height: 1.35; }
 .chat-activity-detail { margin: 0; color: var(--ink-2, #626a61); font-size: 11.5px; line-height: 1.55; white-space: pre-line; }
+/* Scannable recap structure: short lead, then one bullet per observed
+   activity, the ordered flow when the evidence supports it, and the explicit
+   evidence gaps. Never one dense paragraph. */
+.chat-activity-bullets { margin: 0; padding: 0 0 0 14px; display: grid; gap: 3px; color: var(--ink-2, #626a61); font-size: 11.5px; line-height: 1.45; }
+.chat-activity-bullets li { margin: 0; }
+.chat-activity-bullets li::marker { color: var(--ink-3, #7b8278); }
+.chat-activity-flow { margin: 0; color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.4; }
+.chat-activity-flow strong { color: var(--ink-2, #626a61); font-weight: 650; }
+.chat-activity-uncertainty { margin: 0; color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.45; }
+.chat-activity-uncertainty strong { color: var(--ink-2, #626a61); font-weight: 650; }
 .chat-activity-provenance { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
 .chat-activity-lead { margin: 0; color: var(--ink-2, #626a61); font-size: 10.5px; font-weight: 700; letter-spacing: 0.01em; }
 .chat-activity-ask { margin: 2px 0 0; color: var(--ink, #182018); font-size: 11.5px; font-weight: 650; }

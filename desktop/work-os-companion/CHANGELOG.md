@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.71
+
+- Activity recaps now read as a short lead with scannable bullets, a flow line, and an explicit list of what the screenshots did not establish.
+
 ## 0.3.70
 
 - The plan window no longer pops up when you open the app if your agenda is already set.

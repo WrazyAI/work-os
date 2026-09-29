@@ -47,6 +47,32 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("Inferred from your screenshots");
   });
 
+  it("renders scannable bullets, the ordered flow, and explicit gaps when the payload carries structure", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...baseInterval,
+        detail: "Reviewed the recap card and its formatting contract.",
+        activities: ["2:20 PM — VS Code: edited the recap card.", "2:45 PM — Terminal: ran the render tests."],
+        workflow: ["implementation", "verification"],
+        uncertainties: ["whether the change was pushed"],
+      },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("chat-activity-bullets");
+    expect(markup).toContain("2:20 PM — VS Code: edited the recap card.");
+    expect(markup).toContain("2:45 PM — Terminal: ran the render tests.");
+    expect(markup).toContain("Flow:");
+    expect(markup).toContain("implementation → verification");
+    expect(markup).toContain("Not established:");
+    expect(markup).toContain("whether the change was pushed");
+  });
+
+  it("keeps the lead-only fallback for older payloads without structure", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
+    expect(markup).not.toContain("chat-activity-bullets");
+    expect(markup).toContain(String(baseInterval.detail));
+  });
+
   it("renders the chat bubble with a lead-in and Looks good / Edit actions", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: baseInterval,
