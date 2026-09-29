@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MemoryPanel, type MemoryFact, type MemoryRecent } from "./MemorySettings";
+import { MemoryModal, MemorySummary, type MemoryFact, type MemoryRecent } from "./MemorySettings";
 
 // One candidate carries a serialized instant in local_date on purpose: the API
 // can hand back a SQL date as an instant, and the panel must still print a
@@ -27,17 +27,19 @@ const RECENT: MemoryRecent[] = [
   { id: "r10", kind: "evidence", content: "Installer checksum verified.", summary: "Installer checksum verified before delivery.", local_date: "2026-09-13", occurred_at: "2026-09-13T14:00:00.000Z" },
 ];
 
-/** Dev-only review surface for the memory panel: the three classes with local
- * review/forget so layout and interactions can be exercised without a backend. */
+/** Dev-only review surface for the memory surface: the settings summary band
+ * and its management modal with local review/forget, so layout and interactions
+ * can be exercised without a backend. */
 export default function MemoryPreview() {
   const [facts, setFacts] = useState(FACTS);
   const [recent, setRecent] = useState(RECENT);
   const [variant, setVariant] = useState<"populated" | "empty">("populated");
+  const [open, setOpen] = useState(true);
   const empty = variant === "empty";
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 17</p><h1>Settings</h1></div></header>
     <main className="page">
       <div className="insight-brief panel" style={{ padding: 16, marginBottom: 16 }}>
-        <p className="insight-empty-note">Memory panel states:</p>
+        <p className="insight-empty-note">Memory surface states:</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
           {(["populated", "empty"] as const).map((entry) => <button
             key={entry}
@@ -51,19 +53,32 @@ export default function MemoryPreview() {
               fontWeight: variant === entry ? 600 : 500,
             }}
           >{entry === "populated" ? "Populated" : "Empty"}</button>)}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            style={{ minHeight: 34, border: "1px solid var(--line)", borderRadius: 9, padding: "6px 12px", background: "transparent", color: "var(--ink)", fontWeight: 500 }}
+          >Open modal</button>
         </div>
       </div>
-      <MemoryPanel
+      <MemorySummary
         facts={empty ? [] : facts}
-        recent={empty ? [] : recent}
-        busy={false}
+        loading={false}
         error={null}
-        onReview={(id, status) => setFacts((current) => current.map((fact) => fact.id === id ? { ...fact, review_status: status } : fact))}
-        onForget={(id) => {
-          setFacts((current) => current.filter((fact) => fact.id !== id));
-          setRecent((current) => current.filter((entry) => entry.id !== id));
-        }}
+        onOpen={() => setOpen(true)}
+        onRetry={() => undefined}
       />
     </main>
+    {open && <MemoryModal
+      facts={empty ? [] : facts}
+      recent={empty ? [] : recent}
+      busy={false}
+      error={null}
+      onReview={(id, status) => setFacts((current) => current.map((fact) => fact.id === id ? { ...fact, review_status: status } : fact))}
+      onForget={(id) => {
+        setFacts((current) => current.filter((fact) => fact.id !== id));
+        setRecent((current) => current.filter((entry) => entry.id !== id));
+      }}
+      onClose={() => setOpen(false)}
+    />}
   </section></div>;
 }

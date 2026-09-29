@@ -6649,61 +6649,188 @@ button:not(:disabled):active {
   }
 }
 
-/* Work memory panel: three classes, three treatments. The panel owns its
-   layout — it must never reuse .settings-panel, whose two-column card grid
-   interleaved the sections. Like the settings groups it is a flat section on
-   the page surface: a heading, sections, and hairlines, no surrounding card. */
-.memory-panel {
-  display: grid;
-  gap: 16px;
-  margin-top: 26px;
-  padding: 20px 0 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.memory-head {
+/* Work memory: a quiet split band on the settings surface — the mascot and the
+   model statement on the left, the counts and the one View action on the right.
+   Facts themselves moved into the management modal, so Settings keeps its flat
+   table rhythm instead of growing a fourth section. Never reuse .settings-panel
+   here; its two-column grid is for settings rows, not this band. */
+.memory-summary {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 4px 12px;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  margin-top: 26px;
+  padding: 20px 0 4px;
+  border-top: 1px solid var(--line);
 }
 
-.memory-head h3 {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 750;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.memory-head p {
+.memory-summary-identity {
+  display: flex;
+  min-width: 0;
   flex: 1 1 420px;
+  align-items: center;
+  gap: 14px;
+}
+
+.memory-summary-figure {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe6d6;
+  border-radius: 16px;
+  background: radial-gradient(120% 120% at 30% 20%, #f4f9ec 0%, #e8f0dd 100%);
+}
+
+.memory-summary-figure .chat-mascot-mark,
+.memory-summary-figure .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.memory-summary-copy { display: grid; min-width: 0; gap: 3px; }
+
+.memory-summary-copy h3 {
   margin: 0;
-  max-width: 640px;
+  color: var(--ink);
+  font: 750 14px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.memory-summary-copy p {
+  margin: 0;
+  max-width: 520px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.5;
 }
 
-.memory-pending {
-  flex: none;
-  min-height: 24px;
+.memory-summary-side { display: flex; flex: none; align-items: center; gap: 22px; }
+.memory-summary-stats { display: flex; align-items: center; gap: 18px; }
+.memory-summary-stats > span { display: grid; justify-items: end; gap: 1px; }
+.memory-summary-stats b { color: var(--ink); font-size: 19px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.memory-summary-stats small { color: var(--muted); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.memory-summary-stats > span.attention b { color: #7a5312; }
+.memory-summary-stats > span.attention small { color: #8a6417; }
+.memory-summary-loading { color: var(--muted); font-size: 11.5px; }
+.memory-summary-error { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--danger); font-size: 11.5px; }
+.memory-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #f7f6ef; color: var(--ink); font-size: 11px; font-weight: 650; }
+.memory-summary-view {
+  min-height: 36px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #263026;
+  color: #f7fbf5;
+  font: 750 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.memory-summary-view:hover { background: #31402f; }
+.memory-summary-view:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
+
+/* Management modal: the settings band stays compact; every fact decision
+   happens here across two peer tabs. */
+.memory-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 20, 16, 0.68);
+  backdrop-filter: blur(9px);
+  overscroll-behavior: none;
+  animation: modalFade 0.18s ease both;
+}
+
+.memory-modal-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  width: min(720px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  background: #f7f5ed;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+  animation: modalRise 0.24s ease both;
+}
+
+.memory-modal-panel:focus { outline: none; }
+
+.memory-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.memory-modal-head h2 { margin: 0; color: var(--ink); font: 800 15px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: -0.015em; }
+.memory-modal-head p { margin: 4px 0 0; max-width: 540px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+.memory-modal-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.memory-modal-close:hover { background: #ecebe4; color: var(--ink); }
+.memory-modal-close:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
+
+.memory-tabs { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+
+.memory-tab {
   display: inline-flex;
   align-items: center;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: #eaf3dc;
-  color: #40661d;
-  font-size: 10px;
-  font-weight: 750;
-  white-space: nowrap;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
+
+.memory-tab:hover { color: var(--ink); }
+.memory-tab.active { border-color: var(--line); background: #fffdf6; color: var(--ink); }
+.memory-tab:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
+.memory-tab-count { min-width: 19px; padding: 1px 6px; border-radius: 999px; background: #ecebe4; color: #5f6358; font-size: 10px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+.memory-tab-count.attention { background: #fff1cf; color: #7a5312; }
+
+.memory-modal-body {
+  --memory-edge: 12px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 20px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--memory-edge), #000 calc(100% - var(--memory-edge)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--memory-edge), #000 calc(100% - var(--memory-edge)), transparent 100%);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.memory-modal-body > .memory-section:first-of-type { border-top: 0; padding-top: 0; }
 
 .memory-section {
   display: grid;
@@ -6923,9 +7050,30 @@ button:not(:disabled):active {
 }
 
 @media (max-width: 640px) {
-  .memory-head {
+  .memory-summary {
+    align-items: flex-start;
     flex-direction: column;
-    gap: 8px;
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  /* In column direction the 420px flex basis would become a 420px height. */
+  .memory-summary-identity {
+    flex: 0 0 auto;
+  }
+
+  .memory-summary-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .memory-modal {
+    padding: 12px;
+  }
+
+  .memory-modal-panel {
+    max-height: calc(100dvh - 24px);
+    border-radius: 16px;
   }
 
   .memory-rows.feed .memory-row {

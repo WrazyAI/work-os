@@ -164,6 +164,13 @@ describe("ProgressComposer focus panel goal card", () => {
     expect(markup).not.toContain("Apply goal");
   });
 
+  it("keeps the Focus panel in the shared scroll region so the goal and activity scroll under the edge fade", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase }));
+    expect(markup).toContain('class="conversation-scroll-region"');
+    expect(markup).toContain('class="goal-composer-panel"');
+    expect(markup.indexOf('class="conversation-scroll-region"')).toBeLessThan(markup.indexOf('class="goal-composer-panel"'));
+  });
+
   it("keeps the task suggestion in the empty editor and hides it once a goal exists", () => {
     const suggestion = { text: "From today's tasks: ship the focus card.", taskIds: ["preview-task-1"] };
     const empty = renderToStaticMarkup(createElement(ProgressComposer, { ...focusBase, goalSuggestion: suggestion }));

@@ -881,9 +881,30 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-detail-subtask-check:has(+ .task-detail-subtask-copy) { margin-top: 1px; }
 .task-detail-subtask-copy { display: grid; min-width: 0; gap: 4px; }
 .task-detail-subtask-copy strong { overflow: hidden; color: #50614f; font-size: 12px; line-height: 1.35; text-overflow: ellipsis; }
+/* The title is the edit affordance: clicking it opens the same editor as the
+ * menu's Edit item, so a subtask is reachable without discovering the menu. */
+.task-detail-subtask-title {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #50614f;
+  font: 700 12px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.task-detail-subtask-title:hover:not(:disabled) { color: #23331f; text-decoration: underline; text-underline-offset: 2px; }
+.task-detail-subtask-title:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
+.task-detail-subtask-title:disabled { cursor: default; }
 .task-detail-subtask-copy p { margin: 0; color: #8a9789; font-size: 10px; line-height: 1.4; }
 .task-detail-subtask-row.completed .task-detail-subtask-check { border-color: #9dcc80; background: #e7f5dd; }
-.task-detail-subtask-row.completed .task-detail-subtask-copy strong { color: #879387; text-decoration: line-through; text-decoration-color: #afc0aa; }
+.task-detail-subtask-row.completed .task-detail-subtask-copy strong,
+.task-detail-subtask-row.completed .task-detail-subtask-title { color: #879387; text-decoration: line-through; text-decoration-color: #afc0aa; }
 .task-detail-subtask-row > .task-state { margin-top: 1px; }
 .task-detail-subtask-row .subtask-actions { margin-top: -4px; }
 .task-detail-provenance { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }

@@ -510,7 +510,10 @@ empty says No tasks match these filters, never No tasks.
 Menus open near their trigger, float above content, and never change row height.
 They close on Escape/outside click and remain within the viewport. Use a
 detached card for contextual details rather than inserting a panel into the
-page and shifting the user's scroll position.
+page and shifting the user's scroll position. The outside-click boundary is the
+trigger plus the menu itself, including when the menu renders through a portal
+at the document body; a press inside the menu never dismisses it before the
+item's action runs.
 
 ### 8.4 Worktivity attendance controls
 
@@ -540,6 +543,35 @@ clock-out without an exact time, use the first fresh off-shift observation as
 the boundary and label the time as inferred in both the attendance observation
 and its audit event. Keep closed sessions as history. Web surfaces may display
 provider status and freshness but must not initiate attendance mutations.
+
+### 8.5 Settings memory summary and management modal
+
+Work memory stays off the settings table. Settings renders one flat split band
+on the page surface — never a card and never the settings row grid: on the
+left, the configured mascot mark in a quiet framed tile, the heading
+`What Otto remembers`, and the one-line model statement; on the right, the
+counts (`Remembered`, `Need review`, the latter amber only while candidates
+exist) and one dark `View` action. The band never lists facts.
+
+`View` opens a centered management modal (`role="dialog"`, `aria-modal`) that
+owns the facts. It carries the same title and model statement, one close
+control, and two peer tabs:
+
+- **Needs review** — proposed facts newest first, each a bordered card with
+  `Keep` and `Not true`, and an honest empty state.
+- **Remembered** — kept facts as flat rows on hairlines, each with the verified
+  glyph, `Kept <month day>`, and `Forget`; beneath a divider, the Recent
+  activity feed with its kind label, summary, calendar day, `Forget`, the
+  eight-row cap with `Show all N`, and the provenance line.
+
+Tab switching follows the shared peer-view contract (click or ←/→/Home/End,
+with roving tabindex and the count as part of each tab's accessible name).
+The modal body is the only scroll region and uses the shared edge dissolve;
+Escape, backdrop press, and the close control all dismiss it, and focus returns
+to `View`. Below 720px the summary stacks with its counts and action in one row
+beneath the copy, and below 640px the modal takes the viewport inset. Keep,
+reject, and forget keep their exact existing behavior and states; nothing is
+remembered without a keep.
 
 ## 9. Data truth, provenance, and state
 

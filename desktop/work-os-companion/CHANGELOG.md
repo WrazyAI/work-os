@@ -25,6 +25,11 @@ they change what the employee sees or does.
 ## Unreleased
 
 - Otto can use memories inferred during the day as temporary context for that day without treating them as saved long-term facts.
+- The Focus tab now scrolls with the same soft edge fade as chat, so the goal and long activity lists stay reachable.
+- The dock's Agenda tab is now called Chat, matching the floating companion.
+- New chat uses the same pen icon in the dock and the floating companion.
+- Settings shows memory as a compact summary with a View button; facts open in a two-tab window to keep or forget.
+- Clicking a subtask title opens its editor, and the subtask action menu now stays open until you choose an item.
 
 ## 0.3.59
 

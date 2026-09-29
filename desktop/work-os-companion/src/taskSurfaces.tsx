@@ -3,6 +3,7 @@ import { FadeArc, Skeleton, TaskDetailSkeleton } from "./LoadingUi";
 import { createPortal } from "react-dom";
 import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
+import { renderViewportSurface } from "./viewportSurface";
 import { BOTTLENECK_QUESTION, composeEodMarkdown, extractBottleneckAnswer, hasBottleneckAnswer, resolvedBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
@@ -180,16 +181,6 @@ export function moveMenuFocus(event: KeyboardEvent) {
 
 type AnyTask = Record<string, any>;
 
-/**
- * App-wide task surfaces have one seam: they render through document.body so
- * fixed positioning cannot be scoped by the scrolling workspace or its chat
- * dock. The server-rendered fallback keeps static markup tests and previews
- * deterministic when no document exists yet.
- */
-function renderViewportSurface(node: ReactNode) {
-  return typeof document === "undefined" ? node : createPortal(node, document.body);
-}
-
 function AppWideSidePanel({ children, className = "", closeLabel, onClose, busy = false }: {
   children: ReactNode;
   className?: string;
@@ -254,17 +245,17 @@ function SubtaskActions({ subtask, busy, menuOpen, moveOpen, onMenuToggle, onMov
       ref={(node) => { triggerRef.current = node; }}
       onClick={onMenuToggle}
     ><MoreHorizontal size={17} /></button>
-    {menuOpen && createPortal(<div className="subtask-menu task-detail-menu anchored-menu" role="menu" style={style} ref={menuRef}>
+    {menuOpen && renderViewportSurface(<div className="subtask-menu task-detail-menu anchored-menu" role="menu" style={style} ref={menuRef}>
       <button role="menuitem" onClick={onToggle}>{subtask.completed ? <RotateCcw size={14} /> : <Check size={14} />} {subtask.completed ? "Reopen subtask" : "Mark subtask done"}</button>
       <button role="menuitem" onClick={onEdit}><Pencil size={14} /> Edit</button>
       <button role="menuitem" aria-haspopup="menu" aria-expanded={moveOpen} ref={(node) => { move.triggerRef.current = node; }} onClick={onMoveToggle}><MoveRight size={14} /> Move to <ChevronRight size={13} /></button>
       <button role="menuitem" onClick={onArchive}><Archive size={14} /> Archive <small>reversible</small></button>
       <button className="danger" role="menuitem" onClick={onDelete}><Trash2 size={14} /> Delete permanently</button>
-    </div>, document.body)}
-    {moveOpen && createPortal(<div className="move-target-menu task-detail-move-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
+    </div>)}
+    {moveOpen && renderViewportSurface(<div className="move-target-menu task-detail-move-menu anchored-menu" role="menu" aria-label="Move subtask to" style={move.style} ref={move.menuRef}>
       <span>Move to task</span>
       {(moveTargets || []).length ? moveTargets.map((target) => <button role="menuitem" key={target.id} onClick={() => onMove(target)}>{safeTaskText(target.title, "Untitled task")}</button>) : <p>No other open tasks available.</p>}
-    </div>, document.body)}
+    </div>)}
   </div>;
 }
 
@@ -316,7 +307,7 @@ export function TaskDetailsModal({ details, loading, readOnly, currentDate, busy
             <div className="subtask-list">{subtasks.length ? subtasks.map((subtask) => {
               const subtaskId = String(subtask.provider_task_id || subtask.id);
               const subtaskState = subtask.completed ? "complete" as const : typeof subtask.due_date === "string" && subtask.due_date.slice(0, 10) < currentDate ? "overdue" as const : "open" as const;
-              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy"><strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong>{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
+              return <article key={subtask.id} className={`task-detail-subtask-row${subtask.completed ? " completed" : ""}`}><button type="button" className="task-detail-subtask-check" disabled={readOnly || busy} aria-label={subtask.completed ? `Reopen ${safeTaskText(subtask.title, "subtask")}` : `Complete ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onToggleSubtask(subtask)}>{subtask.completed && <Check size={13} />}</button><div className="task-detail-subtask-copy">{readOnly ? <strong>{safeTaskText(subtask.title, "Untitled subtask")}</strong> : <button type="button" className="task-detail-subtask-title" disabled={busy} title="Edit subtask" aria-label={`Edit ${safeTaskText(subtask.title, "subtask")}`} onClick={() => onEditTask(subtask)}>{safeTaskText(subtask.title, "Untitled subtask")}</button>}{safeTaskText(subtask.description, "") && <p>{safeTaskText(subtask.description, "")}</p>}<AssigneeTags task={subtask} /></div><span className={`task-state ${subtaskState}`}>{sentence(subtaskState)}</span>{!readOnly && <SubtaskActions
                 subtask={subtask} busy={busy}
                 menuOpen={subtaskMenuId === subtaskId} moveOpen={moveMenuId === subtaskId}
                 onMenuToggle={() => { onSubtaskMenu(subtaskMenuId === subtaskId ? null : subtaskId); onMoveMenu(null); }}

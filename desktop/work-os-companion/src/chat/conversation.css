@@ -206,7 +206,8 @@
 }
 
 .conversation-scroll-region > .progress-conversation,
-.conversation-scroll-region > .avatar-chat {
+.conversation-scroll-region > .avatar-chat,
+.conversation-scroll-region > .goal-composer-panel {
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -218,6 +219,13 @@
   mask-repeat: no-repeat;
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
+}
+
+/* The Focus panel packs its goal editor and recent activity from the top; the
+ * scroll region owns overflow, and the shared edge mask supplies the fade. */
+.conversation-scroll-region > .goal-composer-panel {
+  align-content: start;
+  overscroll-behavior: contain;
 }
 
 [data-conversation-surface="in-app"] .chat-surface.is-open {

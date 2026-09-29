@@ -375,20 +375,31 @@ describe("operational visualizations", () => {
     expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.setting,[\s\S]*?flex-direction: column;/);
   });
 
-  it("keeps the memory panel in its own column with three separated classes", () => {
-    // The root cause of the interleaved panel was reusing the settings grid.
+  it("keeps memory as a settings summary band with a two-tab management modal", () => {
+    // The settings surface stays a flat band; the facts live in the modal, and
+    // the three classes keep their own separated sections inside its tabs.
     expect(memoryPanel).not.toContain("settings-panel");
+    expect(memoryPanel).toContain('className="memory-summary"');
     expect(memoryPanel).toContain('className="memory-section review"');
     expect(memoryPanel).toContain('className="memory-section facts"');
     expect(memoryPanel).toContain('className="memory-section activity"');
-    expect(memoryPanel).toContain("memory-section-head");
+    expect(memoryPanel).toContain('role="tablist"');
     expect(memoryPanel).toContain("memoryDateLabel");
     expect(memoryPanel).toContain("formatWorkOsDate");
-    expect(memoryStyles).toMatch(/\.memory-panel \{[\s\S]*?display: grid;/);
+    expect(memoryStyles).toContain(".memory-summary {");
+    expect(memoryStyles).toContain(".memory-summary-view");
+    expect(memoryStyles).toContain(".memory-modal-panel");
+    expect(memoryStyles).toContain(".memory-tabs");
     expect(memoryStyles).toContain(".memory-cards");
     expect(memoryStyles).toContain(".memory-rows.feed");
     expect(memoryStyles).toContain(".memory-provenance");
     expect(memoryStyles).toMatch(/@media \(max-width: 1024px\) \{[\s\S]*?\.memory-cards \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+  });
+
+  it("keeps the dock Focus panel on the shared scroll region and edge fade", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    expect(app).toContain('className="conversation-scroll-region"><div className="goal-composer-panel"');
+    expect(conversationStyles).toContain(".conversation-scroll-region > .goal-composer-panel");
   });
 
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {

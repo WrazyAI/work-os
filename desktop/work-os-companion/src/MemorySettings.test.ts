@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MemoryPanel, type MemoryFact, type MemoryRecent } from "./MemorySettings";
+import { MemoryActivitySection, MemoryFactsSection, MemoryModal, MemoryReviewSection, MemorySummary, type MemoryFact, type MemoryRecent } from "./MemorySettings";
 
 const noop = () => undefined;
 
@@ -50,48 +50,90 @@ const manyRecent: MemoryRecent[] = Array.from({ length: 10 }, (_, index) => ({
   occurred_at: `2026-09-${String(20 - index).padStart(2, "0")}T10:00:00.000Z`,
 }));
 
-describe("MemoryPanel sections", () => {
-  it("keeps the three memory classes in one ordered, full-width column", () => {
+describe("MemorySummary", () => {
+  it("renders the mascot band with counts and the View action", () => {
     const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [candidate, confirmed], recent: [recent], busy: false, error: null, onReview: noop, onForget: noop }),
+      createElement(MemorySummary, { facts: [candidate, instantCandidate, confirmed], loading: false, error: null, onOpen: noop, onRetry: noop }),
     );
-    const review = html.indexOf("Waiting for your review");
-    const facts = html.indexOf("Remembered facts");
-    const activity = html.indexOf("Recent activity");
-    expect(review).toBeGreaterThan(-1);
-    expect(facts).toBeGreaterThan(review);
-    expect(activity).toBeGreaterThan(facts);
-    expect(html).toContain('class="memory-panel"');
+    expect(html).toContain('class="memory-summary"');
+    expect(html).toContain("What Otto remembers");
+    expect(html).toContain('class="memory-summary-figure"');
+    expect(html).toContain('aria-label="1 remembered, 2 waiting for review"');
+    expect(html).toContain(">View</button>");
     expect(html).not.toContain("settings-panel");
+  });
+
+  it("shows a loading state and an inline retry on failure", () => {
+    const loading = renderToStaticMarkup(
+      createElement(MemorySummary, { facts: [], loading: true, error: null, onOpen: noop, onRetry: noop }),
+    );
+    expect(loading).toContain("Loading memory…");
+    expect(loading).toContain(">View</button>");
+    const failed = renderToStaticMarkup(
+      createElement(MemorySummary, { facts: [], loading: false, error: "Load failed", onOpen: noop, onRetry: noop }),
+    );
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("Load failed");
+    expect(failed).toContain("Retry");
+  });
+});
+
+describe("MemoryModal", () => {
+  it("opens on the review tab with peer tab semantics and the keep decision", () => {
+    const html = renderToStaticMarkup(
+      createElement(MemoryModal, { facts: [candidate, confirmed], recent: [recent], busy: false, error: null, onReview: noop, onForget: noop, onClose: noop }),
+    );
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('id="memory-tab-review"');
+    expect(html).toContain('aria-selected="true"');
+    expect(html).toContain("Needs review");
+    expect(html).toContain("Remembered");
+    expect(html).toContain("Waiting for your review");
+    expect(html).toContain("Keep");
+    expect(html).toContain("Not true");
+  });
+
+  it("keeps errors visible inside the dialog", () => {
+    const html = renderToStaticMarkup(
+      createElement(MemoryModal, { facts: [], recent: [], busy: false, error: "That fact could not be updated.", onReview: noop, onForget: noop, onClose: noop }),
+    );
+    expect(html).toContain('class="memory-modal-body"');
+    expect(html).toContain('role="alert"');
+  });
+});
+
+describe("Memory sections", () => {
+  it("shows candidates for review with keep and reject actions, newest first", () => {
+    const oldest: MemoryFact = { ...candidate, id: "old", content: "Oldest proposal.", occurred_at: "2026-09-01T09:00:00.000Z" };
+    const newest: MemoryFact = { ...candidate, id: "new", content: "Newest proposal.", occurred_at: "2026-09-20T09:00:00.000Z" };
+    const html = renderToStaticMarkup(
+      createElement(MemoryReviewSection, { facts: [oldest, candidate, newest], busy: false, onReview: noop }),
+    );
     expect(html).toContain('class="memory-section review"');
+    expect(html).toContain("Prefers deep work before noon.");
+    expect(html).toContain('aria-label="3 waiting for review"');
+    expect(html.indexOf("Newest proposal.")).toBeLessThan(html.indexOf("Prefers deep work before noon."));
+    expect(html.indexOf("Prefers deep work before noon.")).toBeLessThan(html.indexOf("Oldest proposal."));
+    expect(html).not.toContain("settings-panel");
+  });
+
+  it("shows confirmed facts with a forget control and calendar-day dates", () => {
+    const html = renderToStaticMarkup(
+      createElement(MemoryFactsSection, { facts: [confirmed, instantCandidate], busy: false, onForget: noop }),
+    );
     expect(html).toContain('class="memory-section facts"');
-    expect(html).toContain('class="memory-section activity"');
-  });
-
-  it("labels each section with its own count", () => {
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [candidate, instantCandidate, confirmed], recent: manyRecent, busy: false, error: null, onReview: noop, onForget: noop }),
-    );
-    expect(html).toContain('aria-label="2 waiting for review"');
-    expect(html).toContain('aria-label="1 kept facts"');
-    expect(html).toContain('aria-label="10 recent memories"');
-    expect(html).toContain("2 waiting for review</span>");
-  });
-
-  it("formats memory dates as calendar days instead of raw instants", () => {
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [instantCandidate, confirmed], recent: [recent], busy: false, error: null, onReview: noop, onForget: noop }),
-    );
-    expect(html).toContain("Proposed September 17");
+    expect(html).toContain("Owns checkout reporting.");
+    expect(html).toContain("Forget: Owns checkout reporting.");
     expect(html).toContain("Kept September 10");
     expect(html).not.toContain("T00:00:00");
-    expect(html).not.toContain("2026-09-17T");
   });
 
   it("caps the activity feed and explains what activity means", () => {
     const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [], recent: manyRecent, busy: false, error: null, onReview: noop, onForget: noop }),
+      createElement(MemoryActivitySection, { recent: manyRecent, busy: false, onForget: noop }),
     );
+    expect(html).toContain('class="memory-section activity"');
     expect((html.match(/class="memory-row"/g) ?? []).length).toBe(8);
     expect(html).toContain("Show all 10");
     expect(html).toContain('aria-expanded="false"');
@@ -99,44 +141,12 @@ describe("MemoryPanel sections", () => {
     expect(html).toContain('class="memory-kind"');
   });
 
-  it("orders review candidates newest first", () => {
-    const oldest: MemoryFact = { ...candidate, id: "old", content: "Oldest proposal.", occurred_at: "2026-09-01T09:00:00.000Z" };
-    const newest: MemoryFact = { ...candidate, id: "new", content: "Newest proposal.", occurred_at: "2026-09-20T09:00:00.000Z" };
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [oldest, candidate, newest], recent: [], busy: false, error: null, onReview: noop, onForget: noop }),
-    );
-    expect(html.indexOf("Newest proposal.")).toBeLessThan(html.indexOf("Prefers deep work before noon."));
-    expect(html.indexOf("Prefers deep work before noon.")).toBeLessThan(html.indexOf("Oldest proposal."));
-  });
-});
-
-describe("MemoryPanel", () => {
-  it("shows candidates for review with keep and reject actions", () => {
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [candidate], recent: [], busy: false, error: null, onReview: noop, onForget: noop }),
-    );
-    expect(html).toContain("Prefers deep work before noon.");
-    expect(html).toContain("Waiting for your review");
-    expect(html).toContain("Keep");
-    expect(html).toContain("Not true");
-  });
-
-  it("shows confirmed facts with a forget control and recent memories", () => {
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [confirmed], recent: [recent], busy: false, error: null, onReview: noop, onForget: noop }),
-    );
-    expect(html).toContain("Owns checkout reporting.");
-    expect(html).toContain("Forget: Owns checkout reporting.");
-    expect(html).toContain("Finished the migration.");
-    expect(html).toContain("Check-in");
-  });
-
-  it("renders empty states and errors", () => {
-    const html = renderToStaticMarkup(
-      createElement(MemoryPanel, { facts: [], recent: [], busy: false, error: "Load failed", onReview: noop, onForget: noop }),
-    );
-    expect(html).toContain("No kept facts yet");
-    expect(html).toContain("No memories recorded yet");
-    expect(html).toContain("Load failed");
+  it("renders empty states for every class", () => {
+    const review = renderToStaticMarkup(createElement(MemoryReviewSection, { facts: [], busy: false, onReview: noop }));
+    expect(review).toContain("Nothing is waiting for your review.");
+    const facts = renderToStaticMarkup(createElement(MemoryFactsSection, { facts: [], busy: false, onForget: noop }));
+    expect(facts).toContain("No kept facts yet");
+    const activity = renderToStaticMarkup(createElement(MemoryActivitySection, { recent: [], busy: false, onForget: noop }));
+    expect(activity).toContain("No memories recorded yet");
   });
 });
