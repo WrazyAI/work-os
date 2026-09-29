@@ -29,7 +29,7 @@ const fs = require('node:fs');
     await orb.locator('.avatar-pet .studio-otto').waitFor();
     const orbFigure = await orb.locator('.avatar-pet .studio-otto').boundingBox();
     assert(orbFigure.width >= 116 && orbFigure.height >= 130, JSON.stringify(orbFigure)); checks++;
-    assert.equal(await orb.locator('.avatar-day-time').count(), 0); checks++;
+    assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m left'); checks++;
     const orbMotion = await orb.locator('.studio-rig').evaluate(el => {
       const style = getComputedStyle(el);
       return { name: style.animationName, timing: style.animationTimingFunction };
@@ -45,7 +45,7 @@ const fs = require('node:fs');
     }));
     assert(Math.abs(Number.parseFloat(shiftProgress.value) - 50) < 0.1, JSON.stringify(shiftProgress)); checks++;
     assert(shiftProgress.image.includes('conic-gradient'), JSON.stringify(shiftProgress)); checks++;
-    assert.equal(await progress.locator('.avatar-day-time').count(), 0); checks++;
+    assert.equal((await progress.locator('.avatar-day-time').innerText()).trim(), '1h 30m elapsed'); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
     await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
