@@ -47,3 +47,5 @@ next-env.d.ts
 /.neon
 /.testsprite/
 /.worktrees/
+/.worktrees
+/skills-lock.json
