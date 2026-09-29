@@ -130,6 +130,7 @@ async function main(): Promise<void> {
   }
 
   if (!restartRequested) {
+    writeFileSync(markerPath, `${previous}\n`);
     console.log(`⚠ changed files touch the runner's imports:\n${relevant.map((file) => `  - ${file}`).join("\n")}`);
     console.log("  restart it when no job is in flight: systemctl --user restart agentos-runner");
     console.log("  then clear this reminder: node --import tsx scripts/runner-restart-check.mts --mark");
