@@ -162,9 +162,9 @@ export function StudioOtto({
       </g>
 
       {full && resting && <g className="studio-sleep-zs" aria-hidden="true">
-        <path className="studio-sleep-z z-1" d="M123 40h8l-8 8h8" />
-        <path className="studio-sleep-z z-2" d="M133 28h9l-9 9h9" />
-        <path className="studio-sleep-z z-3" d="M141 15h10l-10 10h10" />
+        <path className="studio-sleep-z z-1" d="M121 41h11l-11 11h11" />
+        <path className="studio-sleep-z z-2" d="M132 25h13l-13 13h13" />
+        <path className="studio-sleep-z z-3" d="M140 8h16l-16 16h16" />
       </g>}
 
       {full && working && <g className="studio-taskpad">
