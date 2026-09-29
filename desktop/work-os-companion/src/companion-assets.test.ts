@@ -163,6 +163,11 @@ describe("floating companion integration", () => {
     expect(conversationStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(conversationStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, 0\.9\);/);
     expect(conversationStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-orb\s*\{[^}]*margin-top:\s*108px;/);
+    const accessibilityStyles = readFileSync(resolve(root, "src/accessibility.css"), "utf8");
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-drag-surface\s*\{[^}]*top:\s*47px;/);
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble \+ \.avatar-drag-surface\s*\{[^}]*top:\s*97px;/);
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-hide\s*\{[^}]*top:\s*45px;/);
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*97px;/);
     expect(avatar).toContain("/api/work-os/me/proposals");
     expect(avatar).toContain('decision: "reject"');
     expect(avatar).toContain("TaskSelectionCard");
