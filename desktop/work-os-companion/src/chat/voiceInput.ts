@@ -22,6 +22,8 @@ export const VOICE_MIN_RECORDING_MS = 500;
 /** Display label for the registered global hold-to-talk shortcut. The binding
  * itself is registered in `src-tauri/src/lib.rs`. */
 export const VOICE_HOTKEY_LABEL = "Ctrl + M";
+/** Margin over the route's 45s provider timeout. */
+const VOICE_UPLOAD_TIMEOUT_MS = 55_000;
 
 export type VoiceState = "idle" | "requesting" | "recording" | "transcribing";
 export type VoiceFailure = "unsupported" | "permission" | "device" | "start" | "transcribe" | "network";
@@ -153,7 +155,13 @@ export function useVoiceInput(options: {
     form.append("mime", mime);
     form.append("language", language);
     try {
-      const result = await apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", { method: "POST", body: form });
+      /* Outlast the server's own 45s provider timeout: giving up first would
+         abandon a clip the route is still transcribing. */
+      const result = await apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
+      });
       const text = typeof result?.text === "string" ? result.text.trim() : "";
       if (!mountedRef.current) return;
       if (!text) {

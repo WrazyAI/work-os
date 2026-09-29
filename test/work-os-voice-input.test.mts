@@ -357,6 +357,17 @@ test("hold-to-talk is a stored, truthful per-device preference", () => {
   assert.match(app, /if \(applied !== enabled\) return;/);
 });
 
+test("the client outlasts the server's provider timeout", () => {
+  /* The route bounds the provider at 45s; a client that gives up sooner would
+     abandon a clip the server is still transcribing. */
+  assert.match(read("src/lib/aiTranscribe.ts"), /TRANSCRIBE_TIMEOUT_MS = 45_000/);
+  for (const path of ["src/modules/work-os/useVoiceInput.ts", "desktop/work-os-companion/src/chat/voiceInput.ts"]) {
+    const source = read(path);
+    assert.match(source, /const VOICE_UPLOAD_TIMEOUT_MS = 55_000;/);
+    assert.match(source, /AbortSignal\.timeout\(VOICE_UPLOAD_TIMEOUT_MS\)/);
+  }
+});
+
 test("the mic waits for the server build, not just the workspace flag", () => {
   /* A companion that ships ahead of its server must not offer a record control
      the deployment cannot serve: it waits for the capability, not the flag. */

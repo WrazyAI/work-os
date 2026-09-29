@@ -19,6 +19,8 @@ export const VOICE_MAX_RECORDING_MS = 120_000;
  * instead of surfacing a "no speech" error. */
 export const VOICE_MIN_RECORDING_MS = 500;
 export const VOICE_HOTKEY_LABEL = "Ctrl + M";
+/** Margin over the route's own 45s provider timeout. */
+const VOICE_UPLOAD_TIMEOUT_MS = 55_000;
 const VOICE_RECEIPT_MS = 5_000;
 
 export type VoiceState = "idle" | "requesting" | "recording" | "transcribing";
@@ -142,7 +144,14 @@ export function useVoiceInput(options: {
     form.append("mime", mime);
     form.append("language", language);
     try {
-      const response = await fetch("/api/work-os/voice/transcribe", { method: "POST", body: form, credentials: "same-origin" });
+      /* Outlast the server's own 45s provider timeout: giving up first would
+         abandon a clip the route is still transcribing. */
+      const response = await fetch("/api/work-os/voice/transcribe", {
+        method: "POST",
+        body: form,
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
+      });
       const body = await response.json().catch(() => ({})) as { text?: unknown; error?: unknown };
       if (!mountedRef.current) return;
       if (!response.ok) {
