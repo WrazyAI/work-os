@@ -11,10 +11,11 @@
 
 export const TRANSCRIBE_MODEL = "fal-ai/cohere-transcribe";
 
-/** 45s covers a 120s push-to-talk clip with provider headroom; a slow
- * provider must fail honestly instead of leaving the composer stuck in
- * "Transcribing…". */
-const TRANSCRIBE_TIMEOUT_MS = 45_000;
+/** A 120s clip transcribes in ~2s and scales with its length, so 25s covers
+ * the two-minute cap with a wide margin — and it stays comfortably inside the
+ * edge proxy's deadline, which otherwise answers with its own opaque 504 page
+ * instead of the honest error returned here. */
+const TRANSCRIBE_TIMEOUT_MS = 25_000;
 
 /** Well under the proxy's 10MB body-buffer truncation cliff, and far above a
  * 120s opus clip (~0.5MB). */

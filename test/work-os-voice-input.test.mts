@@ -358,12 +358,13 @@ test("hold-to-talk is a stored, truthful per-device preference", () => {
 });
 
 test("the client outlasts the server's provider timeout", () => {
-  /* The route bounds the provider at 45s; a client that gives up sooner would
-     abandon a clip the server is still transcribing. */
-  assert.match(read("src/lib/aiTranscribe.ts"), /TRANSCRIBE_TIMEOUT_MS = 45_000/);
+  /* The route bounds the provider at 25s — inside the edge proxy's own
+     deadline, so its opaque 504 page can never replace the honest error. A
+     client that gave up sooner would abandon a clip still being transcribed. */
+  assert.match(read("src/lib/aiTranscribe.ts"), /TRANSCRIBE_TIMEOUT_MS = 25_000/);
   for (const path of ["src/modules/work-os/useVoiceInput.ts", "desktop/work-os-companion/src/chat/voiceInput.ts"]) {
     const source = read(path);
-    assert.match(source, /const VOICE_UPLOAD_TIMEOUT_MS = 55_000;/);
+    assert.match(source, /const VOICE_UPLOAD_TIMEOUT_MS = 35_000;/);
     assert.match(source, /AbortSignal\.timeout\(VOICE_UPLOAD_TIMEOUT_MS\)/);
   }
 });
