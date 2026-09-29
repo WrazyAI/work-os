@@ -182,6 +182,34 @@ dominate a small change.
 - Report tool latency (rate-limit waits, build time) separately from
   engineering time in the handoff.
 
+## TestSprite CLI (installed location)
+
+The TestSprite CLI is installed on this box at
+`/home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite` — it is **not
+missing**. A bare `command not found` is a PATH problem, not an install
+problem (its shebang needs Node). Invoke it with that toolchain on PATH:
+
+```bash
+PATH=/home/zahemen/.nvm/versions/node/v24.20.0/bin:$PATH \
+  /home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite auth status
+```
+
+Auth is already configured (operator workspace "David Zahemen's workspace");
+never re-run `testsprite setup`. If `auth status` itself fails, stop and tell
+the operator.
+
+Projects: **Work OS Companion** `e8fa6d35-586c-47a7-a69c-13e6b8552a0b`
+(frontend, → https://app.wrazyos.com); **Work OS Web API**
+`e35f94fb-0e9d-42f5-8eba-a5a5e13683b7` (backend, → https://srv1726015.tailbf7608.ts.net);
+**WrazyOS API** `c76fc011-4043-4f03-9e1a-7d0fbc50a64a` (backend, → https://app.wrazyos.com).
+Frontend runs use the project's configured environment URL (V3 routing ignores
+`--target-url`); use `--local <port>` for a localhost-only frontend. Existing
+frontend plans log in with the `e2e-verify@wrazyos.com` fixture — if that
+sign-in fails with `Invalid email or password`, ask the operator for the
+current fixture password instead of declaring the app broken. Backend tests
+need a project credential and at least one literal `assert` in the Python; run
+the script directly as well before reporting the verdict.
+
 ## Running services (systemd --user)
 Both live in `~/.config/systemd/user/`, auto-restart, `Linger=yes` (start on boot):
 - **`agentos-web`** — `next start` on :3000 (UI + all API routes).
