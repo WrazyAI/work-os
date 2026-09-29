@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   conversationTurnFromHistory,
@@ -59,11 +60,16 @@ test("recency decay ranks fresher items higher at equal rank", () => {
 test("memory context labels recalled facts and respects the character budget", () => {
   const fact = item({ id: "f", kind: "profile_fact", content: "Prefers deep work before noon", local_date: "2026-09-01" });
   const recalled = item({ id: "r", content: "Closed the migration task", local_date: "2026-09-10", kind: "task_event" });
-  const block = formatMemoryContext({ items: [recalled], profileFacts: [fact] });
+  const tentative = item({ id: "t", kind: "profile_fact", content: "May prefer implementation before status writing", local_date: "2026-09-11" });
+  const block = formatMemoryContext({ items: [recalled], profileFacts: [fact], sameDayCandidates: [tentative] });
   assert.match(block, /Known about this person/);
+  assert.match(block, /Working context inferred on this date/);
+  assert.match(block, /unconfirmed/);
+  assert.match(block, /never as completion evidence or a durable fact/);
+  assert.match(block, /2026-09-11 · tentative/);
   assert.match(block, /Recalled history/);
   assert.match(block, /2026-09-10 · task_event/);
-  const tiny = formatMemoryContext({ items: [recalled], profileFacts: [fact], maxChars: 40 });
+  const tiny = formatMemoryContext({ items: [recalled], profileFacts: [fact], sameDayCandidates: [tentative], maxChars: 40 });
   assert.ok(tiny.length <= 40);
 });
 
@@ -126,4 +132,25 @@ test("fact source ids are deterministic per person and case-insensitive value", 
   const draft = { key: "role", value: "Owns checkout reporting." };
   assert.equal(factSourceId("p1", draft), factSourceId("p1", { key: "role", value: "owns checkout reporting." }));
   assert.notEqual(factSourceId("p1", draft), factSourceId("p2", draft));
+});
+
+
+test("semantic recall excludes profile facts and same-day candidates use an explicit date lane", () => {
+  const source = readFileSync(new URL("../src/lib/work-memory.ts", import.meta.url), "utf8");
+  assert.equal((source.match(/kind <> 'profile_fact'/g) ?? []).length, 2);
+  assert.match(source, /\.eq\("review_status", "candidate"\)/);
+  assert.match(source, /\.eq\("local_date", analysisLocalDate\)/);
+  assert.match(source, /includeSameDayCandidates !== false/);
+});
+
+test("daily digests never absorb profile facts awaiting review", () => {
+  const source = readFileSync(new URL("../src/lib/work-memory-digest.ts", import.meta.url), "utf8");
+  assert.equal((source.match(/\.neq\("kind", "profile_fact"\)/g) ?? []).length, 2);
+});
+
+test("profile fact candidates use the employee-local workday instead of UTC date slicing", () => {
+  const source = readFileSync(new URL("../src/lib/work-memory-facts.ts", import.meta.url), "utf8");
+  assert.match(source, /work_employee_onboarding/);
+  assert.match(source, /localDateForTimezone\(now, timezone\)/);
+  assert.doesNotMatch(source, /const today = now\.toISOString\(\)\.slice\(0, 10\)/);
 });
