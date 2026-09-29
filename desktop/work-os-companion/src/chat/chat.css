@@ -741,6 +741,35 @@
   border-top: 1px solid var(--color-line);
 }
 
+/* Edit on a recap bubble hands editing to the composer; this strip names the
+   mode and offers a way out without sending anything. */
+.avatar-panel .avatar-recap-edit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--inset, #edf0ea);
+  color: var(--ink-2, #626a61);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.avatar-panel .avatar-recap-edit button {
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: transparent;
+  color: var(--ink, #182018);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.avatar-panel .avatar-recap-edit button:hover { background: rgba(24, 32, 24, 0.08); }
+.avatar-panel .avatar-recap-edit button:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
+
 .chat-surface:focus-within { border-color: var(--color-signal-strong); }
 
 /* In-app dock, closed state: the surface owns the card chrome (border, radius,
@@ -1040,6 +1069,8 @@ body {
 .chat-activity-headline { margin: 0; color: var(--ink, #182018); font-size: 12.5px; font-weight: 650; line-height: 1.35; }
 .chat-activity-detail { margin: 0; color: var(--ink-2, #626a61); font-size: 11.5px; line-height: 1.55; white-space: pre-line; }
 .chat-activity-provenance { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
+.chat-activity-lead { margin: 0; color: var(--ink-2, #626a61); font-size: 10.5px; font-weight: 700; letter-spacing: 0.01em; }
+.chat-activity-ask { margin: 2px 0 0; color: var(--ink, #182018); font-size: 11.5px; font-weight: 650; }
 .chat-activity-note {
   margin: 0;
   border-left: 2px solid var(--line, #e2e6df);

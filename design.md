@@ -712,8 +712,18 @@ stream's header carries a dark `View in app` action on the right that opens the
 dock's Focus tab in the main window, where the same stream sits beneath the
 daily goal. Expired images say
 so honestly without deleting the recap; there are no charts, scores, or hours
-totals. The prompt turn offers `Looks right` and `Add or correct`, never a
-mutation of anything other than the recap.
+totals.
+
+The chat bubble for a due recap is a short conversational card: a `This is what
+we got from your last hour` lead-in, the interval label, the headline and the
+evidence-bounded detail (tall enough to carry the brief summary of the observed
+window), and the inferred provenance line. It asks `Sounds good?` with two
+actions: `Looks good` confirms the recap in place, and `Edit` hands editing to
+the composer, which switches to recap-edit mode (an `Editing your recap` strip
+with `Cancel` and an `Update recap` send label) so the employee writes the
+correction themselves. Sending that note records it as the employee amendment.
+Neither action mutates anything other than the recap, and the Tasks-tab stream
+keeps its inline `Looks right` / `Add or correct` review.
 
 The EOD uses a confirmed, amended, or inferred recap as activity context for
 the hours it covers, labeled with its provenance, and falls back to the hourly

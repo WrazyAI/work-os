@@ -188,6 +188,8 @@ export default function AvatarApp(): React.ReactElement {
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
   const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>(null);
   const [activityPreparing, setActivityPreparing] = useState(false);
+  const [recapEditMode, setRecapEditMode] = useState(false);
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
@@ -721,6 +723,7 @@ export default function AvatarApp(): React.ReactElement {
     try {
       await decideActivityIntervalReview(id, action, feedback);
       setActivityPrompt(null);
+      setRecapEditMode(false);
       setFacts((current) => clearRecordedUpdatePrompt(current));
       setChat((current) => current.map((entry) => entry.activityInterval?.id === id
         ? { ...entry, activityInterval: undefined, text: entry.text, receipt: action === "confirm" ? "Recap confirmed" : "Recap updated with your note" }
@@ -736,6 +739,13 @@ export default function AvatarApp(): React.ReactElement {
       setDecidingIntervalId(null);
     }
   }, [facts.shiftDate, loadDay]);
+
+  // Edit on the recap bubble hands editing to the composer: the employee writes
+  // the correction there, and sending it records the recap note.
+  const startRecapEdit = useCallback((): void => {
+    setRecapEditMode(true);
+    setComposerFocusSignal((signal) => signal + 1);
+  }, []);
 
   // ── Persist position after drags settle ──
   useEffect(() => {
@@ -837,6 +847,19 @@ export default function AvatarApp(): React.ReactElement {
       setThinkingTrace(null);
     }
   }, [input, thinkingTrace, filing, facts.planIntent, facts.shiftDate, chat]);
+
+  // While the recap bubble is in edit mode the composer records the recap note
+  // instead of filing a general update.
+  const sendAvatarUpdate = useCallback(async (): Promise<void> => {
+    if (recapEditMode && activityPrompt) {
+      const note = input.trim();
+      if (!note || decidingIntervalId) return;
+      setInput("");
+      await decideActivityPrompt(activityPrompt.id, "amend", note);
+      return;
+    }
+    await sendUpdate();
+  }, [activityPrompt, decideActivityPrompt, decidingIntervalId, input, recapEditMode, sendUpdate]);
 
   const approveOperations = useCallback(async (entryId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => {
     if ((!approved.length && !rejected.length) || filing) return;
@@ -1189,7 +1212,11 @@ export default function AvatarApp(): React.ReactElement {
   // A recap only belongs to its prompt instance; drop it once the prompt has
   // been answered or the cadence moves on.
   useEffect(() => {
-    if (activityPrompt && !facts.promptRequired && facts.loaded) setActivityPrompt(null);
+    if (!activityPrompt) {
+      setRecapEditMode(false);
+      return;
+    }
+    if (!facts.promptRequired && facts.loaded) setActivityPrompt(null);
   }, [activityPrompt, facts.promptRequired, facts.loaded]);
   const taskContext = useMemo(
     () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
@@ -1436,6 +1463,8 @@ export default function AvatarApp(): React.ReactElement {
                           <ActivityIntervalCard
                             interval={entry.activityInterval}
                             timezone={facts.timezone}
+                            leadIn={activityPrompt?.id === entry.activityInterval.id ? "This is what we got from your last hour" : undefined}
+                            onEdit={activityPrompt?.id === entry.activityInterval.id ? startRecapEdit : undefined}
                             onDecide={decideActivityPrompt}
                             deciding={decidingIntervalId === entry.activityInterval.id}
                           />
@@ -1506,12 +1535,19 @@ export default function AvatarApp(): React.ReactElement {
            </div>
            </div>
            {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
+            {recapEditMode && activityPrompt ? (
+              <div className="avatar-recap-edit">
+                <span>Editing your recap</span>
+                <button type="button" onClick={() => setRecapEditMode(false)}>Cancel</button>
+              </div>
+            ) : null}
             <WorkOsPromptBar
               sweepSignal={sweepSignal}
+              focusSignal={composerFocusSignal}
               value={input}
               onChange={setInput}
-              onSend={() => void (agendaDue ? submitAgenda() : sendUpdate())}
-              placeholder={agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : activityPrompt ? "Add context to the recap above…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
+              onSend={() => void (agendaDue ? submitAgenda() : sendAvatarUpdate())}
+              placeholder={recapEditMode && activityPrompt ? "Correct or add to your recap…" : agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : activityPrompt ? "Add context to the recap above…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
               ariaLabel={agendaDue ? "Describe your goal for today" : "Share an update or instruct the assistant"}
               canSend={!!input.trim() && !thinking && !filing && !agendaReview}
               busy={thinking || filing}
@@ -1520,7 +1556,7 @@ export default function AvatarApp(): React.ReactElement {
               commands={workOsChatCommands({ eod: () => void openEodReview() }).map((command) =>
                 command.key === "focus" ? { ...command, insert: "Focus: " } : command,
               )}
-              sendLabel={agendaDue ? "Confirm today’s agenda" : "Send update"}
+              sendLabel={agendaDue ? "Confirm today’s agenda" : recapEditMode ? "Update recap" : "Send update"}
             />
           </footer>}
           {contextualPrompt.kind === "check_in" && !missed && !lastEntry?.receipt && (
