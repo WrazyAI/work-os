@@ -26,6 +26,7 @@ they change what the employee sees or does.
 
 ## 0.3.73
 
+- Profile settings now use the same calmer hierarchy as the main Settings page, with cleaner sections, flatter schedule controls, and a more focused save area.
 - The microphone only appears when the workspace can actually transcribe, and a slow transcription now says so instead of failing silently.
 - Recap messages now show an All recaps button beside Copy that opens the Tasks tab with your full recap history.
 
