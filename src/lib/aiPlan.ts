@@ -105,7 +105,7 @@ export function parsePlanInterpretation(raw: unknown, rawIntent: string, context
 export interface PlanMemoryContext {
   /** Live day snapshot: agenda, completions, recent updates, shift state. */
   todayBlock?: string;
-  /** Recalled episodic history and profile facts. Dated context, never evidence. */
+  /** Confirmed memory, dated history, and same-day tentative context. Never evidence. */
   memoryBlock?: string;
 }
 
@@ -125,7 +125,7 @@ export function resolvePlanIntent(rawIntent: unknown, loom?: PlanLoomContext) {
   return text(rawIntent, 4_000) ?? (loom ? LOOM_ONLY_PLAN_INTENT : null);
 }
 
-const MEMORY_RULE = "todayContext is the live day state; memoryContext is dated recalled history for continuity only — never treat it as evidence of completion, progress, or current state.";
+const MEMORY_RULE = "todayContext is the live day state; memoryContext may include confirmed memory, dated recalled history, and same-day tentative context awaiting review. Use it for continuity and intent only — never as evidence of completion, progress, or current state.";
 
 export function buildPlanningPrompt(
   rawIntent: string,

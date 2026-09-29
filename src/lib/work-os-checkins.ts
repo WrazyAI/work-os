@@ -92,7 +92,7 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
             "Use an existing task when the text refers to one. Do not claim work, status, output, blockers, or completion unless the employee explicitly states it.",
             "Daily commitments are employee-reviewed planning context, not evidence. Never infer a commitment is completed or progressed from its presence.",
             "The live day state is authoritative for what is currently planned, completed, and blocked today.",
-            "Recalled memory is dated history for continuity only. Never treat it as evidence of current state, progress, or completion.",
+            "Memory context may include dated history plus same-day tentative context awaiting review. Use it only for continuity and intent; never treat it as evidence of current state, progress, or completion.",
             "Use complete_task only for explicit completion language. Activity alone never proves completion.",
             "For create_task include name, expected_outcome, definition_of_done, and any stated due date, priority, effort, dependency, or blocker. Do not fabricate missing values.",
           ].join("\n"),
@@ -186,7 +186,7 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   const context = memoryEnabled(access.featureFlags)
     ? {
         todayBlock: await buildTodaySnapshot({ organizationId: access.organizationId, personId, localDate: shiftDate }),
-        memoryBlock: await buildMemoryPromptBlock({ organizationId: access.organizationId, personId }, input || "recent progress and blockers", { limit: 8 }),
+        memoryBlock: await buildMemoryPromptBlock({ organizationId: access.organizationId, personId, localDate: shiftDate }, input || "recent progress and blockers", { limit: 8, analysisLocalDate: shiftDate }),
       }
     : undefined;
   const parsed = input ? await parseCheckIn(input, tasks, commitments, context) : { model: CHECK_IN_MODEL, proposals: [] as ParsedProposal[] };
