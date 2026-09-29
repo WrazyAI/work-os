@@ -73,7 +73,7 @@ export function MemorySummary({ facts, loading, error, onOpen, onRetry }: {
       <span className="memory-summary-figure" aria-hidden="true"><MascotMark pose={MASCOT.idlePose} /></span>
       <div className="memory-summary-copy">
         <h3 id="memory-summary-title">What {MASCOT.name} remembers</h3>
-        <p>{MASCOT.name} proposes facts as you work. Nothing is remembered until you keep it, and you can forget anything at any time.</p>
+        <p>{MASCOT.name} may use today's proposals as temporary context. Only facts you keep are remembered across days, and you can forget them at any time.</p>
       </div>
     </div>
     <div className="memory-summary-side">
@@ -248,7 +248,7 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
         <header className="memory-modal-head">
           <div>
             <h2 id="memory-modal-title">What {MASCOT.name} remembers</h2>
-            <p>{MASCOT.name} proposes facts as you work. Nothing is remembered until you keep it, and you can forget anything at any time.</p>
+            <p>{MASCOT.name} may use today's proposals as temporary context. Only facts you keep are remembered across days, and you can forget them at any time.</p>
           </div>
           <button type="button" className="memory-modal-close" aria-label="Close memory" onClick={onClose}><X size={16} /></button>
         </header>
