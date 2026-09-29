@@ -5,6 +5,8 @@ import {
   activityIntervalConfig,
   activityIntervalSlotKey,
   formatIntervalRange,
+  intervalMemoryQuery,
+  intervalSynthesisMessages,
   isoInstant,
   intervalHourStarts,
   intervalProvenanceLabel,
@@ -14,7 +16,7 @@ import {
   selectIntervalEvidence,
   type IntervalEvidenceEntry,
 } from "../src/lib/work-os-activity-intervals";
-import type { ScreenshotWindowCandidate } from "../src/lib/work-os-screenshots";
+import type { ScreenshotWindowCandidate, ScreenshotWindowPreparation } from "../src/lib/work-os-screenshots";
 
 const candidate = (id: string, capturedAt: string, app: string | null, retained = true, confidence = 0.8): ScreenshotWindowCandidate => ({
   summaryId: `summary-${id}`,
@@ -200,4 +202,56 @@ test("evidence entries keep raw flags only for the representative subset", () =>
   const raw = entries.filter((entry) => entry.rawImageShown);
   assert.equal(raw.length, 1);
   assert.equal(raw[0].candidate.retained, true);
+});
+
+test("memory recall follows the day's focus and the interval's own work", () => {
+  assert.equal(
+    intervalMemoryQuery({
+      focus: "Finalize LaunchLoom templates",
+      apps: ["VS Code", "Google Chrome", "VS Code", null],
+      tasks: ["Tasks", undefined, "Work OS dashboard"],
+    }),
+    "Finalize LaunchLoom templates · VS Code · Google Chrome · Tasks · Work OS dashboard",
+  );
+  assert.equal(intervalMemoryQuery({ apps: ["  VS   Code  "] }), "VS Code");
+  assert.equal(intervalMemoryQuery({ focus: "   " }), "current work in progress and recent activity context");
+  assert.equal(intervalMemoryQuery({}), "current work in progress and recent activity context");
+  assert.equal(intervalMemoryQuery({ focus: "x".repeat(600) }).length, 500);
+});
+
+test("interval messages carry memory context only as labeled, non-evidence context", () => {
+  const base = {
+    windowLabel: "2–3 PM",
+    observations: [{
+      index: 1,
+      at: "2026-09-28T14:05:00.000Z",
+      app: "VS Code",
+      summary: "Edited files.",
+      workContext: null,
+      possibleTaskReference: null,
+      confidence: 0.8,
+    }],
+    images: [],
+    counts: {
+      providerFrames: 4,
+      processed: 3,
+      excludedPolicy: 0,
+      excludedSensitive: 0,
+      unavailable: 1,
+      pending: 0,
+    } as ScreenshotWindowPreparation["counts"],
+  };
+  const userText = (messages: ReturnType<typeof intervalSynthesisMessages>) =>
+    String((messages[1].content as Array<Record<string, unknown>>)[0].text ?? "");
+  const without = intervalSynthesisMessages(base);
+  assert.ok(!userText(without).includes("Additional context"));
+  const withMemory = intervalSynthesisMessages({
+    ...base,
+    contextBlock: "Today so far (2026-09-28) — live facts:\n- Focus: LaunchLoom templates",
+  });
+  assert.ok(userText(withMemory).includes("Additional context (live day state and recalled history — informational only; never evidence):"));
+  assert.ok(userText(withMemory).includes("Focus: LaunchLoom templates"));
+  const system = String(without[0].content);
+  assert.match(system, /never as screenshot evidence/);
+  assert.match(system, /never contradict what the observations and images show/);
 });

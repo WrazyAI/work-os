@@ -631,6 +631,17 @@ eligibility, completion, deployment, or quality; the synthesizer always
 receives the ordered per-frame observations and only a bounded representative
 subset of raw frames.
 
+When Work Memory is enabled for the person, the synthesizer also receives a
+bounded additional-context block: the live day snapshot (focus, agenda,
+completed and deferred items, recent substantive updates, shift state) and a
+recalled-history block retrieved for the interval's own work (the day's stated
+focus plus the observed apps and possible task references). That context exists
+only so the recap understands what the employee is currently working on. It is
+labeled informational, is never screenshot evidence, can never add completion,
+progress, or activity claims, and can never contradict the frames. A memory
+recall failure degrades silently to an evidence-only recap, and interval
+coverage records whether memory context was used.
+
 Review adds provenance without creating employee-authored truth:
 
 - `inferred` — the AI recap as generated; silence leaves it here, and it still
