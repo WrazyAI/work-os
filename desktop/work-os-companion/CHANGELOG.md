@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.69
+
+- The floating companion no longer opens the chat on its own — a bubble above Otto shows your recap when it’s ready, and View more opens it in the chat.
+- While your recap is being analyzed, Otto shows his working state instead of asking for input.
+- A recap now stays in the chat until you confirm or correct it, and View more opens the chat at the latest recap.
+
 ## 0.3.68
 
 - Loom recordings now bring their own transcript into your plan and EOD draft — no copy-paste needed.
