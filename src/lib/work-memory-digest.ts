@@ -10,6 +10,7 @@ export async function buildDailyMemoryDigests(localDate: string, limit = 50): Pr
     .select("organization_id,person_id")
     .eq("local_date", localDate)
     .neq("kind", "digest")
+    .neq("kind", "profile_fact")
     .limit(500);
   if (error) throw new Error(`load digest scopes: ${error.message}`);
 
@@ -28,6 +29,7 @@ export async function buildDailyMemoryDigests(localDate: string, limit = 50): Pr
       .eq("person_id", scope.personId)
       .eq("local_date", localDate)
       .neq("kind", "digest")
+      .neq("kind", "profile_fact")
       .order("occurred_at", { ascending: true })
       .limit(50);
     if (itemError) throw new Error(`load digest items: ${itemError.message}`);
