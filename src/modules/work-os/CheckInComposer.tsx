@@ -48,8 +48,10 @@ export function CheckInComposer({
   voice: VoiceInput;
 }) {
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  /* The hold-to-talk listener is registered once; this ref keeps it on the
+     newest recorder without re-subscribing on every render. */
   const voiceRef = useRef(voice);
-  voiceRef.current = voice;
+  useEffect(() => { voiceRef.current = voice; }, [voice]);
 
   const capturing = voice.state === "requesting" || voice.state === "recording";
   const transcribing = voice.state === "transcribing";

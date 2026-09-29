@@ -222,8 +222,10 @@ export default function App() {
       setProgressComposerOpen(true);
     },
   });
+  /* The hold-to-talk listener is registered once; this ref keeps it on the
+     newest recorder without re-subscribing on every render. */
   const voiceRef = useRef(voice);
-  voiceRef.current = voice;
+  useEffect(() => { voiceRef.current = voice; }, [voice]);
   const [voiceHotkeyEnabled, setVoiceHotkeyEnabled] = useState(true);
   const [voiceHotkeyError, setVoiceHotkeyError] = useState<string | null>(null);
   /** Registers or releases the hold-to-talk shortcut and records the truthful

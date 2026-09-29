@@ -208,8 +208,10 @@ export default function AvatarApp(): React.ReactElement {
       void toggleExpanded(true);
     },
   });
+  /* The hold-to-talk listener is registered once; this ref keeps it on the
+     newest recorder without re-subscribing on every render. */
   const voiceRef = useRef(voice);
-  voiceRef.current = voice;
+  useEffect(() => { voiceRef.current = voice; }, [voice]);
   const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
