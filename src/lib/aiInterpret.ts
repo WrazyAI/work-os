@@ -389,7 +389,7 @@ function buildPrompt(
     planIntent ? `Their stated plan for today: "${planIntent}".` : "",
     context?.todayBlock ? `Live day state (current facts):\n${context.todayBlock}` : "",
     conversation ? `Recent conversation:\n${conversation}` : "",
-    context?.memoryBlock ? `Recalled memory (dated history only — never current facts or completion evidence):\n${context.memoryBlock}` : "",
+    context?.memoryBlock ? `Memory context (confirmed facts, dated history, and same-day tentative context; never completion evidence):\n${context.memoryBlock}` : "",
     blueprintBlock,
     loomBlock,
     "Their tasks:",
