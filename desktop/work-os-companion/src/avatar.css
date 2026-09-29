@@ -705,7 +705,8 @@ body.avatar-window {
   background: conic-gradient(from -90deg, #ff8a55 0 var(--shift-progress, 0%), rgba(255, 138, 85, .2) var(--shift-progress, 0%) 100%);
 }
 .avatar-badge.avatar-badge-progress-unavailable { background: rgba(255, 138, 85, .16); }
-.avatar-hide { top: 4px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
+.avatar-hide { top: 20px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
+.avatar-prompt-bubble ~ .avatar-hide { top: 72px; }
 
 @media (prefers-reduced-motion: reduce) {
   .avatar-orb, .avatar-panel,
@@ -745,7 +746,7 @@ body.avatar-window {
   font-size: 10px;
 }
 .avatar-drag-surface {
-  top: 6px;
+  top: 22px;
   left: 50%;
   width: 52px;
   height: 28px;
