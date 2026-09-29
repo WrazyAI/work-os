@@ -145,12 +145,12 @@ describe("floating companion integration", () => {
     expect(attentionSequence).toContain("[enabled, reducedMotion, replayKey]");
     const avatarStyles = readFileSync(resolve(root, "src/avatar.css"), "utf8");
     expect(avatar).not.toContain("avatar-orb-state");
-    expect(avatar).not.toContain("avatar-day-time");
+    expect(avatar).toContain("avatar-day-time");
     const chatPreview = readFileSync(resolve(root, "src/ChatPreview.tsx"), "utf8");
     expect(chatPreview).not.toContain("avatar-orb-state");
-    expect(chatPreview).not.toContain("avatar-day-time");
+    expect(chatPreview).toContain("avatar-day-time");
     expect(avatarStyles).not.toContain(".avatar-orb-state");
-    expect(avatarStyles).not.toContain(".avatar-day-time");
+    expect(avatarStyles).toContain(".avatar-day-time");
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble strong\s*\{[^}]*font-size:\s*12px;/);
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*font-size:\s*10\.5px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
