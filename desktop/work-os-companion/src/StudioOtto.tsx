@@ -57,6 +57,7 @@ export function StudioOtto({
   const fill = (part: string) => `url(#${id(part)})`;
   const full = crop === "full";
   const working = pose === "think";
+  const resting = pose === "sleep" || pose === "rest";
   const palette = studioOttoPalette(pose, tone);
   const colors = STUDIO_PALETTES[palette];
   const artStyle = {
@@ -159,6 +160,12 @@ export function StudioOtto({
         </g>
         <path d="M48 103Q80 108 113 103" stroke="#fffef6" strokeWidth="1.3" fill="none" opacity=".8" />
       </g>
+
+      {full && resting && <g className="studio-sleep-zs" aria-hidden="true">
+        <path className="studio-sleep-z z-1" d="M123 40h8l-8 8h8" />
+        <path className="studio-sleep-z z-2" d="M133 28h9l-9 9h9" />
+        <path className="studio-sleep-z z-3" d="M141 15h10l-10 10h10" />
+      </g>}
 
       {full && working && <g className="studio-taskpad">
         <path d="M53 124h53q4 0 3 5l-5 22H50l-2-21q-1-6 5-6Z" fill={fill("metal")} stroke="#7f8983" strokeWidth=".9" />
