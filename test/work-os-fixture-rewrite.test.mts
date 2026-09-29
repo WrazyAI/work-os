@@ -70,3 +70,32 @@ import { rewritePlanSteps } from "../scripts/rotate-e2e-fixture.mts";
   const outcome = rewritePlanSteps(steps, { email: "e2e-verify@wrazyos.com", newPassword: "NewPass456" });
   assert.equal(outcome.changed, false);
 }
+
+// 6. A changed fixture email rewrites the email fill as well.
+{
+  const steps = [
+    { description: "Fill 'e2e-verify@wrazyos.com' into email field" },
+    { description: "Fill 'OldPass123' into password field" },
+  ];
+  const outcome = rewritePlanSteps(steps, {
+    email: "e2e-verify@wrazyos.com",
+    newEmail: "e2e-verify@maigreeks.com",
+    newPassword: "NewPass456",
+  });
+  assert.equal(outcome.emailSteps, 1);
+  assert.equal(outcome.emailRewrites, 1);
+  assert.equal(outcome.passwordSteps, 1);
+  assert.equal(outcome.steps[0].description, "Fill 'e2e-verify@maigreeks.com' into email field");
+  assert.equal(outcome.steps[1].description, "Fill 'NewPass456' into password field");
+}
+
+// 7. Without --new-email the email fill stays byte-identical.
+{
+  const steps = [
+    { description: "Fill 'e2e-verify@maigreeks.com' into email field" },
+    { description: "Fill 'OldPass123' into password field" },
+  ];
+  const outcome = rewritePlanSteps(steps, { email: "e2e-verify@maigreeks.com", newPassword: "NewPass456" });
+  assert.equal(outcome.emailRewrites, 0);
+  assert.equal(outcome.steps[0].description, "Fill 'e2e-verify@maigreeks.com' into email field");
+}

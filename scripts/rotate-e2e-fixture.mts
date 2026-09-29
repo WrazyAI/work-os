@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import bcrypt from "bcryptjs";
 import { Client } from "pg";
 
-const DEFAULT_EMAIL = "e2e-verify@wrazyos.com";
+const DEFAULT_EMAIL = "e2e-verify@maigreeks.com";
 const DEFAULT_BASE = "https://app.wrazyos.com";
 const DEFAULT_PROJECT = "e8fa6d35-586c-47a7-a69c-13e6b8552a0b";
 const DEFAULT_TESTSRITE = "/home/zahemen/.nvm/versions/node/v24.20.0/bin/testsprite";
@@ -21,6 +21,7 @@ export interface FixturePlanStep {
 export interface RewriteOutcome {
   steps: FixturePlanStep[];
   emailSteps: number;
+  emailRewrites: number;
   passwordSteps: number;
   changed: boolean;
 }
@@ -30,15 +31,16 @@ function parseFill(description: string): { value: string; field: string } | null
   return match ? { value: match[1], field: match[2] } : null;
 }
 
-/** Rewrite fixture-login fill steps to the new password. The first password
- * fill after an email fill is the credential; both its description text and
- * its structured input move to the new value. */
+/** Rewrite fixture-login fill steps to the new email and password. The first
+ * password fill after an email fill is the credential; both the description
+ * text and the structured input move to the new values. */
 export function rewritePlanSteps(
   steps: FixturePlanStep[],
-  options: { email: string; newPassword: string },
+  options: { email: string; newPassword: string; newEmail?: string },
 ): RewriteOutcome {
   const rewritten = steps.map((step) => ({ ...step }));
   let emailSteps = 0;
+  let emailRewrites = 0;
   let passwordSteps = 0;
   for (let index = 0; index < rewritten.length; index += 1) {
     const step = rewritten[index];
@@ -46,6 +48,13 @@ export function rewritePlanSteps(
     const input = typeof step.input === "string" ? step.input : "";
     if (input !== options.email && !description.includes(options.email)) continue;
     emailSteps += 1;
+    if (options.newEmail && options.newEmail !== options.email) {
+      if (input === options.email) step.input = options.newEmail;
+      if (description.includes(options.email)) {
+        step.description = description.split(options.email).join(options.newEmail);
+      }
+      emailRewrites += 1;
+    }
     for (let offset = 1; offset <= 3 && index + offset < rewritten.length; offset += 1) {
       const candidate = rewritten[index + offset];
       const candidateDescription = typeof candidate.description === "string" ? candidate.description : "";
@@ -61,11 +70,12 @@ export function rewritePlanSteps(
       break;
     }
   }
-  return { steps: rewritten, emailSteps, passwordSteps, changed: passwordSteps > 0 };
+  return { steps: rewritten, emailSteps, emailRewrites, passwordSteps, changed: emailRewrites > 0 || passwordSteps > 0 };
 }
 
 interface Options {
   email: string;
+  newEmail: string;
   base: string;
   project: string;
   testsprite: string;
@@ -80,6 +90,7 @@ interface Options {
 function parseArgs(argv: string[]): Options | null {
   const options: Options = {
     email: DEFAULT_EMAIL,
+    newEmail: "",
     base: DEFAULT_BASE,
     project: DEFAULT_PROJECT,
     testsprite: DEFAULT_TESTSRITE,
@@ -94,6 +105,7 @@ function parseArgs(argv: string[]): Options | null {
     const arg = argv[index];
     const next = () => argv[++index] ?? "";
     if (arg === "--email") options.email = next();
+    else if (arg === "--new-email") options.newEmail = next();
     else if (arg === "--base") options.base = next();
     else if (arg === "--project") options.project = next();
     else if (arg === "--testsprite") options.testsprite = next();
@@ -192,11 +204,17 @@ async function rotatePlans(options: Options, newPassword: string): Promise<void>
       continue;
     }
     const steps = detail.planSteps ?? [];
-    const outcome = rewritePlanSteps(steps, { email: options.email, newPassword });
+    const outcome = rewritePlanSteps(steps, {
+      email: options.email,
+      newPassword,
+      newEmail: options.newEmail || undefined,
+    });
     if (!outcome.changed) continue;
     summary.affected += 1;
     if (!options.apply) {
-      console.log(`would rewrite ${test.id} (${test.name ?? "unnamed"}) — ${outcome.passwordSteps} password step(s)`);
+      console.log(
+        `would rewrite ${test.id} (${test.name ?? "unnamed"}) — ${outcome.emailRewrites} email / ${outcome.passwordSteps} password step(s)`,
+      );
       continue;
     }
     const dir = mkdtempSync(join(tmpdir(), "rotate-e2e-fixture-"));
@@ -231,7 +249,7 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (!options) {
     console.error(
-      "usage: tsx scripts/rotate-e2e-fixture.mts --password-file <path> [--email <addr>] [--apply] [--skip-db] [--skip-testsprite] [--project <id>] [--test-ids <id,id>] [--backends <id,id>]",
+      "usage: tsx scripts/rotate-e2e-fixture.mts --password-file <path> [--email <addr>] [--new-email <addr>] [--apply] [--skip-db] [--skip-testsprite] [--project <id>] [--test-ids <id,id>] [--backends <id,id>]",
     );
     process.exit(1);
   }
