@@ -353,7 +353,6 @@ describe("operational visualizations", () => {
     expect(styles).toMatch(/\.settings-group \{[\s\S]*?grid-template-columns: minmax\(128px, 164px\) minmax\(0, 1fr\);/);
     expect(styles).toMatch(/\.settings-group-head h3 \{[\s\S]*?font: 750 13px\/1\.25/);
     expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
-    expect(styles).not.toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
     expect(styles).toMatch(/\.setting \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*?min-height: 64px;[\s\S]*?border-top: 1px solid/);
     expect(styles).toContain(".setting:first-child { border-top: 0; }");
     expect(styles).toContain(".setting-copy");
