@@ -551,7 +551,10 @@ on the page surface — never a card and never the settings row grid: on the
 left, the configured mascot mark in a quiet framed tile, the heading
 `What Otto remembers`, and the one-line model statement; on the right, the
 counts (`Remembered`, `Need review`, the latter amber only while candidates
-exist) and one dark `View` action. The band never lists facts.
+exist) and one dark `View` action. The band never lists facts. The model
+statement must make the trust boundary explicit: a candidate may help as
+temporary context on the local workday it was proposed, but only a kept fact
+becomes durable memory across days.
 
 `View` opens a centered management modal (`role="dialog"`, `aria-modal`) that
 owns the facts. It carries the same title and model statement, one close
@@ -633,9 +636,11 @@ subset of raw frames.
 
 When Work Memory is enabled for the person, the synthesizer also receives a
 bounded additional-context block: the live day snapshot (focus, agenda,
-completed and deferred items, recent substantive updates, shift state) and a
-recalled-history block retrieved for the interval's own work (the day's stated
-focus plus the observed apps and possible task references). That context exists
+completed and deferred items, recent substantive updates, shift state) plus a
+memory block containing confirmed profile facts, same-day tentative candidates
+for that workday, and recalled episodic history retrieved for the interval's
+own work (the day's stated focus plus the observed apps and possible task
+references). That context exists
 only so the recap understands what the employee is currently working on. It is
 labeled informational, is never screenshot evidence, can never add completion,
 progress, or activity claims, and can never contradict the frames. It is
