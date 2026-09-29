@@ -6660,8 +6660,8 @@ button:not(:disabled):active {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 18px 28px;
-  margin-top: 26px;
-  padding: 20px 0 4px;
+  margin-top: 0;
+  padding: 28px 0;
   border-top: 1px solid var(--line);
 }
 
