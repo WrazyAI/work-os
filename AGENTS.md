@@ -204,11 +204,14 @@ Projects: **Work OS Companion** `e8fa6d35-586c-47a7-a69c-13e6b8552a0b`
 **WrazyOS API** `c76fc011-4043-4f03-9e1a-7d0fbc50a64a` (backend, → https://app.wrazyos.com).
 Frontend runs use the project's configured environment URL (V3 routing ignores
 `--target-url`); use `--local <port>` for a localhost-only frontend. Existing
-frontend plans log in with the `e2e-verify@wrazyos.com` fixture — if that
-sign-in fails with `Invalid email or password`, ask the operator for the
-current fixture password instead of declaring the app broken. Backend tests
-need a project credential and at least one literal `assert` in the Python; run
-the script directly as well before reporting the verdict.
+frontend plans log in with the `e2e-verify@wrazyos.com` fixture; when that
+sign-in fails with `Invalid email or password`, rotate it with
+`tsx scripts/rotate-e2e-fixture.mts --password-file <secret> --apply` (updates
+the credential and rewrites every stored plan that embeds it) instead of
+declaring the app broken. `tsx scripts/e2e-cleanup.mts <user-id> [--dry-run]`
+removes a disposable e2e user, its auto-created legacy org, and its memory
+rows. Backend tests need a project credential and at least one literal `assert`
+in the Python; run the script directly as well before reporting the verdict.
 
 ## Running services (systemd --user)
 Both live in `~/.config/systemd/user/`, auto-restart, `Linger=yes` (start on boot):
@@ -234,8 +237,14 @@ running server serves HTML referencing chunks that no longer exist → **CSS/JS 
 Symptom: page loads as unstyled HTML, `/claude` etc. throw "This page couldn't
 load." Fix if it happens: `systemctl --user restart agentos-web`.
 
-After changing **runner** code (anything it imports), restart it too:
-`systemctl --user restart agentos-runner`.
+After changing **runner** code (anything it imports), restart it too — the
+redeploy writes `.deployed-commit` and warns when the changed files overlap the
+runner's import closure. The warning is sticky (baseline
+`.runner-deployed-commit`), so it repeats until the runner is restarted:
+`systemctl --user restart agentos-runner` followed by
+`node --import tsx scripts/runner-restart-check.mts --mark`, or re-run
+`npm run redeploy -- --restart-runner` (the restart happens only when no job is
+in flight, and the baseline advances automatically).
 
 After changing the **Hermes SEO agent surface** — especially
 `scripts/seo-mcp-server.mjs`, `config/hermes/SOUL.md`, or the tools exposed by
@@ -505,6 +514,14 @@ Convergence procedure:
    against `http://127.0.0.1:3000`.
 5. Never rewrite either repo's history to force a match. Converge content with
    normal commits on each side and record both commit SHAs in the handoff.
+
+`scripts/converge-to-agentos.mts <commit>` automates steps 1–3 for
+blob-identical files: it classifies every changed file (identical, diverged,
+new, absent, deleted), applies only the identical set in a temporary agent-os
+worktree, verifies each post-image, commits, and pushes to `agentos/main` (new
+files need `--include-new`; diverged files always print as manual follow-up).
+It never force-pushes; a rejected push leaves the worktree in place for
+recovery.
 
 ### Non-destructive convergence rule (mandatory)
 

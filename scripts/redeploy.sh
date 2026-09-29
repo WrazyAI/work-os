@@ -84,6 +84,13 @@ if ! check_live_assets; then
   exit 1
 fi
 
+DEPLOYED_COMMIT="$(git rev-parse HEAD)"
+echo "▶ runner check…"
+if ! node --import tsx scripts/runner-restart-check.mts --previous-file .deployed-commit --current "$DEPLOYED_COMMIT" "$@"; then
+  echo "⚠ runner restart check failed; verify agentos-runner manually" >&2
+fi
+printf '%s\n' "$DEPLOYED_COMMIT" > .deployed-commit
+
 rm -rf "$PREVIOUS_DIST"
 echo "✓ redeployed build"
 systemctl --user is-active "$SERVICE" agentos-runner.service
