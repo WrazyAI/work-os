@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Settings is calmer and easier to scan, with simpler copy, aligned controls, and cleaner section spacing.
+
 ## 0.3.63
 
 - When Otto is set to Small, the floating drag handle and hover close button stay tucked near his head.
