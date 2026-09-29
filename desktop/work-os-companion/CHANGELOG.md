@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.63
+
+- When Otto is set to Small, the floating drag handle and hover close button stay tucked near his head.
+
 ## 0.3.62
 
 - Resting Otto’s deep-blue sleep Zs are larger and easier to notice.
