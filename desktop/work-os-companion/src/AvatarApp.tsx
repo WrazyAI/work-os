@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -39,7 +39,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -172,6 +172,7 @@ export default function AvatarApp(): React.ReactElement {
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
+  const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
   const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
@@ -218,6 +219,10 @@ export default function AvatarApp(): React.ReactElement {
      newest recorder without re-subscribing on every render. */
   const voiceRef = useRef(voice);
   useEffect(() => { voiceRef.current = voice; }, [voice]);
+  // DEV fixture: render either mascot size without the vault.
+  useEffect(() => {
+    if (avatarMascotFixture) document.documentElement.dataset.mascotSize = avatarMascotFixture;
+  }, [avatarMascotFixture]);
   const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
@@ -497,12 +502,14 @@ export default function AvatarApp(): React.ReactElement {
   // Appearance is per-device and shared with the main window: apply what the
   // vault holds on boot, then follow the main window's broadcast live. This
   // window never writes, so both windows always agree on one stored value.
+  // A DEV fixture owns the rendered size instead.
   useEffect(() => {
+    if (avatarMascotFixture) return;
     let unlisten: (() => void) | undefined;
     void secureState.settings().then((settings) => applyAppearance(normalizeAppearance(settings))).catch(() => undefined);
     void listen<{ textSize?: unknown; mascotSize?: unknown }>(APPEARANCE_EVENT, (event) => applyAppearance(normalizeAppearance(event.payload))).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
-  }, []);
+  }, [avatarMascotFixture]);
 
   // Hold-to-talk reaches whichever companion window is on screen: Rust routes
   // the press/release here when the floating window is the visible one.
@@ -1261,7 +1268,9 @@ export default function AvatarApp(): React.ReactElement {
         if (!recap || existing.activityInterval?.id === recap.id) return current;
         return current.map((entry) => entry.id === turnId ? { ...entry, activityInterval: recap, text } : entry);
       }
-      return [...current, {
+      // Only the latest undecided recap stays in the chat; older ones live in
+      // the Tasks stream instead of stacking up as chat cards.
+      return [...replaceUndecidedRecapTurns(current, turnId), {
         id: turnId, role: "assistant" as const, text, createdAt: new Date().toISOString(), kind: "prompt" as const,
         ...(recap ? { activityInterval: recap } : {}),
       }];

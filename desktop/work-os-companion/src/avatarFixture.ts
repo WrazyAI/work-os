@@ -82,6 +82,13 @@ export function avatarRecapProcessingFixtureRequested(search: string): boolean {
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_PROCESSING_FIXTURE;
 }
 
+/** DEV fixtures render either configured mascot size without the vault. */
+export function avatarMascotSizeFixture(search: string): "small" | "large" | null {
+  if (!import.meta.env.DEV) return null;
+  const value = new URLSearchParams(search).get("avatar-mascot");
+  return value === "small" || value === "large" ? value : null;
+}
+
 export function avatarShiftProgressFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_SHIFT_PROGRESS_FIXTURE;

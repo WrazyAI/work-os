@@ -131,6 +131,25 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
+/* A ready recap hugs the mascot's head at any configured mascot size: the
+   bubble's bottom edge sits just above the visible head, its tail points down
+   at the head's center, and the copy clamps so the bubble always fits the
+   space reserved above the figure. */
+.avatar-recap-bubble {
+  top: auto;
+  bottom: var(--avatar-bubble-anchor, 160px);
+  padding: 8px 10px;
+  cursor: default;
+}
+.avatar-recap-bubble::after { left: 50%; margin-left: -6px; }
+.avatar-recap-bubble strong,
+.avatar-recap-bubble > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.avatar-recap-bubble .avatar-bubble-more { margin-top: 6px; padding: 3px 10px; }
 /* A ready recap is a result, not a prompt: the bubble is not itself clickable,
    so the summary stays readable and View more is the only action. */
 .avatar-recap-bubble { cursor: default; }
@@ -738,13 +757,17 @@ body.avatar-window {
 .avatar-compact {
   width: 200px;
   height: 276px;
+  /* Where a recap bubble's bottom edge sits, measured from the window bottom:
+   * just above the visible head for each configured mascot size. */
+  --avatar-bubble-anchor: 160px;
 }
+html[data-mascot-size="small"] .avatar-compact { --avatar-bubble-anchor: 128px; }
 .avatar-orb {
   width: 144px;
   height: 154px;
   margin: 76px 28px 0;
 }
-.avatar-prompt-bubble ~ .avatar-orb { margin-top: 108px; }
+.avatar-prompt-bubble ~ .avatar-orb { margin-top: 116px; }
 .avatar-pet {
   width: 118px;
   height: 133px;

@@ -388,6 +388,15 @@ export function prunePromptReminderTurns<T extends { id: string; role: string; k
   return entries.filter((entry) => entry.id === currentPromptTurnId || Boolean(entry.activityInterval) || !isPromptReminderTurn(entry));
 }
 
+/** Keeps only the latest undecided recap turn in the chat: older inferred
+ * recaps stay in the Tasks stream instead of stacking up as chat cards. */
+export function replaceUndecidedRecapTurns<T extends { id: string; activityInterval?: { reviewStatus?: string | null } | null }>(
+  entries: T[],
+  keepId: string,
+): T[] {
+  return entries.filter((entry) => entry.id === keepId || !entry.activityInterval || entry.activityInterval.reviewStatus !== "inferred");
+}
+
 /** Serializes a live entry for the vault. System notices and reminder
  * scaffolding stay ephemeral. */
 export function serializeAvatarChatEntry(entry: AvatarChatEntryState): AvatarStoredTurn | null {

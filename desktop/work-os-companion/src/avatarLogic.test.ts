@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -356,6 +356,15 @@ describe("prompt reminder turns", () => {
     const dialogue = { id: "u-1", role: "user", text: "Finalizing the dashboard." };
     expect(prunePromptReminderTurns([reminder, staleReminder, recapTurn, decidedRecap, dialogue], reminder.id))
       .toEqual([reminder, recapTurn, dialogue]);
+  });
+
+  it("keeps only the latest undecided recap turn in the chat", () => {
+    const olderRecap = { id: "recap:interval-1", activityInterval: { reviewStatus: "inferred" } };
+    const newestRecap = { id: "recap:interval-2", activityInterval: { reviewStatus: "inferred" } };
+    const decidedRecap = { id: "recap:interval-0", activityInterval: { reviewStatus: "confirmed" } };
+    const receipt = { id: "recap:interval-3" };
+    expect(replaceUndecidedRecapTurns([olderRecap, decidedRecap, receipt], newestRecap.id))
+      .toEqual([decidedRecap, receipt]);
   });
 
   it("never serializes reminder scaffolding into the vault", () => {
