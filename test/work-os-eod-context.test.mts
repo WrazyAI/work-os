@@ -23,7 +23,9 @@ const grounding: EodGrounding = {
 };
 
 test("the draft prompt offers screenshot observations as selectable facts", () => {
-  const prompt = buildEodPrompt(grounding);
+  const prompt = buildEodPrompt({ ...grounding, contextBlock: "Working context inferred on this date (unconfirmed): candidate" });
+  assert.match(prompt, /Additional context \(live day state plus confirmed, historical, and same-day tentative memory/);
+  assert.match(prompt, /Working context inferred on this date \(unconfirmed\)/);
   assert.match(prompt, /Observed activity context/);
   assert.match(prompt, /observed:0: A browser window shows the settlement dashboard\. \(observed in Google Chrome\)/);
   assert.match(prompt, /observedFactIds/);
