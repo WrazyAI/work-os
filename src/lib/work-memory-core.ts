@@ -88,8 +88,9 @@ function memoryDate(item: MemoryItem): string {
   return item.local_date || item.occurred_at.slice(0, 10);
 }
 
-/** Formats recalled memory as a dated prompt block. Recalled context is
- * explicitly labeled as history, never as current fact. */
+/** Formats durable profile facts, same-day tentative candidates, and recalled
+ * episodic history as explicitly labeled prompt context. Tentative and
+ * episodic context never become current-state or completion evidence. */
 export function formatMemoryContext(input: {
   items: MemoryItem[];
   profileFacts?: MemoryItem[];
