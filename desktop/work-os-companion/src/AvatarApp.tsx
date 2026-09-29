@@ -1302,7 +1302,6 @@ export default function AvatarApp(): React.ReactElement {
             aria-hidden="true"
           />}
         </button>
-        {showShiftTime && <span className="avatar-day-time" aria-hidden="true">{elapsedText}</span>}
         </div>
       )}
       {expanded && (
