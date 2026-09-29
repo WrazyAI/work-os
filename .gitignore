@@ -37,3 +37,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Agent-local working state: skills installed for the agent, the Neon CLI
+# config, TestSprite run artifacts, and nested worktrees. None of these belong
+# in the repository, and one of them is a symlink into another agent's
+# worktree, so a blanket `git add -A` must never sweep them in.
+/.agents/
+/.claude/
+/.neon
+/.testsprite/
+/.worktrees/
