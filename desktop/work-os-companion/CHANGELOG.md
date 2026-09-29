@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.62
+
+- Resting Otto’s deep-blue sleep Zs are larger and easier to notice.
+- The compact drag handle and hover close button now sit closer to Otto without getting any larger.
+
 ## 0.3.61
 
 - Settings has a new Reading & display section: choose Small or Medium text to make the whole app easier to read.
