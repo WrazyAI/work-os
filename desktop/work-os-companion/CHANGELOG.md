@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Loom recordings now bring their own transcript into your plan and EOD draft — no copy-paste needed.
+
 ## 0.3.67
 
 - The floating companion no longer leaves its "What are you working on today?" reminder in the chat after your plan is set.
