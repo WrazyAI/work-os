@@ -67,6 +67,7 @@ test("memory context labels recalled facts and respects the character budget", (
   assert.match(block, /unconfirmed/);
   assert.match(block, /never as completion evidence or a durable fact/);
   assert.match(block, /2026-09-11 · tentative/);
+  assert.ok(block.indexOf("Working context inferred on this date") < block.indexOf("Known about this person"), "same-day context gets prompt-budget priority over durable facts");
   assert.match(block, /Recalled history/);
   assert.match(block, /2026-09-10 · task_event/);
   const tiny = formatMemoryContext({ items: [recalled], profileFacts: [fact], sameDayCandidates: [tentative], maxChars: 40 });
