@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.72
+
+- The recap bubble now sits directly above Otto’s head at any mascot size, with its tail pointing at him.
+- Only the latest undecided recap stays in the chat — older recaps remain in the Tasks tab.
+
 ## 0.3.71
 
 - Activity recaps now read as a short lead with scannable bullets, a flow line, and an explicit list of what the screenshots did not establish.
