@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.64
+
 - Settings is calmer and easier to scan, with simpler copy, aligned controls, and cleaner section spacing.
 
 ## 0.3.63
