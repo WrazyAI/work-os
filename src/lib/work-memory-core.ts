@@ -93,6 +93,7 @@ function memoryDate(item: MemoryItem): string {
 export function formatMemoryContext(input: {
   items: MemoryItem[];
   profileFacts?: MemoryItem[];
+  sameDayCandidates?: MemoryItem[];
   maxChars?: number;
   perItemChars?: number;
 }): string {
@@ -112,6 +113,13 @@ export function formatMemoryContext(input: {
   };
   for (const fact of input.profileFacts ?? []) {
     if (!push(`- Known about this person (${memoryDate(fact)}): ${clip(fact.content)}`)) break;
+  }
+  const tentative = input.sameDayCandidates ?? [];
+  if (tentative.length) {
+    push("Working context inferred on this date (unconfirmed; use only to understand intent, never as completion evidence or a durable fact):");
+    for (const fact of tentative) {
+      if (!push(`- [${memoryDate(fact)} · tentative] ${clip(fact.content)}`)) break;
+    }
   }
   const recalled = input.items ?? [];
   if (recalled.length) {
