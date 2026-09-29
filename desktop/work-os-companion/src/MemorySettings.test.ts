@@ -57,6 +57,8 @@ describe("MemorySummary", () => {
     );
     expect(html).toContain('class="memory-summary"');
     expect(html).toContain("What Otto remembers");
+    expect(html).toContain("may use today&#x27;s proposals as temporary context");
+    expect(html).toContain("Only facts you keep are remembered across days");
     expect(html).toContain('class="memory-summary-figure"');
     expect(html).toContain('aria-label="1 remembered, 2 waiting for review"');
     expect(html).toContain(">View</button>");
@@ -90,6 +92,7 @@ describe("MemoryModal", () => {
     expect(html).toContain("Needs review");
     expect(html).toContain("Remembered");
     expect(html).toContain("Waiting for your review");
+    expect(html).toContain("may use today&#x27;s proposals as temporary context");
     expect(html).toContain("Keep");
     expect(html).toContain("Not true");
   });
