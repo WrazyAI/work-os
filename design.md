@@ -483,6 +483,14 @@ Both chat surfaces use the configured mascot head crop through
 src/chat/MascotMark.tsx. Never hardcode mascot art, the mascot name, or a
 generic sparkle as agent identity. Global mascot changes belong in mascot.ts.
 
+Prompt reminders — the plan question, a due check-in, the EOD nudge — are
+scaffolding for the prompt they announce. The companion may show one in the
+thread, but it is removed as soon as that prompt is answered or replaced, is
+never written to the vault or sent as conversation history, and never replays
+in the agent's stored context. A scheduled check-in appears only once its
+prompt time arrives: confirming the plan never triggers an immediate check-in
+demand.
+
 ## 8. Controls and interaction contracts
 
 ### 8.1 Actions

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordWorkMemory, type MemoryScope } from "@/lib/work-memory";
-import { memoryScopeKey, conversationTurnFromHistory } from "@/lib/work-memory-core";
+import { isPromptReminderContent, memoryScopeKey, conversationTurnFromHistory } from "@/lib/work-memory-core";
 
 export interface ConversationScope extends MemoryScope {
   localDate: string;
@@ -145,7 +145,11 @@ export async function recentConversationTurns(
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
       .limit(Math.min(Math.max(limit, 1), 50));
-    return (data ?? []).reverse().map((row) => ({ role: row.role as "user" | "assistant", content: String(row.content) }));
+    return (data ?? []).reverse()
+      // Never replay reminder scaffolding to the assistant, even if an older
+      // client persisted it before the write guard existed.
+      .filter((row) => !isPromptReminderContent(String(row.role), String(row.content)))
+      .map((row) => ({ role: row.role as "user" | "assistant", content: String(row.content) }));
   } catch (error) {
     console.warn(`conversation history skipped: ${(error as Error).message}`);
     return [];

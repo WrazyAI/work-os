@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -309,5 +309,42 @@ describe("composerSendTarget", () => {
   it("keeps the agenda prompt on the composer when no recap edit is active", () => {
     expect(composerSendTarget({ agendaDue: true, recapEditing: false })).toBe("agenda");
     expect(composerSendTarget({ agendaDue: false, recapEditing: false })).toBe("update");
+  });
+});
+
+describe("prompt reminder turns", () => {
+  it("recognizes marked and legacy reminder scaffolding, never real dialogue", () => {
+    expect(isPromptReminderTurn({ role: "assistant", kind: "prompt", text: "Anything" })).toBe(true);
+    expect(isPromptReminderTurn({ role: "assistant", text: "What are you working on today?: Set today's focus. This does not affect attendance." })).toBe(true);
+    expect(isPromptReminderTurn({ role: "assistant", text: "First check-in due: Record what you started or moved forward." })).toBe(true);
+    expect(isPromptReminderTurn({ role: "assistant", text: "EOD review is due: Review the record and submit your EOD when it is accurate." })).toBe(true);
+    expect(isPromptReminderTurn({ role: "user", text: "What are you working on today?: my plan" })).toBe(false);
+    expect(isPromptReminderTurn({ role: "assistant", text: "Recorded your update." })).toBe(false);
+  });
+
+  it("strips reminders from interpretation payloads", () => {
+    const entries = [
+      { role: "assistant", text: "What are you working on today?: Set today's focus." },
+      { role: "user", text: "Finalizing the dashboard." },
+      { role: "assistant", text: "Noted." },
+    ];
+    expect(stripPromptReminderTurns(entries)).toEqual([entries[1], entries[2]]);
+  });
+
+  it("never serializes reminder scaffolding into the vault", () => {
+    expect(serializeAvatarChatEntry({ id: "p1", role: "assistant", text: "First check-in due: Record what you started.", kind: "prompt" })).toBeNull();
+    expect(serializeAvatarChatEntry({ id: "p2", role: "assistant", text: "Check-in due: Record what changed since your last update." })).toBeNull();
+    expect(serializeAvatarChatEntry({ id: "u1", role: "user", text: "Shipped the fix." })).not.toBeNull();
+  });
+});
+
+describe("check-in banner timing", () => {
+  it("waits for the scheduled follow-up instead of demanding a check-in as soon as the plan is set", () => {
+    const scheduled = { ...base, promptRequired: true, promptKind: "follow_up" as const, nextPromptAt: new Date(NOW + 30 * 60_000).toISOString() };
+    const waiting = avatarPrompt(scheduled, NOW);
+    expect(waiting.kind).toBe("available");
+    expect(waiting.body).toContain("next check-in");
+    expect(waiting.compact).toContain("Next check-in");
+    expect(avatarPrompt(scheduled, NOW + 31 * 60_000).kind).toBe("check_in");
   });
 });

@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.67
+
+- The floating companion no longer leaves its "What are you working on today?" reminder in the chat after your plan is set.
+- Progress check-ins keep their own rhythm: a due check-in is no longer held back while your plan is being confirmed.
+
 ## 0.3.66
 
 - Your activity recap in chat now asks “Sounds good?” — tap Looks good to confirm it, or Edit to correct it yourself in the chat box.

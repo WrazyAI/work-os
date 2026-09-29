@@ -40,7 +40,10 @@ export function memoryScopeKey(organizationId: string, personId: string, localDa
  * companion sends `text`; both must persist. */
 export function conversationTurnFromHistory(entry: unknown): { role: "user" | "assistant"; content: string } | null {
   if (!entry || typeof entry !== "object") return null;
-  const raw = entry as { role?: unknown; content?: unknown; text?: unknown };
+  const raw = entry as { role?: unknown; content?: unknown; text?: unknown; kind?: unknown };
+  // Reminder scaffolding is UI, not dialogue: the companion marks it and also
+  // carries legacy unmarked copies, which are recognized by their heading.
+  if (raw.kind === "prompt") return null;
   const role = raw.role === "user" || raw.role === "assistant" ? raw.role : null;
   const content =
     typeof raw.content === "string" && raw.content.trim()
@@ -49,7 +52,21 @@ export function conversationTurnFromHistory(entry: unknown): { role: "user" | "a
         ? raw.text
         : null;
   if (!role || !content) return null;
+  if (isPromptReminderContent(role, content)) return null;
   return { role, content };
+}
+
+/** Avatar reminder headings that must never be stored or replayed as
+ * conversation. Kept in sync with the companion's `avatarLogic` prefixes. */
+const PROMPT_REMINDER_PREFIXES = [
+  "What are you working on today?:",
+  "First check-in due:",
+  "Check-in due:",
+  "EOD review is due:",
+];
+
+export function isPromptReminderContent(role: string, content: string): boolean {
+  return role === "assistant" && PROMPT_REMINDER_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 
 const RRF_K = 60;

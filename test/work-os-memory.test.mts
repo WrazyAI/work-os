@@ -5,6 +5,7 @@ import {
   conversationTurnFromHistory,
   formatMemoryContext,
   fuseMemoryRanks,
+  isPromptReminderContent,
   memoryContentHash,
   memoryScopeKey,
   type MemoryItem,
@@ -154,4 +155,21 @@ test("profile fact candidates use the employee-local workday instead of UTC date
   assert.match(source, /work_employee_onboarding/);
   assert.match(source, /localDateForTimezone\(now, timezone\)/);
   assert.doesNotMatch(source, /const today = now\.toISOString\(\)\.slice\(0, 10\)/);
+});
+
+test("avatar reminder scaffolding is never persisted or replayed as conversation", () => {
+  assert.equal(conversationTurnFromHistory({ role: "assistant", kind: "prompt", text: "Anything" }), null);
+  assert.equal(conversationTurnFromHistory({ role: "assistant", text: "What are you working on today?: Set today's focus. This does not affect attendance." }), null);
+  assert.equal(conversationTurnFromHistory({ role: "assistant", text: "First check-in due: Record what you started or moved forward." }), null);
+  assert.equal(conversationTurnFromHistory({ role: "assistant", text: "EOD review is due: Review the record and submit your EOD when it is accurate." }), null);
+  assert.deepEqual(
+    conversationTurnFromHistory({ role: "user", text: "What are you working on today?: my plan" }),
+    { role: "user", content: "What are you working on today?: my plan" },
+  );
+  assert.deepEqual(
+    conversationTurnFromHistory({ role: "assistant", text: "Recorded your update." }),
+    { role: "assistant", content: "Recorded your update." },
+  );
+  assert.equal(isPromptReminderContent("assistant", "Check-in due: Record what changed since your last update."), true);
+  assert.equal(isPromptReminderContent("user", "Check-in due: answering now"), false);
 });

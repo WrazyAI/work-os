@@ -38,7 +38,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
+  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isPromptReminderTurn, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -97,6 +97,8 @@ interface ChatEntry {
   /** The live recap card for this prompt turn (local-only; the Tasks tab
    * carries the durable stream). */
   activityInterval?: ActivityIntervalCardData;
+  /** UI-only reminder scaffolding: never persisted or sent as conversation. */
+  kind?: "prompt";
 }
 
 interface AgendaReview {
@@ -798,7 +800,7 @@ export default function AvatarApp(): React.ReactElement {
       const result = await apiRequest<{ interpretation: unknown }>("/api/work-os/me/interpret", {
         method: "POST",
         signal: AbortSignal.timeout(60_000),
-        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: history.slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
+        body: JSON.stringify({ input: text, planIntent: facts.planIntent || null, today: facts.shiftDate || null, history: stripPromptReminderTurns(history).slice(-24).map(({ role, text: turnText }) => ({ role, text: turnText })) }),
       });
       setThinkingTrace({ stages, active: 1, startedAt });
       const review = normalizeInterpretation(result.interpretation, text, facts.taskOptions);
@@ -1103,10 +1105,9 @@ export default function AvatarApp(): React.ReactElement {
     ];
     setThinkingTrace({ stages, active: 0, startedAt });
     try {
-      const conversation = chat
-        .filter((entry) => entry.role === "user" || entry.role === "assistant")
-        .slice(-8)
-        .map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text }));
+      const conversation = stripPromptReminderTurns(
+        chat.filter((entry) => entry.role === "user" || entry.role === "assistant"),
+      ).slice(-8).map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text }));
       const result = await apiRequest<{ interpretation: PlanningInterpretation; build_id: string }>("/api/work-os/me/plan/interpret", {
         method: "POST",
         body: JSON.stringify({ input: goal, date: facts.shiftDate, conversation }),
@@ -1144,7 +1145,7 @@ export default function AvatarApp(): React.ReactElement {
     setThinkingTrace({ stages, active: 0, startedAt });
     try {
       const conversation = withAnswerRound(
-        chat.filter((entry) => entry.role === "user" || entry.role === "assistant")
+        stripPromptReminderTurns(chat.filter((entry) => entry.role === "user" || entry.role === "assistant"))
           .slice(-8).map((entry) => ({ role: entry.role as "user" | "assistant", text: entry.text })),
         interpretation.clarifications,
         answers,
@@ -1205,11 +1206,19 @@ export default function AvatarApp(): React.ReactElement {
         return current.map((entry) => entry.id === promptTurnId ? { ...entry, activityInterval: recap, text } : entry);
       }
       return [...current, {
-        id: promptTurnId, role: "assistant" as const, text, createdAt: new Date().toISOString(),
+        id: promptTurnId, role: "assistant" as const, text, createdAt: new Date().toISOString(), kind: "prompt" as const,
         ...(recap ? { activityInterval: recap } : {}),
       }];
     });
   }, [contextualPrompt.body, promptTurnId, activityPrompt]);
+  // The reminder is scaffolding for the prompt it announces. Drop it as soon as
+  // a different prompt (or none) is current, including legacy unmarked copies.
+  useEffect(() => {
+    setChat((current) => {
+      const next = current.filter((entry) => entry.id === promptTurnId || !isPromptReminderTurn(entry));
+      return next.length === current.length ? current : next;
+    });
+  }, [promptTurnId]);
   // A recap only belongs to its prompt instance; drop it once the prompt has
   // been answered or the cadence moves on.
   useEffect(() => {

@@ -144,20 +144,26 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
   }
 
   if (facts.promptRequired) {
-    const firstCheckIn = facts.promptKind === "follow_up" && !facts.lastSubstantiveUpdateAt;
-    return {
-      kind: "check_in",
-      heading: firstCheckIn ? "First check-in due" : "Check-in due",
-      // Keep the banner to the two sentences that matter; the focus and task
-      // state live in the task card and the composer, not in the nudge.
-      body: firstCheckIn
-        ? "Record what you started or moved forward."
-        : lastUpdate
-          ? `Your last recorded update was at ${lastUpdate}. What's changed since then?`
-          : "Record what changed since your last update.",
-      compact: firstCheckIn ? "Tell Work OS what you started." : "Tell Work OS what changed.",
-      action: null,
-    };
+    // The banner follows the same due rule as the nudge: a scheduled follow-up
+    // is not "due" until its next prompt time arrives, so finishing the plan
+    // never causes an immediate check-in demand.
+    const dueAt = facts.nextPromptAt ? Date.parse(facts.nextPromptAt) : now;
+    if (!Number.isFinite(dueAt) || dueAt <= now) {
+      const firstCheckIn = facts.promptKind === "follow_up" && !facts.lastSubstantiveUpdateAt;
+      return {
+        kind: "check_in",
+        heading: firstCheckIn ? "First check-in due" : "Check-in due",
+        // Keep the banner to the two sentences that matter; the focus and task
+        // state live in the task card and the composer, not in the nudge.
+        body: firstCheckIn
+          ? "Record what you started or moved forward."
+          : lastUpdate
+            ? `Your last recorded update was at ${lastUpdate}. What's changed since then?`
+            : "Record what changed since your last update.",
+        compact: firstCheckIn ? "Tell Work OS what you started." : "Tell Work OS what changed.",
+        action: null,
+      };
+    }
   }
 
   if (facts.sessionState === "paused") {
@@ -336,11 +342,37 @@ export interface AvatarChatEntryState {
   operations?: ProposedOperation[];
   toolResults?: ToolCallResult[];
   taskOptions?: Array<{ id: string; title: string }>;
+  /** UI-only reminders (plan, check-in, EOD). Ephemeral: never persisted, never
+   * sent as conversation history, and removed once the prompt is answered. */
+  kind?: "prompt";
 }
 
-/** Serializes a live entry for the vault. System notices stay ephemeral. */
+/** Reminder turns are scaffolding, not conversation: the avatar injects the
+ * current prompt into the thread and drops it when the prompt no longer
+ * applies. Legacy copies already saved in a vault are recognized by their
+ * exact heading prefix, so an upgrade cleans them up too. */
+const PROMPT_REMINDER_PREFIXES = [
+  "What are you working on today?:",
+  "First check-in due:",
+  "Check-in due:",
+  "EOD review is due:",
+];
+
+export function isPromptReminderTurn(entry: { role: string; kind?: string | null; text: string }): boolean {
+  if (entry.kind === "prompt") return true;
+  return entry.role === "assistant" && PROMPT_REMINDER_PREFIXES.some((prefix) => entry.text.startsWith(prefix));
+}
+
+/** Removes reminder turns from anything sent to the interpretation service. */
+export function stripPromptReminderTurns<T extends { role: string; kind?: string | null; text: string }>(entries: T[]): T[] {
+  return entries.filter((entry) => !isPromptReminderTurn(entry));
+}
+
+/** Serializes a live entry for the vault. System notices and reminder
+ * scaffolding stay ephemeral. */
 export function serializeAvatarChatEntry(entry: AvatarChatEntryState): AvatarStoredTurn | null {
   if (entry.role !== "user" && entry.role !== "assistant") return null;
+  if (isPromptReminderTurn(entry)) return null;
   const turn: AvatarStoredTurn = {
     id: entry.id,
     role: entry.role,
