@@ -68,14 +68,18 @@ describe("Studio Otto", () => {
   });
 
   it("shows deep-blue sleep marks only on full resting figures", () => {
-    expect(render("sleep")).toContain("studio-sleep-zs");
+    const sleep = render("sleep");
+    expect(sleep).toContain("studio-sleep-zs");
+    expect(sleep).toContain('d="M121 41h11l-11 11h11"');
+    expect(sleep).toContain('d="M140 8h16l-16 16h16"');
     expect(render("rest")).toContain("studio-sleep-zs");
     expect(render("idle")).not.toContain("studio-sleep-zs");
     expect(render("focus")).not.toContain("studio-sleep-zs");
     expect(render("sleep", "head")).not.toContain("studio-sleep-zs");
 
     const css = readFileSync(new URL("./studio-otto.css", import.meta.url), "utf8");
-    expect(css).toContain("--studio-sleep-blue: #3154a5");
+    expect(css).toContain("--studio-sleep-blue: #2f54d7");
+    expect(css).toContain("stroke-width: 3.2");
     expect(css).toContain("studio-sleep-drift 4.8s ease-in-out infinite");
   });
 

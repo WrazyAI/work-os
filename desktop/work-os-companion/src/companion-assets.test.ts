@@ -153,12 +153,14 @@ describe("floating companion integration", () => {
     expect(avatarStyles).toContain(".avatar-day-time");
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble strong\s*\{[^}]*font-size:\s*12px;/);
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*font-size:\s*10\.5px;/);
-    expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
+    expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, \.9\);/);
+    expect(avatarStyles).toMatch(/\.avatar-hide\s*\{[^}]*top:\s*20px;[^}]*right:\s*9px;[^}]*width:\s*21px;[^}]*height:\s*21px;/);
+    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*72px;/);
     const conversationStyles = readFileSync(resolve(root, "src/chat/conversation.css"), "utf8");
     expect(conversationStyles).toMatch(/\.avatar-compact\s*\{[^}]*width:\s*200px;[^}]*height:\s*276px;/);
     expect(conversationStyles).toMatch(/\.avatar-orb\s*\{[^}]*width:\s*144px;[^}]*height:\s*154px;[^}]*margin:\s*76px 28px 0;/);
-    expect(conversationStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
+    expect(conversationStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(conversationStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, 0\.9\);/);
     expect(conversationStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-orb\s*\{[^}]*margin-top:\s*108px;/);
     expect(avatar).toContain("/api/work-os/me/proposals");

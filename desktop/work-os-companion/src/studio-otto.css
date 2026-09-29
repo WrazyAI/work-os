@@ -5,7 +5,7 @@
   will-change: auto;
 }
 .studio-otto {
-  --studio-sleep-blue: #3154a5;
+  --studio-sleep-blue: #2f54d7;
   display: block;
   width: 100%;
   height: 100%;
@@ -58,26 +58,26 @@
 .studio-otto .studio-sleep-zs {
   fill: none;
   stroke: var(--studio-sleep-blue);
-  stroke-width: 2.5;
+  stroke-width: 3.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 1px 2px rgba(49, 84, 165, .24));
+  filter: drop-shadow(0 1px 3px rgba(47, 84, 215, .34));
   pointer-events: none;
 }
 .studio-otto .studio-sleep-z {
   transform-box: fill-box;
   transform-origin: center;
-  opacity: .78;
+  opacity: .9;
   animation: studio-sleep-drift 4.8s ease-in-out infinite;
 }
 .studio-otto .studio-sleep-z.z-2 { animation-delay: .8s; }
 .studio-otto .studio-sleep-z.z-3 { animation-delay: 1.6s; }
 
 @keyframes studio-sleep-drift {
-  0%, 100% { opacity: .18; transform: translate(0, 2px) scale(.92); }
-  24% { opacity: .82; transform: translate(0, 0) scale(1); }
-  68% { opacity: .64; transform: translate(2px, -5px) scale(1.03); }
-  88% { opacity: .3; transform: translate(4px, -8px) scale(1.06); }
+  0%, 100% { opacity: .28; transform: translate(0, 2px) scale(.94); }
+  24% { opacity: .96; transform: translate(0, 0) scale(1); }
+  68% { opacity: .76; transform: translate(2px, -5px) scale(1.04); }
+  88% { opacity: .4; transform: translate(4px, -8px) scale(1.07); }
 }
 
 @keyframes studio-blink {
