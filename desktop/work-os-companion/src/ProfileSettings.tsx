@@ -140,8 +140,16 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return <label className="profile-field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>;
 }
 
-function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
-  return <section className="profile-editor-section"><header><span>{eyebrow}</span><h3>{title}</h3></header>{children}</section>;
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return (
+    <section className="profile-editor-section">
+      <header>
+        <h3>{title}</h3>
+        {description ? <p>{description}</p> : null}
+      </header>
+      <div className="profile-section-content">{children}</div>
+    </section>
+  );
 }
 
 export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: ProfileSettingsProps) {
@@ -262,24 +270,26 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
   }
 
   const content = <>
-    <Section eyebrow="Profile" title="How Work OS knows you">
+    <Section title="Identity" description="The details Work OS uses across your workspace.">
       <div className="profile-identity">
         <div className="profile-photo-stack">
           <span className="profile-photo-preview">{previewSource ? <img src={previewSource} alt="" /> : initials(form.displayName)}</span>
-          <label className="profile-photo-button">
-            <Camera size={14} /> Change photo
-            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
-          </label>
-          {(avatar || data.profile.avatarUrl) && <button type="button" className="profile-remove-photo" onClick={() => { setAvatar(null); setRemoveAvatar(true); setSaved(false); }}><Trash2 size={13} /> Remove</button>}
+          <div className="profile-photo-actions">
+            <label className="profile-photo-button">
+              <Camera size={14} /> Change photo
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectAvatar} />
+            </label>
+            {(avatar || data.profile.avatarUrl) && <button type="button" className="profile-remove-photo" onClick={() => { setAvatar(null); setRemoveAvatar(true); setSaved(false); }}><Trash2 size={13} /> Remove</button>}
+          </div>
         </div>
         <div className="profile-identity-fields">
-          <Field label="Display name" hint="Used across your Work OS workspace."><input value={form.displayName} maxLength={120} onChange={(event) => patchForm({ displayName: event.target.value })} autoComplete="name" /></Field>
-          <Field label="Account email" hint="Email changes are managed by your sign-in provider."><input value={data.profile.email} readOnly aria-readonly="true" /></Field>
+          <Field label="Display name" hint="Shown across Work OS."><input value={form.displayName} maxLength={120} onChange={(event) => patchForm({ displayName: event.target.value })} autoComplete="name" /></Field>
+          <Field label="Account email" hint="Managed by your sign-in provider."><input value={data.profile.email} readOnly aria-readonly="true" /></Field>
         </div>
       </div>
     </Section>
 
-    <Section eyebrow="Locale" title="Make time and language feel local">
+    <Section title="Region &amp; time" description="Set local time, language, and calendar defaults.">
       <div className="profile-field-grid">
         <Field label="Timezone"><select value={form.timezone} onChange={(event) => patchForm({ timezone: event.target.value })}>{timezones.map((timezone) => <option key={timezone} value={timezone}>{timezoneLabel(timezone)}</option>)}</select></Field>
         <Field label="Language"><select value={form.language} onChange={(event) => patchForm({ language: event.target.value })}>{!LANGUAGE_OPTIONS.some(([value]) => value === form.language) && <option value={form.language}>{form.language}</option>}{LANGUAGE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
@@ -288,30 +298,30 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
       </div>
     </Section>
 
-    <Section eyebrow="Workday" title="Set the rhythm around your day">
+    <Section title="Workday" description="Choose when Work OS expects your day to start, end, and pause.">
       <div className="profile-schedule">
-        <div className="profile-schedule-note">Your schedule controls Work OS clock-in windows and check-ins.</div>
+        <div className="profile-schedule-note">Used for clock-in windows and scheduled check-ins.</div>
         <div className="profile-day-picker" role="group" aria-label="Scheduled days">{[{ value: 1, label: "Mon" }, { value: 2, label: "Tue" }, { value: 3, label: "Wed" }, { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" }, { value: 0, label: "Sun" }].map((day) => <button key={day.value} type="button" aria-pressed={form.schedule.daysOfWeek.includes(day.value)} onClick={() => toggleDay(day.value)}>{day.label}</button>)}</div>
         <div className="profile-field-grid compact"><Field label="Starts"><input type="time" value={form.schedule.shiftStart} onChange={(event) => updateSchedule({ shiftStart: event.target.value })} /></Field><Field label="Ends"><input type="time" value={form.schedule.shiftEnd} onChange={(event) => updateSchedule({ shiftEnd: event.target.value })} /></Field></div>
         <div className="profile-breaks"><div className="profile-subhead"><strong>Break windows</strong><button type="button" className="profile-inline-action" onClick={() => updateSchedule({ breaks: [...form.schedule.breaks, { start: "12:00", end: "12:30" }] })}><Plus size={13} /> Add break</button></div>{form.schedule.breaks.length ? form.schedule.breaks.map((item, index) => <div className="profile-break-row" key={`${index}-${item.start}-${item.end}`}><input type="time" aria-label={`Break ${index + 1} starts`} value={item.start} onChange={(event) => updateBreak(index, { start: event.target.value })} /><span>to</span><input type="time" aria-label={`Break ${index + 1} ends`} value={item.end} onChange={(event) => updateBreak(index, { end: event.target.value })} /><button type="button" aria-label={`Remove break ${index + 1}`} onClick={() => updateSchedule({ breaks: form.schedule.breaks.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={13} /></button></div>) : <small className="profile-muted">No break windows added.</small>}</div>
       </div>
-      <div className="profile-preference-row"><div><strong>Desktop check-ins</strong><small>Allow the companion to surface scheduled prompts.</small></div><SettingsSwitch label="Desktop check-ins" checked={form.desktopEnabled} onChange={(value) => patchForm({ desktopEnabled: value })} /></div>
+      <div className="profile-preference-row"><div><strong>Desktop check-ins</strong><small>Show scheduled check-ins from the desktop companion.</small></div><SettingsSwitch label="Desktop check-ins" checked={form.desktopEnabled} onChange={(value) => patchForm({ desktopEnabled: value })} /></div>
     </Section>
 
-    <Section eyebrow="Privacy" title="Keep your boundaries explicit">
-      <Field label="Sensitive app or domain exclusions" hint="Separate entries with commas. These are excluded from activity context."><input value={form.sensitiveAppExclusions} onChange={(event) => patchForm({ sensitiveAppExclusions: event.target.value })} placeholder="password manager, private.example" /></Field>
-      <div className="profile-readonly-row"><div><strong>Screenshot analysis consent</strong><small>Consent history is controlled through the onboarding safety step.</small></div><span className={`status-chip${data.profile.privacy.screenshotAnalysisConsent ? " is-positive" : ""}`}>{data.profile.privacy.screenshotAnalysisConsent ? "Accepted" : "Not accepted"}</span></div>
+    <Section title="Privacy" description="Keep sensitive apps and domains outside activity context.">
+      <Field label="Sensitive app or domain exclusions" hint="Separate entries with commas."><input value={form.sensitiveAppExclusions} onChange={(event) => patchForm({ sensitiveAppExclusions: event.target.value })} placeholder="password manager, private.example" /></Field>
+      <div className="profile-readonly-row"><div><strong>Screenshot analysis consent</strong><small>Managed through the onboarding safety step.</small></div><span className={`status-chip${data.profile.privacy.screenshotAnalysisConsent ? " is-positive" : ""}`}>{data.profile.privacy.screenshotAnalysisConsent ? "Accepted" : "Not accepted"}</span></div>
     </Section>
 
-    <Section eyebrow="Work profile" title="Help the companion understand your work">
+    <Section title="Work profile" description="Give Otto enough context to understand the work you do.">
       <div className="profile-field-grid"><Field label="Work scope"><select value={form.archetypeId} onChange={(event) => selectArchetype(event.target.value)}>{data.catalog.archetypes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></Field><Field label="Custom role title"><input value={form.customRoleTitle} onChange={(event) => patchForm({ customRoleTitle: event.target.value })} placeholder={selectedArchetype?.id === "custom" ? "e.g. Customer operations" : "Optional"} /></Field></div>
       {selectedArchetype?.specialties.length ? <fieldset className="profile-specialties"><legend>Specialties</legend><div>{selectedArchetype.specialties.map((specialty) => <label key={specialty.id}><input type="checkbox" checked={form.specialtyIds.includes(specialty.id)} onChange={() => patchForm({ specialtyIds: form.specialtyIds.includes(specialty.id) ? form.specialtyIds.filter((id) => id !== specialty.id) : [...form.specialtyIds, specialty.id] })} /><span>{specialty.name}</span></label>)}</div></fieldset> : null}
       <div className="profile-field-grid"><Field label="Responsibilities" hint="Comma-separated work signals."><input value={form.responsibilities} onChange={(event) => patchForm({ responsibilities: event.target.value })} /></Field><Field label="Outputs"><input value={form.outputTypes} onChange={(event) => patchForm({ outputTypes: event.target.value })} /></Field><Field label="Evidence sources"><input value={form.evidenceSources} onChange={(event) => patchForm({ evidenceSources: event.target.value })} /></Field><Field label="GitHub username"><input value={form.githubUsername} onChange={(event) => patchForm({ githubUsername: event.target.value })} autoComplete="username" /></Field></div>
-      <div className="profile-preference-row"><div><strong>Voice updates</strong><small>Allow voice notes to be used as a draft for your work updates.</small></div><SettingsSwitch label="Voice updates" checked={form.voiceUpdatesEnabled} onChange={(value) => patchForm({ voiceUpdatesEnabled: value })} /></div>
+      <div className="profile-preference-row"><div><strong>Voice updates</strong><small>Use voice notes as drafts for work updates.</small></div><SettingsSwitch label="Voice updates" checked={form.voiceUpdatesEnabled} onChange={(value) => patchForm({ voiceUpdatesEnabled: value })} /></div>
     </Section>
   </>;
 
-  const actions = <div className="profile-editor-actions"><span className="profile-save-state" role="status">{saving ? "Saving…" : saved ? <><Check size={14} /> Saved to your workspace</> : "Changes are saved to your account."}</span><button type="submit" className="primary" disabled={busy || saving}>{saving ? "Saving…" : "Save changes"}</button></div>;
+  const actions = <div className="profile-editor-actions"><span className="profile-save-state" role="status">{saving ? "Saving…" : saved ? <><Check size={14} /> Saved to your account</> : "Changes sync when you save."}</span><button type="submit" className="primary" disabled={busy || saving}>{saving ? "Saving…" : "Save changes"}</button></div>;
 
   return mode === "modal"
     ? <form className="profile-editor profile-editor-modal" onSubmit={submit}><div className="task-modal-body profile-editor-body">{content}</div>{actions}</form>
