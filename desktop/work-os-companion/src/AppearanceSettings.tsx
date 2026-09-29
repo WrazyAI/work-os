@@ -13,9 +13,9 @@ export function AppearanceSettings({ textSize, mascotSize, onTextSize, onMascotS
 }) {
   return (
     <section className="settings-group" aria-labelledby="settings-display-title">
-      <header className="settings-group-head"><h3 id="settings-display-title">Reading &amp; display</h3><small>How large text and Otto render across every window.</small></header>
+      <header className="settings-group-head"><h3 id="settings-display-title">Reading &amp; display</h3></header>
       <section className="settings-panel">
-        <Setting title="Text size" detail="Medium renders companion text 15% larger. Spacing and layout stay put.">
+        <Setting title="Text size" detail="Medium makes companion text 15% larger.">
           <SettingsChoice<TextSize>
             label="Text size"
             value={textSize}
@@ -23,7 +23,7 @@ export function AppearanceSettings({ textSize, mascotSize, onTextSize, onMascotS
             options={[{ value: "small", label: "Small" }, { value: "medium", label: "Medium" }]}
           />
         </Setting>
-        <Setting title="Mascot size" detail="Small shrinks Otto everywhere he appears, including the floating companion.">
+        <Setting title="Mascot size" detail="Choose how much space Otto takes up across Work OS.">
           <SettingsChoice<MascotSize>
             label="Mascot size"
             value={mascotSize}

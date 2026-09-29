@@ -1708,85 +1708,118 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .evidence-list h3 { font-size: 15px; }
 .evidence-list p,
 .evidence-list time { font-size: 11px; line-height: 1.55; }
-/* Settings are grouped by user intent (design.md 29.4). Each group is a flat
-   list under its heading: transparent rows on hairline separators, never a
-   stack of white cards. */
+/* Settings use an editorial definition-list layout: one quiet section label
+   column, one aligned preference column, and only the separators needed to
+   preserve scanning rhythm. The page shell already says Settings, so this
+   surface avoids a second hero and keeps metadata subordinate to the control. */
+.settings-page {
+  width: min(100%, 960px);
+  padding-bottom: 72px;
+}
+.settings-lead {
+  max-width: 610px;
+  margin: 8px 0 34px;
+  color: var(--muted);
+  font: 500 13px/1.65 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
 .settings-group {
   display: grid;
-  gap: 10px;
-  margin-bottom: 22px;
+  grid-template-columns: minmax(128px, 164px) minmax(0, 1fr);
+  column-gap: 36px;
+  align-items: start;
+  margin: 0;
+  padding: 26px 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+}
+.settings-page > .settings-group:first-of-type {
+  padding-top: 0;
+  border-top: 0;
 }
 .settings-group-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  display: grid;
+  gap: 6px;
+  padding-top: 16px;
 }
 .settings-group-head h3 {
   margin: 0;
   color: var(--ink);
-  font: 700 16px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: -0.02em;
+  font: 750 13px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.015em;
+}
+.settings-group-head small {
+  max-width: 150px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
 }
 .settings-panel {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 36px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-/* Two-column table: transparent rows on hairlines. Never a card per row, and
-   no card behind the group either — settings live on the page surface. */
-.setting,
-.setting:first-child {
-  display: flex;
-  justify-content: space-between;
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 74px;
-  gap: 16px;
-  padding: 13px 2px;
+  min-height: 64px;
+  gap: 28px;
+  padding: 16px 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
-/* Controls sit together in the row's control column. */
+.setting:first-child { border-top: 0; }
+.setting-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.setting-copy strong {
+  color: var(--ink);
+  font: 680 13px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.006em;
+}
+.setting-copy small {
+  display: block;
+  max-width: 520px;
+  overflow: visible;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  text-overflow: clip;
+}
+.setting-action {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .setting-controls {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 8px;
 }
-.setting > div {
-  min-width: 0;
-  gap: 4px;
-}
-.setting strong { font-size: 13px; }
-.setting small {
-  display: block;
-  max-width: 560px;
-  overflow: visible;
-  font-size: 11px;
-  line-height: 1.5;
-  text-overflow: clip;
-}
-.setting > button,
-.setting > .settings-switch,
-.setting > .status-chip {
-  flex: none;
-}
-.setting > button {
+.setting-action > button {
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f7f6ef;
+  background: color-mix(in srgb, var(--paper) 86%, #fff 14%);
   padding: 0 10px;
 }
-.setting > button:not(:disabled):hover { border-color: #b8b9af; background: #fffef8; transform: translateY(-1px); }
+.setting-action > button:not(:disabled):hover {
+  border-color: #b8b9af;
+  background: #fffef8;
+  transform: translateY(-1px);
+}
 /* Status chips state a fact; they are never shaped like a control. */
 .status-chip {
   display: inline-flex;
@@ -1804,10 +1837,10 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   background: #fff3d6;
   color: #7a5312;
 }
-/* Destructive settings live in their own separated group. */
+/* Destructive settings remain a distinct final section, but use the same
+   geometry so danger does not become visual noise. */
 .settings-group.danger {
-  border-top: 1px solid #ecd4ce;
-  padding-top: 16px;
+  border-top-color: #ecd4ce;
 }
 .settings-group.danger .settings-group-head h3 { color: #8e3a2f; }
 
@@ -2258,23 +2291,32 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 @media (max-width: 850px) {
   .nav-group { display: grid; }
+  .settings-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 22px 0;
+  }
+  .settings-group-head { padding-top: 0; }
+  .settings-group-head small { max-width: 560px; }
   .settings-panel { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
-  .setting,
-  .setting:first-child {
-    flex-direction: column;
-    align-items: stretch;
+  .settings-lead { margin-bottom: 26px; }
+  .setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
     min-height: 0;
-    padding: 14px 2px;
+    padding: 15px 0 17px;
   }
-  .setting > button,
-  .setting > .settings-switch,
-  .setting > .status-chip,
-  .setting > .setting-controls {
-    align-self: flex-start;
+  .setting-action {
+    width: 100%;
+    justify-content: flex-start;
   }
-  .setting > .quiet-action {
+  .setting-action > .setting-controls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .setting-action > .quiet-action {
     width: 100%;
     justify-content: center;
   }
@@ -2291,7 +2333,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .evidence-list:before { left: 30px; }
   .evidence-list article { grid-template-columns: 1fr; padding-left: 28px; }
   .evidence-list article:before { left: 0; }
-  .setting { min-height: 104px; }
 }
 
 .preview-workspace .stage {

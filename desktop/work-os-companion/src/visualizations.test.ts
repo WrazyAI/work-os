@@ -332,47 +332,46 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain("width: min(calc(100% - 48px), 1024px);");
   });
 
-  it("keeps the settings page grouped, sized, and control-consistent", () => {
+  it("keeps the settings page calm, editorial, and control-consistent", () => {
+    expect(app).toContain('className="page settings-page"');
+    expect(app).toContain('className="settings-lead"');
+    expect(app).not.toContain("Your companion, your boundaries.");
     expect(app).toContain('className="settings-group"');
     expect(app).toContain('className="settings-group danger"');
     expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(2);
     expect(app).toContain('from "./SettingsSwitch"');
     expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
+    const settingSource = readFileSync(resolve(root, "src/Setting.tsx"), "utf8");
+    expect(settingSource).toContain('className="setting-copy"');
+    expect(settingSource).toContain('className="setting-action"');
     expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
     expect(app).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
-    expect(app).not.toContain('eyebrow="Workspace control"');
-    expect(app).not.toContain("Your identity and personal Work OS preferences.");
-    expect(app).not.toContain("How the companion starts and updates itself.");
-    expect(app).not.toContain("Check-ins and what the workspace may surface.");
-    expect(app).not.toContain("Local queue state and the account this companion is signed in to.");
-    expect(app).not.toContain("Prove what the companion did, or reproduce a state on purpose.");
-    expect(app).not.toContain("Changes your local setup. Manager-owned setup and consent history stay intact.");
-    expect(styles).toContain(".settings-group-head");
-    expect(styles).toMatch(/\.settings-group-head h3 \{[\s\S]*?font: 700 16px\/1\.2/);
-    expect(styles).toContain("color: var(--ink);");
-    // Settings rows are flat, hairline-separated entries on the page — never
-    // per-row white cards (and never a second card around them).
-    expect(styles).toMatch(/\.setting,[\s\S]*?min-height: 74px;/);
-    expect(styles).toMatch(/\.setting,[\s\S]*?border-top: 1px solid var\(--line\);/);
-    expect(styles).toMatch(/\.setting,[\s\S]*?background: transparent;/);
-    expect(styles).toMatch(/\.setting,[\s\S]*?box-shadow: none;/);
-    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?border: 0;/);
+    expect(styles).toContain(".settings-page");
+    expect(styles).toContain(".settings-lead");
+    expect(styles).toMatch(/\.settings-group \{[\s\S]*?grid-template-columns: minmax\(128px, 164px\) minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.settings-group-head h3 \{[\s\S]*?font: 750 13px\/1\.25/);
+    expect(styles).toMatch(/\.settings-panel \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.setting \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*?min-height: 64px;[\s\S]*?border-top: 1px solid/);
+    expect(styles).toContain(".setting:first-child { border-top: 0; }");
+    expect(styles).toContain(".setting-copy");
+    expect(styles).toContain(".setting-action");
     expect(styles).toContain(".setting-controls");
-    // The update row's actions share one control column, so Check and
-    // What's new stay adjacent instead of being spread across the row.
     const controlStart = app.indexOf('className="setting-controls"');
     const updateRow = app.slice(controlStart, app.indexOf("</Setting>", controlStart));
     expect(updateRow).toContain("checkForUpdates()");
     expect(updateRow).toContain("setWhatsNew(");
-    expect(styles).not.toMatch(/\.evidence-list,\n\.settings-panel \{/);
     expect(styles).toContain(".settings-switch-track");
     expect(styles).toContain(".status-chip.attention");
     expect(styles).toContain(".settings-group.danger");
     expect(styles).not.toContain(".settings-panel .status-dot");
-    expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.setting,[\s\S]*?flex-direction: column;/);
+    const memoryIndex = app.indexOf("<MemorySettings />");
+    const diagnosticsIndex = app.indexOf('aria-labelledby="settings-diagnostics-title"');
+    expect(memoryIndex).toBeGreaterThan(-1);
+    expect(memoryIndex).toBeLessThan(diagnosticsIndex);
+    expect(styles).toMatch(/@media \(max-width: 850px\) \{[\s\S]*?\.settings-group \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.setting \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   });
 
   it("keeps memory as a settings summary band with a two-tab management modal", () => {
