@@ -175,7 +175,7 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Observed activity context (neutral screenshot summaries; never proof of productivity, effort, or task completion):",
     fmt(facts.observed, "none"),
     "",
-    grounding.contextBlock ? `Additional context (live day state and recalled history — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",
+    grounding.contextBlock ? `Additional context (live day state plus confirmed, historical, and same-day tentative memory — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",
     "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds, and mediaFactIds.",
     "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");
