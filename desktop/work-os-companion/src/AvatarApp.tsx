@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -39,7 +39,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isPromptReminderTurn, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -168,12 +168,15 @@ export default function AvatarApp(): React.ReactElement {
   const avatarAttentionFixture = avatarAttentionFixtureRequested(window.location.search);
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
+  const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
+  const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture && !avatarSnoozeFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
+    : (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
@@ -183,16 +186,17 @@ export default function AvatarApp(): React.ReactElement {
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [chat, setChat] = useState<ChatEntry[]>(() => avatarFixture ? avatarFixtureChat() : []);
+  const [chat, setChat] = useState<ChatEntry[]>(() => (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
-  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>(null);
-  const [activityPreparing, setActivityPreparing] = useState(false);
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>(avatarRecapFixture ? avatarRecapFixtureCard() : null);
+  const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  const [scrollToLatest, setScrollToLatest] = useState(0);
   /* Voice input (design §7.3): the transcript lands in the draft for review;
      nothing is ever sent by the recorder itself. */
   const voice = useVoiceInput({
@@ -661,11 +665,8 @@ export default function AvatarApp(): React.ReactElement {
               fireNotification(nudge, notificationPermission.current);
             }
             setMissed(false);
-            setExpanded((current) => {
-              if (!current) void toggleExpanded(true);
-              return true;
-            });
-            if (win) win.setFocus().catch(() => { /* best effort */ });
+            // A ready recap surfaces as the collapsed bubble; the chat window
+            // never opens itself.
             void loadDay();
             if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
           } finally {
@@ -780,6 +781,14 @@ export default function AvatarApp(): React.ReactElement {
     setRecapEditMode(true);
     setComposerFocusSignal((signal) => signal + 1);
   }, []);
+
+  // View more on the recap bubble: open the chat on the latest item. The recap
+  // turn stays in the thread until it is decided.
+  const openRecapInChat = useCallback((): void => {
+    setAvatarTab("chat");
+    setScrollToLatest((signal) => signal + 1);
+    void toggleExpanded(true);
+  }, [toggleExpanded]);
 
   // ── Persist position after drags settle ──
   useEffect(() => {
@@ -1227,39 +1236,47 @@ export default function AvatarApp(): React.ReactElement {
   const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
   const attentionDue = ["agenda", "check_in", "eod"].includes(contextualPrompt.kind);
   const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
+  // The recap the compact bubble and the chat card treat as current: the live
+  // one from the nudge, or the latest undecided recap already in the chat.
+  const pendingRecap = useMemo(() => {
+    if (activityPrompt && activityPrompt.reviewStatus === "inferred") return activityPrompt;
+    const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
+    return entry?.activityInterval ?? null;
+  }, [activityPrompt, chat]);
+  const bubble = avatarBubble({ preparing: activityPreparing, recapReady: pendingRecap !== null, promptDue: attentionDue });
   useEffect(() => {
-    if (!promptTurnId) return;
+    const recap = activityPrompt;
+    // A recap gets its own stable turn so it survives the prompt being claimed
+    // and stays reviewable in the chat until the employee decides it.
+    const turnId = recap ? `recap:${recap.id}` : promptTurnId;
+    if (!turnId) return;
     setChat((current) => {
-      const recap = activityPrompt;
       const text = recap ? (recap.headline ?? "Here is what I observed.") : `${contextualPrompt.heading}: ${contextualPrompt.body}`;
-      const existing = current.find((entry) => entry.id === promptTurnId);
+      const existing = current.find((entry) => entry.id === turnId);
       if (existing) {
         if (!recap || existing.activityInterval?.id === recap.id) return current;
-        return current.map((entry) => entry.id === promptTurnId ? { ...entry, activityInterval: recap, text } : entry);
+        return current.map((entry) => entry.id === turnId ? { ...entry, activityInterval: recap, text } : entry);
       }
       return [...current, {
-        id: promptTurnId, role: "assistant" as const, text, createdAt: new Date().toISOString(), kind: "prompt" as const,
+        id: turnId, role: "assistant" as const, text, createdAt: new Date().toISOString(), kind: "prompt" as const,
         ...(recap ? { activityInterval: recap } : {}),
       }];
     });
   }, [contextualPrompt.body, promptTurnId, activityPrompt]);
   // The reminder is scaffolding for the prompt it announces. Drop it as soon as
   // a different prompt (or none) is current, including legacy unmarked copies.
+  // Recap turns are the employee's review surface and stay until decided.
   useEffect(() => {
     setChat((current) => {
-      const next = current.filter((entry) => entry.id === promptTurnId || !isPromptReminderTurn(entry));
+      const next = prunePromptReminderTurns(current, promptTurnId);
       return next.length === current.length ? current : next;
     });
   }, [promptTurnId]);
-  // A recap only belongs to its prompt instance; drop it once the prompt has
-  // been answered or the cadence moves on.
+  // The recap stays in the chat until the employee decides it; a new recap
+  // replaces it, and editing mode only follows the recap itself.
   useEffect(() => {
-    if (!activityPrompt) {
-      setRecapEditMode(false);
-      return;
-    }
-    if (!facts.promptRequired && facts.loaded) setActivityPrompt(null);
-  }, [activityPrompt, facts.promptRequired, facts.loaded]);
+    if (!activityPrompt) setRecapEditMode(false);
+  }, [activityPrompt]);
   const taskContext = useMemo(
     () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
     [facts.loaded, facts.shiftDate, facts.taskOptions],
@@ -1293,7 +1310,7 @@ export default function AvatarApp(): React.ReactElement {
     scenario: debugScenario,
     facts: { ...facts, connected: connected === true && facts.loaded,
       promptKind: contextualPrompt.kind, promptRequired: attentionDue },
-    working: thinking || filing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
+    working: thinking || filing || activityPreparing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
     failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
     needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
@@ -1356,6 +1373,24 @@ export default function AvatarApp(): React.ReactElement {
     threadMetricsRef.current = { scrollHeight: el.scrollHeight };
   }, [chat.length, thinking]);
 
+  // View more — and a fresh recap while the window is already open — lands the
+  // reader on the latest item instead of the top of the thread.
+  useEffect(() => {
+    if (!expanded || !scrollToLatest) return;
+    const el = chatScroll.current;
+    if (!el) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior });
+      threadMetricsRef.current = { scrollHeight: el.scrollHeight };
+    }));
+    return () => cancelAnimationFrame(frame);
+  }, [expanded, scrollToLatest]);
+  useEffect(() => {
+    if (!expanded || !activityPrompt) return;
+    setScrollToLatest((signal) => signal + 1);
+  }, [expanded, activityPrompt?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- the recap id is the scroll trigger
+
   if (connected === false) {
     return (
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
@@ -1381,7 +1416,15 @@ export default function AvatarApp(): React.ReactElement {
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
         <div className="avatar-compact">
-        {attentionDue && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><span>{activityPreparing ? "Otto is analyzing your recent frames." : contextualPrompt.compact}</span></button>}
+        {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
+        {bubble === "recap" && pendingRecap && (
+          <div className="avatar-prompt-bubble avatar-recap-bubble">
+            <strong>{pendingRecap.headline ?? "Your activity recap is ready"}</strong>
+            <span>{pendingRecap.detail ? `${pendingRecap.detail.slice(0, 140)}${pendingRecap.detail.length > 140 ? "…" : ""}` : "Review what your screenshots show."}</span>
+            <button type="button" className="avatar-bubble-more" onClick={openRecapInChat}>View more</button>
+          </div>
+        )}
+        {bubble === "prompt" && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"

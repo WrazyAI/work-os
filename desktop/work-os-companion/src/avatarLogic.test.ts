@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
-  avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
 } from "./avatarLogic";
@@ -312,6 +312,23 @@ describe("composerSendTarget", () => {
   });
 });
 
+describe("avatarBubble", () => {
+  it("shows processing while the recap is being analyzed, even with a due prompt", () => {
+    expect(avatarBubble({ preparing: true, recapReady: false, promptDue: true })).toBe("processing");
+    expect(avatarBubble({ preparing: true, recapReady: true, promptDue: true })).toBe("processing");
+  });
+
+  it("shows the ready recap ahead of the prompt it came from", () => {
+    expect(avatarBubble({ preparing: false, recapReady: true, promptDue: true })).toBe("recap");
+    expect(avatarBubble({ preparing: false, recapReady: true, promptDue: false })).toBe("recap");
+  });
+
+  it("falls back to the prompt, then to nothing", () => {
+    expect(avatarBubble({ preparing: false, recapReady: false, promptDue: true })).toBe("prompt");
+    expect(avatarBubble({ preparing: false, recapReady: false, promptDue: false })).toBe(null);
+  });
+});
+
 describe("prompt reminder turns", () => {
   it("recognizes marked and legacy reminder scaffolding, never real dialogue", () => {
     expect(isPromptReminderTurn({ role: "assistant", kind: "prompt", text: "Anything" })).toBe(true);
@@ -329,6 +346,16 @@ describe("prompt reminder turns", () => {
       { role: "assistant", text: "Noted." },
     ];
     expect(stripPromptReminderTurns(entries)).toEqual([entries[1], entries[2]]);
+  });
+
+  it("keeps recap turns until they are decided while pruning stale reminders", () => {
+    const reminder = { id: "prompt:today:check_in", role: "assistant", kind: "prompt", text: "First check-in due: Record what you started." };
+    const staleReminder = { id: "prompt:today:check_in:old", role: "assistant", kind: "prompt", text: "Check-in due: Record what changed." };
+    const recapTurn = { id: "recap:interval-1", role: "assistant", kind: "prompt", text: "Reviewed the recap bubble.", activityInterval: { id: "interval-1" } };
+    const decidedRecap = { id: "recap:interval-0", role: "assistant", kind: "prompt", text: "Earlier recap." };
+    const dialogue = { id: "u-1", role: "user", text: "Finalizing the dashboard." };
+    expect(prunePromptReminderTurns([reminder, staleReminder, recapTurn, decidedRecap, dialogue], reminder.id))
+      .toEqual([reminder, recapTurn, dialogue]);
   });
 
   it("never serializes reminder scaffolding into the vault", () => {

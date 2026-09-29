@@ -131,6 +131,23 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
+/* A ready recap is a result, not a prompt: the bubble is not itself clickable,
+   so the summary stays readable and View more is the only action. */
+.avatar-recap-bubble { cursor: default; }
+.avatar-bubble-more {
+  position: relative;
+  z-index: 1;
+  margin-top: 8px;
+  border: 1px solid #4d6349;
+  border-radius: 8px;
+  padding: 5px 11px;
+  background: #a8f15b;
+  color: #182018;
+  font: 700 10.5px/1 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+.avatar-bubble-more:hover { filter: brightness(1.04); }
+.avatar-bubble-more:focus-visible { outline: 2px solid #7cc936; outline-offset: 1px; }
 .avatar-day-time {
   position: absolute;
   right: 50%;

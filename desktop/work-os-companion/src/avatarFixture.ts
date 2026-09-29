@@ -10,18 +10,25 @@
  * attention without coupling the visual state to a check-in prompt.
  * `?window=avatar&avatar-fixture=snooze-reminder` renders a due check-in in the
  * compact window so its snooze reminder and attention motion can be exercised.
+ * `?window=avatar&avatar-fixture=recap` renders the compact window with a ready
+ * activity recap so the summary bubble and its View more action can be
+ * exercised; `avatar-fixture=recap-processing` renders the same window while
+ * the recap is still being analyzed (working state, no View more yet).
  * The shapes mirror production exactly: the display result carries a real
  * `tasks` array, and the recorded mutation carries the proposal row's
  * `provider_result` object (jsonb `{}`) that must never render as a card
  * (design §25.9, §25.11). Never active outside `import.meta.env.DEV`. */
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { CompanionDayFacts } from "./avatarLogic";
+import type { ActivityIntervalCard } from "./types";
 
 export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
 export const AVATAR_RECORDED_FIXTURE = "recorded-completion";
 export const AVATAR_SHIFT_PROGRESS_FIXTURE = "shift-progress";
 export const AVATAR_ATTENTION_PARAM = "avatar-attention";
 export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
+export const AVATAR_RECAP_FIXTURE = "recap";
+export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -59,7 +66,18 @@ export interface AvatarFixtureTurn {
 export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
-  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE;
+  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE;
+}
+
+export function avatarRecapFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_FIXTURE;
+}
+
+export function avatarRecapProcessingFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_PROCESSING_FIXTURE;
 }
 
 export function avatarShiftProgressFixtureRequested(search: string): boolean {
@@ -100,6 +118,42 @@ export function avatarSnoozeFixtureFacts(now = Date.now()): AvatarFixtureFacts {
     nextPromptAt: new Date(now - 60_000).toISOString(),
     promptKind: "hourly_fallback",
   };
+}
+
+/** Active shift with no due prompt: the ready recap bubble owns the compact
+ * window without competing check-in pressure. */
+export function avatarRecapFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return avatarShiftProgressFixtureFacts(now);
+}
+
+/** A ready, undecided recap shaped exactly like `/ensure` returns (no evidence
+ * list; the Tasks stream carries the full record). */
+export function avatarRecapFixtureCard(): ActivityIntervalCard {
+  return {
+    id: "fixture-recap",
+    windowStart: "2026-09-29T14:17:00.000Z",
+    windowEnd: "2026-09-29T15:17:00.000Z",
+    label: "2:17–3:17 PM",
+    promptKind: "hourly_fallback",
+    generationStatus: "ready",
+    reviewStatus: "inferred",
+    headline: "Reviewed the recap bubble and chat scroll behavior",
+    detail: "Worked in the companion chat and the Tasks stream, checked the recap card actions, and verified the composer routing while the plan was pending. The screenshots do not establish whether the change was released.",
+    employeeFeedback: null,
+    failureReason: null,
+    generatedAt: "2026-09-29T15:18:00.000Z",
+    reviewedAt: null,
+  };
+}
+
+/** The fixture chat plus filler turns, so the recap card sits below the fold
+ * and View more must actually scroll the thread to reach it. */
+export function avatarRecapFixtureChat(): AvatarFixtureTurn[] {
+  const filler: AvatarFixtureTurn[] = Array.from({ length: 12 }, (_, index) => ([
+    { id: `recap-fixture-user-${index}`, role: "user" as const, text: `Fixture note ${index + 1}: continued work on the dashboard surfaces.` },
+    { id: `recap-fixture-assistant-${index}`, role: "assistant" as const, text: `Recorded note ${index + 1}.` },
+  ])).flat();
+  return [...avatarFixtureChat(), ...filler];
 }
 
 /** Loaded day facts with no session, prompt, or agenda pressure: the composer

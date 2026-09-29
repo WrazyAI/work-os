@@ -205,6 +205,17 @@ export function composerSendTarget(input: { agendaDue: boolean; recapEditing: bo
   return "update";
 }
 
+/** The collapsed companion shows exactly one bubble: processing while the
+ * recap is being generated, the generated recap with its View more action once
+ * ready, otherwise the current prompt. A ready recap outranks the prompt it
+ * came from, so the employee sees what was produced. */
+export function avatarBubble(input: { preparing: boolean; recapReady: boolean; promptDue: boolean }): "processing" | "recap" | "prompt" | null {
+  if (input.preparing) return "processing";
+  if (input.recapReady) return "recap";
+  if (input.promptDue) return "prompt";
+  return null;
+}
+
 /** Hourly prompt nudge: the server marked an update required and we have not
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {
@@ -366,6 +377,15 @@ export function isPromptReminderTurn(entry: { role: string; kind?: string | null
 /** Removes reminder turns from anything sent to the interpretation service. */
 export function stripPromptReminderTurns<T extends { role: string; kind?: string | null; text: string }>(entries: T[]): T[] {
   return entries.filter((entry) => !isPromptReminderTurn(entry));
+}
+
+/** Prompt-reminder scaffolding is dropped when its prompt is no longer current;
+ * turns that carry a recap card stay until the employee decides them. */
+export function prunePromptReminderTurns<T extends { id: string; role: string; kind?: string | null; text: string; activityInterval?: unknown }>(
+  entries: T[],
+  currentPromptTurnId: string | null,
+): T[] {
+  return entries.filter((entry) => entry.id === currentPromptTurnId || Boolean(entry.activityInterval) || !isPromptReminderTurn(entry));
 }
 
 /** Serializes a live entry for the vault. System notices and reminder
