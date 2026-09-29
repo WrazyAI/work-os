@@ -313,7 +313,7 @@ export default function EmployeeWorkOsHome() {
       }
       if (!result.analysis) {
         setGoalLoomNote(result.reason === "transcript_required"
-          ? "No transcript was supplied, so the recording could only be read for its title. Paste the transcript and analyze again."
+          ? "Loom didn't return a transcript for that recording, so it could only be read for its title. Paste the transcript and analyze again."
           : "The recording analysis is unavailable right now. Try again in a moment.");
         return;
       }
@@ -565,7 +565,7 @@ export default function EmployeeWorkOsHome() {
                     onChange={(event) => setGoalLoomTranscript(event.target.value)}
                     rows={3}
                     maxLength={50000}
-                    placeholder="In Loom open Transcript, then Copy — paste it here so the recording can shape the goal."
+                    placeholder="Only if Loom has no transcript: open Transcript in Loom, Copy, and paste it here."
                     className="mt-2 w-full resize-y border bg-transparent px-3 py-2 text-[12px] leading-5 text-[var(--text-primary)] outline-none"
                     style={{ borderColor: "var(--border)" }}
                     aria-label="Loom transcript"

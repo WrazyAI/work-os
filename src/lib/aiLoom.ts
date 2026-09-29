@@ -154,11 +154,13 @@ export interface LoomAgentFeed {
   reason: "invalid_link" | "prior_day" | "future" | "transcript_required" | LoomAnalysisFailure | null;
 }
 
-/** One call for agent surfaces: collect the recording, enforce the day rule,
- * and analyze the transcript when it is usable. */
+/** One call for agent surfaces: collect the recording (its own transcript
+ * included), enforce the day rule, and analyze the transcript when usable. */
 export async function analyzeLoomForAgent(input: {
   url: string;
   transcript?: string | null;
+  /** Prose written beside the link; a fallback, not a replacement. */
+  updateText?: string | null;
   targetDate: string;
   timezone: string;
   existingTaskTitles?: string[];
@@ -183,8 +185,10 @@ export function loomFeedLine(bundle: LoomBundle) {
   return `${bundle.metadata?.title ?? "Loom recording"}${length ? ` (${length})` : ""} — ${bundle.reference.url} · recorded ${recorded} · ${bundle.temporal.verdict.replaceAll("_", " ")} for ${formatReportDate(bundle.temporal.targetDate)}`;
 }
 
-/** Everything pasted alongside the link is treated as employee-supplied
- * recording content (people often paste the transcript with the link). */
+/** Everything written beside the link that is not the link itself: an
+ * employee-pasted transcript when that is what it is, otherwise the update
+ * sentence that must not stand in for the recording's own transcript. The
+ * bundle uses it only when no better transcript exists. */
 function transcriptFromUpdateText(text: string, videoId: string) {
   return text
     .replace(/https:\/\/[^\s<>"']+/gi, " ")
@@ -210,7 +214,7 @@ export async function buildLoomAttachment(input: {
   if (!reference) return null;
   const feed = await analyzeLoomForAgent({
     url: reference.url,
-    transcript: transcriptFromUpdateText(input.text, reference.videoId),
+    updateText: transcriptFromUpdateText(input.text, reference.videoId),
     targetDate: input.targetDate,
     timezone: input.timezone,
     existingTaskTitles: input.existingTaskTitles,
@@ -229,9 +233,10 @@ export async function buildLoomAttachment(input: {
       suggestedTasks: feed.analysis?.suggestedTasks ?? [],
       cautions: [
         ...(feed.analysis?.cautions ?? []),
-        ...(feed.reason === "transcript_required" ? ["No transcript was supplied; do not infer work from recording metadata."] : []),
+        ...(feed.reason === "transcript_required" ? ["No transcript was available for this recording; do not infer work from its metadata."] : []),
       ],
       transcriptChars: feed.bundle.transcript.chars,
+      transcriptSource: feed.bundle.transcript.source,
       blocked: feed.blocked,
     },
   };

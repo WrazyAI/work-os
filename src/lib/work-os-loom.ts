@@ -10,9 +10,14 @@ export const LOOM_TRANSCRIPT_MAX_AI = 12_000;
 export const LOOM_METADATA_TIMEOUT_MS = 8_000;
 export const LOOM_METADATA_MAX_BYTES = 64_000;
 export const LOOM_PAGE_MAX_BYTES = 400_000;
+/** The recording's own caption track is fetched from Loom's CDN; bound the
+ * payload and the wait so one long recording cannot stall an interpretation. */
+export const LOOM_TRANSCRIPT_TIMEOUT_MS = 12_000;
+export const LOOM_TRANSCRIPT_FETCH_MAX_BYTES = 2_000_000;
 
 const VIDEO_ID = /^[0-9a-f]{32}$/i;
 const LOOM_HOSTS = new Set(["loom.com", "www.loom.com"]);
+const LOOM_CDN_HOSTS = new Set(["cdn.loom.com"]);
 const LOOM_IN_TEXT = /(?<![a-z0-9.-])(?:https?:\/\/)?(?:www\.)?loom\.com\/[^\s<>"']+/gi;
 const VTT_TIMESTAMP = /^\s*(?:\d{1,3}:)?\d{2}:\d{2}[.,]\d{3}\s*-->/;
 const VTT_HEADER = /^\s*(WEBVTT|NOTE|STYLE|REGION)\b.*$/i;
@@ -33,6 +38,20 @@ export interface LoomMetadata {
   /** Public recording time from the share page; null when Loom does not
    * expose it (private or metadata-less recordings). */
   createdAt: string | null;
+}
+
+/** Where an analyzed transcript came from. Provenance is named in the prompt,
+ * so the model never presents a pasted or auto-read transcript as something it
+ * inferred. */
+export type LoomTranscriptSource = "employee_paste" | "loom" | "update_text";
+
+/** Loom's own transcription record from the public share page: the processing
+ * status plus the signed transcript/caption URLs on cdn.loom.com. The URLs
+ * expire, so they are used once and never stored. */
+export interface LoomTranscriptRecord {
+  status: string | null;
+  sourceUrl: string | null;
+  captionsUrl: string | null;
 }
 
 export type LoomTemporalVerdict = "same_day" | "prior_day" | "future" | "unknown";
@@ -93,9 +112,62 @@ export function loomMetadataEnabled(featureFlags: Record<string, boolean> | null
 const metadataCache = new Map<string, { at: number; value: LoomMetadata | null }>();
 const METADATA_TTL_MS = 5 * 60_000;
 const METADATA_CACHE_MAX = 200;
+/** A transcription still being processed is re-read quickly so a fresh
+ * recording starts using its own transcript as soon as Loom finishes. */
+const PAGE_TRANSCRIPT_RETRY_TTL_MS = 30_000;
 
 function stringOrNull(value: unknown, max = 500): string | null {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
+}
+
+/** Reads one string value out of the share page's embedded JSON. */
+function pageJsonString(html: string, key: string): string | null {
+  const match = html.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)"`));
+  return match && match[1].trim() ? match[1].trim() : null;
+}
+
+/** Only Loom's own CDN may be fetched, even though the URL came out of Loom's
+ * page: same allow-list discipline the share link itself gets. */
+function loomCdnUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !LOOM_CDN_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Reads Loom's own transcription record out of the public share page: the
+ * processing status plus the signed JSON/VTT URLs when a transcript exists.
+ * Pure, so the record shape and the CDN allow-list stay unit-testable. */
+export function parseLoomTranscriptRecord(html: string): LoomTranscriptRecord | null {
+  const status = pageJsonString(html, "transcription_status");
+  const sourceUrl = loomCdnUrl(pageJsonString(html, "source_url"));
+  const captionsUrl = loomCdnUrl(pageJsonString(html, "captions_source_url"));
+  if (!status && !sourceUrl && !captionsUrl) return null;
+  return { status, sourceUrl, captionsUrl };
+}
+
+/** Flattens Loom's JSON transcript (one `value` string per phrase) into a
+ * single readable block, bounded like a pasted transcript. */
+export function loomTranscriptTextFromJson(payload: unknown): string {
+  const phrases = (payload as { phrases?: unknown } | null)?.phrases;
+  if (!Array.isArray(phrases)) return "";
+  const text = phrases
+    .flatMap((phrase) => phrase && typeof phrase === "object" && typeof (phrase as { value?: unknown }).value === "string" ? [(phrase as { value: string }).value] : [])
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, LOOM_TRANSCRIPT_MAX_STORED);
+}
+
+const pageCache = new Map<string, { at: number; value: LoomSharePage | null }>();
+
+interface LoomSharePage {
+  createdAt: string | null;
+  transcript: LoomTranscriptRecord | null;
 }
 
 /** Public metadata only, through Loom's official oEmbed endpoint plus the
@@ -104,10 +176,11 @@ function stringOrNull(value: unknown, max = 500): string | null {
 export async function fetchLoomMetadata(reference: LoomReference): Promise<LoomMetadata | null> {
   const cached = metadataCache.get(reference.videoId);
   if (cached && Date.now() - cached.at < METADATA_TTL_MS) return cached.value;
-  const [oembed, createdAt] = await Promise.all([
+  const [oembed, page] = await Promise.all([
     fetchLoomOembed(reference),
-    fetchLoomCreatedAt(reference),
+    fetchLoomSharePage(reference),
   ]);
+  const createdAt = page?.createdAt ?? null;
   const value = oembed || createdAt
     ? {
         title: oembed?.title ?? null,
@@ -173,25 +246,83 @@ async function fetchLoomOembed(reference: LoomReference): Promise<{ title: strin
 }
 
 /** The public share page carries the recording time as schema.org metadata
- * (`uploadDate`, sometimes `createdAt`). Best-effort: null when the page is
- * unreachable or the recording is not public. */
-async function fetchLoomCreatedAt(reference: LoomReference): Promise<string | null> {
+ * (`uploadDate`, sometimes `createdAt`) and, once Loom has transcribed the
+ * recording, the signed transcript/captions record. Best-effort: null when the
+ * page is unreachable or the recording is not public. Cached briefly so the
+ * metadata and transcript reads share one page fetch. */
+function pageCacheTtl(value: LoomSharePage | null) {
+  return value?.transcript?.status === "success" ? METADATA_TTL_MS : PAGE_TRANSCRIPT_RETRY_TTL_MS;
+}
+
+async function fetchLoomSharePage(reference: LoomReference): Promise<LoomSharePage | null> {
+  const cached = pageCache.get(reference.videoId);
+  if (cached && Date.now() - cached.at < pageCacheTtl(cached.value)) return cached.value;
+  let value: LoomSharePage | null = null;
   try {
     const response = await fetch(reference.url, {
       signal: AbortSignal.timeout(LOOM_METADATA_TIMEOUT_MS),
       redirect: "error",
       headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36" },
     });
+    if (response.ok) {
+      const html = await readBounded(response, LOOM_PAGE_MAX_BYTES);
+      if (html) {
+        const match = html.match(UPLOAD_DATE) ?? html.match(CREATED_AT);
+        const parsed = match ? new Date(match[1]) : null;
+        value = {
+          createdAt: parsed && Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null,
+          transcript: parseLoomTranscriptRecord(html),
+        };
+      }
+    }
+  } catch {
+    value = null;
+  }
+  if (pageCache.size >= METADATA_CACHE_MAX) pageCache.clear();
+  pageCache.set(reference.videoId, { at: Date.now(), value });
+  return value;
+}
+
+async function fetchLoomCdnBody(url: string, accept: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(LOOM_TRANSCRIPT_TIMEOUT_MS),
+      redirect: "error",
+      headers: { Accept: accept },
+    });
     if (!response.ok) return null;
-    const html = await readBounded(response, LOOM_PAGE_MAX_BYTES);
-    if (!html) return null;
-    const match = html.match(UPLOAD_DATE) ?? html.match(CREATED_AT);
-    if (!match) return null;
-    const parsed = new Date(match[1]);
-    return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+    return readBounded(response, LOOM_TRANSCRIPT_FETCH_MAX_BYTES);
   } catch {
     return null;
   }
+}
+
+/** Reads the recording's own transcript, so an employee never has to copy it:
+ * Loom's transcript record points at a signed JSON/VTT pair on its CDN, and
+ * only the normalized text leaves this function. Returns null when Loom has
+ * not finished a transcript (or has none); the caller falls back to the
+ * employee's paste. */
+export async function fetchLoomTranscript(reference: LoomReference): Promise<{ text: string; source: "loom" } | null> {
+  const page = await fetchLoomSharePage(reference);
+  const record = page?.transcript;
+  if (!record || (record.status && record.status !== "success")) return null;
+  if (record.sourceUrl) {
+    const body = await fetchLoomCdnBody(record.sourceUrl, "application/json");
+    if (body) {
+      try {
+        const text = loomTranscriptTextFromJson(JSON.parse(body));
+        if (text) return { text, source: "loom" };
+      } catch {
+        // Malformed JSON falls through to the caption track.
+      }
+    }
+  }
+  if (record.captionsUrl) {
+    const body = await fetchLoomCdnBody(record.captionsUrl, "text/vtt");
+    const text = body ? normalizeLoomTranscript(body) : "";
+    if (text) return { text, source: "loom" };
+  }
+  return null;
 }
 
 /** Strips WebVTT/SRT scaffolding from a pasted transcript and collapses it to
@@ -241,34 +372,42 @@ export interface LoomBundle {
   reference: LoomReference;
   metadata: LoomMetadata | null;
   temporal: LoomTemporal;
-  transcript: { present: boolean; chars: number; source: "employee_paste" | null; text: string | null };
+  transcript: { present: boolean; chars: number; source: LoomTranscriptSource | null; text: string | null };
 }
 
 /** Collects everything the analyze tool needs from one pasted link: canonical
  * reference, public metadata (including the recording time), the temporal
- * verdict for the target day, and the normalized transcript. Returns null only
- * when the link itself is not a Loom share link. */
+ * verdict for the target day, and the normalized transcript. An explicit
+ * employee paste wins; otherwise the recording's own transcript is read from
+ * Loom, so no copy step is required. Text merely written beside the link in a
+ * chat update is only a fallback, never a reason to skip the recording's own
+ * transcript. Already-refused days are not transcribed. Returns null only when
+ * the link is not a Loom share link. */
 export async function collectLoomBundle(input: {
   url: string;
   transcript?: string | null;
+  /** Prose pasted alongside the link; used only when nothing better exists. */
+  updateText?: string | null;
   targetDate: string;
   timezone: string;
 }): Promise<LoomBundle | null> {
   const reference = parseLoomReference(input.url);
   if (!reference) return null;
-  const [metadata, transcript] = await Promise.all([
-    fetchLoomMetadata(reference),
-    Promise.resolve(normalizeLoomTranscript(String(input.transcript ?? ""))),
-  ]);
+  const pasted = normalizeLoomTranscript(String(input.transcript ?? ""));
+  const inferred = pasted ? "" : normalizeLoomTranscript(String(input.updateText ?? ""));
+  const metadata = await fetchLoomMetadata(reference);
+  const temporal = loomTemporal(metadata?.createdAt ?? null, input.targetDate, input.timezone);
+  const extracted = pasted || !loomUsableForDay(temporal) ? null : await fetchLoomTranscript(reference);
+  const text = pasted || extracted?.text || inferred;
   return {
     reference,
     metadata,
-    temporal: loomTemporal(metadata?.createdAt ?? null, input.targetDate, input.timezone),
+    temporal,
     transcript: {
-      present: !!transcript,
-      chars: transcript.length,
-      source: transcript ? "employee_paste" : null,
-      text: transcript || null,
+      present: !!text,
+      chars: text.length,
+      source: pasted ? "employee_paste" : extracted ? "loom" : inferred ? "update_text" : null,
+      text: text || null,
     },
   };
 }

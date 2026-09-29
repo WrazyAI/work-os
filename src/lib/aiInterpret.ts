@@ -342,6 +342,7 @@ export interface InterpretContext {
     suggestedTasks: Array<{ title: string; description: string | null; subtasks: string[] }>;
     cautions: string[];
     transcriptChars: number;
+    transcriptSource: "employee_paste" | "loom" | "update_text" | null;
     blocked: boolean;
   };
 }
@@ -380,7 +381,13 @@ function buildPrompt(
             ? `- Suggested follow-up work (candidate only; reconcile against the task list before proposing):\n${loom.suggestedTasks.map((task, index) => `  ${index + 1}. ${task.title}${task.subtasks.length ? ` — steps: ${task.subtasks.join("; ")}` : ""}`).join("\n")}`
             : null,
           loom.cautions.length ? `- Cautions: ${loom.cautions.join(" ")}` : null,
-          loom.transcriptChars ? `- The update text included ${loom.transcriptChars} characters the employee pasted from the recording.` : null,
+          loom.transcriptChars
+            ? loom.transcriptSource === "loom"
+              ? `- Work OS read ${loom.transcriptChars} characters of transcript from the recording itself (machine-transcribed).`
+              : loom.transcriptSource === "update_text"
+                ? `- No recording transcript was available; the ${loom.transcriptChars} characters written beside the link are treated as employee context, not as the recording's words.`
+                : `- The update text included ${loom.transcriptChars} characters the employee pasted from the recording.`
+            : null,
         ].filter(Boolean).join("\n")
     : "";
   return [
