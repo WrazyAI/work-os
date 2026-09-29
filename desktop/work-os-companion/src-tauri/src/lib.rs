@@ -419,7 +419,10 @@ fn set_voice_shortcut(app: &tauri::AppHandle, enabled: bool) -> VoiceHotkeyStatu
 #[tauri::command]
 fn voice_hotkey_status(app: tauri::AppHandle) -> VoiceHotkeyStatus {
     let state = app.state::<VoiceHotkey>();
-    match state.0.lock() {
+    // The guard must be a local: a temporary in the match scrutinee would be
+    // dropped after `state`, and rustc rejects the borrow outliving it (E0597).
+    let locked = state.0.lock();
+    match locked {
         Ok(status) => VoiceHotkeyStatus {
             enabled: status.enabled,
             shortcut: status.shortcut.clone(),
