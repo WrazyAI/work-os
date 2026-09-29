@@ -471,22 +471,17 @@
 .conversation-surface .chat-copy-row {
   position: static;
   display: inline-flex;
-  min-height: 23px;
+  align-items: center;
+  gap: 6px;
   margin-top: 7px;
-  border: 1px solid rgba(23, 26, 24, 0.12);
-  border-radius: 999px;
-  padding: 0 8px;
-  background: rgba(255, 252, 246, 0.78);
-  box-shadow: 0 2px 7px rgba(23, 26, 24, 0.05);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-2px);
-  transition: opacity 140ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .conversation-surface .chat-turn-shell:hover .chat-copy-row,
-.conversation-surface .chat-turn-shell:focus-within .chat-copy-row,
-.conversation-surface .chat-copy-row:focus-visible {
+.conversation-surface .chat-turn-shell:focus-within .chat-copy-row {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -504,14 +499,31 @@
   margin-right: 2px;
 }
 
-.conversation-surface .chat-copy-row:hover,
-.conversation-surface .chat-copy-row:focus-visible {
+/* Each action is its own pill so copy and a destination read as peers. */
+.conversation-surface .chat-copy-row > .chat-copy,
+.conversation-surface .chat-copy-row > .chat-turn-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 23px;
+  border: 1px solid rgba(23, 26, 24, 0.12);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: rgba(255, 252, 246, 0.78);
+  box-shadow: 0 2px 7px rgba(23, 26, 24, 0.05);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.conversation-surface .chat-copy-row > .chat-copy:hover,
+.conversation-surface .chat-copy-row > .chat-copy:focus-visible,
+.conversation-surface .chat-copy-row > .chat-turn-action:hover,
+.conversation-surface .chat-copy-row > .chat-turn-action:focus-visible {
   border-color: var(--conversation-ink);
   background: var(--conversation-ink);
   color: var(--conversation-surface);
 }
 
-.conversation-surface .chat-copy-row.is-copied {
+.conversation-surface .chat-copy.is-copied {
   border-color: rgba(93, 137, 41, 0.28);
   background: rgba(213, 255, 84, 0.26);
   color: #456d18;

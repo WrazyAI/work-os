@@ -141,6 +141,23 @@ describe("ChatTurn copy and mascot", () => {
     expect(receipt).toContain("chat-receipt");
     expect(receipt).toContain("chat-copy-row");
   });
+
+  it("renders turn-specific actions beside copy, and alone when there is nothing to copy", () => {
+    const action = createElement("button", { type: "button", className: "chat-turn-action" }, "All recaps");
+    const withCopy = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", text: "Here is your recap.", actions: action }));
+    expect(withCopy).toContain("chat-copy-row");
+    expect(withCopy).toContain('aria-label="Copy message"');
+    expect(withCopy).toContain("chat-turn-action");
+    expect(withCopy).toContain("All recaps");
+
+    const actionOnly = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", actions: action }));
+    expect(actionOnly).toContain("chat-copy-row");
+    expect(actionOnly).toContain("All recaps");
+    expect(actionOnly).not.toContain('aria-label="Copy message"');
+
+    const plain = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", text: "Just text." }));
+    expect(plain).not.toContain("chat-turn-action");
+  });
 });
 
 describe("HistoryTurn", () => {

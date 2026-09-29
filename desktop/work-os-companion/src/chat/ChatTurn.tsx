@@ -22,6 +22,7 @@ export function ChatTurn({
   showMark = true,
   children,
   copySource,
+  actions,
 }: {
   role: ChatTurnRole;
   text?: string;
@@ -36,15 +37,26 @@ export function ChatTurn({
   children?: ReactNode;
   /** Turn data for the copy payload when the visible content includes cards. */
   copySource?: CopyableTurn;
+  /** Extra hover actions beside Copy, for turn-specific destinations such as the
+   * recap stream behind a recap summary. */
+  actions?: ReactNode;
 }) {
   const copyText = turnCopyText(copySource ?? { role, text });
+  // The row reserves its strip and reveals on hover, so adding an action never
+  // shifts the thread and never requires the copy control to be present.
+  const actionRow = copyText || actions ? (
+    <div className="chat-copy-row">
+      {copyText ? <CopyMessageButton text={copyText} /> : null}
+      {actions}
+    </div>
+  ) : null;
   if (role === "user") {
     return (
       <div className={cx("chat-turn-shell is-user chat-enter", className)}>
         <div className="chat-turn-user">
           {text ? <ChatMarkdown text={text} /> : children}
         </div>
-        {copyText ? <CopyMessageButton text={copyText} className="chat-copy-row" /> : null}
+        {actionRow}
       </div>
     );
   }
@@ -75,7 +87,7 @@ export function ChatTurn({
           {children}
         </div>
       </div>
-      {copyText ? <CopyMessageButton text={copyText} className="chat-copy-row" /> : null}
+      {actionRow}
     </div>
   );
 }

@@ -760,6 +760,12 @@ and an explicit `Not established:` line for the evidence gaps. A dense
 multi-sentence paragraph is a contract violation, never a rendering fallback
 for new intervals.
 
+A recap summary delivered as a chat turn is still a conversation message:
+hovering it offers `Copy` plus one short destination action — `All recaps` —
+that opens the stream where every recap lives (the floating companion's Tasks
+tab). The action never replaces Copy and never appears on turns that are not
+recaps.
+
 When Work Memory is enabled for the person, the synthesizer also receives a
 bounded additional-context block: the live day snapshot (focus, agenda,
 completed and deferred items, recent substantive updates, shift state) and a

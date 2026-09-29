@@ -4,7 +4,7 @@ import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "
 import { emit, listen } from "./tauriEvents";
 import { useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { SquarePen, X } from "lucide-react";
+import { History, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
 import { useAttendanceWatch } from "./useAttendanceWatch";
@@ -1547,7 +1547,13 @@ export default function AvatarApp(): React.ReactElement {
                 {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
                   : entry.role === "system" ? <ChatTurn role="system" text={entry.text} />
                     : entry.receipt ? <ChatTurn role="assistant" showMark={showAssistantMark} receipt text={entry.receipt} copySource={entry} />
-                      : <ChatTurn role="assistant" showMark={showAssistantMark} text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}>
+                      : <ChatTurn role="assistant" showMark={showAssistantMark} text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}
+                          actions={entry.activityInterval ? (
+                            <button type="button" className="chat-turn-action" title="View all recaps" aria-label="View all recaps in the Tasks tab" onClick={() => setAvatarTab("tasks")}>
+                              <History size={12} aria-hidden="true" />
+                              <span>All recaps</span>
+                            </button>
+                          ) : undefined}>
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}
