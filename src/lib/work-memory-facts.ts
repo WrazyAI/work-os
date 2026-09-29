@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordWorkMemory, type MemoryScope } from "@/lib/work-memory";
+import { localDateForTimezone } from "@/modules/work-os/companion";
 
 export const FACT_MODEL = process.env.WORK_OS_INTERPRET_MODEL ?? "gpt-5.6-luna";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
@@ -60,12 +61,25 @@ export function factSourceId(personId: string, draft: FactDraft): string {
  * never reach agent prompts until the employee confirms them. */
 export async function extractProfileFactCandidates(
   scope: MemoryScope,
-  options: { sinceDays?: number; now?: Date } = {},
+  options: { sinceDays?: number; now?: Date; localDate?: string } = {},
 ): Promise<{ created: number; considered: number; reason?: string }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return { created: 0, considered: 0, reason: "ai_unconfigured" };
   const db = createAdminClient();
   const now = options.now ?? new Date();
+  let candidateLocalDate = typeof options.localDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(options.localDate)
+    ? options.localDate
+    : null;
+  if (!candidateLocalDate) {
+    const { data: onboarding } = await db
+      .from("work_employee_onboarding")
+      .select("timezone")
+      .eq("organization_id", scope.organizationId)
+      .eq("person_id", scope.personId)
+      .maybeSingle();
+    const timezone = typeof onboarding?.timezone === "string" && onboarding.timezone.trim() ? onboarding.timezone : "UTC";
+    candidateLocalDate = localDateForTimezone(now, timezone);
+  }
   const since = new Date(now.getTime() - (options.sinceDays ?? 7) * 86_400_000).toISOString();
   const { data: items, error } = await db
     .from("work_memory_items")
@@ -134,7 +148,6 @@ export async function extractProfileFactCandidates(
   }
 
   let created = 0;
-  const today = now.toISOString().slice(0, 10);
   for (const draft of drafts) {
     const lower = draft.value.toLowerCase();
     if (known.some((value) => value.includes(lower))) continue;
@@ -147,7 +160,7 @@ export async function extractProfileFactCandidates(
       metadata: { factKey: draft.key },
       factKey: draft.key,
       reviewStatus: "candidate",
-      localDate: today,
+      localDate: candidateLocalDate,
     });
     if (recorded) {
       created += 1;
