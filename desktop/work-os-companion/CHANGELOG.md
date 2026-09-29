@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.68
+
 - Loom recordings now bring their own transcript into your plan and EOD draft — no copy-paste needed.
 - Hold Ctrl + M anywhere to record a voice update — release it and what you said is typed into the update box.
 - The update box shows a microphone while it is empty. Tap it to record instead of typing, and tap stop to finish.
