@@ -57,7 +57,7 @@ test("insight synthesis prompt renders recalled context as informational only", 
   const plain = buildInsightSynthesisPrompt(base);
   assert.doesNotMatch(plain, /Additional context/);
   const enriched = buildInsightSynthesisPrompt({ ...base, contextBlock: "Today so far (2026-09-14) — live facts:\n- Shift: on shift" });
-  assert.match(enriched, /Additional context \(live day state and recalled history — informational only/);
+  assert.match(enriched, /Additional context \(live day state plus confirmed, historical, and same-day tentative memory — informational only/);
   assert.match(enriched, /Shift: on shift/);
   assert.match(enriched, /never a selectable fact and never completion evidence/);
 });
