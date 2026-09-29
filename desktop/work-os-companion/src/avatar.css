@@ -131,22 +131,6 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
-.avatar-day-time {
-  position: absolute;
-  right: 50%;
-  bottom: 3px;
-  transform: translateX(50%);
-  padding: 3px 6px;
-  border: 1px solid rgba(214, 244, 184, 0.4);
-  border-radius: 7px;
-  background: rgba(17, 24, 17, 0.94);
-  color: #efffd6;
-  font: 800 10px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .03em;
-  white-space: nowrap;
-}
-
 .avatar-badge {
   position: absolute;
   top: 2px;
@@ -699,7 +683,6 @@ body.avatar-window {
 .avatar-drag-surface { top: 5px; left: 55px; width: 54px; height: 23px; border-color: rgba(83, 100, 81, .22); border-radius: 999px; background: rgba(251, 252, 248, .92); color: #778174; font: 800 8px/1 Manrope, Inter, sans-serif; letter-spacing: .12em; box-shadow: 0 4px 12px rgba(13, 18, 12, .12); }
 .avatar-prompt-bubble + .avatar-drag-surface { top: 63px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, .25); background: rgba(32, 36, 33, .9); color: rgba(255, 252, 246, .82); font-size: 12px; }
 .avatar-prompt-bubble ~ .avatar-orb { margin-top: 68px; }
-.avatar-day-time { bottom: 1px; border-color: rgba(83, 100, 81, .7); border-radius: 999px; background: rgba(251, 252, 248, .96); color: #344333; font: 750 9px/1 Manrope, Inter, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 9px rgba(13, 18, 12, .13); }
 .avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
 .avatar-badge.avatar-badge-progress {
   background: conic-gradient(from -90deg, #ff8a55 0 var(--shift-progress, 0%), rgba(255, 138, 85, .2) var(--shift-progress, 0%) 100%);
@@ -735,14 +718,6 @@ body.avatar-window {
 .avatar-pet .avatar-pet-art {
   width: 118px;
   height: 133px;
-}
-.avatar-day-time {
-  right: 50%;
-  bottom: 5px;
-  min-width: 76px;
-  padding: 4px 8px;
-  text-align: center;
-  font-size: 10px;
 }
 .avatar-drag-surface {
   top: 6px;
