@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, nextSessionState, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, nextSessionState, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -17,10 +17,15 @@ test("session transitions reject impossible branches", () => {
   assert.throws(() => nextSessionState("clocked_out", "pause"));
 });
 
-test("prompt contract requires planning before adaptive follow-ups and suppresses breaks, final hour, and post clock-out", () => {
+test("prompt contract keeps the planning prompt until a progress check-in is due and suppresses breaks, final hour, and post clock-out", () => {
   const firstPrompt = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T09:05:00.000Z" });
   assert.equal(firstPrompt.kind, "plan");
   assert.equal(firstPrompt.nextPromptAt, "2026-08-12T09:00:00.000Z");
+  // An unconfirmed plan no longer silences the cadence once the first follow-up is due.
+  const progressPrompt = decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: false, at: "2026-08-12T10:20:00.000Z" });
+  assert.equal(progressPrompt.kind, "follow_up");
+  assert.equal(progressPrompt.nextPromptAt, "2026-08-12T10:15:00.000Z");
+  assert.equal(progressPrompt.required, false);
   assert.equal(decideWorkdayPrompt({ session, breaks: [{ startsAt: "2026-08-12T12:00:00.000Z", endsAt: "2026-08-12T12:30:00.000Z" }], hasConfirmedPlan: true, at: "2026-08-12T12:05:00.000Z" }).kind, null);
   assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:15:00.000Z" }).kind, null);
   assert.equal(decideWorkdayPrompt({ session, breaks: [], hasConfirmedPlan: true, at: "2026-08-12T16:51:00.000Z" }).kind, "eod");
@@ -29,9 +34,26 @@ test("prompt contract requires planning before adaptive follow-ups and suppresse
 
 test("check-in cadence defaults to an hourly fallback and accepts bounded configuration", () => {
   assert.equal(checkInIntervalMs(undefined), 60 * 60_000);
+  assert.equal(checkInIntervalMs("5"), 5 * 60_000);
+  assert.equal(checkInIntervalMs("10"), 10 * 60_000);
   assert.equal(checkInIntervalMs("15"), 15 * 60_000);
+  assert.equal(checkInIntervalMs("4"), 60 * 60_000);
   assert.equal(checkInIntervalMs("0"), 60 * 60_000);
   assert.equal(checkInIntervalMs("241"), 60 * 60_000);
+});
+
+test("the first follow-up interval is deployment-configurable and bounded", () => {
+  assert.equal(firstFollowUpMinutes(undefined), 75);
+  assert.equal(firstFollowUpMinutes("10"), 10);
+  assert.equal(firstFollowUpMinutes("5"), 5);
+  assert.equal(firstFollowUpMinutes("4"), 75);
+  assert.equal(firstFollowUpMinutes("241"), 75);
+  process.env.WORK_OS_FIRST_FOLLOW_UP_MINUTES = "10";
+  try {
+    assert.equal(firstFollowUpAt({ session, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:10:00.000Z");
+  } finally {
+    delete process.env.WORK_OS_FIRST_FOLLOW_UP_MINUTES;
+  }
 });
 
 test("a submitted EOD suppresses any remaining workday prompt", () => {

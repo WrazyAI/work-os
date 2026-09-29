@@ -190,6 +190,15 @@ export function hasOpenShiftSession(facts: CompanionDayFacts): boolean {
   return !facts.eodSubmitted && Boolean(facts.clockedInAt) && !facts.clockedOutAt;
 }
 
+/** Which send action the avatar composer owns right now. A recap edit wins over
+ * the agenda prompt because the employee explicitly chose to correct the recap;
+ * otherwise the plan prompt keeps the composer, as before. */
+export function composerSendTarget(input: { agendaDue: boolean; recapEditing: boolean }): "recap" | "agenda" | "update" {
+  if (input.recapEditing) return "recap";
+  if (input.agendaDue) return "agenda";
+  return "update";
+}
+
 /** Hourly prompt nudge: the server marked an update required and we have not
  * fired for this prompt instance yet. Only while on shift. */
 export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {

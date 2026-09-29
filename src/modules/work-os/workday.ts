@@ -62,9 +62,11 @@ const transitions: Record<WorkSessionAction, readonly WorkSessionState[]> = {
 
 /** Planning is available as soon as attendance has been recorded. */
 export const FIRST_FOLLOW_UP_MINUTES = 75;
-/** Hourly is the safe production fallback; deployments may only lengthen it. */
+const MIN_FIRST_FOLLOW_UP_MINUTES = 5;
+const MAX_FIRST_FOLLOW_UP_MINUTES = 240;
+/** Hourly is the safe production fallback; deployments may shorten or lengthen it. */
 export const DEFAULT_CHECK_IN_INTERVAL_MINUTES = 60;
-const MIN_CHECK_IN_INTERVAL_MINUTES = 15;
+const MIN_CHECK_IN_INTERVAL_MINUTES = 5;
 const MAX_CHECK_IN_INTERVAL_MINUTES = 240;
 export const EOD_LEAD_TIME_MS = 10 * 60_000;
 
@@ -76,12 +78,21 @@ export function checkInIntervalMs(value = process.env.WORK_OS_CHECK_IN_INTERVAL_
   return (valid ? minutes : DEFAULT_CHECK_IN_INTERVAL_MINUTES) * 60_000;
 }
 
+/** The first progress prompt follows clock-in (or plan confirmation) by this
+ * many minutes. Deployment-configurable for testing phases, bounded so a bad
+ * value cannot silence or storm the workday. */
+export function firstFollowUpMinutes(value = process.env.WORK_OS_FIRST_FOLLOW_UP_MINUTES): number {
+  const minutes = Number(value);
+  const valid = Number.isInteger(minutes) && minutes >= MIN_FIRST_FOLLOW_UP_MINUTES && minutes <= MAX_FIRST_FOLLOW_UP_MINUTES;
+  return valid ? minutes : FIRST_FOLLOW_UP_MINUTES;
+}
+
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "session" | "at">) {
   if (context.firstFollowUpAt) return context.firstFollowUpAt;
   const baseline = context.planConfirmedAt ?? context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  return new Date(baselineAt + FIRST_FOLLOW_UP_MINUTES * 60_000).toISOString();
+  return new Date(baselineAt + firstFollowUpMinutes() * 60_000).toISOString();
 }
 
 export function eodDueAt(scheduledEndsAt: string | null | undefined) {
@@ -122,32 +133,40 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
   if (session.snoozedUntil && Date.parse(session.snoozedUntil) > now) {
     return { kind: null, nextPromptAt: session.snoozedUntil, required: false, reason: "Check-in snoozed." };
   }
-  if (!context.hasConfirmedPlan) {
-    const availableAt = session.clockedInAt ?? context.at;
-    return {
-      kind: "plan",
-      nextPromptAt: availableAt,
-      required: true,
-      reason: "Plan not confirmed.",
-    };
-  }
   const firstAt = Date.parse(firstFollowUpAt(context));
   if (!Number.isFinite(firstAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
+  let progress: WorkdayPrompt;
   if (context.lastPromptKind !== "follow_up" && context.lastPromptKind !== "hourly_fallback") {
-    return now >= firstAt
+    progress = now >= firstAt
       ? { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up is due after the workday has had time to start." }
       : { kind: "follow_up", nextPromptAt: new Date(firstAt).toISOString(), required: false, reason: "Your first follow-up follows clock-in." };
+  } else {
+    const lastPromptAt = context.lastPromptAt ? Date.parse(context.lastPromptAt) : null;
+    const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : null;
+    const latestResponseAt = lastSubstantiveAt !== null && lastSubstantiveAt > (lastPromptAt ?? -Infinity) ? lastSubstantiveAt : null;
+    const fallbackAt = latestResponseAt !== null
+      ? latestResponseAt + checkInIntervalMs()
+      : Date.parse(context.nextFallbackAt ?? new Date(firstAt + checkInIntervalMs()).toISOString());
+    if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
+    progress = now >= fallbackAt
+      ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }
+      : { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
   }
-
-  const lastPromptAt = context.lastPromptAt ? Date.parse(context.lastPromptAt) : null;
-  const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : null;
-  const latestResponseAt = lastSubstantiveAt !== null && lastSubstantiveAt > (lastPromptAt ?? -Infinity) ? lastSubstantiveAt : null;
-  const fallbackAt = latestResponseAt !== null
-    ? latestResponseAt + checkInIntervalMs()
-    : Date.parse(context.nextFallbackAt ?? new Date(firstAt + checkInIntervalMs()).toISOString());
-  if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  if (now >= fallbackAt) return { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." };
-  return { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
+  // An unconfirmed plan keeps its required planning prompt, but only while no
+  // progress prompt is due: once the check-in cadence arrives, the recap
+  // check-in wins and the agenda review stays as the companion's inline banner.
+  if (!context.hasConfirmedPlan) {
+    const progressDue = progress.kind !== null && progress.nextPromptAt !== null && now >= Date.parse(progress.nextPromptAt);
+    if (!progressDue) {
+      return {
+        kind: "plan",
+        nextPromptAt: session.clockedInAt ?? context.at,
+        required: true,
+        reason: "Plan not confirmed.",
+      };
+    }
+  }
+  return progress;
 }
 
 export function dedupePlanCandidates<T extends { id?: string | null; provider_task_id?: string | null; title?: string | null }>(items: T[]): T[] {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, mergeAvatarChatEntries, mergeConversationTurns, serializeAvatarChatEntry,
   avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -297,5 +297,17 @@ describe("mergeConversationTurns", () => {
     expect(merged).toHaveLength(60);
     expect(merged[merged.length - 1]?.id).toBe("t-new");
     expect(merged.some((entry) => entry.id === "t-0")).toBe(false);
+  });
+});
+
+describe("composerSendTarget", () => {
+  it("lets a recap edit win over the pending agenda prompt", () => {
+    expect(composerSendTarget({ agendaDue: true, recapEditing: true })).toBe("recap");
+    expect(composerSendTarget({ agendaDue: false, recapEditing: true })).toBe("recap");
+  });
+
+  it("keeps the agenda prompt on the composer when no recap edit is active", () => {
+    expect(composerSendTarget({ agendaDue: true, recapEditing: false })).toBe("agenda");
+    expect(composerSendTarget({ agendaDue: false, recapEditing: false })).toBe("update");
   });
 });

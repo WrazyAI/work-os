@@ -38,7 +38,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
+  agendaAutoExpandKey, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -1018,6 +1018,7 @@ export default function AvatarApp(): React.ReactElement {
   }, [filing]);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
+  const composerTarget = composerSendTarget({ agendaDue, recapEditing: recapEditMode && activityPrompt !== null });
   /** Persists only an agenda that the planning service successfully built. */
   const confirmAgenda = useCallback(async (
     goal: string,
@@ -1546,9 +1547,9 @@ export default function AvatarApp(): React.ReactElement {
               focusSignal={composerFocusSignal}
               value={input}
               onChange={setInput}
-              onSend={() => void (agendaDue ? submitAgenda() : sendAvatarUpdate())}
+              onSend={() => void (composerTarget === "agenda" ? submitAgenda() : sendAvatarUpdate())}
               placeholder={recapEditMode && activityPrompt ? "Correct or add to your recap…" : agendaReview ? "Answer the follow-up questions above…" : agendaDue ? "Describe your goal for today…" : activityPrompt ? "Add context to the recap above…" : contextualPrompt.kind === "check_in" && !missed ? "Record what changed since your last update…" : "Share an update or instruct the assistant…"}
-              ariaLabel={agendaDue ? "Describe your goal for today" : "Share an update or instruct the assistant"}
+              ariaLabel={composerTarget === "recap" ? "Correct or add to this recap" : agendaDue ? "Describe your goal for today" : "Share an update or instruct the assistant"}
               canSend={!!input.trim() && !thinking && !filing && !agendaReview}
               busy={thinking || filing}
               autoFocus
@@ -1556,7 +1557,7 @@ export default function AvatarApp(): React.ReactElement {
               commands={workOsChatCommands({ eod: () => void openEodReview() }).map((command) =>
                 command.key === "focus" ? { ...command, insert: "Focus: " } : command,
               )}
-              sendLabel={agendaDue ? "Confirm today’s agenda" : recapEditMode ? "Update recap" : "Send update"}
+              sendLabel={composerTarget === "recap" ? "Update recap" : agendaDue ? "Confirm today’s agenda" : "Send update"}
             />
           </footer>}
           {contextualPrompt.kind === "check_in" && !missed && !lastEntry?.receipt && (

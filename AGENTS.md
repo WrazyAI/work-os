@@ -50,10 +50,13 @@ cover. Reconcile unfamiliar files with that context instead of guessing, and
 call out any interaction with a recent change in the handoff. Add a changelog
 entry when the change is release-facing.
 
-The active Work OS check-in cadence defaults to sixty minutes (the first
-follow-up lands 75 minutes after plan confirmation or clock-in). Set
-`WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `15` through `240` to
-override it for a deployment; invalid values fall back to sixty minutes.
+The active Work OS check-in cadence defaults to sixty minutes. Set
+`WORK_OS_CHECK_IN_INTERVAL_MINUTES` to an integer from `5` through `240` to
+override it for a deployment; invalid values fall back to sixty minutes. The
+first progress check-in lands `WORK_OS_FIRST_FOLLOW_UP_MINUTES` (default 75,
+range 5–240) after plan confirmation or clock-in, and once a progress check-in
+is due an unconfirmed plan no longer blocks the cadence — the agenda review
+stays visible as the companion's inline banner.
 
 Activity Interval Reviews build the evidence-backed recap for each due check-in
 from Worktivity frames. Their bounds are `WORK_OS_ACTIVITY_INTERVALS_ENABLED`
