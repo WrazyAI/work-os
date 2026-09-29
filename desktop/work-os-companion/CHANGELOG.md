@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto can use memories inferred during the day as temporary context for that day without treating them as saved long-term facts.
+
 ## 0.3.59
 
 - The Focus tab now lists your interval check-ins beneath the daily goal, with the screenshots behind each one.
