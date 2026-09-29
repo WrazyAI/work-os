@@ -59,6 +59,8 @@ function proposalFilingTransport() {
 
 interface DayFacts extends CompanionDayFacts {
   loaded: boolean;
+  /** The organization allows voice input and this deployment can transcribe. */
+  voiceAvailable: boolean;
   personId: string | null;
   planIntent: string | null;
   timezone: string | null;
@@ -178,7 +180,7 @@ export default function AvatarApp(): React.ReactElement {
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
     : (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
-    loaded: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
+    loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
     timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [], lateReasonRequired: false,
@@ -197,9 +199,10 @@ export default function AvatarApp(): React.ReactElement {
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [scrollToLatest, setScrollToLatest] = useState(0);
-  /* Voice input (design §7.3): the transcript lands in the draft for review;
+  /* Voice input (design §8.8): the transcript lands in the draft for review;
      nothing is ever sent by the recorder itself. */
   const voice = useVoiceInput({
+    enabled: facts.voiceAvailable,
     onTranscript: (text) => {
       setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
       setAvatarTab("chat");
@@ -400,6 +403,7 @@ export default function AvatarApp(): React.ReactElement {
         completedTasks: Number(day?.signals?.completedTasks ?? 0) || 0,
         openTasks: Number(day?.signals?.openTasks ?? 0) || 0,
         eodSubmitted: typeof day?.report?.submitted_at === "string",
+        voiceAvailable: day?.access?.featureFlags?.voice_input === true && day?.access?.capabilities?.voice_input === true,
         personId: day?.access?.personId ?? null,
         planIntent: day?.plan?.focus_summary ?? day?.plan?.freeform_intent ?? null,
         timezone: day?.shift?.timezone ?? null,
@@ -1629,7 +1633,7 @@ export default function AvatarApp(): React.ReactElement {
             <WorkOsPromptBar
               sweepSignal={sweepSignal}
               focusSignal={composerFocusSignal}
-              voice={voice}
+              voice={facts.voiceAvailable ? voice : undefined}
               hotkeyLabel={VOICE_HOTKEY_LABEL}
               value={input}
               onChange={setInput}

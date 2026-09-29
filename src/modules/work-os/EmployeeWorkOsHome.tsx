@@ -37,7 +37,7 @@ type AnyRow = Record<string, any>;
 interface DayResponse {
   at: string;
   shiftDate: string;
-  access?: { featureFlags?: Record<string, boolean> };
+  access?: { featureFlags?: Record<string, boolean>; capabilities?: { voice_input?: boolean } };
   shift: {
     startsAt: string;
     endsAt: string;
@@ -336,7 +336,13 @@ export default function EmployeeWorkOsHome() {
   });
   /* Voice input (design §7.3): a transcript lands in the draft for review;
      nothing is ever sent by the recorder itself. */
-  const checkInVoice = useCheckInVoice(input, setInput, day.data?.access?.featureFlags?.voice_input === true);
+  /* The organization flag says the workspace may use voice input; the server
+     capability says this deployment can actually transcribe. Both are required,
+     so a client that shipped ahead of its server never offers a record control
+     that cannot work (design §8.8). */
+  const voiceAvailable = day.data?.access?.featureFlags?.voice_input === true
+    && day.data?.access?.capabilities?.voice_input === true;
+  const checkInVoice = useCheckInVoice(input, setInput, voiceAvailable);
   const review = useMutation({
     mutationFn: async ({ id, decision }: { id: string; decision: "accept" | "reject" }) => {
       const row = await fetchJson<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${id}`, {
@@ -611,7 +617,7 @@ export default function EmployeeWorkOsHome() {
               onSend={() => checkIn.mutate({ input_text: input })}
               onSnooze={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
               busy={checkIn.isPending}
-              voiceEnabled={day.data?.access?.featureFlags?.voice_input === true}
+              voiceEnabled={voiceAvailable}
               voice={checkInVoice}
             />
           </section>

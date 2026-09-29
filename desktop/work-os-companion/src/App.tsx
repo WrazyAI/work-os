@@ -212,23 +212,6 @@ export default function App() {
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[]; reviewId?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [composerThinking, setComposerThinking] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
-  /* Voice input (design §7.3): the transcript lands in the draft for review;
-     nothing is ever sent by the recorder itself. */
-  const voice = useVoiceInput({
-    onTranscript: (text) => {
-      setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
-      setProgressPanel("update");
-      setProgressComposerOpen(true);
-    },
-    onRecordingStart: () => {
-      setProgressPanel("update");
-      setProgressComposerOpen(true);
-    },
-  });
-  /* The hold-to-talk listener is registered once; this ref keeps it on the
-     newest recorder without re-subscribing on every render. */
-  const voiceRef = useRef(voice);
-  useEffect(() => { voiceRef.current = voice; }, [voice]);
   const [voiceHotkeyEnabled, setVoiceHotkeyEnabled] = useState(true);
   const [voiceHotkeyError, setVoiceHotkeyError] = useState<string | null>(null);
   /** Registers or releases the hold-to-talk shortcut and records the truthful
@@ -385,6 +368,29 @@ export default function App() {
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+
+  /* The organization flag says the workspace may use voice input; the server
+     capability says this deployment can actually transcribe. The record
+     control appears only when both are true, so a companion that shipped ahead
+     of its server never offers a control that cannot work (design §8.8). */
+  const voiceAvailable = visibleDay?.access?.featureFlags?.voice_input === true
+    && visibleDay?.access?.capabilities?.voice_input === true;
+  const voice = useVoiceInput({
+    enabled: voiceAvailable,
+    onTranscript: (text) => {
+      setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+      setProgressPanel("update");
+      setProgressComposerOpen(true);
+    },
+    onRecordingStart: () => {
+      setProgressPanel("update");
+      setProgressComposerOpen(true);
+    },
+  });
+  /* The hold-to-talk listener is registered once; this ref keeps it on the
+     newest recorder without re-subscribing on every render. */
+  const voiceRef = useRef(voice);
+  useEffect(() => { voiceRef.current = voice; }, [voice]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
   const modalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen;
@@ -3293,7 +3299,7 @@ export default function App() {
         activityDate={visibleDay?.shiftDate ?? null}
         activityTimezone={dashboardTimezone}
         activityPollMs={60_000}
-        voice={voice}
+        voice={voiceAvailable ? voice : undefined}
         onInput={setInput}
         onOpen={() => { setProgressPanel("update"); setProgressComposerOpen(true); }}
         onOpenGoal={openGoalComposer}

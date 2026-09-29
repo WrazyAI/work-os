@@ -32,6 +32,8 @@ export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
+  /** The dev fixtures stand in for a deployment that can transcribe. */
+  voiceAvailable: boolean;
   personId: string | null;
   planIntent: string | null;
   timezone: string | null;
@@ -162,6 +164,7 @@ export function avatarRecapFixtureChat(): AvatarFixtureTurn[] {
 export function avatarFixtureFacts(): AvatarFixtureFacts {
   return {
     loaded: true,
+    voiceAvailable: true,
     shiftDate: "2026-09-18",
     promptRequired: false,
     nextPromptAt: null,

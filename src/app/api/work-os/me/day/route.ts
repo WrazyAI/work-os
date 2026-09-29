@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { voiceInputConfigured } from "@/lib/aiTranscribe";
 import { getWorkOsDay } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
@@ -42,6 +43,10 @@ export async function GET(req: Request) {
         personId: auth.access.personId,
         displayName: auth.access.ctx.profile.displayName,
         featureFlags: auth.access.featureFlags,
+        /* Build-level, not per-organization: a companion that shipped ahead of
+           its server must not offer a record control this deployment cannot
+           serve (design §8.8). */
+        capabilities: { voice_input: voiceInputConfigured() },
       },
     });
   } catch (error) {

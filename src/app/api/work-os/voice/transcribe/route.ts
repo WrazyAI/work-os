@@ -5,7 +5,7 @@ import {
   voiceInputConfigured,
   type TranscribeFailure,
 } from "@/lib/aiTranscribe";
-import { requireWorkOsAccess } from "@/lib/work-os-api";
+import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,43 +34,50 @@ const FAILURE_COPY: Record<TranscribeFailure, { status: number; error: string }>
 // The clip is forwarded straight to the provider and dropped; nothing is
 // written to disk or to the database.
 export async function POST(req: Request) {
-  const auth = await requireWorkOsAccess({
-    organizationId: req.headers.get("x-work-os-organization-id"),
-    authorization: req.headers.get("authorization"),
-    requirePerson: true,
-    feature: VOICE_FEATURE_FLAG,
-  });
-  if (auth.response) return auth.response;
-  if (!voiceInputConfigured()) {
-    return NextResponse.json({ error: FAILURE_COPY.not_configured.error }, { status: 503 });
-  }
-
-  let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+    const auth = await requireWorkOsAccess({
+      organizationId: req.headers.get("x-work-os-organization-id"),
+      authorization: req.headers.get("authorization"),
+      requirePerson: true,
+      feature: VOICE_FEATURE_FLAG,
+    });
+    if (auth.response) return auth.response;
+    if (!voiceInputConfigured()) {
+      return NextResponse.json({ error: FAILURE_COPY.not_configured.error }, { status: 503 });
+    }
+
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+    }
+
+    const upload = await readVoiceUpload(form);
+    if (!upload.ok) {
+      const copy = FAILURE_COPY[upload.reason];
+      return NextResponse.json({ error: copy.error, reason: upload.reason }, { status: copy.status });
+    }
+
+    const result = await transcribeAudio({
+      bytes: upload.bytes,
+      mime: upload.mime,
+      language: form.get("language"),
+    });
+
+    if (!result.ok) {
+      const copy = FAILURE_COPY[result.reason];
+      return NextResponse.json(
+        { error: copy.error, reason: result.reason, ...(result.detail ? { detail: result.detail } : {}) },
+        { status: copy.status },
+      );
+    }
+
+    return NextResponse.json({ text: result.text, model: result.model });
+  } catch (error) {
+    /* Every other Work OS route funnels unexpected throws through jsonError so
+       a failure is diagnosable; without this the client only ever sees an
+       opaque 500 with no error field. */
+    return jsonError(error);
   }
-
-  const upload = await readVoiceUpload(form);
-  if (!upload.ok) {
-    const copy = FAILURE_COPY[upload.reason];
-    return NextResponse.json({ error: copy.error, reason: upload.reason }, { status: copy.status });
-  }
-
-  const result = await transcribeAudio({
-    bytes: upload.bytes,
-    mime: upload.mime,
-    language: form.get("language"),
-  });
-
-  if (!result.ok) {
-    const copy = FAILURE_COPY[result.reason];
-    return NextResponse.json(
-      { error: copy.error, reason: result.reason, ...(result.detail ? { detail: result.detail } : {}) },
-      { status: copy.status },
-    );
-  }
-
-  return NextResponse.json({ text: result.text, model: result.model });
 }

@@ -227,6 +227,10 @@ test("the transcribe route is authenticated, flag-gated, and size-guarded", () =
   assert.match(route, /readVoiceUpload\(form\)/);
   assert.match(route, /voiceInputConfigured\(\)/);
   assert.doesNotMatch(route, /console\.log|FAL_API_KEY/);
+  /* Every other Work OS route funnels unexpected throws through jsonError; a
+     bare 500 has no error field for the client to show. */
+  assert.match(route, /import \{ jsonError, requireWorkOsAccess \} from "@\/lib\/work-os-api"/);
+  assert.match(route, /\} catch \(error\) \{[\s\S]{0,240}?return jsonError\(error\);/);
 });
 
 test("voice input is a real organization feature with a live readiness check", () => {
@@ -276,7 +280,7 @@ test("the web check-in composer carries the same voice contract", () => {
   assert.match(composer, /Hold \{VOICE_HOTKEY_LABEL\} to talk/);
   assert.match(composer, /Transcribed — review it, then send\./);
   const employee = read("src/modules/work-os/EmployeeWorkOsHome.tsx");
-  assert.match(employee, /voiceEnabled=\{day\.data\?\.access\?\.featureFlags\?\.voice_input === true\}/);
+  assert.match(employee, /voiceEnabled=\{voiceAvailable\}/);
   assert.match(employee, /<CheckInComposer/);
 });
 
@@ -351,4 +355,42 @@ test("hold-to-talk is a stored, truthful per-device preference", () => {
   assert.match(app, /Hold-to-talk \(Ctrl \+ M\)/);
   /* A refused registration reports the real state instead of toggling anyway. */
   assert.match(app, /if \(applied !== enabled\) return;/);
+});
+
+test("the mic waits for the server build, not just the workspace flag", () => {
+  /* A companion that ships ahead of its server must not offer a record control
+     the deployment cannot serve: it waits for the capability, not the flag. */
+  const day = read("src/app/api/work-os/me/day/route.ts");
+  assert.match(day, /capabilities: \{ voice_input: voiceInputConfigured\(\) \}/);
+  assert.match(day, /import \{ voiceInputConfigured \} from "@\/lib\/aiTranscribe"/);
+
+  const employee = read("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  assert.match(employee, /const voiceAvailable = day\.data\?\.access\?\.featureFlags\?\.voice_input === true/);
+  assert.match(employee, /&& day\.data\?\.access\?\.capabilities\?\.voice_input === true;/);
+  assert.match(employee, /useCheckInVoice\(input, setInput, voiceAvailable\)/);
+  assert.match(employee, /voiceEnabled=\{voiceAvailable\}/);
+
+  const dock = read("desktop/work-os-companion/src/App.tsx");
+  assert.match(dock, /const voiceAvailable = visibleDay\?\.access\?\.featureFlags\?\.voice_input === true/);
+  assert.match(dock, /&& visibleDay\?\.access\?\.capabilities\?\.voice_input === true;/);
+  assert.match(dock, /enabled: voiceAvailable,/);
+  assert.match(dock, /voice=\{voiceAvailable \? voice : undefined\}/);
+
+  const floating = read("desktop/work-os-companion/src/AvatarApp.tsx");
+  assert.match(floating, /voiceAvailable: day\?\.access\?\.featureFlags\?\.voice_input === true && day\?\.access\?\.capabilities\?\.voice_input === true,/);
+  assert.match(floating, /enabled: facts\.voiceAvailable,/);
+  assert.match(floating, /voice=\{facts\.voiceAvailable \? voice : undefined\}/);
+
+  /* The day payload is where the capability arrives, so both clients must be
+     able to read it. */
+  assert.match(read("desktop/work-os-companion/src/types.ts"), /capabilities\?: \{ voice_input\?: boolean \}/);
+  assert.match(read("desktop/work-os-companion/src/avatarFixture.ts"), /voiceAvailable: boolean;/);
+});
+
+test("the companion refreshes the capability from the server on every day load", () => {
+  const floating = read("desktop/work-os-companion/src/AvatarApp.tsx");
+  assert.match(floating, /voiceAvailable: day\?\.access\?\.featureFlags\?\.voice_input === true && day\?\.access\?\.capabilities\?\.voice_input === true,/);
+  /* The fixture stands in for a deployment that can transcribe. */
+  const fixture = read("desktop/work-os-companion/src/avatarFixture.ts");
+  assert.match(fixture, /voiceAvailable: true,/);
 });
