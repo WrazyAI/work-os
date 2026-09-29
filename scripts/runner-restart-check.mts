@@ -56,6 +56,41 @@ export function runnerRelevantChanges(changed: string[], closure: Set<string>): 
   return changed.filter((file) => closure.has(file));
 }
 
+export interface ProcessRow {
+  pid: string;
+  ppid: string;
+  args: string;
+}
+
+export function parseProcessTable(output: string): ProcessRow[] {
+  return output.split("\n").flatMap((line) => {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+    return match ? [{ pid: match[1], ppid: match[2], args: match[3] }] : [];
+  });
+}
+
+/** Descendants of `rootPid` that are not part of the runner's own wrapper
+ * chain (`sh -c tsx scripts/agent-runner.ts` and its node children). Anything
+ * left is an in-flight job CLI or one of its subprocesses. */
+export function descendantsExcluding(table: ProcessRow[], rootPid: string, excludeNeedle: string): ProcessRow[] {
+  const byParent = new Map<string, ProcessRow[]>();
+  for (const row of table) {
+    const list = byParent.get(row.ppid) ?? [];
+    list.push(row);
+    byParent.set(row.ppid, list);
+  }
+  const collected: ProcessRow[] = [];
+  const queue = [rootPid];
+  while (queue.length) {
+    const pid = queue.pop()!;
+    for (const child of byParent.get(pid) ?? []) {
+      if (!child.args.includes(excludeNeedle)) collected.push(child);
+      queue.push(child.pid);
+    }
+  }
+  return collected;
+}
+
 function git(repo: string, args: string[]): string {
   return execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
 }
@@ -142,15 +177,16 @@ async function main(): Promise<void> {
   const mainPid = execFileSync("systemctl", ["--user", "show", "agentos-runner", "-p", "MainPID", "--value"], {
     encoding: "utf8",
   }).trim();
-  let children = "";
+  let running: ProcessRow[] = [];
   if (mainPid && mainPid !== "0") {
     try {
-      children = execFileSync("pgrep", ["-P", mainPid], { encoding: "utf8" }).trim();
+      const table = parseProcessTable(execFileSync("ps", ["-eo", "pid=,ppid=,args="], { encoding: "utf8" }));
+      running = descendantsExcluding(table, mainPid, "agent-runner.ts");
     } catch {
-      children = "";
+      running = [];
     }
   }
-  if (children) {
+  if (running.length) {
     writeFileSync(markerPath, `${previous}\n`);
     report.reason = "runner has in-flight child processes; restart skipped";
     console.log("⚠ runner restart skipped: an agent job is in flight");

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   collectRunnerImports,
+  descendantsExcluding,
+  parseProcessTable,
   resolveSpecifier,
   runnerRelevantChanges,
 } from "../scripts/runner-restart-check.mts";
@@ -39,3 +41,30 @@ assert.deepEqual(runnerRelevantChanges(["docs/notes.md"], closure), []);
 assert.equal(resolveSpecifier("scripts/agent-runner.ts", "./missing", io), null);
 assert.equal(resolveSpecifier("scripts/agent-runner.ts", "pg", io), null);
 assert.equal(resolveSpecifier("src/lib/format.ts", "./db/query", io), "src/lib/db/query.ts");
+
+// The runner's own wrapper chain must never count as an in-flight job; a job
+// CLI and its subprocesses must.
+const busy = parseProcessTable(
+  [
+    "  100       1 systemd --user",
+    "  101     100 sh -c tsx scripts/agent-runner.ts",
+    "  102     101 node /path/tsx/dist/loader.mjs scripts/agent-runner.ts",
+    "  103     102 node scripts/agent-runner.ts",
+    "  104     103 claude --print",
+    "  105     104 sh -c helper --flag",
+    "  200       1 unrelated",
+  ].join("\n"),
+);
+assert.equal(busy.length, 7);
+assert.deepEqual(
+  descendantsExcluding(busy, "100", "agent-runner.ts").map((row) => row.pid),
+  ["104", "105"],
+);
+const idle = parseProcessTable(
+  [
+    "  100 1 systemd --user",
+    "  101 100 sh -c tsx scripts/agent-runner.ts",
+    "  102 101 node tsx scripts/agent-runner.ts",
+  ].join("\n"),
+);
+assert.deepEqual(descendantsExcluding(idle, "100", "agent-runner.ts"), []);
