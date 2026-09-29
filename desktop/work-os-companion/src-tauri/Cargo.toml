@@ -21,6 +21,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-deep-link = "2"
+# Pinned to the 2.3 line: 2.4 requires tauri ^2.12, and upgrading the framework
+# inside a feature change is a separate decision.
+tauri-plugin-global-shortcut = "~2.3.2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
@@ -38,6 +41,7 @@ work-os-diagnostics-core = { path = "diagnostics-core" }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.2"
+webview2-com = "0.38"
 windows-sys = { version = "0.60", default-features = false, features = ["Win32_System_Threading"] }
 
 [profile.dev.package.scrypt]

@@ -20,6 +20,7 @@ import { MASCOT } from "./mascot";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { WorkOsConversationTurn } from "./vault";
 import { TaskBatchCard } from "./TaskBatchCard";
+import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "./chat/voiceInput";
 
 /** DEV-only visual review surface for the shared chat language
  * (design §25.11): the real in-app ProgressComposer plus a faithful
@@ -67,6 +68,13 @@ export default function ChatPreview() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 32, maxWidth: 860, padding: 24 }}>
         <BatchSection />
+      </div>
+    );
+  }
+  if (isolate === "voice") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 860, padding: 24 }}>
+        <VoiceSection width={Number(params.get("width")) || 760} only={params.get("state")} />
       </div>
     );
   }
@@ -774,4 +782,135 @@ function BatchSection() {
       <TaskBatchCard operation={addBatch} result={skipped} context={context} onApprove={() => undefined} onSkip={() => undefined} onRetry={() => undefined} />
     </section>
   </>;
+}
+
+/** DEV-only review surface for the composer's voice states (design §8.8).
+ * Renders the real ChatComposer in every capture state at one width, so a
+ * reviewer sees the slot swap, the capture row, the receipt, and each failure
+ * without needing a microphone. */
+function VoiceSection({ width, only = null }: { width: number; only?: string | null }) {
+  const [demo, setDemo] = useState<VoiceState>("idle");
+  const stub = (state: VoiceState, overrides: Partial<VoiceInput> = {}): VoiceInput => ({
+    state,
+    level: state === "recording" ? 0.62 : 0,
+    elapsedMs: state === "recording" ? 7_400 : 0,
+    maxMs: 120_000,
+    error: null,
+    receipt: false,
+    supported: true,
+    dismissError: () => undefined,
+    start: () => setDemo("recording"),
+    stop: () => setDemo("idle"),
+    cancel: () => setDemo("idle"),
+    ...overrides,
+  });
+  /* Named fixtures so one state can be captured on its own: the app shell is
+     viewport-anchored, so stacked composers overlap and only the top one is
+     ever painted. */
+  const fixtures: Record<string, { label: string; overrides: Partial<VoiceInput>; draft: string }> = {
+    empty: { label: "Empty draft — record takes the send slot", overrides: { state: "idle" }, draft: "" },
+    typed: { label: "Draft present — send returns", overrides: { state: "idle" }, draft: "Shipped the audit fix and picked up the next ticket." },
+    requesting: { label: "Requesting the microphone", overrides: { state: "requesting" }, draft: "" },
+    recording: { label: "Recording", overrides: { state: "recording" }, draft: "" },
+    transcribing: { label: "Transcribing", overrides: { state: "transcribing" }, draft: "" },
+    receipt: { label: "Transcribed receipt", overrides: { state: "idle", receipt: true }, draft: "Refined the onboarding copy for the pilot review." },
+    permission: { label: "Permission denied", overrides: { state: "idle", error: VOICE_FAILURE_COPY.permission }, draft: "" },
+    nospeech: { label: "No speech detected", overrides: { state: "idle", error: VOICE_FAILURE_COPY.transcribe }, draft: "" },
+    unsupported: { label: "Capture unavailable (no microphone in this runtime)", overrides: { state: "idle", supported: false }, draft: "" },
+  };
+  if (only && fixtures[only]) {
+    const fixture = fixtures[only];
+    return (
+      <section aria-label="Voice input preview" style={{ display: "grid", gap: 8, width: Math.min(width, 860) }}>
+        <strong style={{ fontSize: 12 }}>{fixture.label}</strong>
+        <ProgressComposer
+          input={fixture.draft}
+          open
+          panel="update"
+          pending=""
+          receipt={null}
+          busy={false}
+          required={false}
+          goal=""
+          goalProvenance={null}
+          goalSuggestion={null}
+          saveState="saved"
+          onInput={noop}
+          onOpen={noop}
+          onOpenGoal={noop}
+          onClose={noop}
+          onSubmit={noop}
+          onClassify={noop}
+          onApplyGoal={noop}
+          voice={stub(fixture.overrides.state ?? "idle", fixture.overrides)}
+        />
+      </section>
+    );
+  }
+  const rows: Array<[string, Partial<VoiceInput>, string]> = [
+    ["Empty draft — record takes the send slot", { state: "idle" }, ""],
+    ["Draft present — send returns", { state: "idle" }, "Shipped the audit fix and picked up the next ticket."],
+    ["Requesting the microphone", { state: "requesting" }, ""],
+    ["Recording", { state: "recording" }, ""],
+    ["Transcribing", { state: "transcribing" }, ""],
+    ["Transcribed receipt", { state: "idle", receipt: true }, "Refined the onboarding copy for the pilot review."],
+    ["Permission denied", { state: "idle", error: VOICE_FAILURE_COPY.permission }, ""],
+    ["No speech detected", { state: "idle", error: VOICE_FAILURE_COPY.transcribe }, ""],
+    ["Capture unavailable (no microphone in this runtime)", { state: "idle", supported: false }, ""],
+  ];
+  return (
+    <section aria-label="Voice input preview" style={{ display: "grid", gap: 18, width: Math.min(width, 860) }}>
+      <h2 style={{ margin: 0, fontSize: 14 }}>Composer voice input (live stub: tap record or stop)</h2>
+      <div style={{ display: "grid", gap: 8 }}>
+        <strong style={{ fontSize: 12 }}>Interactive (stubbed recorder)</strong>
+        <ProgressComposer
+          input=""
+          open
+          panel="update"
+          pending=""
+          receipt={null}
+          busy={false}
+          required={false}
+          goal=""
+          goalProvenance={null}
+          goalSuggestion={null}
+          saveState="saved"
+          onInput={noop}
+          onOpen={noop}
+          onOpenGoal={noop}
+          onClose={noop}
+          onSubmit={noop}
+          onClassify={noop}
+          onApplyGoal={noop}
+          voice={stub(demo)}
+        />
+      </div>
+      {rows.map(([label, overrides, draft]) => (
+        <div key={label} style={{ display: "grid", gap: 8 }}>
+          <strong style={{ fontSize: 12 }}>{label}</strong>
+          <ProgressComposer
+            input={draft}
+            open
+            panel="update"
+            pending=""
+            receipt={null}
+            busy={false}
+            required={false}
+            goal=""
+            goalProvenance={null}
+            goalSuggestion={null}
+            saveState="saved"
+            onInput={noop}
+            onOpen={noop}
+            onOpenGoal={noop}
+            onClose={noop}
+            onSubmit={noop}
+            onClassify={noop}
+            onApplyGoal={noop}
+            voice={stub(overrides.state ?? "idle", overrides)}
+          />
+        </div>
+      ))}
+    </section>
+  );
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "./tauriEvents";
+import { useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
@@ -206,6 +207,47 @@ export default function App() {
   const [interpretation, setInterpretation] = useState<{ status: "loading" | "ready"; operations: ProposedOperation[]; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[]; reviewId?: string } | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState<string | null>(null);
   const [composerThinking, setComposerThinking] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  /* Voice input (design §7.3): the transcript lands in the draft for review;
+     nothing is ever sent by the recorder itself. */
+  const voice = useVoiceInput({
+    onTranscript: (text) => {
+      setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+      setProgressPanel("update");
+      setProgressComposerOpen(true);
+      setComposerFocusSignal((signal) => signal + 1);
+    },
+    onRecordingStart: () => {
+      setProgressPanel("update");
+      setProgressComposerOpen(true);
+    },
+  });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+  const [voiceHotkeyEnabled, setVoiceHotkeyEnabled] = useState(true);
+  const [voiceHotkeyError, setVoiceHotkeyError] = useState<string | null>(null);
+  /** Registers or releases the hold-to-talk shortcut and records the truthful
+   * result, so Settings never shows a shortcut Windows (or another app)
+   * refused, and never claims one is off while it is still captured. */
+  const applyVoiceHotkey = useCallback(async (enabled: boolean) => {
+    if (!isTauri()) return false;
+    try {
+      const status = await invoke<{ enabled: boolean; error: string | null }>("set_voice_hotkey", { enabled });
+      setVoiceHotkeyError(status.error ?? null);
+      return status.enabled;
+    } catch {
+      setVoiceHotkeyError("Hold-to-talk could not be registered on this device.");
+      return false;
+    }
+  }, []);
+  async function toggleVoiceHotkey(enabled: boolean) {
+    setVoiceHotkeyEnabled(enabled);
+    const applied = await applyVoiceHotkey(enabled);
+    setVoiceHotkeyEnabled(applied);
+    if (applied !== enabled) return;
+    try { await secureState.saveSettings({ voiceHotkey: enabled }); }
+    catch (value) { showError(value, "The voice shortcut setting could not be saved.", "Setting not saved"); }
+  }
   const [queuedInterpretationId, setQueuedInterpretationId] = useState<string | null>(null);
   const [eodDraft, setEodDraft] = useState<{ markdown: string; source: "ai" | "deterministic" | "simulated"; screenshots?: EodScreenshotContext | null; screenshotSyncUnavailable?: boolean; loom?: { title: string | null; durationSeconds: number | null; createdLocalDate: string | null; verdict: string; url: string } | null } | null>(null);
   const [eodRedrafting, setEodRedrafting] = useState(false);
@@ -825,7 +867,8 @@ export default function App() {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
-      const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates);
+      const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
+      void applyVoiceHotkey(settings.voiceHotkey);
       const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
       if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
         // Seed the cache with the last workday snapshot for an instant first
@@ -926,6 +969,21 @@ export default function App() {
     }).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
+
+  // Hold-to-talk: the global shortcut is registered in Rust so it reaches the
+  // app from any window, then routed here as press/release/cancel. The hold
+  // owns the whole capture, so a release always ends it.
+  useEffect(() => {
+    if (!isTauri()) return;
+    const unlisteners: Array<() => void> = [];
+    void listen("work-os://voice/start", () => voiceRef.current.start("hotkey"))
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    void listen("work-os://voice/stop", () => voiceRef.current.stop())
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    void listen("work-os://voice/cancel", () => voiceRef.current.cancel())
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    return () => unlisteners.forEach((fn) => fn());
+  }, []);
 
   // Assistant navigation shortcuts from the floating avatar land on the
   // requested destination. The page name is validated before it can move.
@@ -3132,6 +3190,12 @@ export default function App() {
              <header className="settings-group-head"><h3 id="settings-device-title">This device</h3></header>
             <section className="settings-panel">
               <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
+              <Setting
+                title="Hold-to-talk (Ctrl + M)"
+                detail={voiceHotkeyError ?? "Hold Ctrl + M anywhere to record a voice update. Release to transcribe it."}
+              >
+                <SettingsSwitch label="Hold-to-talk (Ctrl + M)" checked={voiceHotkeyEnabled} onChange={(value) => void toggleVoiceHotkey(value)} />
+              </Setting>
               <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}. We'll let you know when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
               <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
                 <span className="setting-controls">
@@ -3207,6 +3271,8 @@ export default function App() {
         activityDate={visibleDay?.shiftDate ?? null}
         activityTimezone={dashboardTimezone}
         activityPollMs={60_000}
+        voice={voice}
+        voiceFocusSignal={composerFocusSignal}
         onInput={setInput}
         onOpen={() => { setProgressPanel("update"); setProgressComposerOpen(true); }}
         onOpenGoal={openGoalComposer}
@@ -3508,7 +3574,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
+export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, voiceFocusSignal = 0, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -3518,6 +3584,9 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
+  voice?: import("./chat/voiceInput").VoiceInput;
+  /** Increment to focus the prompt field (e.g. after a transcript lands). */
+  voiceFocusSignal?: number;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
   onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void;
 }) {
@@ -3644,7 +3713,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
    : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div></div>}
     </section>
     <div className="progress-input-shell">
-      <WorkOsPromptBar autoFocus={open && panel === "update"} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update, a blocker, or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" />
+      <WorkOsPromptBar autoFocus={open && panel === "update"} focusSignal={voiceFocusSignal} voice={voice} hotkeyLabel={VOICE_HOTKEY_LABEL} sweepSignal={sweepSignal} value={input} onChange={onInput} onSend={onSubmit} onFocus={onOpen} onPlus={onOpen} placeholder={agendaMode ? "Add a task — planning doesn't clock you in…" : "Share an update, a blocker, or add a task…"} ariaLabel="Share an update or add a task" canSend={!!input.trim()} busy={busy} commands={workOsChatCommands({ focus: () => onOpenGoal(), eod: () => onNavigateView?.("review") })} footerLeft={<button className={`focus-dock-button ${panel === "goal" && open ? "active" : ""}`} aria-label="Update today’s focus" aria-pressed={panel === "goal" && open} onClick={onOpenGoal}><Pencil size={15} /><span>Focus</span></button>} sendLabel="Review update type" />
     </div>
     </div>
     : <ConversationLauncher ref={launcherRef} mode={agendaMode ? "agenda" : "progress"} required={required} onOpen={onOpen} />}

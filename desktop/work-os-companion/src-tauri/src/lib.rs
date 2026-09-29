@@ -342,6 +342,155 @@ async fn finish_worktivity_control(app: tauri::AppHandle) -> Result<(), String> 
 #[cfg(not(windows))]
 fn arm_exit_watchdog(_grace_seconds: u64) {}
 
+/* ── Voice input: hold-to-talk ─────────────────────────────────────────────
+ *
+ * Ctrl + M is registered as a real global shortcut so the hold reaches the
+ * companion from any application, and so the *release* ends the capture. The
+ * frontend only ever receives start/stop/cancel; it owns the microphone, the
+ * recording cap, and the transcription request.
+ */
+
+/// The route a press is bound to, remembered so the release cannot land on a
+/// different window than the one the press opened.
+struct VoiceHotkeyRoute(std::sync::Mutex<Option<&'static str>>);
+
+/// Truthful registration state, so Settings never shows a switch that claims
+/// the shortcut is live when Windows (or another app) refused it.
+#[derive(serde::Serialize)]
+struct VoiceHotkeyStatus {
+    enabled: bool,
+    shortcut: String,
+    error: Option<String>,
+}
+
+struct VoiceHotkey(std::sync::Mutex<VoiceHotkeyStatus>);
+
+const VOICE_SHORTCUT_LABEL: &str = "Ctrl + M";
+
+fn voice_shortcut() -> tauri_plugin_global_shortcut::Shortcut {
+    use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+    Shortcut::new(Some(Modifiers::CONTROL), Code::KeyM)
+}
+
+/// The window the employee is actually looking at: the floating companion when
+/// it is on screen (collapsed-to-orb still counts), otherwise the main window.
+fn voice_target(app: &tauri::AppHandle) -> &'static str {
+    match app.get_webview_window("avatar") {
+        Some(window) if window.is_visible().unwrap_or(false) => "avatar",
+        _ => "main",
+    }
+}
+
+fn focus_voice_target(app: &tauri::AppHandle, target: &str) {
+    if target == "avatar" {
+        show_avatar(app.clone());
+    } else {
+        show_main(app);
+    }
+}
+
+fn set_voice_shortcut(app: &tauri::AppHandle, enabled: bool) -> VoiceHotkeyStatus {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let manager = app.global_shortcut();
+    let shortcut = voice_shortcut();
+    let mut status = VoiceHotkeyStatus {
+        enabled,
+        shortcut: VOICE_SHORTCUT_LABEL.to_string(),
+        error: None,
+    };
+    let result = if enabled {
+        if manager.is_registered(shortcut.clone()) {
+            Ok(())
+        } else {
+            manager.register(shortcut)
+        }
+    } else {
+        manager.unregister(shortcut)
+    };
+    if let Err(_error) = result {
+        status.enabled = false;
+        status.error = Some(
+            "Hold-to-talk is unavailable — another application may already own Ctrl + M.".to_string(),
+        );
+    }
+    status
+}
+
+#[tauri::command]
+fn voice_hotkey_status(app: tauri::AppHandle) -> VoiceHotkeyStatus {
+    let state = app.state::<VoiceHotkey>();
+    match state.0.lock() {
+        Ok(status) => VoiceHotkeyStatus {
+            enabled: status.enabled,
+            shortcut: status.shortcut.clone(),
+            error: status.error.clone(),
+        },
+        Err(_) => VoiceHotkeyStatus {
+            enabled: false,
+            shortcut: VOICE_SHORTCUT_LABEL.to_string(),
+            error: Some("Hold-to-talk state is unavailable.".to_string()),
+        },
+    }
+}
+
+#[tauri::command]
+fn set_voice_hotkey(app: tauri::AppHandle, enabled: bool) -> VoiceHotkeyStatus {
+    let status = set_voice_shortcut(&app, enabled);
+    if let Some(state) = app.try_state::<VoiceHotkey>() {
+        if let Ok(mut current) = state.0.lock() {
+            *current = VoiceHotkeyStatus {
+                enabled: status.enabled,
+                shortcut: status.shortcut.clone(),
+                error: status.error.clone(),
+            };
+        }
+    }
+    status
+}
+
+/// WebView2 answers media-capture permission requests through
+/// `PermissionRequested`, and with no handler registered the request is
+/// denied outright — WebView2 has no permission UI of its own — so
+/// `getUserMedia` rejects with NotAllowedError even when Windows already lets
+/// the app record. Answer the microphone request for the app's own origin
+/// only; the OS privacy setting still applies on top.
+#[cfg(windows)]
+fn allow_microphone_capture(window: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+    };
+    use webview2_com::PermissionRequestedEventHandler;
+    let _ = window.with_webview(|webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else {
+            return;
+        };
+        let handler = PermissionRequestedEventHandler::create(Box::new(|_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = Default::default();
+            args.PermissionKind(&mut kind)?;
+            if kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                return Ok(());
+            }
+            let mut uri = Default::default();
+            args.Uri(&mut uri)?;
+            let origin = webview2_com::take_pwstr(uri);
+            if !origin.starts_with("tauri://localhost")
+                && !origin.starts_with("https://tauri.localhost")
+                && !origin.starts_with("http://tauri.localhost")
+            {
+                return Ok(());
+            }
+            args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+            Ok(())
+        }));
+        let mut token = 0;
+        let _ = core.add_PermissionRequested(&handler, &mut token);
+    });
+}
+
+#[cfg(not(windows))]
+fn allow_microphone_capture(_window: &tauri::WebviewWindow) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -360,6 +509,36 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if shortcut != &voice_shortcut() {
+                        return;
+                    }
+                    let route = app.state::<VoiceHotkeyRoute>();
+                    match event.state() {
+                        ShortcutState::Pressed => {
+                            let target = voice_target(app);
+                            if let Ok(mut current) = route.0.lock() {
+                                *current = Some(target);
+                            }
+                            focus_voice_target(app, target);
+                            let _ = app.emit_to(target, "work-os://voice/start", ());
+                        }
+                        ShortcutState::Released => {
+                            let target = route
+                                .0
+                                .lock()
+                                .ok()
+                                .and_then(|mut current| current.take())
+                                .unwrap_or("main");
+                            let _ = app.emit_to(target, "work-os://voice/stop", ());
+                        }
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
             session_guard::app_heartbeat,
@@ -372,6 +551,8 @@ pub fn run() {
             open_work_os_auth,
             worktivity_control,
             finish_worktivity_control,
+            voice_hotkey_status,
+            set_voice_hotkey,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,
             diagnostics::diagnostics_snapshot,
@@ -391,6 +572,18 @@ pub fn run() {
             session_guard::start(app.handle());
             #[cfg(any(target_os = "linux", windows))]
             app.deep_link().register_all()?;
+
+            // Voice input: answer WebView2's microphone permission request for
+            // both windows, then arm the hold-to-talk shortcut. The frontend
+            // corrects the registration from the stored preference on boot.
+            for label in ["main", "avatar"] {
+                if let Some(window) = app.get_webview_window(label) {
+                    allow_microphone_capture(&window);
+                }
+            }
+            let hotkey = set_voice_shortcut(app.handle(), true);
+            app.manage(VoiceHotkeyRoute(std::sync::Mutex::new(None)));
+            app.manage(VoiceHotkey(std::sync::Mutex::new(hotkey)));
 
             let show = MenuItem::with_id(app, "show", "Open My Day", true, None::<&str>)?;
             let companion = MenuItem::with_id(app, "companion", "Hide companion", true, None::<&str>)?;

@@ -154,6 +154,57 @@
   .chat-composer-sweep { animation-duration: 1ms; }
 }
 
+/* ── Voice input ─────────────────────────────────────────────────────────
+ * The live meter is driven by the real microphone signal, so it reads as data
+ * rather than an ambient loop: no animation, no transition, and no idle
+ * motion. The shell's signal border and the meter are the only live cues. */
+
+.chat-voice-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  min-width: 18px;
+}
+
+.chat-voice-meter-bar {
+  width: 2px;
+  border-radius: 999px;
+  background: var(--color-signal-strong);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-voice-meter-bar { transition: height 90ms linear; }
+}
+
+/* Status and receipt lines sit outside the shell so the composer keeps its
+   shape; they are quiet, one line, and never displace the thread. */
+.chat-voice-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-ink-2);
+}
+
+.chat-voice-note > span { min-width: 0; overflow-wrap: anywhere; }
+
+.chat-voice-note.is-receipt { color: var(--color-accent-ink); }
+
+.chat-voice-note button {
+  flex: none;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--color-ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-voice-note button:hover { color: var(--color-ink); }
+
 /* ── Primitive component classes (used alongside utilities) ─────────────── */
 
 @layer components {

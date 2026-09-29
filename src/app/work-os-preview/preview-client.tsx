@@ -6,8 +6,11 @@
 // exercised without a live session.
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import EmployeeWorkOsHome from "@/modules/work-os/EmployeeWorkOsHome";
+import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
+import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
 
 const TODAY = "2026-09-11";
 
@@ -36,6 +39,9 @@ const historyFixture = (date: string, goal: string) => ({
   workspaceSummary: workspace(date, goal),
   attendance: null,
   breakPolicy: { worktivityAuthoritative: false },
+  /* Voice input is the newest capability on the check-in composer, so the
+     fixture keeps it on for rendered review (design §8.8). */
+  access: { featureFlags: { voice_input: true, loom_updates: false } },
 });
 
 const rejectedFixture = (date: string) => ({
@@ -114,5 +120,75 @@ export default function WorkOsPreviewClient() {
     instance.setQueryData(["work-os", "employee-onboarding"], onboardingFixture);
     return instance;
   });
-  return <QueryClientProvider client={client}><EmployeeWorkOsHome /></QueryClientProvider>;
+  return <QueryClientProvider client={client}><PreviewBody /></QueryClientProvider>;
+}
+
+/** `?voice` renders the check-in composer's voice states on their own;
+ * `?voice=<state>` renders just one. The dev harness never hydrates here, so
+ * these fixtures are reached through the server render, not by clicking
+ * (design §8.8). */
+function PreviewBody() {
+  const voice = useSearchParams().get("voice");
+  if (voice) {
+    const entries = VOICE_FIXTURES[voice] ? [[voice, VOICE_FIXTURES[voice]] as const] : Object.entries(VOICE_FIXTURES);
+    return (
+      <div style={{ display: "grid", gap: 20, maxWidth: 760, padding: 24 }}>
+        <strong style={{ fontSize: 13 }}>Check-in composer voice states</strong>
+        {entries.map(([key, fixture]) => (
+          <section key={key} style={{ display: "grid", gap: 8 }}>
+            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{fixture.label}</span>
+            <div data-voice-fixture={key} style={{ border: "1px solid var(--border)", background: "var(--bg-card)", padding: 16 }}>
+              <CheckInComposer
+                value={fixture.draft}
+                onChange={() => undefined}
+                onSend={() => undefined}
+                onSnooze={() => undefined}
+                busy={false}
+                voiceEnabled
+                voice={voiceStub(fixture)}
+              />
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+  return <EmployeeWorkOsHome />;
+}
+
+interface VoiceFixture {
+  label: string;
+  state: VoiceState;
+  draft: string;
+  error?: string;
+  receipt?: boolean;
+  supported?: boolean;
+}
+
+const VOICE_FIXTURES: Record<string, VoiceFixture> = {
+  empty: { label: "Empty draft — record takes the send slot", state: "idle", draft: "" },
+  typed: { label: "Draft present — send returns", state: "idle", draft: "Shipped the audit fix and picked up the next ticket." },
+  requesting: { label: "Requesting the microphone", state: "requesting", draft: "" },
+  recording: { label: "Recording", state: "recording", draft: "" },
+  transcribing: { label: "Transcribing", state: "transcribing", draft: "" },
+  receipt: { label: "Transcribed receipt", state: "idle", draft: "Refined the onboarding copy for the pilot review.", receipt: true },
+  permission: { label: "Permission denied", state: "idle", draft: "", error: VOICE_FAILURE_COPY.permission },
+  nospeech: { label: "No speech detected", state: "idle", draft: "", error: VOICE_FAILURE_COPY.transcribe },
+  unsupported: { label: "Capture unavailable in this browser", state: "idle", draft: "", supported: false },
+};
+
+function voiceStub(fixture: VoiceFixture): VoiceInput {
+  return {
+    state: fixture.state,
+    level: fixture.state === "recording" ? 0.62 : 0,
+    elapsedMs: fixture.state === "recording" ? 7_400 : 0,
+    maxMs: 120_000,
+    error: fixture.error ?? null,
+    receipt: fixture.receipt ?? false,
+    supported: fixture.supported !== false,
+    dismissError: () => undefined,
+    start: () => undefined,
+    stop: () => undefined,
+    cancel: () => undefined,
+  };
 }

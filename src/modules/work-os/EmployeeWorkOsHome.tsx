@@ -30,6 +30,7 @@ import { attendanceWatchExpectation, attendanceWatchInput, attendanceWatchInterv
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { lateReasonRequired } from "@/lib/work-os-late-start";
 import { EmployeeEodOutstandingBell, calendarDateLabel, type OutstandingEodDay, type OutstandingEodsResponse } from "@/modules/work-os/EmployeeEodOutstanding";
+import { CheckInComposer, useCheckInVoice } from "@/modules/work-os/CheckInComposer";
 
 type AnyRow = Record<string, any>;
 
@@ -333,6 +334,9 @@ export default function EmployeeWorkOsHome() {
       void refresh();
     },
   });
+  /* Voice input (design §7.3): a transcript lands in the draft for review;
+     nothing is ever sent by the recorder itself. */
+  const checkInVoice = useCheckInVoice(input, setInput, day.data?.access?.featureFlags?.voice_input === true);
   const review = useMutation({
     mutationFn: async ({ id, decision }: { id: string; decision: "accept" | "reject" }) => {
       const row = await fetchJson<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${id}`, {
@@ -601,32 +605,15 @@ export default function EmployeeWorkOsHome() {
                 <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--status-warn)]" style={{ borderColor: "var(--status-warn)" }}>Required</span>
               ) : null}
             </div>
-            <textarea
+            <CheckInComposer
               value={input}
-              onChange={(event) => setInput(event.target.value)}
-              rows={4}
-              placeholder="Describe what you plan to do, progress made, blockers, or completed work."
-              className="w-full resize-y border bg-transparent px-3 py-2 text-[13px] leading-6 text-[var(--text-primary)] outline-none"
-              style={{ borderColor: "var(--border)" }}
+              onChange={setInput}
+              onSend={() => checkIn.mutate({ input_text: input })}
+              onSnooze={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
+              busy={checkIn.isPending}
+              voiceEnabled={day.data?.access?.featureFlags?.voice_input === true}
+              voice={checkInVoice}
             />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                disabled={!input.trim() || checkIn.isPending}
-                onClick={() => checkIn.mutate({ input_text: input })}
-                className="inline-flex items-center gap-2 px-3 py-2 text-[12px] font-semibold disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "var(--text-inverse)" }}
-              >
-                <Send size={14} /> Send update
-              </button>
-              <button
-                disabled={checkIn.isPending}
-                onClick={() => checkIn.mutate({ snoozed_until: new Date(Date.now() + 30 * 60_000).toISOString() })}
-                className="ml-auto inline-flex items-center gap-2 border px-3 py-2 text-[12px] text-[var(--text-tertiary)] disabled:opacity-50"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <TimerReset size={14} /> 30 min
-              </button>
-            </div>
           </section>
 
 

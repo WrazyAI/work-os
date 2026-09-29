@@ -12,6 +12,7 @@
     "notification:default",
     "opener:default",
     "allow-app-commands",
+    "allow-voice-commands",
     "process:allow-restart",
     "stronghold:default",
     "stronghold:allow-remove-store-record",

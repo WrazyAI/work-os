@@ -5,7 +5,7 @@ import { jsonError, requireWorkOsAccess, type WorkOsOrgRole } from "@/lib/work-o
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FEATURES = new Set(["employee_companion", "github_evidence", "ghl_evidence", "screenshot_summaries", "desktop_companion", "seo_mission_control"]);
+const FEATURES = new Set(["employee_companion", "github_evidence", "ghl_evidence", "screenshot_summaries", "desktop_companion", "seo_mission_control", "voice_input"]);
 
 async function adminAccess() {
   return requireWorkOsAccess({ roles: ["admin"] });

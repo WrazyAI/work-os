@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, Plus } from "lucide-react";
+import { ArrowUp, Mic, Plus, Square, X } from "lucide-react";
+import { FadeArc } from "../LoadingUi";
 import { computeMenuPlacement } from "../menuPlacement";
 import { GlideMenu, type GlideRow } from "./GlideMenu";
 import {
@@ -19,12 +20,32 @@ import {
   type WorkOsChatCommand,
   type WorkOsChatSource,
 } from "./core";
+import { formatRecordingClock, type VoiceInput } from "./voiceInput";
+
+/** Bar weights for the live input meter: a real signal, never a decorative
+ * loop, and only mounted while the microphone is open. */
+const VOICE_METER_BARS = [0.45, 0.75, 1, 0.75, 0.45];
+
+function VoiceMeter({ level }: { level: number }) {
+  return (
+    <span className="chat-voice-meter" aria-hidden="true">
+      {VOICE_METER_BARS.map((weight, index) => (
+        <span
+          key={index}
+          className="chat-voice-meter-bar"
+          style={{ height: `${Math.max(3, Math.round(level * weight * 16))}px` }}
+        />
+      ))}
+    </span>
+  );
+}
 
 /**
- * The shared Work OS composer (design §25.11): context (+), @ sources,
+ * The shared Work OS composer (design §7.2, §7.3): context (+), @ sources,
  * / commands, a growing field, an optional labeled footer action, and a dark
- * ink send. Parent owns the draft value and send authority; this owns only
- * menu/disclosure state so both delivery surfaces stay identical.
+ * ink send. Parent owns the draft value, the send authority, and the voice
+ * recorder; this owns menu/disclosure state so both delivery surfaces stay
+ * identical.
  */
 export function ChatComposer({
   value,
@@ -45,6 +66,8 @@ export function ChatComposer({
   plusLabel = "Add Work OS context and commands",
   sweepSignal = 0,
   focusSignal = 0,
+  voice,
+  hotkeyLabel,
   className,
 }: {
   value: string;
@@ -68,6 +91,10 @@ export function ChatComposer({
   sweepSignal?: number;
   /** Increment to focus the field (e.g. Edit on a chat recap card). */
   focusSignal?: number;
+  /** Voice input. Absent or unsupported hides the record affordance. */
+  voice?: VoiceInput;
+  /** Human label for the hold-to-talk shortcut, e.g. "Ctrl + M". */
+  hotkeyLabel?: string;
   className?: string;
 }) {
   const menuId = useId();
@@ -279,7 +306,29 @@ export function ChatComposer({
     }
   };
 
-  const wide = isWideDraft(value, !!footerLeft);
+  const voiceState = voice?.state ?? "idle";
+  const capturing = voiceState === "requesting" || voiceState === "recording";
+  const transcribing = voiceState === "transcribing";
+  const voiceMode = capturing || transcribing;
+  /* The record affordance replaces the send only on an empty draft: the moment
+     there is text to send, sending is the primary action again (and a second
+     input method would compete with it). */
+  const showRecord = !!voice && voice.supported && !voiceMode && !value.trim();
+
+  /* Escape abandons a capture without transcribing it. The field is not
+     mounted while recording, so the shortcut is owned here. */
+  useEffect(() => {
+    if (!voiceMode) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (capturing) voice?.cancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [capturing, voice, voiceMode]);
+
+  const wide = !voiceMode && isWideDraft(value, !!footerLeft);
   const hasFooter = !!footerLeft;
   const menuLabel = menu === "at" ? "Work OS context" : "Work OS commands";
   const activeOptionId = menu && rows[active] ? `${menuId}-option-${active}` : undefined;
@@ -288,6 +337,11 @@ export function ChatComposer({
     : hasFooter
       ? "grid-cols-[36px_minmax(0,1fr)_auto_36px]"
       : "grid-cols-[36px_minmax(0,1fr)_36px]";
+  const voiceStatus = transcribing
+    ? "Transcribing…"
+    : voiceState === "requesting"
+      ? "Waiting for the microphone…"
+      : `${formatRecordingClock(voice?.elapsedMs ?? 0)} / ${formatRecordingClock(voice?.maxMs ?? 0)}`;
 
   return (
     <div ref={rootRef} data-workos-promptbar className={`relative w-full min-w-0 ${className ?? ""}`}>
@@ -329,82 +383,153 @@ export function ChatComposer({
           wide ? "gap-2.5 rounded-[18px] p-3" : "gap-1.5 rounded-[16px] p-1.5"
         }`}
         data-sweep-signal={sweepSignal}
+        data-voice-state={voiceState}
       >
         {sweepSignal > 0 ? <span key={sweepSignal} className="chat-composer-sweep" aria-hidden="true" /> : null}
+        <span className="sr-only" role="status" aria-live="polite">
+          {voiceState === "recording"
+            ? "Recording your voice update"
+            : voiceState === "transcribing"
+              ? "Transcribing your recording"
+              : voice?.receipt
+                ? "Transcribed. Review the text before sending."
+                : ""}
+        </span>
         <div
           className={`relative z-10 grid items-end gap-x-1 gap-y-1.5 ${gridColumns}`}
         >
-          <button
-            type="button"
-            aria-label={plusLabel}
-            aria-expanded={plusOpen}
-            onClick={() => {
-              if (!plusOpen) onPlus?.();
-              setDismissed(false);
-              setPlusOpen((current) => !current);
-              inputRef.current?.focus();
-            }}
-            className={`flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[9px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong ${
-              plusOpen ? "bg-hover text-ink" : ""
-            } ${wide ? "col-start-1 row-start-2" : "col-start-1 row-start-1"}`}
-          >
-            <Plus size={16} strokeWidth={2} aria-hidden="true" />
-          </button>
+          {voiceMode ? (
+            <>
+              {/* The capture row keeps the composer's own grid, so the mode
+                  change never moves the shell. Cancel is tertiary on the
+                  left; stop is the primary action on the right. */}
+              {capturing ? (
+                <button
+                  type="button"
+                  aria-label="Cancel recording"
+                  onClick={() => voice?.cancel()}
+                  className="col-start-1 row-start-1 flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[9px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong"
+                >
+                  <X size={16} strokeWidth={2} aria-hidden="true" />
+                </button>
+              ) : (
+                <span className="col-start-1 row-start-1 size-9" aria-hidden="true" />
+              )}
 
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={value}
-            maxLength={maxLength}
-            autoFocus={autoFocus}
-            onChange={(event) => {
-              onChange(event.target.value);
-              setDismissed(false);
-              setPlusOpen(false);
-            }}
-            onFocus={onFocus}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder}
-            aria-label={ariaLabel}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-haspopup="listbox"
-            aria-expanded={Boolean(menu)}
-            aria-controls={menuId}
-            aria-activedescendant={activeOptionId}
-            className={`min-h-9 min-w-0 w-full resize-none bg-transparent px-1 py-[7px] text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-3 [overflow-wrap:anywhere] ${
-              wide ? "col-span-full col-start-1 row-start-1" : "col-start-2 row-start-1"
-            }`}
-          />
+              <span
+                className="col-start-2 row-start-1 flex min-h-9 min-w-0 items-center gap-2 px-1 text-[11px] text-ink-2"
+                data-voice-status
+              >
+                {capturing ? <VoiceMeter level={voice?.level ?? 0} /> : null}
+                <span className={capturing ? "tabular-nums" : undefined}>{voiceStatus}</span>
+                {capturing ? <span className="text-ink-3">Hold {hotkeyLabel ?? "Ctrl + M"} to talk</span> : null}
+              </span>
 
-          {footerLeft && (
-            <span
-              className={
-                wide
-                  ? "col-start-2 row-start-2 justify-self-start"
-                  : "col-start-3 row-start-1 justify-self-start"
-              }
-            >
-              {footerLeft}
-            </span>
+              {capturing ? (
+                <button
+                  type="button"
+                  aria-label="Stop recording"
+                  onClick={() => voice?.stop()}
+                  className="col-start-3 row-start-1 flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-ink text-white transition-[background-color,color,transform] duration-200 active:scale-[0.96] hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong"
+                >
+                  <Square size={14} strokeWidth={2.4} fill="currentColor" aria-hidden="true" />
+                </button>
+              ) : (
+                <span className="col-start-3 row-start-1 flex size-9 items-center justify-center text-ink-2" aria-hidden="true">
+                  <FadeArc size={16} />
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                aria-label={plusLabel}
+                aria-expanded={plusOpen}
+                onClick={() => {
+                  if (!plusOpen) onPlus?.();
+                  setDismissed(false);
+                  setPlusOpen((current) => !current);
+                  inputRef.current?.focus();
+                }}
+                className={`flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[9px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong ${
+                  plusOpen ? "bg-hover text-ink" : ""
+                } ${wide ? "col-start-1 row-start-2" : "col-start-1 row-start-1"}`}
+              >
+                <Plus size={16} strokeWidth={2} aria-hidden="true" />
+              </button>
+
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={value}
+                maxLength={maxLength}
+                autoFocus={autoFocus}
+                onChange={(event) => {
+                  onChange(event.target.value);
+                  setDismissed(false);
+                  setPlusOpen(false);
+                }}
+                onFocus={onFocus}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                aria-label={ariaLabel}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-haspopup="listbox"
+                aria-expanded={Boolean(menu)}
+                aria-controls={menuId}
+                aria-activedescendant={activeOptionId}
+                className={`min-h-9 min-w-0 w-full resize-none bg-transparent px-1 py-[7px] text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink-3 [overflow-wrap:anywhere] ${
+                  wide ? "col-span-full col-start-1 row-start-1" : "col-start-2 row-start-1"
+                }`}
+              />
+
+              {footerLeft && (
+                <span
+                  className={
+                    wide
+                      ? "col-start-2 row-start-2 justify-self-start"
+                      : "col-start-3 row-start-1 justify-self-start"
+                  }
+                >
+                  {footerLeft}
+                </span>
+              )}
+
+              <button
+                type="button"
+                aria-label={showRecord ? (hotkeyLabel ? `Record a voice update (hold ${hotkeyLabel})` : "Record a voice update") : sendLabel}
+                aria-keyshortcuts={showRecord && hotkeyLabel ? "Control+M" : "Enter"}
+                disabled={showRecord ? false : (!canSend || busy)}
+                onClick={showRecord ? () => voice?.start() : send}
+                className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong disabled:cursor-default ${
+                  wide
+                    ? hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-2"
+                    : hasFooter ? "col-start-4 row-start-1" : "col-start-3 row-start-1"
+                } ${
+                  showRecord
+                    ? "bg-line text-ink-2 hover:bg-hover-2 hover:text-ink"
+                    : canSend && !busy ? "bg-ink text-white hover:-translate-y-px" : "bg-line text-ink-2"
+                }`}
+              >
+                {showRecord
+                  ? <Mic size={16} strokeWidth={2.2} aria-hidden="true" />
+                  : <ArrowUp size={16} strokeWidth={2.4} aria-hidden="true" />}
+              </button>
+            </>
           )}
-
-          <button
-            type="button"
-            aria-label={sendLabel}
-            aria-keyshortcuts="Enter"
-            disabled={!canSend || busy}
-            onClick={send}
-            className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong disabled:cursor-default ${
-              wide
-                ? hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-2"
-                : hasFooter ? "col-start-4 row-start-1" : "col-start-3 row-start-1"
-            } ${canSend && !busy ? "bg-ink text-white hover:-translate-y-px" : "bg-line text-ink-2"}`}
-          >
-            <ArrowUp size={16} strokeWidth={2.4} aria-hidden="true" />
-          </button>
         </div>
       </div>
+
+      {voice?.error ? (
+        <p role="status" className="chat-voice-note" data-voice-error>
+          <span>{voice.error}</span>
+          <button type="button" onClick={() => voice.dismissError()} aria-label="Dismiss voice input message">Dismiss</button>
+        </p>
+      ) : voice?.receipt ? (
+        <p role="status" className="chat-voice-note is-receipt" data-voice-receipt>Transcribed — review it, then send.</p>
+      ) : null}
     </div>
   );
 }

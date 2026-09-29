@@ -1,0 +1,7 @@
+[[permission]]
+identifier = "allow-voice-commands"
+description = "Hold-to-talk registration, driven from the main window's Settings."
+commands.allow = [
+  "voice_hotkey_status",
+  "set_voice_hotkey"
+]

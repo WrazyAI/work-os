@@ -338,7 +338,11 @@ describe("operational visualizations", () => {
     expect(app).not.toContain("Your companion, your boundaries.");
     expect(app).toContain('className="settings-group"');
     expect(app).toContain('className="settings-group danger"');
-    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(2);
+    // Three device switches: start with Windows, automatic update checks, and
+    // the hold-to-talk shortcut. Each one is a real registration, not a stored
+    // wish, so none of them can be a bare checkbox.
+    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(3);
+    expect(app).toContain('title="Hold-to-talk (Ctrl + M)"');
     expect(app).toContain('from "./SettingsSwitch"');
     expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
     const settingSource = readFileSync(resolve(root, "src/Setting.tsx"), "utf8");
@@ -346,6 +350,7 @@ describe("operational visualizations", () => {
     expect(settingSource).toContain('className="setting-action"');
     expect(app).not.toContain('<input type="checkbox" checked={autoStart}');
     expect(app).not.toContain('<input type="checkbox" checked={autoCheckUpdates}');
+    expect(app).not.toContain('<input type="checkbox" checked={voiceHotkeyEnabled}');
     expect(app).toContain('className="status-chip"');
     expect(app).toContain("Sign out of Work OS?");
     expect(styles).toContain(".settings-page");

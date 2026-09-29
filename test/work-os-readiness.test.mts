@@ -32,6 +32,7 @@ function baseInput(): WorkOsReadinessInput {
       screenshotEncryptionConfigured: false,
       cronSecretConfigured: false,
       worktivityConfigured: true,
+      falConfigured: true,
       githubWebhookConfigured: false,
       ghlWebhookConfigured: false,
     },

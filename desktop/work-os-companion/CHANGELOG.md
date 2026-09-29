@@ -25,6 +25,10 @@ they change what the employee sees or does.
 ## Unreleased
 
 - Loom recordings now bring their own transcript into your plan and EOD draft — no copy-paste needed.
+- Hold Ctrl + M anywhere to record a voice update — release it and what you said is typed into the update box.
+- The update box shows a microphone while it is empty. Tap it to record instead of typing, and tap stop to finish.
+- A voice update is only ever typed into the box, never sent: check it, edit it, then send it yourself.
+- Settings has a Hold-to-talk switch, and says so honestly when another app already owns Ctrl + M.
 
 ## 0.3.67
 

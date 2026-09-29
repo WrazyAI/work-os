@@ -73,6 +73,7 @@ export interface WorkOsReadinessInput {
     screenshotEncryptionConfigured: boolean;
     cronSecretConfigured: boolean;
     worktivityConfigured: boolean;
+    falConfigured: boolean;
     githubWebhookConfigured: boolean;
     ghlWebhookConfigured: boolean;
   };
@@ -213,6 +214,7 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
     github_evidence: asFlag(flags.github_evidence),
     ghl_evidence: asFlag(flags.ghl_evidence),
     screenshot_summaries: asFlag(flags.screenshot_summaries),
+    voice_input: asFlag(flags.voice_input),
   };
   const issues: WorkOsReadinessIssue[] = [];
   const addIssue = (code: string, severity: WorkOsReadinessSeverity, count: number, message: string) => {
@@ -241,6 +243,7 @@ export function evaluateWorkOsReadiness(input: WorkOsReadinessInput): WorkOsRead
   addIssue("runtime.openai_missing", "blocked", features.employee_companion && !input.runtime.openAiConfigured ? 1 : 0, "OPENAI_API_KEY is required for Work OS proposal generation.");
   addIssue("runtime.provider_secret_missing", "blocked", input.runtime.providerCredentialsPresent && !input.runtime.providerSecretConfigured ? 1 : 0, "WORK_OS_PROVIDER_SECRET_KEY is required to decrypt stored provider credentials.");
   addIssue("runtime.worktivity_key_missing", "needs_setup", requiredProviders.includes("worktivity") && !input.runtime.worktivityConfigured ? 1 : 0, "WORKTIVITY_API_KEY is required for Worktivity evidence synchronization.");
+  addIssue("runtime.fal_key_missing", "needs_setup", features.voice_input && !input.runtime.falConfigured ? 1 : 0, "FAL_API_KEY is required for Work OS voice input transcription.");
   addIssue("runtime.github_webhook_missing", "needs_setup", features.github_evidence && !input.runtime.githubWebhookConfigured ? 1 : 0, "WORK_OS_GITHUB_WEBHOOK_SECRET is required for GitHub evidence ingestion.");
   addIssue("runtime.ghl_webhook_missing", "needs_setup", features.ghl_evidence && !input.runtime.ghlWebhookConfigured ? 1 : 0, "WORK_OS_GHL_WEBHOOK_PUBLIC_KEY is required for GoHighLevel evidence ingestion.");
   addIssue("runtime.screenshot_encryption_missing", "blocked", features.screenshot_summaries && !input.runtime.screenshotEncryptionConfigured ? 1 : 0, "WORK_OS_SCREENSHOT_ENCRYPTION_KEY is required for retained screenshots.");

@@ -84,6 +84,7 @@ async function auditOrganization(db: Db, organization: { id: string; name: strin
       screenshotEncryptionConfigured: Boolean(process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY),
       cronSecretConfigured: Boolean(process.env.CRON_SECRET),
       worktivityConfigured: worktivityReady,
+      falConfigured: Boolean(process.env.FAL_API_KEY),
       githubWebhookConfigured: Boolean(process.env.WORK_OS_GITHUB_WEBHOOK_SECRET),
       ghlWebhookConfigured: Boolean(process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY),
     },

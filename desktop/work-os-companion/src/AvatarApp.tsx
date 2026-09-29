@@ -2,6 +2,7 @@ import { hasPendingMascotApproval } from "./mascotApproval";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
+import { useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -192,6 +193,23 @@ export default function AvatarApp(): React.ReactElement {
   const [activityPreparing, setActivityPreparing] = useState(false);
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  /* Voice input (design §7.3): the transcript lands in the draft for review;
+     nothing is ever sent by the recorder itself. */
+  const voice = useVoiceInput({
+    onTranscript: (text) => {
+      setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+      setAvatarTab("chat");
+      setRecapEditMode(false);
+      void toggleExpanded(true);
+      setComposerFocusSignal((signal) => signal + 1);
+    },
+    onRecordingStart: () => {
+      setAvatarTab("chat");
+      void toggleExpanded(true);
+    },
+  });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
   const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
@@ -475,6 +493,19 @@ export default function AvatarApp(): React.ReactElement {
     void secureState.settings().then((settings) => applyAppearance(normalizeAppearance(settings))).catch(() => undefined);
     void listen<{ textSize?: unknown; mascotSize?: unknown }>(APPEARANCE_EVENT, (event) => applyAppearance(normalizeAppearance(event.payload))).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
+  }, []);
+
+  // Hold-to-talk reaches whichever companion window is on screen: Rust routes
+  // the press/release here when the floating window is the visible one.
+  useEffect(() => {
+    const unlisteners: Array<() => void> = [];
+    void listen("work-os://voice/start", () => voiceRef.current.start("hotkey"))
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    void listen("work-os://voice/stop", () => voiceRef.current.stop())
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    void listen("work-os://voice/cancel", () => voiceRef.current.cancel())
+      .then((fn) => unlisteners.push(fn)).catch(() => undefined);
+    return () => unlisteners.forEach((fn) => fn());
   }, []);
 
   const avatarConversationScope = desktopSession?.organizationId && facts.personId && facts.shiftDate
@@ -1554,6 +1585,8 @@ export default function AvatarApp(): React.ReactElement {
             <WorkOsPromptBar
               sweepSignal={sweepSignal}
               focusSignal={composerFocusSignal}
+              voice={voice}
+              hotkeyLabel={VOICE_HOTKEY_LABEL}
               value={input}
               onChange={setInput}
               onSend={() => void (composerTarget === "agenda" ? submitAgenda() : sendAvatarUpdate())}

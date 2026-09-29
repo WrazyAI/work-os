@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { voiceInputConfigured } from "@/lib/aiTranscribe";
 import { worktivityConfigured } from "@/lib/worktivity";
 import { niftyOrganizationConfigStatus } from "@/lib/integrations/nifty";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -84,6 +85,7 @@ export async function GET(req: Request) {
         screenshotEncryptionConfigured: !!process.env.WORK_OS_SCREENSHOT_ENCRYPTION_KEY,
         cronSecretConfigured: !!process.env.CRON_SECRET,
         worktivityConfigured: worktivityConfigured(),
+        falConfigured: voiceInputConfigured(),
         githubWebhookConfigured: !!process.env.WORK_OS_GITHUB_WEBHOOK_SECRET,
         ghlWebhookConfigured: !!process.env.WORK_OS_GHL_WEBHOOK_PUBLIC_KEY,
       },

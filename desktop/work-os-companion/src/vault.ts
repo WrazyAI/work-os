@@ -11,6 +11,8 @@ export interface WorkOsSettings {
   apiBase: string;
   /** Launch update check. Absent historically means on. */
   autoCheckUpdates: boolean;
+  /** Hold-to-talk shortcut (`Ctrl + M`). Absent historically means on. */
+  voiceHotkey: boolean;
   /** Accessibility appearance, per device; see `appearance.ts`. */
   textSize: TextSize;
   mascotSize: MascotSize;
@@ -198,23 +200,25 @@ export const secureState = {
   savePendingAuth: (value: { verifier: string; state: string; apiBase: string }) => isTauri() ? set("pending-auth", value) : Promise.resolve(),
   clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
   settings: async (): Promise<WorkOsSettings> => {
-    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true, ...APPEARANCE_DEFAULTS };
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
+    if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true, voiceHotkey: true, ...APPEARANCE_DEFAULTS };
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
     const autoCheckUpdates = settings?.autoCheckUpdates !== false;
+    const voiceHotkey = settings?.voiceHotkey !== false;
     const appearance = normalizeAppearance(settings);
-    try { return { autoCheckUpdates, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
+    try { return { autoCheckUpdates, voiceHotkey, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
     catch {
-      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates, ...appearance };
+      const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates, voiceHotkey, ...appearance };
       await set("settings", fallback);
       return fallback;
     }
   },
-  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; textSize?: TextSize; mascotSize?: MascotSize }) => {
+  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize }) => {
     if (!isTauri()) return;
-    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
+    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
     await set("settings", {
       apiBase: httpsOrigin(settings.apiBase ?? current?.apiBase ?? defaultApiBase),
       autoCheckUpdates: settings.autoCheckUpdates ?? current?.autoCheckUpdates !== false,
+      voiceHotkey: settings.voiceHotkey ?? current?.voiceHotkey !== false,
       ...appearanceFromChange(normalizeAppearance(current), settings),
     });
   },
