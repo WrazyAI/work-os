@@ -44,6 +44,7 @@ export function ChatComposer({
   sendLabel = "Send",
   plusLabel = "Add Work OS context and commands",
   sweepSignal = 0,
+  focusSignal = 0,
   className,
 }: {
   value: string;
@@ -65,6 +66,8 @@ export function ChatComposer({
   plusLabel?: string;
   /** Increment to replay the sweep (e.g. when a reply settles). */
   sweepSignal?: number;
+  /** Increment to focus the field (e.g. Edit on a chat recap card). */
+  focusSignal?: number;
   className?: string;
 }) {
   const menuId = useId();
@@ -113,6 +116,18 @@ export function ChatComposer({
     input.style.height = `${Math.min(Math.max(contentHeight, 36), 100)}px`;
     input.style.overflowY = contentHeight > 100 ? "auto" : "hidden";
   }, [value, fitKey]);
+
+  /* Edit on a chat recap card hands editing here: focus the field when asked,
+     with the caret at the end of any existing draft. */
+  useEffect(() => {
+    if (!focusSignal) return;
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+    } catch { /* caret placement is cosmetic */ }
+  }, [focusSignal]);
 
   /* Refit when the surface itself changes size or late fonts load. */
   useEffect(() => {

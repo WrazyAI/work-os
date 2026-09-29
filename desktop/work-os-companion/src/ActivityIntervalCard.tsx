@@ -79,6 +79,11 @@ interface ActivityIntervalCardProps {
   deciding?: boolean;
   defaultEvidenceOpen?: boolean;
   resolveSrc?: PreviewResolver;
+  /** Chat-bubble presentation: a lead-in line ("This is what we got from your
+   * last hour") and an Edit action that hands editing to the composer instead
+   * of expanding an inline field. */
+  leadIn?: string;
+  onEdit?: () => void;
 }
 
 /** One Activity Interval Review card: headline, evidence-bounded detail,
@@ -92,6 +97,8 @@ export function ActivityIntervalCard({
   deciding = false,
   defaultEvidenceOpen = false,
   resolveSrc,
+  leadIn,
+  onEdit,
 }: ActivityIntervalCardProps) {
   const [feedback, setFeedback] = useState("");
   const [amending, setAmending] = useState(false);
@@ -151,6 +158,7 @@ export function ActivityIntervalCard({
         </span>
         <span className={`chat-activity-status is-${interval.reviewStatus}`}>{STATUS_LABEL[interval.reviewStatus]}</span>
       </header>
+      {leadIn ? <p className="chat-activity-lead">{leadIn}</p> : null}
       {interval.headline ? <p className="chat-activity-headline">{interval.headline}</p> : null}
       {interval.detail ? <p className="chat-activity-detail">{interval.detail}</p> : null}
       {interval.reviewStatus === "amended" && interval.employeeFeedback ? (
@@ -161,7 +169,17 @@ export function ActivityIntervalCard({
       ) : null}
 
       {interval.reviewStatus === "inferred" && onDecide ? (
-        amending ? (
+        onEdit ? (
+          <>
+            <p className="chat-activity-ask">Sounds good?</p>
+            <div className="chat-activity-actions">
+              <button type="button" className="chat-activity-confirm" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
+                {deciding ? "Saving…" : "Looks good"}
+              </button>
+              <button type="button" className="chat-activity-quiet" disabled={deciding} onClick={onEdit}>Edit</button>
+            </div>
+          </>
+        ) : amending ? (
           <div className="chat-activity-amend">
             <label className="sr-only" htmlFor={`activity-note-${interval.id}`}>Add or correct this recap</label>
             <textarea

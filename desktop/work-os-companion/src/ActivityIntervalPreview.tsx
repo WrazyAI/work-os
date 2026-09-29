@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { ActivityIntervalList } from "./ActivityIntervalList";
 import { workOsKeys } from "./queryClient";
 import type { ActivityInterval, ActivityIntervalEvidence } from "./types";
@@ -111,6 +112,7 @@ const fixtures: ActivityInterval[] = [
 
 export default function ActivityIntervalPreview() {
   const [intervals, setIntervals] = useState(fixtures);
+  const [editRequested, setEditRequested] = useState(false);
   // Seed the cache before the list mounts: a query with no data would start a
   // real fetch and its rejection could override the fixture.
   const client = useMemo(() => {
@@ -139,6 +141,20 @@ export default function ActivityIntervalPreview() {
   return (
     <QueryClientProvider client={client}>
       <div className="avatar-window" style={{ width: 400, minHeight: "100vh", padding: 12, background: "var(--color-canvas, #eef1eb)" }}>
+        <ActivityIntervalCard
+          interval={intervals[0]}
+          timezone="UTC"
+          leadIn="This is what we got from your last hour"
+          onDecide={decide}
+          onEdit={() => setEditRequested(true)}
+          resolveSrc={resolveSrc}
+        />
+        {editRequested ? (
+          <div className="avatar-recap-edit" style={{ marginTop: 8 }}>
+            <span>Editing your recap</span>
+            <button type="button" onClick={() => setEditRequested(false)}>Cancel</button>
+          </div>
+        ) : null}
         <ActivityIntervalList
           date={DATE}
           enabled

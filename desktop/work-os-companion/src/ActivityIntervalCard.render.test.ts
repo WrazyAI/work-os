@@ -47,6 +47,24 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("Inferred from your screenshots");
   });
 
+  it("renders the chat bubble with a lead-in and Looks good / Edit actions", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: baseInterval,
+      timezone: "UTC",
+      leadIn: "This is what we got from your last hour",
+      onDecide: async () => undefined,
+      onEdit: () => undefined,
+    }));
+    expect(markup).toContain("This is what we got from your last hour");
+    expect(markup).toContain("Sounds good?");
+    expect(markup).toContain("Looks good");
+    expect(markup).toContain(">Edit<");
+    expect(markup).toContain("Inferred from your screenshots");
+    expect(markup).not.toContain("Looks right");
+    expect(markup).not.toContain("Add or correct");
+    expect(markup).not.toContain("<textarea");
+  });
+
   it("lists the exact analyzed frames in a collapsed evidence disclosure", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
     expect(markup).toContain("Evidence · 3 screenshots");
