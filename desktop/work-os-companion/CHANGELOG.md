@@ -28,6 +28,7 @@ they change what the employee sees or does.
 
 - Work OS now notices when Worktivity starts or ends your workday and updates the dashboard within a minute — no manual refresh needed.
 - While it waits for your activity, the dashboard says "Checking your activity…" and you can still clock in, pause, or clock out yourself.
+- Your activity recap in chat now asks “Sounds good?” — tap Looks good to confirm it, or Edit to correct it yourself in the chat box.
 
 ## 0.3.64
 
