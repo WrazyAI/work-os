@@ -1,6 +1,7 @@
 import { formatWorkOsDateTime } from "./dateFormat";
 import type { AttendanceProjection, DayData, OnboardingSchedule, WorkSession } from "./types";
 import type { ShiftPulse } from "./shiftPulse";
+import type { AttendanceWatchExpectation } from "./attendanceWatch";
 import { isOverdueTask, safeTaskText, type TaskRow } from "./taskWorkspace";
 
 export type DashboardState = "off_shift" | "ready" | "active" | "paused" | "observed";
@@ -20,6 +21,9 @@ export interface WorkdayDashboardModel {
   };
   pulse: ShiftPulse;
   attendance: AttendanceProjection | null;
+  /** What the attendance watch is currently waiting to observe, if anything.
+   * Surfaces show a quiet "checking activity" note while it is non-null. */
+  activityWatch: AttendanceWatchExpectation;
   focus: { text: string; source: string };
   metrics: {
     planned: number;
@@ -47,6 +51,7 @@ export interface DashboardModelInput {
   timezone?: string | null;
   attendance?: AttendanceProjection | null;
   pulse: ShiftPulse;
+  activityWatch?: AttendanceWatchExpectation;
   tasks: TaskRow[];
   carryover: TaskRow[];
   reviews: number;
@@ -257,6 +262,7 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
     },
     pulse: input.pulse,
     attendance,
+    activityWatch: input.activityWatch ?? null,
     focus: { text: focusText, source: focusSource },
     metrics: {
       planned: input.tasks.length,

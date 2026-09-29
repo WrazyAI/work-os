@@ -76,6 +76,8 @@ import SidebarNav, { type SidebarView } from "./SidebarNav";
 import { TaskDateNavigator } from "./TaskDateNavigator";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
+import { attendanceWatchExpectation, attendanceWatchInput } from "./attendanceWatch";
+import { useAttendanceWatch } from "./useAttendanceWatch";
 import "./plan-insights.css";
 import "./insight-charts.css";
 
@@ -740,6 +742,17 @@ export default function App() {
     setRefreshing(true);
     try { return await refreshInternal(options); } finally { setRefreshing(false); }
   }, [refreshInternal]);
+
+  // Activity can clock an employee in or out without anyone touching Work OS.
+  // Re-check Worktivity on the adaptive cadence (30s while a transition is
+  // expected, 60s once steady) and refresh the workspace only when the tracked
+  // state actually moved, then relay the change to the floating companion.
+  const onAttendanceChange = useCallback(() => {
+    invalidateDayData();
+    void refresh({ dayOnly: true }).catch(() => undefined);
+    void emit("work-os://main-day-changed");
+  }, [invalidateDayData, refresh]);
+  useAttendanceWatch({ enabled: signedIn && !syncBypass, input: attendanceWatchInput(visibleDay), onChange: onAttendanceChange });
 
   /** A conflicting write means the workspace holds an authoritative newer plan;
    * drop the rejected local draft and render the server record instead of
@@ -1897,6 +1910,7 @@ export default function App() {
     schedule: dashboardSchedule,
     timezone: dashboardTimezone,
     attendance: visibleDay?.attendance ?? null,
+    activityWatch: attendanceWatchExpectation(attendanceWatchInput(visibleDay), pulseNow.getTime()),
     pulse,
     tasks: visibleTodayTasks,
     carryover: unfinishedCarryOver.map(({ task }) => task),
@@ -1906,7 +1920,7 @@ export default function App() {
       ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
       : goalSuggestion ? "Suggested from today’s tasks" : "Task record",
     niftySync: visibleDay?.niftySync,
-  }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
+  }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, pulseNow, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
   const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {

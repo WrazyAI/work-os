@@ -599,6 +599,30 @@ and persists a change (rolling the visible state back if the save fails) and
 broadcasts it with `work-os://appearance-changed`; the floating companion
 window reads the stored value on boot and follows the broadcast live.
 
+### 8.7 Attendance freshness: activity-driven clock-in and clock-out
+
+Worktivity owns attendance: activity alone can start or close a workday. Work OS
+must reflect a provider-observed transition without waiting for a manual
+refresh.
+
+- Clients poll `POST /api/work-os/attendance/observe` every **30 seconds while
+  a transition is expected** — from two minutes before a startable shift with
+  no mirrored session, and while an active session runs past its scheduled end
+  or the provider has already observed the close — and every **60 seconds once
+  the state is steady**. The five-minute background reconciliation remains for
+  devices with no window open.
+- The endpoint converges the active session from fresh provider activity (the
+  same path a full day refresh takes) and returns whether the tracked
+  attendance-and-session signature actually moved. Only a real transition
+  refreshes the workspace; the main window relays it so the floating companion
+  and every workspace view converge together.
+- While a transition is pending, the dashboard shows one quiet line
+  (`Checking your activity…`) beside the state copy. The manual Clock in,
+  Pause/Resume, and Clock out controls stay available the whole time, and
+  manual clock actions keep their existing Worktivity confirmation flow.
+- Provider reads are cached for 25 seconds and single-flight per employee, so
+  two windows polling together never stampede the provider.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:

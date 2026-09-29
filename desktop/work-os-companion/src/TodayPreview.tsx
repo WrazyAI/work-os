@@ -39,6 +39,7 @@ export default function TodayPreview() {
   const pendingMode = params.get("pending");
   const pendingRows: TaskRow[] = pendingMode ? [{ id: "pending-dash", title: "Draft the onboarding checklist", description: "Optimistic add awaiting Nifty confirmation.", completed: false, due_date: "2026-08-25", pending_status: pendingMode, pending_error: pendingMode === "failed" ? "Nifty timed out" : undefined }] : [];
   const worktivityControlMode = params.get("worktivity-control");
+  const watchMode = params.get("watch") === "clock-out" ? "clock-out" as const : params.get("watch") === "clock-in" ? "clock-in" as const : null;
   const [worktivityControlPreview, setWorktivityControlPreview] = useState<WorktivityControlNoticeState | null>(() =>
     worktivityControlMode === "pending"
       ? { status: "pending", message: "Worktivity has not confirmed the change yet. This preview has not contacted a provider account." }
@@ -66,7 +67,7 @@ export default function TodayPreview() {
     const attendance = { source: "worktivity" as const, state: "off_shift" as const, status: "yet_to_start" as const, observedAt: "2026-08-26T12:08:00Z", clockedInAt: null, clockedOutAt: null, stale: false, fallbackAllowed: false, message: "Worktivity reports no active attendance; Work OS attendance remains explicit." };
     const pulse = shiftPulse(null, shift, now, true, attendance);
     const previewTasks = [...pendingRows, ...tasks];
-    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse, tasks: previewTasks, carryover: previousTasks, reviews: 0, focus: goal, focusSource: "Written by you", niftySync: { fresh: true, syncedAt: "2026-08-26T12:06:00Z" } }, now.getTime());
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, activityWatch: watchMode, pulse, tasks: previewTasks, carryover: previousTasks, reviews: 0, focus: goal, focusSource: "Written by you", niftySync: { fresh: true, syncedAt: "2026-08-26T12:06:00Z" } }, now.getTime());
     const submitAgendaUpdate = () => {
       const text = input.trim();
       if (!text) return;
@@ -80,7 +81,7 @@ export default function TodayPreview() {
   const activeSession = { id: "preview-session", state: "active" as const, scheduled_starts_at: activeShift.startsAt, scheduled_ends_at: activeShift.endsAt, clocked_in_at: activeShift.startsAt, clocked_out_at: null, paused_seconds: 0 };
   const activePulse = shiftPulse(activeSession, activeShift, activeNow, false, activeAttendance);
   const activeTasks = [...pendingRows, ...tasks];
-  const activeModel = buildWorkdayDashboardModel({ active: true, paused: false, observedOnly, currentDate: "2026-08-25", shift: activeShift, attendance: activeAttendance, pulse: activePulse, tasks: activeTasks, carryover: [...previousTasks, ...otherTasks], reviews: 0, focus: goal, focusSource: "Your focus note", niftySync: { fresh: true, syncedAt: "2026-08-25T13:42:00Z" } }, activeNow.getTime());
+  const activeModel = buildWorkdayDashboardModel({ active: true, paused: false, observedOnly, currentDate: "2026-08-25", shift: activeShift, attendance: activeAttendance, activityWatch: watchMode, pulse: activePulse, tasks: activeTasks, carryover: [...previousTasks, ...otherTasks], reviews: 0, focus: goal, focusSource: "Your focus note", niftySync: { fresh: true, syncedAt: "2026-08-25T13:42:00Z" } }, activeNow.getTime());
   return <div className="workspace today-preview">
     <PreviewRail />
     <section className="stage"><header className="masthead"><div><p>2026-08-25</p><h1>Today</h1></div><div className="mast-actions"><span className="provider">Nifty live · {tasks.filter((task) => !task.completed).length} open</span><button className="avatar">DZ</button></div></header>

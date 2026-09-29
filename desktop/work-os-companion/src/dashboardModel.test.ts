@@ -124,4 +124,9 @@ describe("buildWorkdayDashboardModel", () => {
     });
     expect(fallOverlap?.startsAt).toBe("2026-11-01T05:30:00.000Z");
   });
+
+  it("carries the attendance watch expectation into the model", () => {
+    expect(buildWorkdayDashboardModel(input({ activityWatch: "clock-in" }), Date.parse("2026-09-20T12:00:00Z")).activityWatch).toBe("clock-in");
+    expect(buildWorkdayDashboardModel(input(), Date.parse("2026-09-20T12:00:00Z")).activityWatch).toBeNull();
+  });
 });

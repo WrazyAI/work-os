@@ -68,3 +68,19 @@ export function projectWorktivityAttendanceWithActivity(
 export function unknownAttendance(message: string, observedAt = new Date().toISOString()): AttendanceProjection {
   return { source: "unknown", state: "unknown", status: "unknown", observedAt, clockedInAt: null, clockedOutAt: null, stale: false, fallbackAllowed: true, message };
 }
+
+/** The meaningful, non-volatile attendance and session state. Clients compare
+ * this signature across polls so a routine provider read that observed nothing
+ * new never triggers a full workspace refresh. `observedAt` is deliberately
+ * excluded: it changes on every read. */
+export function attendanceSignature(attendance: Pick<AttendanceProjection, "status" | "state" | "clockedInAt" | "clockedOutAt"> | null | undefined, session: Record<string, unknown> | null | undefined): string {
+  return [
+    attendance?.status ?? "",
+    attendance?.state ?? "",
+    attendance?.clockedInAt ?? "",
+    attendance?.clockedOutAt ?? "",
+    session?.state ?? "",
+    session?.clocked_in_at ?? "",
+    session?.clocked_out_at ?? "",
+  ].join("|");
+}

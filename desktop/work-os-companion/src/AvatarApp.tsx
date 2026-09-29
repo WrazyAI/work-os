@@ -6,6 +6,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { secureState } from "./vault";
+import { useAttendanceWatch } from "./useAttendanceWatch";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
@@ -429,6 +430,19 @@ export default function AvatarApp(): React.ReactElement {
     const poll = setInterval(() => { void loadDay(); }, DAY_POLL_MS);
     return () => clearInterval(poll);
   }, [avatarFixture, loadDay]);
+
+  // Worktivity can clock the employee in or out from activity alone. Watch on
+  // the shared adaptive cadence, reload only when something actually moved,
+  // and tell the main window so every surface converges together.
+  const onAttendanceChange = useCallback(() => {
+    void loadDay(true);
+    void emit("work-os://avatar-day-changed");
+  }, [loadDay]);
+  useAttendanceWatch({
+    enabled: connected === true,
+    input: { sessionState: facts.sessionState, shiftStartsAt: facts.shiftStartsAt, shiftEndsAt: facts.shiftEndsAt },
+    onChange: onAttendanceChange,
+  });
 
   // The main and companion windows own separate React trees. Refresh promptly
   // after a main-window write or sign-in instead of waiting for the minute poll.

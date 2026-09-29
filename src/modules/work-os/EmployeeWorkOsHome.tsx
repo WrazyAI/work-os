@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "@/modules/work-os/timezones";
+import { attendanceWatchExpectation, attendanceWatchInput, attendanceWatchInterval } from "@/modules/work-os/attendance-watch";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { lateReasonRequired } from "@/lib/work-os-late-start";
 import { EmployeeEodOutstandingBell, calendarDateLabel, type OutstandingEodDay, type OutstandingEodsResponse } from "@/modules/work-os/EmployeeEodOutstanding";
@@ -157,6 +158,23 @@ export default function EmployeeWorkOsHome() {
     queryFn: () => fetchJson("/api/work-os/me/day"),
     refetchInterval: 60_000,
   });
+  // Activity alone can clock someone in or out. Re-check Worktivity on the
+  // adaptive cadence and refresh the day only when the tracked state moved.
+  const attendanceWatch = useQuery<{ changed?: boolean }>({
+    queryKey: ["work-os", "attendance-watch"],
+    queryFn: () => fetchJson("/api/work-os/attendance/observe", { method: "POST" }),
+    enabled: !!day.data,
+    refetchInterval: () => attendanceWatchInterval(attendanceWatchInput(day.data), Date.now()),
+    staleTime: 0,
+    retry: false,
+  });
+  const attendanceWatchSeen = useRef(0);
+  useEffect(() => {
+    if (!attendanceWatch.dataUpdatedAt || attendanceWatchSeen.current === attendanceWatch.dataUpdatedAt) return;
+    attendanceWatchSeen.current = attendanceWatch.dataUpdatedAt;
+    if (attendanceWatch.data?.changed) void queryClient.invalidateQueries({ queryKey: ["work-os", "my-day"] });
+  }, [attendanceWatch.data, attendanceWatch.dataUpdatedAt, queryClient]);
+  const watchExpectation = attendanceWatchExpectation(attendanceWatchInput(day.data), Date.now());
   const historicalWorkspace = useQuery<TaskDayResponse>({
     queryKey: ["work-os", "task-day", selectedTaskDate],
     queryFn: () => fetchJson(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(selectedTaskDate)}&limit=100`),
@@ -503,6 +521,7 @@ export default function EmployeeWorkOsHome() {
                 {day.data?.attendance?.observedAt ? <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">Last observed {formatTime(day.data.attendance.observedAt, timezone)}{day.data?.attendance?.clockedOutAtInferred ? " · clock-out boundary inferred from this observation" : ""}</p> : null}
                 <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">{workSession ? `Work OS session: ${operationLabel(String(workSession.state))}.` : "No Work OS session is currently mirrored."} Clock in, pause, resume, and clock out from the Windows Work OS Companion; it opens Worktivity if needed and waits for Worktivity to confirm each change.</p>
                 {day.data?.attendance?.message ? <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">{day.data.attendance.message}</p> : null}
+                {watchExpectation ? <p className="mt-2 text-[11px] leading-5 font-semibold" style={{ color: "var(--accent)" }} role="status">{watchExpectation === "clock-in" ? "Checking your activity… Work OS will clock you in as soon as Worktivity sees you working." : "Checking your activity… Work OS will close the day when Worktivity observes your clock-out."}</p> : null}
               </div>
               <span className="border px-2 py-1 text-[10px] font-semibold uppercase text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }}>{sessionIsActive ? "Mirrored session" : "Status only"}</span>
             </div>

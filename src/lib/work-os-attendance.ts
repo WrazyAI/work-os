@@ -2,15 +2,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { activeSession, clockIn, insertHistoricalWorktivitySession, syncWorktivitySession, transitionSession } from "@/lib/work-os-workday";
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
-import { projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
+import { attendanceSignature, projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import { worktivityClockOutBoundary } from "@/modules/work-os/worktivity-control";
 
-const CACHE_MS = 55_000;
+/** How long a provider read stays authoritative for interactive checks. The
+ * companion and dashboard re-check at 30s while a clock transition is expected,
+ * so this window must stay below that cadence; the 5-minute cron still filters
+ * background work independently. */
+const CACHE_MS = 25_000;
 const ATTENDANCE_PROVIDER_TIMEOUT_MS = 12_000;
 const STALE_OBSERVATION_MS = 6 * 60_000;
 const POLL_INTERVAL_MS = 5 * 60_000;
-const cache = new Map<string, { fetchedAt: number; projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }>();
+type EmployeeAttendanceRead = { projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null };
+const cache = new Map<string, EmployeeAttendanceRead & { fetchedAt: number }>();
+/** One provider read per employee-local day at a time, so two windows polling
+ * at the same moment cannot stampede Worktivity. */
+const inflight = new Map<string, Promise<EmployeeAttendanceRead>>();
 const db = () => createAdminClient();
 
 /** Reconstruct a provider session when Worktivity omits ClockIn timestamps. */
@@ -130,13 +138,7 @@ export function worktivityLocalDayBounds(timezone: string, at: Date) {
   };
 }
 
-async function employeeAttendance(employeeId: string, timezone: string, observedAt: string, forceRefresh = false): Promise<{ projection: AttendanceProjection; employee: WtEmployee | null; latestActivity: WtActivityLog | null; activityLogs: WtActivityLog[]; sessionStartAt: string | null }> {
-  const bounds = worktivityLocalDayBounds(timezone, new Date(observedAt));
-  const cacheKey = `${employeeId}:${timezone}:${bounds.date}`;
-  const previous = cache.get(cacheKey);
-  if (!forceRefresh && previous && Date.now() - previous.fetchedAt < CACHE_MS) {
-    return { employee: previous.employee, projection: { ...previous.projection, observedAt }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
-  }
+async function fetchEmployeeAttendance(employeeId: string, observedAt: string, cacheKey: string, bounds: { start: string; end: string }, previous: (EmployeeAttendanceRead & { fetchedAt: number }) | undefined, forceRefresh: boolean): Promise<EmployeeAttendanceRead> {
   try {
     // Fetch the full employee-local day (including periods before Work OS
     // launched), with real UTC boundaries and unbounded provider pagination.
@@ -169,6 +171,24 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
   } catch (error) {
     if (!forceRefresh && previous) return { employee: previous.employee, projection: { ...previous.projection, observedAt, stale: true, fallbackAllowed: true, message: "Worktivity could not be refreshed; showing the last observed status." }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
     return { employee: null, projection: unknownAttendance(error instanceof Error ? error.message : "Worktivity attendance is unavailable.", observedAt), latestActivity: null, activityLogs: [], sessionStartAt: null };
+  }
+}
+
+async function employeeAttendance(employeeId: string, timezone: string, observedAt: string, forceRefresh = false): Promise<EmployeeAttendanceRead> {
+  const bounds = worktivityLocalDayBounds(timezone, new Date(observedAt));
+  const cacheKey = `${employeeId}:${timezone}:${bounds.date}`;
+  const previous = cache.get(cacheKey);
+  if (!forceRefresh && previous && Date.now() - previous.fetchedAt < CACHE_MS) {
+    return { employee: previous.employee, projection: { ...previous.projection, observedAt }, latestActivity: previous.latestActivity, activityLogs: previous.activityLogs, sessionStartAt: previous.sessionStartAt };
+  }
+  const pending = inflight.get(cacheKey);
+  if (pending) return pending;
+  const request = fetchEmployeeAttendance(employeeId, observedAt, cacheKey, bounds, previous, forceRefresh);
+  inflight.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (inflight.get(cacheKey) === request) inflight.delete(cacheKey);
   }
 }
 
@@ -288,6 +308,18 @@ export async function observeWorktivityAttendance(access: WorkOsAccess, at = new
   }
   session = await attachObservedAttendance(access, session, projection);
   return { attendance: projection, session };
+}
+
+/** Interactive attendance check for clients that poll at a low cadence without
+ * the full day payload. It converges the session from fresh provider activity
+ * (the same path a full refresh takes) and reports whether the tracked state
+ * actually moved, so clients refresh their workspace only on a real transition. */
+export async function observeAttendanceChange(access: WorkOsAccess, at = new Date()) {
+  const beforeAttendance = await loadPersistedWorktivityAttendance(access, at);
+  const beforeSession = await activeSession(access);
+  const result = await observeWorktivityAttendance(access, at);
+  const changed = attendanceSignature(beforeAttendance, beforeSession) !== attendanceSignature(result.attendance, result.session);
+  return { attendance: result.attendance, session: result.session, changed };
 }
 
 /** Refresh a just-closed Work OS session without reopening or otherwise

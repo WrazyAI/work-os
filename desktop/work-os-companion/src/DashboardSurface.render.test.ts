@@ -64,4 +64,26 @@ describe("dashboard surfaces", () => {
     const observedMarkup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model: observedModel, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", observedOnly: true, canPause: false, canClockOut: false, onAddTask: noop }));
     expect(observedMarkup).toContain("03:46");
   });
+
+  it("shows a quiet activity-watch note while a clock-in is expected and keeps the manual control", () => {
+    const now = Date.parse("2026-08-26T15:30:00Z");
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, activityWatch: "clock-in", pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], reviews: 0, focus: "Make the first task visible", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [task], currentDate: "2026-08-26", onClockIn: noop }));
+
+    expect(markup).toContain('class="dashboard-activity-watch"');
+    expect(markup).toContain("Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.");
+    expect(markup).toContain("Clock in");
+  });
+
+  it("notes the provider-pending clock-out on the active dashboard", () => {
+    const now = Date.parse("2026-08-26T17:10:00Z");
+    const activeShift = { startsAt: "2026-08-26T09:00:00Z", endsAt: "2026-08-26T17:00:00Z", timezone: "UTC", breaks: [] };
+    const activeAttendance = { ...attendance, state: "active" as const, status: "working" as const, clockedInAt: activeShift.startsAt, message: "Activity observed" };
+    const activeSession = { id: "session-1", state: "active" as const, scheduled_starts_at: activeShift.startsAt, scheduled_ends_at: activeShift.endsAt, clocked_in_at: activeShift.startsAt, clocked_out_at: null, paused_seconds: 0 };
+    const model = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: activeAttendance, activityWatch: "clock-out", pulse: shiftPulse(activeSession, activeShift, new Date(now), false, activeAttendance), tasks: [task], carryover: [], reviews: 0, focus: "Make the first task visible", focusSource: "Your focus note" }, now);
+    const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", canPause: true, canClockOut: true, onPause: noop, onClockOut: noop, onAddTask: noop }));
+
+    expect(markup).toContain("Checking your activity… Work OS will close the day when Worktivity observes your clock-out.");
+    expect(markup).toContain("Clock out");
+  });
 });

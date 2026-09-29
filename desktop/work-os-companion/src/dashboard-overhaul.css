@@ -302,6 +302,10 @@ body {
 
 .dashboard-readiness-panel > .dashboard-panel-footer { position: relative; z-index: 1; grid-column: 1 / -1; align-self: end; }
 .dashboard-panel-footer small { font-size: 11px; line-height: 1.4; }
+/* Attendance watch: a quiet line while Work OS waits for provider-observed
+   clock-in/out activity. The manual clock controls stay available. */
+.dashboard-activity-watch { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.4; color: var(--muted); }
+.dashboard-readiness-copy .dashboard-activity-watch { margin: 0; }
 .dashboard-sync-chip { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: 11px; font-weight: 750; }
 .dashboard-sync-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .dashboard-save-warning { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: #96620d; font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; }
