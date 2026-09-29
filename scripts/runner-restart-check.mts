@@ -151,8 +151,10 @@ async function main(): Promise<void> {
     }
   }
   if (children) {
+    writeFileSync(markerPath, `${previous}\n`);
     report.reason = "runner has in-flight child processes; restart skipped";
     console.log("⚠ runner restart skipped: an agent job is in flight");
+    console.log("  the reminder stays pinned until the runner is restarted and marked");
     if (json) console.log(JSON.stringify(report));
     return;
   }
