@@ -12,11 +12,12 @@ import {
   type ScreenshotWindowCandidate,
   type ScreenshotWindowPreparation,
 } from "@/lib/work-os-screenshots";
+import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
 
-export const ACTIVITY_INTERVAL_PROMPT_VERSION = "work-os-activity-interval-v1";
+export const ACTIVITY_INTERVAL_PROMPT_VERSION = "work-os-activity-interval-v2";
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
 const MAX_DETAIL_CHARS = 4_000;
 const MAX_FEEDBACK_CHARS = 4_000;
@@ -373,14 +374,31 @@ const INTERVAL_SYSTEM_PROMPT = [
   "Never claim a task was completed, shipped, merged, deployed, or fixed from screenshots alone.",
   "Never infer private identity or reproduce credentials, message contents, personal data, or customer details.",
   "Use uncertainty language when evidence is incomplete, and do not pad the recap when the interval contains little information.",
+  "Additional context may describe the live day state and dated recalled history; use it only to understand what the employee is working on and never as screenshot evidence.",
+  "Never claim completion, progress, or activity from the additional context alone, and never contradict what the observations and images show.",
   "The recap is useful to a manager later, so be concrete about apps, tools, artifacts, and the apparent work context.",
 ].join("\n");
+
+/** Recall query for interval memory: the day's stated focus plus the interval's
+ * own observed apps and possible task references, so retrieval follows the
+ * work rather than the generic cadence. */
+export function intervalMemoryQuery(input: {
+  focus?: string | null;
+  apps?: Array<string | null | undefined>;
+  tasks?: Array<string | null | undefined>;
+}): string {
+  const parts = [input.focus, ...(input.apps ?? []), ...(input.tasks ?? [])]
+    .flatMap((part) => (typeof part === "string" && part.trim() ? [part.replace(/\s+/g, " ").trim()] : []));
+  const query = [...new Set(parts)].join(" · ").slice(0, 500).trim();
+  return query || "current work in progress and recent activity context";
+}
 
 export function intervalSynthesisMessages(input: {
   windowLabel: string;
   observations: IntervalSynthesisObservation[];
   images: IntervalSynthesisImage[];
   counts: ScreenshotWindowPreparation["counts"];
+  contextBlock?: string;
 }) {
   const observationText = input.observations.map((observation) =>
     `${observation.index}. ${observation.at} — app=${observation.app ?? "unknown"} — ${observation.summary}` +
@@ -395,6 +413,11 @@ export function intervalSynthesisMessages(input: {
       `Frames recorded: ${input.counts.providerFrames}; analyzed: ${input.counts.processed}; excluded by policy: ${input.counts.excludedPolicy}; excluded as sensitive: ${input.counts.excludedSensitive}; unavailable: ${input.counts.unavailable}; still pending: ${input.counts.pending}.`,
       "Neutral observations (1-based indexes):",
       observationText || "(none)",
+      ...(input.contextBlock ? [
+        "",
+        "Additional context (live day state and recalled history — informational only; never evidence):",
+        input.contextBlock,
+      ] : []),
     ].join("\n"),
   }];
   for (const image of input.images) {
@@ -412,6 +435,7 @@ async function synthesizeInterval(input: {
   observations: IntervalSynthesisObservation[];
   images: IntervalSynthesisImage[];
   counts: ScreenshotWindowPreparation["counts"];
+  contextBlock?: string;
   model: string;
   timeoutMs: number;
 }): Promise<IntervalSynthesis> {
@@ -652,6 +676,24 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     for (const entry of selection.selected) entry.rawImageShown = loadedRaw.has(entry.ordinal);
 
     const windowLabel = formatIntervalRange(row.window_start as string, row.window_end as string, timezone);
+    let contextBlock = "";
+    if (memoryEnabled(access.featureFlags)) {
+      try {
+        const focus = [workday.plan?.focus_summary, workday.plan?.freeform_intent]
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .find(Boolean) ?? null;
+        const memoryScope = { organizationId: access.organizationId, personId, localDate: shiftDate };
+        contextBlock = await buildMemoryPromptBlock(memoryScope, intervalMemoryQuery({
+          focus,
+          apps: observations.map((observation) => observation.app),
+          tasks: observations.map((observation) => observation.possibleTaskReference),
+        }), { limit: 8 });
+      } catch {
+        // Memory is continuity context only; a recall outage must never block
+        // the evidence-bounded recap.
+        contextBlock = "";
+      }
+    }
     let synthesis: IntervalSynthesis;
     try {
       synthesis = await synthesizeInterval({
@@ -659,6 +701,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         observations,
         images,
         counts: preparation.counts,
+        contextBlock: contextBlock || undefined,
         model: config.model,
         timeoutMs: clampInt(process.env.WORK_OS_ACTIVITY_INTERVAL_TIMEOUT_MS, 45_000, 5_000, 120_000),
       });
@@ -670,7 +713,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
         source_hash: sourceHash,
         model: config.model,
         prompt_version: config.promptVersion,
-        coverage: { ...preparation.counts, rawImagesLoaded: images.length },
+        coverage: { ...preparation.counts, rawImagesLoaded: images.length, memoryUsed: Boolean(contextBlock), memoryChars: contextBlock.length },
         updated_at: new Date().toISOString(),
       }).eq("id", row.id).select("*").single();
       await auditInterval(access, "activity_interval.failed", String(row.id), { reason: reason.slice(0, 200), slotKey });
@@ -680,6 +723,8 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     const coverage = {
       ...preparation.counts,
       rawImagesLoaded: images.length,
+      memoryUsed: Boolean(contextBlock),
+      memoryChars: contextBlock.length,
       modelCoverage: synthesis.coverage,
     };
     const { data: saved, error: saveError } = await db().from("work_activity_intervals").update({
@@ -705,6 +750,7 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
       analyzed: preparation.counts.processed,
       selected: selection.selected.length,
       rawImages: images.length,
+      memoryChars: contextBlock.length,
       revision: saved?.revision ?? 1,
     });
     return { status: "ready" as const, interval: saved as ActivityIntervalRecord };
