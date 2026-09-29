@@ -1268,9 +1268,8 @@ export default function AvatarApp(): React.ReactElement {
         {!expanded && (
           <div className="avatar-compact">
           <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
-          <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window">
+          <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window" aria-label={`Open ${MASCOT.name} companion to connect Work OS`}>
             <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
-            <span className="avatar-orb-state">Connect</span>
           </button>
           </div>
         )}
@@ -1297,7 +1296,6 @@ export default function AvatarApp(): React.ReactElement {
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
           <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
-          <span className="avatar-orb-state">{mascotVisual.label}</span>
           {(showShiftTime || showBadge) && <span
             className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
             style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}

@@ -5,6 +5,7 @@
   will-change: auto;
 }
 .studio-otto {
+  --studio-sleep-blue: #3154a5;
   display: block;
   width: 100%;
   height: 100%;
@@ -51,6 +52,34 @@
 .studio-otto[data-pose="sleep"] .studio-face { opacity: .5; }
 .studio-otto[data-pose="sleep"] .studio-power { opacity: .4; }
 .studio-otto[data-pose="rest"] .studio-head { transform: rotate(2deg); }
+
+/* Resting/off-shift Otto gets a quiet sleep signal at the upper-right of the
+ * full figure. Paths keep the glyphs renderer-native and font-independent. */
+.studio-otto .studio-sleep-zs {
+  fill: none;
+  stroke: var(--studio-sleep-blue);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(49, 84, 165, .24));
+  pointer-events: none;
+}
+.studio-otto .studio-sleep-z {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: .78;
+  animation: studio-sleep-drift 4.8s ease-in-out infinite;
+}
+.studio-otto .studio-sleep-z.z-2 { animation-delay: .8s; }
+.studio-otto .studio-sleep-z.z-3 { animation-delay: 1.6s; }
+
+@keyframes studio-sleep-drift {
+  0%, 100% { opacity: .18; transform: translate(0, 2px) scale(.92); }
+  24% { opacity: .82; transform: translate(0, 0) scale(1); }
+  68% { opacity: .64; transform: translate(2px, -5px) scale(1.03); }
+  88% { opacity: .3; transform: translate(4px, -8px) scale(1.06); }
+}
+
 @keyframes studio-blink {
   0%, 44%, 48%, 100% { transform: scaleY(1); }
   46% { transform: scaleY(.1); }

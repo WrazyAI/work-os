@@ -170,7 +170,6 @@ function HistorySection() {
           <button className="avatar-hide" aria-label="Hide companion" title="Hide companion"><X size={13} /></button>
           <button className="avatar-orb" aria-label={`Open ${MASCOT.name} companion`}>
             <MascotPet isolated agent={params.has("prompt") ? "needs-input" : "idle"} workday={params.has("prompt") ? "check-in-due" : "active"} className="avatar-pet" artClassName="avatar-pet-art" />
-            <span className="avatar-orb-state">{params.has("prompt") ? "Check in" : "Focused"}</span>
             <span className="avatar-badge" />
           </button>
           <span className="avatar-day-time">3h 12m left</span>
