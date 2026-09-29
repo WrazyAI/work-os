@@ -26,7 +26,7 @@ export interface InsightSource {
   consistency?: { dayCount: number; daysWithGoal: number; daysWithUpdate: number; daysWithCompletion: number; currentStreak: number; commitmentRate: number | null; bestDay: { date: string; tasksCompleted: number } | null } | null;
   /** Totals for the equal-length window immediately before this one. */
   previousTotals?: Record<string, number> | null;
-  /** Live day state + recalled history; informational only, never selectable. */
+  /** Live day state + memory context; informational only, never selectable. */
   contextBlock?: string;
 }
 
@@ -163,7 +163,7 @@ export function buildInsightSynthesisPrompt(data: InsightSource): string {
     "Keep activity context labeled as observed context: it never proves task completion and is never a productivity score.",
     "",
     buildInsightGroundingText(data),
-    ...(data.contextBlock ? ["", `Additional context (live day state and recalled history — informational only; never a selectable fact and never completion evidence):\n${data.contextBlock}`] : []),
+    ...(data.contextBlock ? ["", `Additional context (live day state plus confirmed, historical, and same-day tentative memory — informational only; never a selectable fact and never completion evidence):\n${data.contextBlock}`] : []),
     "",
     "Return ONLY JSON with highlight, attention, focus (short paragraphs), and winIds, attentionIds, nextFocusIds (IDs selected from the matching lists above).",
   ].filter(Boolean).join("\n");
@@ -212,7 +212,7 @@ export async function synthesizeInsights(access: WorkOsAccess, range: InsightRan
     ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 500);
     const [todayBlock, memoryBlock] = await Promise.all([
       buildTodaySnapshot(scope),
-      buildMemoryPromptBlock(scope, focusQuery || "recent work history and patterns", { limit: 8, from: data.from }),
+      buildMemoryPromptBlock(scope, focusQuery || "recent work history and patterns", { limit: 8, from: data.from, analysisLocalDate: data.through }),
     ]);
     contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n") || undefined;
   }
