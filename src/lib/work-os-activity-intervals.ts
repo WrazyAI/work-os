@@ -13,6 +13,7 @@ import {
   type ScreenshotWindowPreparation,
 } from "@/lib/work-os-screenshots";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
+import { buildTodaySnapshot } from "@/lib/work-memory-today";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
@@ -684,11 +685,15 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
           .map((value) => (typeof value === "string" ? value.trim() : ""))
           .find(Boolean) ?? null;
         const memoryScope = { organizationId: access.organizationId, personId, localDate: shiftDate };
-        contextBlock = await buildMemoryPromptBlock(memoryScope, intervalMemoryQuery({
-          focus,
-          apps: observations.map((observation) => observation.app),
-          tasks: observations.map((observation) => observation.possibleTaskReference),
-        }), { limit: 8 });
+        const [todayBlock, memoryBlock] = await Promise.all([
+          buildTodaySnapshot(memoryScope),
+          buildMemoryPromptBlock(memoryScope, intervalMemoryQuery({
+            focus,
+            apps: observations.map((observation) => observation.app),
+            tasks: observations.map((observation) => observation.possibleTaskReference),
+          }), { limit: 8 }),
+        ]);
+        contextBlock = [todayBlock, memoryBlock].filter(Boolean).join("\n\n");
       } catch {
         // Memory is continuity context only; a recall outage must never block
         // the evidence-bounded recap.

@@ -72,6 +72,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(activityEngine, /export function intervalProvenanceLabel/);
   assert.match(activityEngine, /export async function listActivityIntervalActivityLines/);
   assert.match(activityEngine, /memoryEnabled/, "interval recaps use Work Memory only behind the feature flag");
+  assert.match(activityEngine, /buildTodaySnapshot/, "interval recaps receive the live day snapshot");
   assert.match(activityEngine, /buildMemoryPromptBlock/, "interval recaps recall memory as context");
   assert.match(activityEngine, /memoryUsed/, "interval coverage records whether memory context was used");
   assert.doesNotMatch(activityEngine, /recordWorkMemory/, "interval recaps consume memory without writing inferences back");
