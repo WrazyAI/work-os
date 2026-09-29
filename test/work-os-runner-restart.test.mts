@@ -42,29 +42,31 @@ assert.equal(resolveSpecifier("scripts/agent-runner.ts", "./missing", io), null)
 assert.equal(resolveSpecifier("scripts/agent-runner.ts", "pg", io), null);
 assert.equal(resolveSpecifier("src/lib/format.ts", "./db/query", io), "src/lib/db/query.ts");
 
-// The runner's own wrapper chain must never count as an in-flight job; a job
-// CLI and its subprocesses must.
+// The runner's own wrapper chain and the esbuild service must never count as
+// an in-flight job; a job CLI and its subprocesses must.
 const busy = parseProcessTable(
   [
     "  100       1 systemd --user",
     "  101     100 sh -c tsx scripts/agent-runner.ts",
     "  102     101 node /path/tsx/dist/loader.mjs scripts/agent-runner.ts",
     "  103     102 node scripts/agent-runner.ts",
-    "  104     103 claude --print",
-    "  105     104 sh -c helper --flag",
+    "  104     103 /path/esbuild --service=0.28.1 --ping",
+    "  105     103 claude --print",
+    "  106     105 sh -c helper --flag",
     "  200       1 unrelated",
   ].join("\n"),
 );
-assert.equal(busy.length, 7);
+assert.equal(busy.length, 8);
 assert.deepEqual(
-  descendantsExcluding(busy, "100", "agent-runner.ts").map((row) => row.pid),
-  ["104", "105"],
+  descendantsExcluding(busy, "100", ["agent-runner.ts", "esbuild"]).map((row) => row.pid),
+  ["105", "106"],
 );
 const idle = parseProcessTable(
   [
     "  100 1 systemd --user",
     "  101 100 sh -c tsx scripts/agent-runner.ts",
     "  102 101 node tsx scripts/agent-runner.ts",
+    "  103 102 /path/esbuild --service=0.28.1 --ping",
   ].join("\n"),
 );
-assert.deepEqual(descendantsExcluding(idle, "100", "agent-runner.ts"), []);
+assert.deepEqual(descendantsExcluding(idle, "100", ["agent-runner.ts", "esbuild"]), []);

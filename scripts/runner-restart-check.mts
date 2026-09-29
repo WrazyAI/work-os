@@ -69,10 +69,11 @@ export function parseProcessTable(output: string): ProcessRow[] {
   });
 }
 
-/** Descendants of `rootPid` that are not part of the runner's own wrapper
- * chain (`sh -c tsx scripts/agent-runner.ts` and its node children). Anything
- * left is an in-flight job CLI or one of its subprocesses. */
-export function descendantsExcluding(table: ProcessRow[], rootPid: string, excludeNeedle: string): ProcessRow[] {
+/** Descendants of `rootPid` that are not runner infrastructure: the wrapper
+ * chain (`sh -c tsx scripts/agent-runner.ts`, its tsx/preflight children) and
+ * the long-lived esbuild service worker. Anything left is an in-flight job CLI
+ * or one of its subprocesses. */
+export function descendantsExcluding(table: ProcessRow[], rootPid: string, excludeNeedles: string[]): ProcessRow[] {
   const byParent = new Map<string, ProcessRow[]>();
   for (const row of table) {
     const list = byParent.get(row.ppid) ?? [];
@@ -84,7 +85,7 @@ export function descendantsExcluding(table: ProcessRow[], rootPid: string, exclu
   while (queue.length) {
     const pid = queue.pop()!;
     for (const child of byParent.get(pid) ?? []) {
-      if (!child.args.includes(excludeNeedle)) collected.push(child);
+      if (!excludeNeedles.some((needle) => child.args.includes(needle))) collected.push(child);
       queue.push(child.pid);
     }
   }
@@ -181,7 +182,7 @@ async function main(): Promise<void> {
   if (mainPid && mainPid !== "0") {
     try {
       const table = parseProcessTable(execFileSync("ps", ["-eo", "pid=,ppid=,args="], { encoding: "utf8" }));
-      running = descendantsExcluding(table, mainPid, "agent-runner.ts");
+      running = descendantsExcluding(table, mainPid, ["agent-runner.ts", "esbuild"]);
     } catch {
       running = [];
     }
