@@ -3106,19 +3106,19 @@ export default function App() {
       {view === "insights" && <PersonalInsights key={`${insightRange}:${visibleDay?.shiftDate ?? ""}`} data={activeInsights} loading={activeInsightsLoading} range={insightRange} onRange={setInsightRange} onReference={(reference) => void openInsightReference(reference)} onCorrect={(quality, date) => { if (!quality.sessionId) return; setMissedClockOut({ sessionId: quality.sessionId, date, clockedInAt: quality.clockedInAt ?? null }); setMissedClockOutAt(""); setMissedClockOutReason(""); }} />}
       {view === "evidence" && <main className="page"><PageIntro eyebrow="Provenance" title="Evidence with its labels intact." body="Claims, activity observations, and output artifacts are never collapsed into one misleading score." /><section className="evidence-list">{visibleDay?.evidence?.length ? visibleDay.evidence.map((item) => <article key={item.id}><span className={`evidence-kind ${item.source === "worktivity" ? "activity" : "output"}`}>{item.source === "worktivity" ? "Activity context" : item.source === "loom" ? "Loom recording" : "Output evidence"}</span><div><h3>{item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3><p>{item.summary || "No summary available."}</p></div><time>{item.occurred_at ? formatTime(item.occurred_at, visibleDay.shift?.timezone) : "Today"}</time></article>) : <Empty title="No evidence yet" body="Verified provider events and purpose-limited activity context will appear here." />}</section></main>}
        {view === "settings" && (
-        <main className="page">
-           <PageIntro title="Your companion, your boundaries." body="Manage launch behavior, local sync, privacy context, updates, and diagnostics." />
+        <main className="page settings-page">
+           <p className="settings-lead">Personalize Work OS on this device and keep account, sync, and privacy controls in one calm place.</p>
            <section className="settings-group" aria-labelledby="settings-profile-title">
              <header className="settings-group-head"><h3 id="settings-profile-title">Profile settings</h3></header>
             <section className="settings-panel">
-              <Setting title="Workspace settings" detail="Update your name, photo, workday preferences, notifications, privacy exclusions, and work profile."><button type="button" className="quiet-action" onClick={() => setProfileOpen(true)}>Open profile settings <ChevronRight size={14} /></button></Setting>
+              <Setting title="Workspace settings" detail="Name, photo, workday preferences, notifications, privacy, and work profile."><button type="button" className="quiet-action" onClick={() => setProfileOpen(true)}>Open profile settings <ChevronRight size={14} /></button></Setting>
             </section>
            </section>
            <section className="settings-group" aria-labelledby="settings-device-title">
              <header className="settings-group-head"><h3 id="settings-device-title">This device</h3></header>
             <section className="settings-panel">
               <Setting title="Start with Windows" detail="Open quietly in the tray after sign-in"><SettingsSwitch label="Start with Windows" checked={autoStart} onChange={(value) => void toggleAutoStart(value)} /></Setting>
-              <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}; show a flyout when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
+              <Setting title="Automatic update checks" detail={`Check on launch and ${UPDATE_CHECK_CADENCE_COPY}. We'll let you know when a new build is ready.`}><SettingsSwitch label="Automatic update checks" checked={autoCheckUpdates} onChange={(value) => void toggleAutoCheckUpdates(value)} /></Setting>
               <Setting title="Desktop updates" detail={updateRowCopy(updateRowSummary, installedVersion)}>
                 <span className="setting-controls">
                   {updateFlow.status === "idle" && <button type="button" className="quiet-action" onClick={() => void checkForUpdates()}>Check</button>}
@@ -3143,8 +3143,8 @@ export default function App() {
           <section className="settings-group" aria-labelledby="settings-workday-title">
              <header className="settings-group-head"><h3 id="settings-workday-title">Workday</h3></header>
             <section className="settings-panel">
-              <Setting title="Scheduled check-ins" detail="Due check-ins appear in the floating avatar. Snooze them there when needed."><span className="status-chip">Avatar</span></Setting>
-              <Setting title="Evidence" detail="Provider-verified proof of output is coming back. The surface is built and temporarily hidden."><span className="status-chip">Hidden</span></Setting>
+              <Setting title="Scheduled check-ins" detail="Check-ins appear with Otto when they're due. Snooze them from the floating companion."><span className="status-chip">Avatar</span></Setting>
+              <Setting title="Evidence" detail="Output evidence is temporarily hidden while the surface is being prepared."><span className="status-chip">Hidden</span></Setting>
             </section>
            </section>
 
@@ -3156,21 +3156,22 @@ export default function App() {
             </section>
            </section>
 
+           <MemorySettings />
+
            <section className="settings-group" aria-labelledby="settings-diagnostics-title">
              <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3></header>
             <section className="settings-panel">
-              <Setting title="Scenario debugger" detail="Opens a separate diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
-              <Setting title="Export diagnostics" detail="Redacted ZIP of recent events. Never includes tokens or queue bodies."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
+              <Setting title="Scenario debugger" detail="Open the diagnostics window. Ctrl+Shift+D"><button type="button" className="quiet-action" onClick={() => void openDebugger()}><Bug size={15} /> Open</button></Setting>
+              <Setting title="Export diagnostics" detail="Create a redacted ZIP of recent events. Tokens and queue bodies stay out."><button type="button" className="quiet-action" onClick={() => void exportAppDiagnostics()}>Export</button></Setting>
             </section>
            </section>
 
            <section className="settings-group danger" aria-labelledby="settings-danger-title">
              <header className="settings-group-head"><h3 id="settings-danger-title">Reset</h3></header>
             <section className="settings-panel">
-              <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to employee onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
+              <Setting title="Restart onboarding" detail="Clear your personal setup answers and return to onboarding."><button type="button" className="quiet-action danger" disabled={busy} onClick={() => void resetOnboarding()}><RotateCcw size={15} /> Reset</button></Setting>
             </section>
           </section>
-          <MemorySettings />
         </main>
       )}
       {dockVisible && <ProgressComposer
