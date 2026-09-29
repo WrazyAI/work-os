@@ -118,23 +118,37 @@ describe("operational visualizations", () => {
     expect(sidebarStyles).toContain(".sidebar-footer {\n  flex: 0 0 auto;\n  margin-top: auto;");
   });
 
-  it("makes the account surface reachable from both the masthead and Settings", () => {
+  it("keeps profile settings reachable, calm, and consistent with the main Settings surface", () => {
     expect(app).toContain('title="Open profile settings"');
     expect(app).toContain('setProfileOpen(true)');
     expect(app).toContain('mode="modal"');
     expect(app).toContain('<span>Workspace settings</span>');
+    expect(app).toContain('Identity, schedule, privacy, notifications, and work context.');
     expect(app).toContain('Open profile settings');
     expect(app).not.toContain('mode="page"');
+    expect(profileSettings).toContain('title="Identity"');
+    expect(profileSettings).toContain('title="Region &amp; time"');
+    expect(profileSettings).toContain('title="Workday"');
+    expect(profileSettings).toContain('title="Privacy"');
+    expect(profileSettings).toContain('title="Work profile"');
+    expect(profileSettings).toContain('className="profile-section-content"');
+    expect(profileSettings).toContain('className="profile-photo-actions"');
     expect(profileSettings).toContain("Display name");
     expect(profileSettings).toContain("Account email");
     expect(profileSettings).toContain("Sensitive app or domain exclusions");
     expect(profileSettings).toContain("Screenshot analysis consent");
+    expect(profileSettings).toContain("Changes sync when you save.");
+    expect(profileSettings).not.toContain('eyebrow="Profile"');
     expect(app).toContain("new FormData()");
-    expect(styles).toContain(".profile-modal");
+    expect(styles).toContain(".task-modal.profile-modal");
     expect(styles).toContain(".task-modal-backdrop.profile-backdrop");
+    expect(styles).toContain(".profile-section-content");
+    expect(styles).toMatch(/\.profile-editor-section \{[\s\S]*?grid-template-columns: minmax\(120px, 148px\) minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.profile-schedule \{[\s\S]*?border: 0;[\s\S]*?background: transparent;/);
+    expect(styles).toContain(".profile-modal .profile-editor-body::-webkit-scrollbar");
+    expect(styles).toContain(".profile-editor-modal > .profile-editor-actions .primary");
     expect(app).toContain("!!clockOutConfirmation");
     expect(app).toContain('aria-describedby="profile-settings-description"');
-    expect(styles).toContain(".profile-editor-actions");
   });
 
   it("keeps agenda planning available independently of attendance", () => {
