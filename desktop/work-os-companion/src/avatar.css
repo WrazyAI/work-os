@@ -129,8 +129,8 @@ body.avatar-window {
 }
 .avatar-prompt-bubble::after { content: ""; position: absolute; bottom: -7px; left: 25px; width: 12px; height: 12px; background: #202421; border-right: 1px solid #344535; border-bottom: 1px solid #344535; transform: rotate(45deg); }
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
-.avatar-prompt-bubble strong { font-size: 10px; line-height: 1.25; }
-.avatar-prompt-bubble span { margin-top: 3px; color: #b7beb2; font-size: 8.5px; line-height: 1.35; }
+.avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
+.avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
 .avatar-day-time {
   position: absolute;
   right: 50%;
@@ -746,7 +746,7 @@ body.avatar-window {
   height: 154px;
   margin: 76px 28px 0;
 }
-.avatar-prompt-bubble ~ .avatar-orb { margin-top: 99px; }
+.avatar-prompt-bubble ~ .avatar-orb { margin-top: 108px; }
 .avatar-pet {
   width: 118px;
   height: 133px;
@@ -755,13 +755,6 @@ body.avatar-window {
 .avatar-pet .avatar-pet-art {
   width: 118px;
   height: 133px;
-}
-.avatar-orb-state {
-  top: 137px;
-  right: 25px;
-  bottom: auto;
-  left: 25px;
-  padding: 4px 7px;
 }
 .avatar-day-time {
   right: 50%;
@@ -774,16 +767,35 @@ body.avatar-window {
 .avatar-drag-surface {
   top: 6px;
   left: 50%;
-  width: 72px;
-  height: 30px;
+  width: 52px;
+  height: 28px;
   transform: translateX(-50%);
-  font-size: 12px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255, 252, 246, .82);
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+.avatar-drag-surface::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 15px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(213, 255, 84, .25);
+  border-radius: 999px;
+  background: rgba(32, 36, 33, .9);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .18);
+  pointer-events: none;
 }
 .avatar-prompt-bubble + .avatar-drag-surface {
-  top: 63px;
+  top: 72px;
   left: 50%;
-  width: 78px;
-  height: 30px;
+  width: 52px;
+  height: 28px;
   transform: translateX(-50%);
 }
 .avatar-badge { top: 8px; right: 8px; }
