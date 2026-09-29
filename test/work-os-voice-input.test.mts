@@ -255,8 +255,10 @@ test("the companion composer swaps send for record only on an empty draft", () =
   assert.match(composer, /aria-label="Cancel recording"/);
   assert.match(composer, /Hold \{hotkeyLabel/);
   assert.match(composer, /data-voice-state=\{voiceState\}/);
-  /* Escape abandons a capture, and the live region announces the state. */
+  /* Escape abandons a capture, a settled transcript hands the caret back to
+     the field, and the live region announces the state. */
   assert.match(composer, /if \(capturing\) voice\?\.cancel\(\)/);
+  assert.match(composer, /previousVoiceState\.current === "transcribing" && voiceState === "idle"/);
   assert.match(composer, /Recording your voice update/);
   assert.match(composer, /Transcribed\. Review the text before sending\./);
   assert.doesNotMatch(composer, /VOICE_FAILURE_COPY|TRANSCRIBE_MAX_BYTES/);

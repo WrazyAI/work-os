@@ -201,7 +201,6 @@ export default function AvatarApp(): React.ReactElement {
       setAvatarTab("chat");
       setRecapEditMode(false);
       void toggleExpanded(true);
-      setComposerFocusSignal((signal) => signal + 1);
     },
     onRecordingStart: () => {
       setAvatarTab("chat");

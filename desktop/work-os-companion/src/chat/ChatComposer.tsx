@@ -109,6 +109,15 @@ export function ChatComposer({
   const [menuPlacement, setMenuPlacement] = useState<CSSProperties | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const voiceState = voice?.state ?? "idle";
+  const capturing = voiceState === "requesting" || voiceState === "recording";
+  const transcribing = voiceState === "transcribing";
+  const voiceMode = capturing || transcribing;
+  /* The record affordance replaces the send only on an empty draft: the moment
+     there is text to send, sending is the primary action again (and a second
+     input method would compete with it). */
+  const showRecord = !!voice && voice.supported && !voiceMode && !value.trim();
+
   const token = dismissed ? null : parseChatToken(value);
   const menu: "at" | "slash" | null = plusOpen ? "at" : (token?.kind ?? null);
   const query = plusOpen ? "" : (token?.query ?? "");
@@ -155,6 +164,14 @@ export function ChatComposer({
       input.setSelectionRange(input.value.length, input.value.length);
     } catch { /* caret placement is cosmetic */ }
   }, [focusSignal]);
+
+  /* A settled transcript hands the caret back to the field, so the employee can
+     review and correct it without reaching for the mouse. */
+  const previousVoiceState = useRef(voiceState);
+  useEffect(() => {
+    if (previousVoiceState.current === "transcribing" && voiceState === "idle") inputRef.current?.focus();
+    previousVoiceState.current = voiceState;
+  }, [voiceState]);
 
   /* Refit when the surface itself changes size or late fonts load. */
   useEffect(() => {
@@ -306,14 +323,6 @@ export function ChatComposer({
     }
   };
 
-  const voiceState = voice?.state ?? "idle";
-  const capturing = voiceState === "requesting" || voiceState === "recording";
-  const transcribing = voiceState === "transcribing";
-  const voiceMode = capturing || transcribing;
-  /* The record affordance replaces the send only on an empty draft: the moment
-     there is text to send, sending is the primary action again (and a second
-     input method would compete with it). */
-  const showRecord = !!voice && voice.supported && !voiceMode && !value.trim();
 
   /* Escape abandons a capture without transcribing it. The field is not
      mounted while recording, so the shortcut is owned here. */
