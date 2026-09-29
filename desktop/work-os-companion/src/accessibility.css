@@ -24,6 +24,23 @@ html[data-mascot-size="small"] .otto {
   transform-origin: center;
 }
 
+/* The floating companion keeps a fixed 133px art box while Small scales the
+   mascot around its center. That moves the visible top of Otto down by about
+   25px, so move the paired drag/dismiss controls by the same amount to keep
+   the tuned gap above his head. Control sizes and hit areas stay unchanged. */
+html[data-mascot-size="small"] .avatar-compact .avatar-drag-surface {
+  top: 47px;
+}
+html[data-mascot-size="small"] .avatar-compact .avatar-prompt-bubble + .avatar-drag-surface {
+  top: 97px;
+}
+html[data-mascot-size="small"] .avatar-compact .avatar-hide {
+  top: 45px;
+}
+html[data-mascot-size="small"] .avatar-compact .avatar-prompt-bubble ~ .avatar-hide {
+  top: 97px;
+}
+
 /* Dev fixture (?preview-settings) samples. Real surfaces get their sizes from
    the app stylesheets; these only exist so the rendered result is visible. */
 .settings-preview-grid {
