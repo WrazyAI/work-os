@@ -65,6 +65,25 @@ describe("offline action replay", () => {
     expect(mockState.queue[0].body).toMatchObject({ revision: 1, successful_day_intent: "Latest draft" });
   });
 
+  it("clears a plan save that gave up retrying once a newer plan save succeeds", async () => {
+    Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    mockState.queue = [
+      {
+        id: "stale-plan-save", path: "/api/work-os/me/plan", method: "PUT", body: {},
+        createdAt: new Date().toISOString(), attempts: 6, status: "needs_attention",
+      },
+      {
+        id: "other-work", path: "/api/work-os/me/interpret", method: "POST", body: {},
+        createdAt: new Date().toISOString(), attempts: 1, status: "needs_attention",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ plan: {} }), { status: 200, headers: { "content-type": "application/json" } })));
+
+    await sendOrQueue("/api/work-os/me/plan", "PUT", { revision: 2, freeform_intent: "Fresh save" });
+
+    expect(mockState.queue.map((action) => action.id)).toEqual(["other-work"]);
+  });
+
   it("retains a replayed interpretation as ready for explicit review", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
     const queued = await sendOrQueue("/api/work-os/me/interpret", "POST", { input: "Finished the release notes" });

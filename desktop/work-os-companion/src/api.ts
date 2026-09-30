@@ -195,6 +195,12 @@ export async function updateTaskCompletion(taskId: string, completed: boolean): 
   }
 }
 
+/** Full-state saves: a newer PUT on the same path replaces the whole plan or
+ * onboarding payload, so older queued copies are superseded by definition. */
+function isFullStateSave(path: string, method: string) {
+  return (path === "/api/work-os/me/plan" || path === "/api/work-os/me/onboarding") && method === "PUT";
+}
+
 export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH", body: Record<string, unknown>) {
   if (syncBypassActive) throw new SyncBypassError();
   const createdAt = new Date().toISOString();
@@ -209,17 +215,26 @@ export async function sendOrQueue(path: string, method: "POST" | "PUT" | "PATCH"
     status: "pending",
   };
   try {
-    return await apiRequest(path, {
+    const result = await apiRequest(path, {
       method,
       headers: { "Idempotency-Key": action.id },
       body: JSON.stringify(replaySafeBody),
     });
+    if (isFullStateSave(path, method)) {
+      // The server now holds this newer payload, so earlier copies that gave
+      // up retrying are stale; leaving them queued keeps reporting "needs
+      // attention" for work this save already replaced.
+      const queue = await secureState.queue();
+      const live = queue.filter((queued) => !(queued.path === path && queued.method === method && queued.status === "needs_attention"));
+      if (live.length !== queue.length) await secureState.saveQueue(live);
+    }
+    return result;
   } catch (error) {
     const failure = classifyRequestFailure(error);
     if (!failure.retryable) throw error;
     diagnostics.warn("offline_queue.enqueued", "Request queued for retry", { path, method }, { source: "sync" });
     const queue = await secureState.queue();
-    const pending = (path === "/api/work-os/me/plan" || path === "/api/work-os/me/onboarding") && method === "PUT"
+    const pending = isFullStateSave(path, method)
       ? queue.filter((queued) => queued.path !== path || queued.method !== method || queued.status === "needs_attention")
       : queue;
     await secureState.saveQueue([...pending, action]);
