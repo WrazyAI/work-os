@@ -475,19 +475,58 @@ test("a routed voice event is addressed, so only one window ever acts on it", ()
   assert.match(read("desktop/work-os-companion/src/tauriEvents.ts"), /tauriListen<T>\(event, handler, options\)/);
 });
 
+test("a hold always opens the microphone once the previous clip is in flight", () => {
+  /* The reported unreliability: Ctrl + M did nothing whenever a press landed
+     inside the previous upload's 1-3s window, because start() refused any
+     state that was not idle. Only a *live* capture is refused now — taking
+     that over would let the old recorder's teardown clear the newer capture's
+     media references and leave a microphone open. */
+  for (const path of ["desktop/work-os-companion/src/chat/voiceInput.ts", "src/modules/work-os/useVoiceInput.ts"]) {
+    const source = read(path);
+    assert.ok(!source.includes('if (startingRef.current || state !== "idle") return;'), `${path}: the idle-only guard must be gone`);
+    assert.match(source, /if \(state === "recording" \|\| state === "requesting"\) \{?/);
+    /* Transcription is never a reason to refuse. */
+    assert.ok(!/state !== "idle"/.test(source), `${path}: must not refuse while transcribing`);
+  }
+
+  /* A settled older capture must not move the state out from under a newer
+     one, and an older microphone request must abort instead of opening a
+     second recorder. */
+  const companion = read("desktop/work-os-companion/src/chat/voiceInput.ts");
+  assert.match(companion, /const captureIdRef = useRef\(0\);/);
+  assert.match(companion, /const captureId = \(captureIdRef\.current \+= 1\);/);
+  assert.match(companion, /const finish = useCallback\(\(cancelled: boolean, captureId: number\)/);
+  assert.match(companion, /recorder\.onstop = \(\) => finish\(cancelledRef\.current, captureId\);/);
+  assert.match(companion, /if \(captureId === captureIdRef\.current\) setState\("idle"\);/);
+  assert.match(companion, /if \(ownerCheck\) setState\("transcribing"\)|if \(ownsComposer\(\)\) setState\("transcribing"\)/);
+  assert.match(companion, /captureId !== captureIdRef\.current/);
+  /* Every refusal is named, so a silent no-op can never happen again. */
+  assert.match(companion, /diagnostics\.info\("voice\.refused"/);
+  assert.match(companion, /diagnostics\.info\("voice\.capture", "Voice capture started"/);
+  assert.match(companion, /tookOver: "transcript"/);
+
+  const web = read("src/modules/work-os/useVoiceInput.ts");
+  assert.match(web, /const captureIdRef = useRef\(0\);/);
+  assert.match(web, /const finish = useCallback\(\(cancelled: boolean, captureId: number\)/);
+  assert.match(web, /captureId === captureIdRef\.current/);
+});
+
 test("a capture cannot be started twice in one window", () => {
   const companion = read("desktop/work-os-companion/src/chat/voiceInput.ts");
-  for (const source of [companion, read("src/modules/work-os/useVoiceInput.ts")]) {
+  for (const [path, source] of [["companion", companion], ["web", read("src/modules/work-os/useVoiceInput.ts")]] as const) {
     /* The guard is a ref set synchronously before anything is awaited: two
        start requests in one tick would both read the same stale render state. */
     assert.match(source, /const startingRef = useRef\(false\);/);
-    assert.match(source, /if \(startingRef\.current \|\| state !== "idle"\) return;\s*\n\s*startingRef\.current = true;/);
+    /* The double-start guard still runs before any await. */
+    const guardAt = source.indexOf("if (startingRef.current)");
+    const claimAt = source.indexOf("startingRef.current = true;");
+    assert.ok(guardAt !== -1 && claimAt > guardAt, `${path}: the guard must precede the claim`);
     /* Every path that abandons a start releases it, or the microphone could
        never be opened again. */
     assert.ok(source.split("startingRef.current = false").length >= 7, "every failure path must release the guard");
   }
   /* The capture names the surface it came from, for the debugger. */
-  assert.match(companion, /diagnostics\.info\("voice\.capture", "Voice capture started", \{ surface, source \}\)/);
+  assert.match(companion, /diagnostics\.info\("voice\.capture", "Voice capture started", \{/);
   assert.match(read("desktop/work-os-companion/src/App.tsx"), /surface: "dock",/);
   assert.match(read("desktop/work-os-companion/src/AvatarApp.tsx"), /surface: "floating",/);
 });

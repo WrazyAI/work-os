@@ -148,6 +148,10 @@ export function useVoiceInput(options: {
   /* Set synchronously by `start`, before the microphone is awaited, so two
      start requests in one tick cannot both open a recorder. */
   const startingRef = useRef(false);
+  /* Identifies the live capture: a settled older one must not move the state
+     out from under a newer capture, and an older microphone request must abort
+     instead of leaving a second recorder running. */
+  const captureIdRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -172,7 +176,7 @@ export function useVoiceInput(options: {
     setLevel(0);
   }, []);
 
-  const upload = useCallback(async (blob: Blob, mime: string) => {
+  const upload = useCallback(async (blob: Blob, mime: string, captureId: number) => {
     const form = new FormData();
     form.append("audio", blob, `voice.${recorderFileExtension(mime)}`);
     form.append("mime", mime);
@@ -198,11 +202,12 @@ export function useVoiceInput(options: {
       const message = failure instanceof Error ? failure.message : "";
       setError(message || VOICE_FAILURE_COPY.network);
     } finally {
-      if (mountedRef.current) setState("idle");
+      /* A newer hold may already own the composer by now. */
+      if (mountedRef.current && captureId === captureIdRef.current) setState("idle");
     }
   }, [language, onTranscript]);
 
-  const finish = useCallback((cancelled: boolean) => {
+  const finish = useCallback((cancelled: boolean, captureId: number) => {
     if (finishingRef.current) return;
     finishingRef.current = true;
     const mime = mimeRef.current;
@@ -211,29 +216,87 @@ export function useVoiceInput(options: {
     chunksRef.current = [];
     releaseMedia();
     startingRef.current = false;
+    /* Only the newest capture writes the state; an older one still hands its
+       audio over, so nothing the employee said is lost. */
+    const ownsComposer = () => captureId === captureIdRef.current;
     if (cancelled || durationMs < VOICE_MIN_RECORDING_MS) {
-      setElapsedMs(0);
-      setState("idle");
+      if (ownsComposer()) {
+        setElapsedMs(0);
+        setState("idle");
+      }
       return;
     }
     const blob = new Blob(chunks, { type: mime || "audio/webm" });
     if (!blob.size) {
-      setElapsedMs(0);
-      setState("idle");
+      if (ownsComposer()) {
+        setElapsedMs(0);
+        setState("idle");
+      }
       return;
     }
-    setState("transcribing");
-    void upload(blob, mime || blob.type);
+    if (ownsComposer()) setState("transcribing");
+    void upload(blob, mime || blob.type, captureId);
   }, [releaseMedia, upload]);
 
+  const stop = useCallback(() => {
+    if (state === "requesting") {
+      stopRequestedRef.current = true;
+      return;
+    }
+    if (state !== "recording") return;
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch { finish(false, captureIdRef.current); }
+    } else finish(false, captureIdRef.current);
+  }, [finish, state]);
+
+  const cancel = useCallback(() => {
+    cancelledRef.current = true;
+    setElapsedMs(0);
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch { finish(true, captureIdRef.current); }
+    } else {
+      releaseMedia();
+      finishingRef.current = true;
+      startingRef.current = false;
+      setState("idle");
+    }
+  }, [finish, releaseMedia]);
+
+
   const start = useCallback((source: "button" | "hotkey" = "button") => {
-    if (!enabled) return;
+    if (!enabled) {
+      diagnostics.info("voice.refused", "Voice start refused: this window cannot transcribe", { surface, source, reason: "disabled" });
+      return;
+    }
     /* Ref, not the `state` closure: two start requests in the same tick (a
        duplicated shortcut event, or a hold landing while the microphone is
        still opening) would both read the same stale render and open two
        recorders. This one is set synchronously before any await. */
-    if (startingRef.current || state !== "idle") return;
+    if (startingRef.current) {
+      diagnostics.info("voice.refused", "Voice start refused: a capture is already opening in this window", { surface, source, reason: "starting" });
+      return;
+    }
+    /* A hold always opens the microphone once the previous clip is safely in
+       flight. Refusing during transcription is what made Ctrl + M feel
+       unreliable: the upload takes a second or two, and a press inside that
+       window did nothing at all. The microphone is already closed by then, so
+       the new capture cannot overlap the old one (which would let the old
+       recorder's teardown clear the new capture's media references). */
+    if (state === "recording" || state === "requesting") {
+      /* Named, not silent: a key release the system swallowed leaves a capture
+         running, and that must be visible in the debugger rather than looking
+         like the shortcut did nothing. */
+      diagnostics.info("voice.refused", "Voice start refused: a capture is already running in this window", { surface, source, reason: state });
+      return;
+    }
+    /* Recording again while the previous transcript is still on its way: the
+       clip is not discarded, it lands in the draft when it arrives. */
+    const tookOverTranscript = state === "transcribing";
     startingRef.current = true;
+    const captureId = (captureIdRef.current += 1);
+    finishingRef.current = false;
     setError(null);
     setReceipt(false);
     setElapsedMs(0);
@@ -250,7 +313,11 @@ export function useVoiceInput(options: {
     finishingRef.current = false;
     /* One line per real capture, naming the surface: the debugger then shows
        exactly which window opened a microphone and how it was asked to. */
-    diagnostics.info("voice.capture", "Voice capture started", { surface, source });
+    diagnostics.info("voice.capture", "Voice capture started", {
+      surface,
+      source,
+      ...(tookOverTranscript ? { tookOver: "transcript" } : {}),
+    });
     onRecordingStart?.();
     setState("requesting");
 
@@ -263,14 +330,17 @@ export function useVoiceInput(options: {
       } catch (failure) {
         if (!mountedRef.current) return;
         startingRef.current = false;
+        if (captureId !== captureIdRef.current) return;
         setState("idle");
         setError(VOICE_FAILURE_COPY[classifyStartFailure(failure)]);
         return;
       }
-      if (cancelledRef.current || !mountedRef.current) {
+      /* A newer hold owns the microphone now: drop this request instead of
+         opening a second recorder. */
+      if (cancelledRef.current || !mountedRef.current || captureId !== captureIdRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         startingRef.current = false;
-        setState("idle");
+        if (captureId === captureIdRef.current) setState("idle");
         return;
       }
       streamRef.current = stream;
@@ -292,12 +362,12 @@ export function useVoiceInput(options: {
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) chunksRef.current.push(event.data);
       };
-      recorder.onstop = () => finish(cancelledRef.current);
+      recorder.onstop = () => finish(cancelledRef.current, captureId);
       recorder.onerror = () => {
         releaseMedia();
         startingRef.current = false;
         if (!mountedRef.current) return;
-        setState("idle");
+        if (captureId === captureIdRef.current) setState("idle");
         setError(VOICE_FAILURE_COPY.start);
       };
 
@@ -311,6 +381,10 @@ export function useVoiceInput(options: {
         return;
       }
 
+      if (captureId !== captureIdRef.current) {
+        try { recorder.stop(); } catch { /* the newer capture owns the microphone */ }
+        return;
+      }
       startedAtRef.current = Date.now();
       setState("recording");
 
@@ -341,7 +415,7 @@ export function useVoiceInput(options: {
         if (elapsed >= VOICE_MAX_RECORDING_MS) {
           const active = recorderRef.current;
           if (active && active.state !== "inactive") active.stop();
-          else finish(false);
+          else finish(false, captureId);
         }
       }, 200);
 
@@ -352,33 +426,8 @@ export function useVoiceInput(options: {
         if (recorder.state !== "inactive") recorder.stop();
       }
     })();
-  }, [enabled, finish, onRecordingStart, releaseMedia, state]);
+  }, [enabled, finish, onRecordingStart, releaseMedia, state, stop]);
 
-  const stop = useCallback(() => {
-    if (state === "requesting") {
-      stopRequestedRef.current = true;
-      return;
-    }
-    if (state !== "recording") return;
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      try { recorder.stop(); } catch { finish(false); }
-    } else finish(false);
-  }, [finish, state]);
-
-  const cancel = useCallback(() => {
-    cancelledRef.current = true;
-    setElapsedMs(0);
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      try { recorder.stop(); } catch { finish(true); }
-    } else {
-      releaseMedia();
-      finishingRef.current = true;
-      startingRef.current = false;
-      setState("idle");
-    }
-  }, [finish, releaseMedia]);
 
   /* Leaving the window must never leave the microphone open: stop and keep
      whatever was already spoken. */

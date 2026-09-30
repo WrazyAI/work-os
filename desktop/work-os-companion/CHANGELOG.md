@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.82
+
+- Ctrl + M now starts recording even if you press it while the previous note is still being transcribed, instead of appearing to do nothing.
+
 ## 0.3.81
 
 - Insights charts now connect weekly plan progress, show an interactive app/site distribution, and reflow the daily breakdown cleanly on smaller windows.
