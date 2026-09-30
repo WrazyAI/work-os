@@ -1,0 +1,148 @@
+name: Insights PDF regression
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/work-os-companion/**'
+      - '.github/workflows/insights-pdf-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install companion dependencies
+        working-directory: desktop/work-os-companion
+        run: npm ci --no-audit --no-fund
+
+      - name: Install browser runtime
+        run: |
+          npm install --prefix /tmp/insights-pdf-browser playwright --no-audit --no-fund
+          /tmp/insights-pdf-browser/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start companion preview
+        working-directory: desktop/work-os-companion
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/insights-pdf-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/insights-pdf-vite.log
+          exit 1
+
+      - name: Verify first-paint evidence and compact detail
+        env:
+          NODE_PATH: /tmp/insights-pdf-browser/node_modules
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+            const page = await browser.newPage({ viewport: { width: 1024, height: 900 } });
+            const errors = [];
+            page.on('pageerror', error => errors.push(error.message));
+
+            await page.goto('http://127.0.0.1:5173/?offline&day=optional');
+            await page.getByRole('button', { name: 'Insights', exact: true }).click();
+            await page.getByRole('button', { name: '30d', exact: true }).click();
+            await page.locator('.heatmap-cell:not(.blank)').first().waitFor();
+            await page.locator('.tracked-bar').first().waitFor();
+            await page.locator('.trend-bar:not(.empty)').first().waitFor();
+            await page.locator('.bar-track i').first().waitFor();
+
+            const marks = await page.evaluate(() => {
+              function style(selector) {
+                const el = document.querySelector(selector);
+                if (!el) return null;
+                const s = getComputedStyle(el);
+                return {
+                  animationName: s.animationName,
+                  transform: s.transform,
+                  opacity: s.opacity,
+                  backgroundColor: s.backgroundColor,
+                  backgroundImage: s.backgroundImage,
+                };
+              }
+              return {
+                heatmap: style('.heatmap-cell:not(.blank)'),
+                tracked: style('.tracked-bar'),
+                trend: style('.trend-bar:not(.empty)'),
+                update: style('.bar-track i'),
+                overflow: { scroll: document.documentElement.scrollWidth, viewport: window.innerWidth },
+              };
+            });
+
+            for (const [name, mark] of Object.entries(marks)) {
+              if (name === 'overflow') continue;
+              assert(mark, name + ' mark missing');
+              assert.equal(mark.animationName, 'none', name + ' should not depend on entry animation');
+              assert.equal(mark.transform, 'none', name + ' should be at final transform on first paint');
+              assert.equal(mark.opacity, '1', name + ' should be fully visible on first paint');
+            }
+            assert(marks.overflow.scroll <= marks.overflow.viewport + 1, '1024px page overflow: ' + JSON.stringify(marks.overflow));
+
+            await page.screenshot({ path: '/tmp/insights-30d-1024.jpg', type: 'jpeg', quality: 58, fullPage: true });
+
+            await page.setViewportSize({ width: 720, height: 900 });
+            const details = page.locator('.insight-detail-disclosure');
+            await details.locator('summary').click();
+            const region = details.locator('.insight-table-wrap .scroll-fade-region');
+            await region.waitFor();
+
+            const compact = await page.evaluate(() => {
+              const details = document.querySelector('.insight-detail-disclosure');
+              const region = details?.querySelector('.insight-table-wrap .scroll-fade-region');
+              const caption = details?.querySelector('.insight-table-wrap caption');
+              const small = document.querySelector('.insights-page .card-title small');
+              const card = small?.closest('.card-title');
+              const rr = region?.getBoundingClientRect();
+              const cr = caption?.getBoundingClientRect();
+              const sr = small?.getBoundingClientRect();
+              const pr = card?.getBoundingClientRect();
+              const rs = region ? getComputedStyle(region) : null;
+              return {
+                region: rr ? { height: rr.height, clientHeight: region.clientHeight, scrollHeight: region.scrollHeight } : null,
+                overflowY: rs?.overflowY,
+                captionWidth: cr?.width ?? 0,
+                subtitleFits: sr && pr ? sr.right <= pr.right + 1 : false,
+                page: { scroll: document.documentElement.scrollWidth, viewport: window.innerWidth },
+              };
+            });
+            assert(compact.region, 'compact detail region missing');
+            assert(compact.region.clientHeight <= 461, 'compact detail should stay bounded: ' + JSON.stringify(compact.region));
+            assert(compact.region.scrollHeight > compact.region.clientHeight, '30d detail should scroll inside the disclosure');
+            assert.equal(compact.overflowY, 'auto');
+            assert(compact.captionWidth > 200, 'caption collapsed too narrowly: ' + compact.captionWidth);
+            assert(compact.subtitleFits, 'card subtitle escapes its card');
+            assert(compact.page.scroll <= compact.page.viewport + 1, '720px page overflow: ' + JSON.stringify(compact.page));
+
+            await details.screenshot({ path: '/tmp/insights-detail-720.jpg', type: 'jpeg', quality: 60 });
+
+            for (const file of ['/tmp/insights-30d-1024.jpg', '/tmp/insights-detail-720.jpg']) {
+              const key = file.includes('detail') ? 'DETAIL_720' : 'PAGE_1024';
+              console.log('INSIGHTS_PDF_' + key + '=' + fs.readFileSync(file).toString('base64'));
+            }
+            console.log('INSIGHTS_PDF_PASS', JSON.stringify({ marks, compact, runtimeErrors: errors.length }));
+            assert.equal(errors.length, 0, 'runtime errors: ' + errors.join(' | '));
+            await browser.close();
+          })().catch(error => { console.error(error.stack || error); process.exit(1); });
+          NODE
+
+      - name: Troubleshooting context
+        if: failure()
+        run: tail -100 /tmp/insights-pdf-vite.log || true
