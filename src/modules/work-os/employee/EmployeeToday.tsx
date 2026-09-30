@@ -435,7 +435,7 @@ export default function EmployeeToday() {
               <PanelHeader
                 icon={<FileCheck2 size={16} />}
                 title="End-of-day report"
-                meta={eodDue ? "Today’s report is ready to draft or review." : `${outstandingCount} past day${outstandingCount === 1 ? "" : "s"} need a submitted report.`}
+                meta={eodDue ? "Today’s report is ready to draft or review." : `${outstandingCount} past day${outstandingCount === 1 ? "" : "s"} ${outstandingCount === 1 ? "needs" : "need"} a submitted report.`}
                 actions={
                   <Link href="/work-os/review" className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }}>
                     Open Review

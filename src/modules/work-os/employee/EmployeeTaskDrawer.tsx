@@ -30,12 +30,16 @@ export default function EmployeeTaskDrawer({
   const [description, setDescription] = useState(mode === "edit" ? String(task?.description ?? "") : "");
   const titleRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  /* Keep the latest onClose in a ref so the mount-only focus/Escape effect
+     never re-runs (and never steals focus) when the parent re-renders. */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => titleRef.current?.focus());
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key === "Escape") { event.preventDefault(); onCloseRef.current(); }
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -43,7 +47,7 @@ export default function EmployeeTaskDrawer({
       document.removeEventListener("keydown", onKey);
       if (restoreRef.current?.isConnected) restoreRef.current.focus();
     };
-  }, [onClose]);
+  }, []);
 
   const save = useMutation({
     mutationFn: () => {
@@ -98,7 +102,7 @@ export default function EmployeeTaskDrawer({
         <header className="flex items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
           <div>
             <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">{mode === "create" ? "Add task" : "Task details"}</h2>
-            {mode === "edit" ? <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{isWorkOsTask ? "Work OS task" : "Nifty task"} · {task?.provider_task_id || task?.id}</p> : null}
+            {mode === "edit" ? <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">{isWorkOsTask ? "Work OS task" : "Nifty task"}{task?.project?.name ? ` · ${task.project.name}` : ""}</p> : null}
           </div>
           <SecondaryButton onClick={onClose} aria-label="Close" className="!p-2">
             <X size={15} />

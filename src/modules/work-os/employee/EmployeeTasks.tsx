@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
   Archive,
@@ -77,12 +77,8 @@ export default function EmployeeTasks() {
   const [subtaskMenuId, setSubtaskMenuId] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; task: AnyRow } | null>(null);
 
-  const openedRef = useRef(false);
   useEffect(() => {
     if (day.data?.shiftDate) setDate((current) => current || day.data!.shiftDate);
-  }, [day.data?.shiftDate]);
-  useEffect(() => {
-    if (day.data?.shiftDate) openedRef.current = true;
   }, [day.data?.shiftDate]);
 
   const scoped = useQuery<{ tasks: AnyRow[]; counts: { total: number; open: number; completed: number } | null }>({
@@ -302,7 +298,7 @@ export default function EmployeeTasks() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          {subtasks.length || expandedTaskId ? (
+                          {subtasks.length ? (
                             <button
                               type="button"
                               aria-label={`${expanded ? "Collapse" : "Expand"} ${task.title}`}
