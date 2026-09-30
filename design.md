@@ -237,6 +237,41 @@ affordance, and clicking empty sidebar space expands it; navigation rows remain
 clickable without expanding the rail. The icon column uses one shared slot so
 the mark, rows, and footer remain aligned in both states.
 
+### 4.3 Web employee workspace
+
+The deployed web console hosts the employee workspace on nested routes, so each
+destination is a real, deep-linkable, role-guarded page instead of one stacked
+page:
+
+    /work-os/today      command center: status band, focus, check-in, first moves
+    /work-os/tasks      task workspace: My day · Unfinished · Completed · All tasks
+    /work-os/review     EOD reports, proposed changes, and recorded evidence
+    /work-os/insights   range brief and per-day records
+    /work-os/settings   profile, working hours, consent, and companion connect
+
+- Employees and mapped administrators use the workspace; managers keep the
+  review console and unmapped administrators keep the administration console.
+  `/work-os` dispatches by role and redirects employees to their workspace.
+  Legacy `?tab=` links map onto the destinations (reports/evidence → Review,
+  people/schedules/blueprints → Today) so old sidebar links and bookmarks keep
+  working.
+- Work OS navigation is role-aware in the console sidebar: the workspace
+  destinations for employees, Team review for managers, and the administration
+  destinations for administrators, with the active state resolved on the real
+  route.
+- The workspace carries the Work OS material system inside the console shell:
+  warm canvas, white work surfaces, near-black green ink, and signal green for
+  actions, progress, and current state. The tokens are scoped to the workspace
+  routes; the shell keeps its own palette around them. The dark variant keeps
+  the same roles — the blueprint defines the light stack only.
+- Each destination owns one masthead (context eyebrow, single title, compact
+  utilities), one content axis, one panel family with hairline dividers, and at
+  most one primary action per decision area. Task rows stay flat; task details
+  open in a right-side drawer and menus are detached surfaces.
+- The web surface is status-only for attendance: it names the Worktivity state
+  and freshness, keeps the activity watch truthful, and points to the Windows
+  Companion for Clock in, Pause/Resume, and Clock out.
+
 ## 5. Dashboard blueprint
 
 The dashboard is a command center, not a report of everything Work OS knows.

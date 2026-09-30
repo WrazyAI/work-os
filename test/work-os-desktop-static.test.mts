@@ -348,7 +348,10 @@ assert.match(read("src-tauri/permissions/allow-app-commands.toml"), /finish_work
 assert.doesNotMatch(worktivityController, /\$ports\s*\+=\s*\$DefaultPort/);
 assert.doesNotMatch(worktivityController, /Tracking\/CreateActivityLog|api\.useworktivity\.com|Authorization|Bearer/i);
 
-const webEmployee = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/EmployeeWorkOsHome.tsx"), "utf8");
+const webEmployee = [
+  readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeToday.tsx"), "utf8"),
+  readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeSettings.tsx"), "utf8"),
+].join("\n");
 assert.match(webEmployee, /Clock in, pause, resume, and clock out from the Windows Work OS Companion/);
 assert.doesNotMatch(webEmployee, /Clock in<\/button>/);
 assert.doesNotMatch(webEmployee, /action: "clock_out"/);
@@ -489,8 +492,9 @@ const taskStore = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-
 assert.match(taskStore, /task\.provider === "local"/);
 const migration = readFileSync(resolve(import.meta.dirname, "../supabase/migrations/0041_work_os_local_plan_tasks.sql"), "utf8");
 assert.match(migration, /'nifty_task', 'outcome', 'local_task'/);
-const web = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/EmployeeWorkOsHome.tsx"), "utf8");
-assert.match(web, /=== "local" \? "Work OS task" :/);
+const web = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeTasks.tsx"), "utf8");
+assert.match(web, /String\(task\.provider \?\? ""\) === "local"/);
+assert.match(web, /Work OS task/);
 assert.match(web, /Permanently delete this task from Work OS\?/);
 
 // ── Approval flow and shared review persistence ──

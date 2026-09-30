@@ -279,7 +279,7 @@ test("the web check-in composer carries the same voice contract", () => {
   assert.match(composer, /voiceRef\.current\.stop\(\)/);
   assert.match(composer, /Hold \{VOICE_HOTKEY_LABEL\} to talk/);
   assert.match(composer, /Transcribed — review it, then send\./);
-  const employee = read("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  const employee = read("src/modules/work-os/employee/EmployeeToday.tsx");
   assert.match(employee, /voiceEnabled=\{voiceAvailable\}/);
   assert.match(employee, /<CheckInComposer/);
 });
@@ -376,7 +376,7 @@ test("the mic waits for the server build, not just the workspace flag", () => {
   assert.match(day, /capabilities: \{ voice_input: voiceInputConfigured\(\) \}/);
   assert.match(day, /import \{ voiceInputConfigured \} from "@\/lib\/aiTranscribe"/);
 
-  const employee = read("src/modules/work-os/EmployeeWorkOsHome.tsx");
+  const employee = read("src/modules/work-os/employee/EmployeeToday.tsx");
   assert.match(employee, /const voiceAvailable = day\.data\?\.access\?\.featureFlags\?\.voice_input === true/);
   assert.match(employee, /&& day\.data\?\.access\?\.capabilities\?\.voice_input === true;/);
   assert.match(employee, /useCheckInVoice\(input, setInput, voiceAvailable\)/);

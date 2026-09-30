@@ -118,6 +118,88 @@
   --scrollbar-thumb-hover: #626671;
 }
 
+/* ===========================  Work OS employee workspace  ============== */
+/* The employee destinations (/work-os/today …) carry the Work OS blueprint
+   material system (design.md §2–§3): warm ivory canvas, white work surfaces,
+   near-black green ink, and signal green reserved for actions and current
+   state. Scoped here so the console shell keeps its own identity around the
+   routes. The dark variant is a deliberate extension — the blueprint defines
+   the light material stack only — and keeps the same roles. */
+[data-work-os-workspace] {
+  --bg-primary: #eef1eb;      /* canvas */
+  --bg-secondary: #f5f6f1;    /* stage */
+  --bg-tertiary: #f0f3ed;     /* inset / hover */
+  --bg-card: #ffffff;         /* raised work surfaces and fields */
+  --bg-sidebar: #fafaf6;
+
+  --text-primary: #182018;
+  --text-secondary: #3c4b3c;
+  --text-tertiary: #687267;
+  --text-inverse: #fafaf6;
+
+  --border: #d9ded5;
+  --border-subtle: #e6e9e1;
+  --border-hot: #c5cec1;
+
+  --accent: #4c801d;          /* accessible signal green for text + icons */
+  --accent-hover: #3f6b18;
+  --accent-subtle: rgba(168, 241, 91, 0.20);
+  --accent-line: rgba(94, 157, 39, 0.35);
+  --accent-deep: #4c801d;
+
+  --signal: #a8f15b;          /* filled primary actions */
+  --signal-ink: #1d3417;      /* ink on signal */
+
+  --status-ok: #3f7d1c;
+  --status-warn: #9a670c;
+  --status-error: #c94e43;
+  --status-info: #2e617d;
+}
+
+[data-theme="dark"] [data-work-os-workspace] {
+  --bg-primary: #14170f;
+  --bg-secondary: #1a1e16;
+  --bg-tertiary: #232820;
+  --bg-card: #1d221a;
+  --bg-sidebar: #171b13;
+
+  --text-primary: #eef1eb;
+  --text-secondary: #c6cfbc;
+  --text-tertiary: #8e9885;
+  --text-inverse: #131a10;
+
+  --border: #2f3628;
+  --border-subtle: #272d21;
+  --border-hot: #414a37;
+
+  --accent: #8fd24a;
+  --accent-hover: #a3e05f;
+  --accent-subtle: rgba(168, 241, 91, 0.14);
+  --accent-line: rgba(168, 241, 91, 0.32);
+  --accent-deep: #8fd24a;
+
+  --signal: #a8f15b;
+  --signal-ink: #14210e;
+
+  --status-ok: #8fd24a;
+  --status-warn: #e0a44a;
+  --status-error: #e57b6f;
+  --status-info: #7fb3d1;
+}
+
+/* The deployed console shell (agent-os) frames pages with its own padding.
+   Let the workspace canvas reach that frame instead of floating inside it.
+   The marker above the workspace is set by the shell only. */
+[data-shell-frame] [data-work-os-workspace] {
+  margin: -2rem -1.5rem;
+  min-height: calc(100vh - 4rem);
+}
+@media (min-width: 768px) {
+  [data-shell-frame] [data-work-os-workspace] {
+    margin-inline: -2.5rem;
+  }
+}
+
 /* ===========================  Shared scales / aliases  ================== */
 :root, [data-theme="dark"], [data-theme="light"] {
   --r-xs: 4px;
@@ -125,6 +207,12 @@
   --r-md: 10px;
   --r-lg: 14px;
   --r-pill: 999px;
+
+  /* Work OS signal aliases — retargeted to the blueprint palette inside
+     [data-work-os-workspace]. Outside the scope they follow the shell accent. */
+  --signal: var(--accent);
+  --signal-ink: var(--text-inverse);
+  --accent-deep: var(--accent);
 
   /* Sidebar width — toggled expanded/collapsed; main content padding follows it
      (set on <html> by the collapse toggle + the no-flash boot script). */

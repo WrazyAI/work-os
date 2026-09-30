@@ -273,23 +273,49 @@ test("manager review route resolves the report inside the requested organization
   assert.match(review, /requireWorkOsPersonAccess/);
 });
 
-test("mapped administrators default to their unified employee workspace", async () => {
+test("employee destinations are nested routes with legacy ?tab= redirects", async () => {
+  const routes = await source("src/modules/work-os/employee-routes.ts");
+  assert.match(routes, /EMPLOYEE_DESTINATIONS/);
+  assert.match(routes, /\{ id: "today", label: "Today", href: "\/work-os\/today" \}/);
+  assert.match(routes, /\{ id: "tasks", label: "Tasks", href: "\/work-os\/tasks" \}/);
+  assert.match(routes, /\{ id: "review", label: "Review", href: "\/work-os\/review" \}/);
+  assert.match(routes, /\{ id: "insights", label: "Insights", href: "\/work-os\/insights" \}/);
+  assert.match(routes, /\{ id: "settings", label: "Settings", href: "\/work-os\/settings" \}/);
+  assert.match(routes, /reports: "review"/);
+  assert.match(routes, /evidence: "review"/);
+  assert.match(routes, /people: "today"/);
+  const page = await source("src/app/work-os/page.tsx");
+  assert.match(page, /redirect\(employeeDestinationForLegacyTab\(tab\)\)/);
+  assert.match(page, /role === "admin" && personId && !adminSurface && !tab/);
+  assert.match(page, /redirect\("\/work-os\/today"\)/);
+  for (const route of ["today", "tasks", "review", "insights", "settings"]) {
+    assert.ok(existsSync(new URL(`src/app/work-os/(employee)/${route}/page.tsx`, root)), `missing employee route ${route}`);
+  }
+  const layout = await source("src/app/work-os/(employee)/layout.tsx");
+  assert.match(layout, /canUseEmployeeWorkspace/);
+  assert.match(layout, /redirect\("\/work-os"\)/);
+  const access = await source("src/lib/work-os-page-access.ts");
+  assert.match(access, /export async function resolveWorkOsPageAccess/);
+  assert.match(access, /status === 401\) redirect\("\/login"\)/);
+});
+
+test("the Work OS dispatcher keeps manager review and the admin console", async () => {
   const workOsHome = await source("src/modules/work-os/WorkOsHome.tsx");
-  assert.match(workOsHome, /const adminSurface = searchParams\.get\("surface"\) === "admin"/);
-  assert.match(workOsHome, /session\.data\?\.role === "admin" && session\.data\.personId && !adminSurface/);
-  assert.match(workOsHome, /<EmployeeWorkOsHome \/>/);
-  assert.match(workOsHome, /router\.push\("\/work-os\?surface=admin"\)/);
-  assert.match(workOsHome, /router\.push\("\/work-os"\)/);
+  assert.match(workOsHome, /session\.data\?\.role === "manager"/);
+  assert.match(workOsHome, /<ManagerWorkOsHome \/>/);
+  assert.doesNotMatch(workOsHome, /EmployeeWorkOsHome/);
+  assert.doesNotMatch(workOsHome, /adminSurface/);
+  assert.match(workOsHome, /router\.push\("\/work-os\/today"\)/);
 });
 
 test("web onboarding reads back authoritative organization context", async () => {
-  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
-  assert.match(employeeHome, /organizationSetup\?\.roleProfile\?\.name/);
-  assert.match(employeeHome, /organizationSetup\?\.teams\?\.map/);
-  assert.match(employeeHome, /organizationSetup\?\.managers\?\.map/);
-  assert.match(employeeHome, /organizationSetup\?\.officialSchedule/);
-  assert.match(employeeHome, /Official role/);
-  assert.match(employeeHome, /Official schedule/);
+  const settings = await source("src/modules/work-os/employee/EmployeeSettings.tsx");
+  assert.match(settings, /organizationSetup\?\.roleProfile\?\.name/);
+  assert.match(settings, /organizationSetup\?\.teams\?\.map/);
+  assert.match(settings, /organizationSetup\?\.managers\?\.map/);
+  assert.match(settings, /officialSchedule/);
+  assert.match(settings, /Official role/);
+  assert.match(settings, /Official schedule/);
 });
 
 test("work-os page provides a react-query client and API auth returns 401", async () => {
@@ -314,25 +340,25 @@ test("auth proxy keeps desktop CORS and bearer bypass intact", async () => {
   assert.match(proxy, /isDesktopUpdaterDownload/);
 });
 
-test("web Insights follows the selected historical workspace date", async () => {
-  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
-  assert.match(employeeHome, /const insightsThrough = selectedTaskDate \|\| day\.data\?\.shiftDate/);
-  assert.match(employeeHome, /employee-insights", insightRange, insightsThrough/);
-  assert.match(employeeHome, /through=\$\{encodeURIComponent\(insightsThrough \?\? ""\)\}/);
+test("web Insights follows the selected through date", async () => {
+  const insights = await source("src/modules/work-os/employee/EmployeeInsights.tsx");
+  assert.match(insights, /setThrough\(\(current\) => current \|\| day\.data!\.shiftDate\)/);
+  assert.match(insights, /"employee-insights", range, through/);
+  assert.match(insights, /through=\$\{encodeURIComponent\(through\)\}/);
 });
 
-test("web employee drafts EODs for outstanding historical days", async () => {
-  const employeeHome = await source("src/modules/work-os/EmployeeWorkOsHome.tsx");
-  const outstanding = await source("src/modules/work-os/EmployeeEodOutstanding.tsx");
-  assert.match(employeeHome, /eod\/outstanding\?days=14/);
-  assert.match(employeeHome, /\/api\/work-os\/me\/day\?date=\$\{encodeURIComponent\(selectedTaskDate\)\}/);
-  assert.match(employeeHome, /const eodDay = historical \? selectedDay\.data/);
-  assert.match(employeeHome, /body: JSON\.stringify\(\{ date: eodDay\.shiftDate \}\)/);
-  assert.match(employeeHome, /employee-eod-panel/);
-  assert.match(employeeHome, /Draft EOD for \$\{calendarDateLabel\(selectedTaskDate\)\}/);
-  assert.match(outstanding, /aria-label="Outstanding EODs/);
-  assert.match(outstanding, /role="dialog"/);
-  assert.match(outstanding, /outstandingRowMeta/);
+test("web Review drafts EODs for outstanding historical days", async () => {
+  const review = await source("src/modules/work-os/employee/EmployeeReview.tsx");
+  const dayHook = await source("src/modules/work-os/employee/useEmployeeDay.ts");
+  assert.match(dayHook, /eod\/outstanding\?days=14/);
+  assert.match(review, /\/api\/work-os\/me\/day\?date=\$\{encodeURIComponent\(selectedDate\)\}/);
+  assert.match(review, /const eodDay = historical \? selectedDay\.data/);
+  assert.match(review, /body: JSON\.stringify\(\{ date: eodDay\.shiftDate \}\)/);
+  assert.match(review, /employee-eod-panel/);
+  assert.match(review, /employee-eod-editor/);
+  assert.match(review, /Draft EOD for \$\{calendarDateLabel\(selectedDate\)\}/);
+  assert.match(review, /outstandingRowMeta/);
+  assert.match(review, /Outstanding EODs/);
 });
 
 test("proposal application is lease-fenced and reports explicit outcomes", async () => {

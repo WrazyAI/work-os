@@ -18,7 +18,6 @@ import {
   Users,
 } from "lucide-react";
 import type { WorkOsNiftyStatus } from "./types";
-import EmployeeWorkOsHome from "./EmployeeWorkOsHome";
 import ManagerWorkOsHome from "./ManagerWorkOsHome";
 import { supportedTimezones, timezoneLabel } from "./timezones";
 
@@ -97,7 +96,6 @@ export default function WorkOsHome() {
   // (from the sidebar sub-navigation) — keep the URL and the tab selector in sync.
   const searchParams = useSearchParams();
   const deepLinkTab = searchParams.get("tab") as Tab | null;
-  const adminSurface = searchParams.get("surface") === "admin";
   useEffect(() => {
     if (deepLinkTab && ["today", "tasks", "people", "schedules", "blueprints", "evidence", "reports", "settings"].includes(deepLinkTab)) {
       setTab(deepLinkTab);
@@ -420,16 +418,11 @@ export default function WorkOsHome() {
     return <ManagerWorkOsHome />;
   }
   if (session.data?.role === "employee") {
-    return <EmployeeWorkOsHome />;
-  }
-  if (session.data?.role === "admin" && session.data.personId && !adminSurface) {
+    // The server dispatcher sends employees to the nested workspace routes
+    // (/work-os/today …). This only renders if that gate is bypassed.
     return (
-      <div className="min-h-[calc(100vh-8rem)]" style={{ background: "var(--bg-primary)" }}>
-        <div className="flex items-center justify-between border-b px-5 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Employee workspace</span>
-          <button onClick={() => router.push("/work-os?surface=admin")} className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>Administration</button>
-        </div>
-        <EmployeeWorkOsHome />
+      <div className="grid min-h-[50vh] place-items-center text-[12px] text-[var(--text-tertiary)]" role="status">
+        Opening your workspace…
       </div>
     );
   }
@@ -452,7 +445,7 @@ export default function WorkOsHome() {
             <h1 className="mt-2 text-xl font-semibold text-[var(--text-primary)]">Work OS administration</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            {session.data?.personId ? <button onClick={() => router.push("/work-os")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>My Day</button> : null}
+            {session.data?.personId ? <button onClick={() => router.push("/work-os/today")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>My Day</button> : null}
             <button disabled={!schemaReady} onClick={() => sync.mutate()} className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-inverse)" }}>
               <RefreshCw size={14} className={sync.isPending ? "animate-spin" : ""} /> Sync Nifty
             </button>
