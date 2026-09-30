@@ -426,21 +426,53 @@ test("hold-to-talk is routed by focus, so only the window in use records", () =>
   /* A hold owns the capture: the other window gives up whatever it was doing
      before the target starts, so two recorders can never be live at once. */
   assert.match(rust, /let other = if target == "avatar" \{ "main" \} else \{ "avatar" \};/);
-  assert.match(rust, /app\.emit_to\(other, "work-os:\/\/voice\/cancel", \(\)\)/);
+  assert.ok(rust.includes('emit_to(other, "work-os://voice/cancel", voice_event(other))'), "the other window is told to stop, addressed");
   const press = rust.slice(rust.indexOf("ShortcutState::Pressed"), rust.indexOf("ShortcutState::Released"));
   assert.ok(
-    press.indexOf('emit_to(other, "work-os://voice/cancel"') < press.indexOf('emit_to(target, "work-os://voice/start"'),
+    press.indexOf('"work-os://voice/cancel"') < press.indexOf('"work-os://voice/start"'),
     "the other window must be told to stop before the target starts",
   );
 
   /* A release with no recorded press stops both, so a capture cannot outlive
      the hold that opened it. */
-  assert.match(rust, /None => \{\s*\n\s*let _ = app\.emit_to\("main", "work-os:\/\/voice\/stop", \(\)\);\s*\n\s*let _ = app\.emit_to\("avatar", "work-os:\/\/voice\/stop", \(\)\);/);
+  assert.ok(rust.includes('emit_to("main", "work-os://voice/stop", voice_event("main"))'));
+  assert.ok(rust.includes('emit_to("avatar", "work-os://voice/stop", voice_event("avatar"))'));
 
   /* Routing is recorded in the debugger, so a report of a duplicate capture
      can be checked against what the host actually did. */
   assert.match(rust, /diagnostics::host_event\(\s*\n\s*app,\s*\n\s*"voice\.hotkey",/);
   assert.match(rust, /Hold-to-talk start routed to the \{target\} window/);
+});
+
+test("a routed voice event is addressed, so only one window ever acts on it", () => {
+  /* Tauri's emit filter short-circuits for a listener registered with the
+     default target (`match_any_or_filter`: `*target == EventTarget::Any`), so
+     `emit_to` reached *both* windows and both started recording. The event now
+     carries its address, and the listener also names its window so the filter
+     applies. */
+  const rust = read("desktop/work-os-companion/src-tauri/src/lib.rs");
+  assert.match(rust, /fn voice_event\(target: &str\) -> serde_json::Value \{\s*\n\s*serde_json::json!\(\{ "target": target \}\)/);
+  for (const line of rust.split("\n")) {
+    if (!line.includes("work-os://voice/")) continue;
+    assert.ok(line.includes("voice_event("), `every voice emit must carry its address: ${line.trim()}`);
+  }
+
+  const hook = read("desktop/work-os-companion/src/chat/voiceInput.ts");
+  assert.match(hook, /export function isVoiceEventFor\(payload: unknown, label: string\): boolean \{\s*\n\s*return \(payload as \{ target\?: unknown \} \| null\)\?\.target === label;/);
+
+  /* Both windows: check the address, and name themselves as the target. */
+  for (const path of ["desktop/work-os-companion/src/App.tsx", "desktop/work-os-companion/src/AvatarApp.tsx"]) {
+    const source = read(path);
+    assert.match(source, /import \{ isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL \} from "\.\/chat\/voiceInput";/);
+    assert.match(source, /const label = getCurrentWindow\(\)\.label;/);
+    assert.match(source, /if \(!isVoiceEventFor\(event\.payload, label\)\) return;/);
+    assert.match(source, /\}, \{ target: label \}\)/);
+    assert.ok(!source.includes('listen("work-os://voice/start", () => voiceRef.current.start'), "the raw untargeted listener must be gone");
+  }
+
+  /* The shim must forward the target, or the listener stays `Any`. */
+  assert.match(read("desktop/work-os-companion/src/tauriEvents.ts"), /options\?: ListenOptions,/);
+  assert.match(read("desktop/work-os-companion/src/tauriEvents.ts"), /tauriListen<T>\(event, handler, options\)/);
 });
 
 test("a capture cannot be started twice in one window", () => {

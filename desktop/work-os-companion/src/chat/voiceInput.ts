@@ -27,6 +27,21 @@ export const VOICE_HOTKEY_LABEL = "Ctrl + M";
  * proxy's own deadline so its error page can never replace ours. */
 const VOICE_UPLOAD_TIMEOUT_MS = 35_000;
 
+/**
+ * True when a routed voice event is addressed to `label`.
+ *
+ * `emit_to` cannot be trusted to reach one window by itself: a webview
+ * listener registered without an explicit target is stored as
+ * `EventTarget::Any`, and Tauri's filter short-circuits on that
+ * (`match_any_or_filter`), so *every* window receives *every* targeted emit.
+ * That is what made both delivery surfaces start recording from one hold. The
+ * address carried by the event is the authority, and an event that names no
+ * window is refused rather than acted on twice.
+ */
+export function isVoiceEventFor(payload: unknown, label: string): boolean {
+  return (payload as { target?: unknown } | null)?.target === label;
+}
+
 export type VoiceState = "idle" | "requesting" | "recording" | "transcribing";
 export type VoiceFailure = "unsupported" | "permission" | "device" | "start" | "transcribe" | "network";
 

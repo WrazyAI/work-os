@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "./tauriEvents";
-import { useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
@@ -983,17 +984,31 @@ export default function App() {
     return () => unlisten?.();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
 
-  // Hold-to-talk: the global shortcut is registered in Rust so it reaches the
-  // app from any window, then routed here as press/release/cancel. The hold
-  // owns the whole capture, so a release always ends it.
+  /* Hold-to-talk: the global shortcut is registered in Rust so it reaches the
+     app from any window, then routed here as press/release/cancel. The hold
+     owns the whole capture, so a release always ends it.
+     Two guards, because `emit_to` alone is not enough: the listener names this
+     window as its target so Tauri's filter applies, and the event's own
+     address is checked before acting, so a broadcast cannot start a capture
+     meant for the other delivery surface. */
   useEffect(() => {
     if (!isTauri()) return;
+    const label = getCurrentWindow().label;
     const unlisteners: Array<() => void> = [];
-    void listen("work-os://voice/start", () => voiceRef.current.start("hotkey"))
+    void listen<{ target?: string }>("work-os://voice/start", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.start("hotkey");
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
-    void listen("work-os://voice/stop", () => voiceRef.current.stop())
+    void listen<{ target?: string }>("work-os://voice/stop", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.stop();
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
-    void listen("work-os://voice/cancel", () => voiceRef.current.cancel())
+    void listen<{ target?: string }>("work-os://voice/cancel", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.cancel();
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     return () => unlisteners.forEach((fn) => fn());
   }, []);

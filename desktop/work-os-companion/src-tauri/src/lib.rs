@@ -367,6 +367,17 @@ struct VoiceHotkey(std::sync::Mutex<VoiceHotkeyStatus>);
 
 const VOICE_SHORTCUT_LABEL: &str = "Ctrl + M";
 
+/// Addressed payload for every voice event.
+///
+/// `emit_to` alone is not enough to reach one window: a webview listener
+/// registered without an explicit target is stored as `EventTarget::Any`, and
+/// Tauri's own filter short-circuits on that (`match_any_or_filter`), so every
+/// window receives every targeted emit. Each window therefore checks the
+/// address before acting.
+fn voice_event(target: &str) -> serde_json::Value {
+    serde_json::json!({ "target": target })
+}
+
 fn voice_shortcut() -> tauri_plugin_global_shortcut::Shortcut {
     use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
     Shortcut::new(Some(Modifiers::CONTROL), Code::KeyM)
@@ -544,7 +555,7 @@ pub fn run() {
                                before this one starts. A press can therefore
                                never leave two recorders live. */
                             let other = if target == "avatar" { "main" } else { "avatar" };
-                            let _ = app.emit_to(other, "work-os://voice/cancel", ());
+                            let _ = app.emit_to(other, "work-os://voice/cancel", voice_event(other));
                             focus_voice_target(app, target);
                             diagnostics::host_event(
                                 app,
@@ -552,20 +563,20 @@ pub fn run() {
                                 &format!("Hold-to-talk start routed to the {target} window"),
                                 diagnostics::DiagnosticLevel::Info,
                             );
-                            let _ = app.emit_to(target, "work-os://voice/start", ());
+                            let _ = app.emit_to(target, "work-os://voice/start", voice_event(target));
                         }
                         ShortcutState::Released => {
                             let target = route.0.lock().ok().and_then(|mut current| current.take());
                             match target {
                                 Some(target) => {
-                                    let _ = app.emit_to(target, "work-os://voice/stop", ());
+                                    let _ = app.emit_to(target, "work-os://voice/stop", voice_event(target));
                                 }
                                 /* No press was recorded to bind this release
                                    to, so stop both: a capture must never
                                    outlive the hold that opened it. */
                                 None => {
-                                    let _ = app.emit_to("main", "work-os://voice/stop", ());
-                                    let _ = app.emit_to("avatar", "work-os://voice/stop", ());
+                                    let _ = app.emit_to("main", "work-os://voice/stop", voice_event("main"));
+                                    let _ = app.emit_to("avatar", "work-os://voice/stop", voice_event("avatar"));
                                 }
                             }
                         }

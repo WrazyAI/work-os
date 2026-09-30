@@ -2,7 +2,7 @@ import { hasPendingMascotApproval } from "./mascotApproval";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
-import { useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
+import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { History, SquarePen, X } from "lucide-react";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -512,15 +512,27 @@ export default function AvatarApp(): React.ReactElement {
     return () => unlisten?.();
   }, [avatarMascotFixture]);
 
-  // Hold-to-talk reaches whichever companion window is on screen: Rust routes
-  // the press/release here when the floating window is the visible one.
+  /* Hold-to-talk reaches whichever companion window is in use, and the event
+     says which one: the listener names this window so Tauri's filter applies,
+     and the address is checked before acting, so a broadcast cannot start a
+     capture here that was meant for the in-app dock. */
   useEffect(() => {
+    const label = getCurrentWindow().label;
     const unlisteners: Array<() => void> = [];
-    void listen("work-os://voice/start", () => voiceRef.current.start("hotkey"))
+    void listen<{ target?: string }>("work-os://voice/start", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.start("hotkey");
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
-    void listen("work-os://voice/stop", () => voiceRef.current.stop())
+    void listen<{ target?: string }>("work-os://voice/stop", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.stop();
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
-    void listen("work-os://voice/cancel", () => voiceRef.current.cancel())
+    void listen<{ target?: string }>("work-os://voice/cancel", (event) => {
+      if (!isVoiceEventFor(event.payload, label)) return;
+      voiceRef.current.cancel();
+    }, { target: label })
       .then((fn) => unlisteners.push(fn)).catch(() => undefined);
     return () => unlisteners.forEach((fn) => fn());
   }, []);

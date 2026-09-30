@@ -1,4 +1,4 @@
-import { emit as tauriEmit, listen as tauriListen, type EventCallback } from "@tauri-apps/api/event";
+import { emit as tauriEmit, listen as tauriListen, type EventCallback, type Options as ListenOptions } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
 
 // Only non-secret presentation/debug events are bridged in browser DEV fixtures.
@@ -26,8 +26,15 @@ function previewChannel() {
   }
   return channel;
 }
-export function listen<T>(event: string, handler: EventCallback<T>): Promise<() => void> {
-  if (isTauri()) return tauriListen<T>(event, handler);
+export function listen<T>(
+  event: string,
+  handler: EventCallback<T>,
+  options?: ListenOptions,
+): Promise<() => void> {
+  /* The target matters: a listener registered without one is stored as
+     `EventTarget::Any`, and Tauri's own emit filter short-circuits on that, so
+     a *targeted* emit would reach every window. */
+  if (isTauri()) return tauriListen<T>(event, handler, options);
   if (!previewAllowed(event)) return Promise.resolve(() => undefined);
   previewChannel();
   const callback = (payload: unknown) => handler({ event, id: 0, payload: payload as T });
