@@ -31,6 +31,7 @@ import {
   Skeleton,
   StatusPill,
   cx,
+  inlineInputClass,
   inputClass,
   inputStyle,
 } from "./ui";
@@ -139,7 +140,10 @@ export default function EmployeeTasks() {
   }, [menuTaskId, subtaskMenuId]);
 
   const isHistoryView = view === "completed" || view === "all";
-  const rawRows = isHistoryView ? history.data?.pages.flatMap((page) => page.tasks) ?? [] : scoped.data?.tasks ?? [];
+  const rawRows = useMemo(
+    () => (isHistoryView ? history.data?.pages.flatMap((page) => page.tasks) ?? [] : scoped.data?.tasks ?? []),
+    [isHistoryView, history.data, scoped.data],
+  );
   const loading = isHistoryView ? history.isLoading : (scoped.isLoading && !scoped.data);
   const error = scoped.error || history.error || changeTask.error || day.error;
   const historical = view === "day" && !!date && !!day.data?.shiftDate && date !== day.data.shiftDate;
@@ -189,7 +193,7 @@ export default function EmployeeTasks() {
                   max={today ?? undefined}
                   onChange={(event) => setDate(event.target.value)}
                   aria-label="Task date"
-                  className={`${inputClass} w-auto`}
+                  className={`${inlineInputClass} w-auto`}
                   style={inputStyle}
                 />
                 {historical ? (
@@ -264,7 +268,7 @@ export default function EmployeeTasks() {
               <button type="button" onClick={() => activateSort("name")} className="flex flex-1 items-center gap-1 text-left hover:text-[var(--text-primary)]">
                 Name {sort?.key === "name" ? (sort.direction === "asc" ? "↑" : "↓") : null}
               </button>
-              <span className="hidden w-16 shrink-0 md:block">Progress</span>
+              <span className="hidden w-20 shrink-0 md:block">Progress</span>
               <button type="button" onClick={() => activateSort("due")} className="hidden w-28 items-center gap-1 md:flex hover:text-[var(--text-primary)]">
                 Date due {sort?.key === "due" ? (sort.direction === "asc" ? "↑" : "↓") : null}
               </button>
@@ -320,11 +324,11 @@ export default function EmployeeTasks() {
                       </div>
 
                       {progress.total > 0 ? (
-                        <span className="hidden w-16 shrink-0 items-center gap-1.5 pt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)] md:flex" title={`${progress.completed} of ${progress.total} subtasks complete`}>
+                        <span className="hidden w-20 shrink-0 items-center gap-1.5 pt-0.5 text-[11px] tabular-nums text-[var(--text-tertiary)] md:flex" title={`${progress.completed} of ${progress.total} subtasks complete`}>
                           {progress.completed}/{progress.total}
                         </span>
                       ) : (
-                        <span className="hidden w-16 shrink-0 md:block" aria-hidden="true" />
+                        <span className="hidden w-20 shrink-0 md:block" aria-hidden="true" />
                       )}
                       <span className="hidden w-28 shrink-0 pt-0.5 text-[11px] tabular-nums text-[var(--text-secondary)] md:block">
                         {task.due_date ? String(task.due_date) : "No date"}

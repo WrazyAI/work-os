@@ -15,7 +15,7 @@ import {
   SecondaryButton,
   Skeleton,
   StatusPill,
-  inputClass,
+  inlineInputClass,
   inputStyle,
 } from "./ui";
 
@@ -77,7 +77,7 @@ export default function EmployeeInsights() {
               max={day.data?.shiftDate ?? undefined}
               onChange={(event) => setThrough(event.target.value)}
               aria-label="Through date"
-              className={`${inputClass} w-auto`}
+              className={`${inlineInputClass} w-auto`}
               style={inputStyle}
             />
             <IconButton label="Refresh insights" onClick={() => void refresh()} disabled={insights.isFetching}>

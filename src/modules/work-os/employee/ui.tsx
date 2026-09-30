@@ -75,7 +75,7 @@ export function Masthead({
         <h1 className="mt-1.5 text-[26px] font-bold leading-tight tracking-[-0.01em] text-[var(--text-primary)]">{title}</h1>
         {meta ? <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">{meta}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">{actions}</div> : null}
     </header>
   );
 }
@@ -181,6 +181,10 @@ export function StatusPill({ tone = "open", children }: { tone?: "open" | "done"
 
 export const inputClass =
   "w-full rounded-[10px] border px-3 py-2 text-[13px] font-normal text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-deep)]";
+
+/** Same field surface without the full-width base — for compact masthead controls. */
+export const inlineInputClass =
+  "rounded-[10px] border px-3 py-2 text-[13px] font-normal text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-deep)]";
 
 export const inputStyle = { borderColor: "var(--border)", background: "var(--bg-card)" } as const;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -25,6 +25,7 @@ import {
   SecondaryButton,
   Skeleton,
   StatusPill,
+  inlineInputClass,
   inputClass,
   inputStyle,
 } from "./ui";
@@ -136,7 +137,7 @@ export default function EmployeeReview() {
   const editorLocked = status === "pending_review" || status === "approved";
   const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";
 
-  const eodPanel = useMemo(() => {
+  const eodPanel = (() => {
     if (historical && selectedDay.isLoading && !selectedDay.data) {
       return (
         <div className="grid gap-3 px-5 py-5" aria-busy="true">
@@ -194,7 +195,7 @@ export default function EmployeeReview() {
         <p className="text-[11px] text-[var(--text-tertiary)]">Drafting reads your recorded day — activity context and outcomes, never a productivity claim.</p>
       </div>
     );
-  }, [historical, selectedDay, eodReport, reportMarkdown, editorLocked, submitEod.isPending, submitLabel, draftEod.isPending, selectedDate, status]);
+  })();
 
   return (
     <div id="employee-eod-panel">
@@ -210,7 +211,7 @@ export default function EmployeeReview() {
               max={day.data?.shiftDate ?? undefined}
               onChange={(event) => setSelectedDate(event.target.value)}
               aria-label="Report date"
-              className={`${inputClass} w-auto`}
+              className={`${inlineInputClass} w-auto`}
               style={inputStyle}
             />
             {historical ? <SecondaryButton onClick={() => setSelectedDate(day.data?.shiftDate ?? "")}>Back to today</SecondaryButton> : null}
