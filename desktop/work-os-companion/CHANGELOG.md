@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.78
+
+- Drafting your plan no longer fails when you carry a long task list forward.
+- A plan save that didn't go through now clears once a newer save succeeds, instead of lingering in Needs attention.
+
 ## 0.3.77
 
 - The planner now opens your drafted plan in its own view, with a back button to return to the brief and a Review draft action to move forward again.
