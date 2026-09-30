@@ -24,9 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Insights charts now connect weekly plan progress, show an interactive app/site distribution, and reflow the daily breakdown cleanly on smaller windows.
+
 ## 0.3.80
 
-- Ctrl + M now records in the window you are actually using — the app when it's in front, the floating companion otherwise — instead of both, and it never pulls the app forward over what you were doing.
+- Ctrl + M records in the active window — the app when focused, the floating companion otherwise — without pulling the app over your work.
 
 ## 0.3.79
 

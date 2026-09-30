@@ -70,7 +70,7 @@ import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynth
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { useModalScrollLock } from "./modalScrollLock";
 import { consistencyChips, heatmapCells, insightRangeSummary, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
-import { BarBreakdown, ConsistencyChips, DailyRhythmStrip, DeltaBadge, HeatmapGrid, OnTimeBar, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { ActivityDonut, ConsistencyChips, DailyRhythmStrip, DeltaBadge, HeatmapGrid, OnTimeBar, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
@@ -4197,12 +4197,12 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
           <div><strong>Output evidence</strong><span>{data.totals.outputEvidence} linked artifact{data.totals.outputEvidence === 1 ? "" : "s"} or record{data.totals.outputEvidence === 1 ? "" : "s"}</span></div>
         </div>
         {activityTotals.trackedMinutes > 0 ? <div className="insight-activity-inline">
-          <div className="split-data">
-            <BarBreakdown
-              ariaLabel={"Tracked minutes by app for " + rangeLabel}
-              rows={activityTotals.topApps.map((app) => ({ key: app.name, label: app.name, value: app.minutes, detail: "min" }))}
+          <div className="activity-distribution">
+            <p className="split-chart-title">App &amp; site distribution</p>
+            <ActivityDonut
+              ariaLabel={"Tracked app and site distribution for " + rangeLabel}
+              items={activityTotals.topApps}
               total={activityTotals.trackedMinutes}
-              emptyNote="No tracked app activity in this range."
             />
             <p className="activity-provenance">Observed app and site usage is neutral context. It is not a productivity score and never proves task completion.</p>
           </div>
@@ -4230,18 +4230,18 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
               </thead>
               <tbody>
                 {data.days.map((day) => <tr key={day.date}>
-                  <td>{formatWorkOsDate(day.date)}</td>
-                  <td>{durationLabel(day.observedSeconds)}</td>
-                  <td>{durationLabel(day.pausedSeconds)}</td>
-                  <td>{day.plannedCompleted}/{day.planned}</td>
-                  <td>{day.tasksCompleted}</td>
-                  <td>{day.outcomesOnTime ?? 0}</td>
-                  <td>{(day.outcomesLate ?? 0) > 0 ? day.outcomesLate : "—"}</td>
-                  <td>{day.updates}</td>
-                  <td>{(day.updatesByKind?.blocked ?? 0) > 0 ? day.updatesByKind!.blocked : "—"}</td>
-                  <td>{day.trackedMinutes ? day.trackedMinutes + "m" : "—"}</td>
-                  <td>{day.outputEvidence}</td>
-                  <td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td>
+                  <th scope="row">{formatWorkOsDate(day.date)}</th>
+                  <td data-label="Observed">{durationLabel(day.observedSeconds)}</td>
+                  <td data-label="Paused">{durationLabel(day.pausedSeconds)}</td>
+                  <td data-label="Commitments">{day.plannedCompleted}/{day.planned}</td>
+                  <td data-label="Outcomes">{day.tasksCompleted}</td>
+                  <td data-label="On time">{day.outcomesOnTime ?? 0}</td>
+                  <td data-label="Late">{(day.outcomesLate ?? 0) > 0 ? day.outcomesLate : "—"}</td>
+                  <td data-label="Updates">{day.updates}</td>
+                  <td data-label="Blockers">{(day.updatesByKind?.blocked ?? 0) > 0 ? day.updatesByKind!.blocked : "—"}</td>
+                  <td data-label="Tracked">{day.trackedMinutes ? day.trackedMinutes + "m" : "—"}</td>
+                  <td data-label="Output evidence">{day.outputEvidence}</td>
+                  <td data-label="Session quality">{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td>
                 </tr>)}
               </tbody>
             </table>
