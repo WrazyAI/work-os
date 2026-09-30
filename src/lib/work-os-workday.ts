@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { WorkOsConflictError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
+import { WorkOsConflictError, WorkOsValidationError, type WorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { listPersonTasks } from "@/lib/work-os";
 import { dateOnly } from "@/lib/work-os-internal";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
@@ -7,7 +7,7 @@ import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, nextSessionState, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
@@ -206,7 +206,7 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
     carryTasks = result.data ?? [];
   }
   const tasks = [...(currentTasks ?? []), ...carryTasks];
-  const candidates = prioritizePlanCandidates(tasks, shiftDate, carryOver).map((task) => ({
+  const candidates = prioritizePlanCandidates(tasks, shiftDate, carryOver, MAX_DAILY_PLAN_ITEMS - PLAN_ITEM_DRAFT_HEADROOM).map((task) => ({
       organization_id: access.organizationId, person_id: access.personId, task_id: task.id,
       source: task.source, disposition: task.disposition, rank: task.rank, title_snapshot: task.title,
       blocker: task.blocked_reason, item_kind: "nifty_task", completion_state: task.completed ? "completed" : "open",
@@ -576,7 +576,7 @@ export async function resolveMissedClockOut(access: WorkOsAccess, body: Json, id
 
 function planDate(input: unknown) {
   const result = value(input);
-  if (result && !/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new Error("shift_date must be YYYY-MM-DD");
+  if (result && !/^\d{4}-\d{2}-\d{2}$/.test(result)) throw new WorkOsValidationError("shift_date must be YYYY-MM-DD");
   return result;
 }
 
@@ -606,10 +606,10 @@ type DraftItem = {
 
 function boundedCriteria(value: unknown) {
   if (!Array.isArray(value)) return [];
-  if (value.length > 5) throw new Error("A commitment can have at most five success criteria.");
+  if (value.length > 5) throw new WorkOsValidationError("A commitment can have at most five success criteria.");
   return value.map((item) => {
     const criterion = valueText(item);
-    if (!criterion || criterion.length > 300) throw new Error("Success criteria must be 300 characters or fewer.");
+    if (!criterion || criterion.length > 300) throw new WorkOsValidationError("Success criteria must be 300 characters or fewer.");
     return criterion;
   });
 }
@@ -620,21 +620,21 @@ function valueText(value: unknown) {
 
 function commitmentFields(item: DraftItem, taskId: string | null) {
   const objective = item.objective === undefined ? undefined : valueText(item.objective);
-  if (objective !== undefined && objective !== null && objective.length > 1_000) throw new Error("Commitment objectives must be 1000 characters or fewer.");
+  if (objective !== undefined && objective !== null && objective.length > 1_000) throw new WorkOsValidationError("Commitment objectives must be 1000 characters or fewer.");
   const criteria = item.success_criteria === undefined ? undefined : boundedCriteria(item.success_criteria);
   const estimate = item.estimate_minutes;
   if (estimate !== undefined && estimate !== null && (!Number.isInteger(estimate) || estimate < 1 || estimate > 720)) {
-    throw new Error("Commitment estimates must be between 1 and 720 minutes.");
+    throw new WorkOsValidationError("Commitment estimates must be between 1 and 720 minutes.");
   }
   const clarificationState = item.clarification_state;
   if (clarificationState !== undefined && clarificationState !== null && !["none", "needs_clarification", "resolved"].includes(clarificationState)) {
-    throw new Error("Invalid commitment clarification state.");
+    throw new WorkOsValidationError("Invalid commitment clarification state.");
   }
   let sourceRefs: Json[] | undefined;
   if (item.source_refs !== undefined) {
-    if (!Array.isArray(item.source_refs) || item.source_refs.length > 10) throw new Error("A commitment can have at most ten source references.");
+    if (!Array.isArray(item.source_refs) || item.source_refs.length > 10) throw new WorkOsValidationError("A commitment can have at most ten source references.");
     sourceRefs = item.source_refs.map((entry) => {
-      if (!entry || typeof entry !== "object") throw new Error("Commitment source references are invalid.");
+      if (!entry || typeof entry !== "object") throw new WorkOsValidationError("Commitment source references are invalid.");
       const ref = entry as Json;
       const provider = valueText(ref.provider);
       const type = valueText(ref.type);
@@ -642,7 +642,7 @@ function commitmentFields(item: DraftItem, taskId: string | null) {
       const label = valueText(ref.label);
       const validTaskRef = taskId && ["work_os", "nifty"].includes(provider ?? "") && type === "task" && id === taskId;
       const validIntentRef = !taskId && provider === "employee" && type === "intent" && id === "raw_intent";
-      if (!validTaskRef && !validIntentRef) throw new Error("Commitment source references must be server-known task or employee intent references.");
+      if (!validTaskRef && !validIntentRef) throw new WorkOsValidationError("Commitment source references must be server-known task or employee intent references.");
       return { provider, type, id, ...(label ? { label: label.slice(0, 240) } : {}) };
     });
   }
@@ -657,13 +657,13 @@ function commitmentFields(item: DraftItem, taskId: string | null) {
 
 function interpretationMetadata(value: unknown) {
   if (value === undefined) return undefined;
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("interpretation_metadata must be an object.");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new WorkOsValidationError("interpretation_metadata must be an object.");
   const raw = value as Json;
   const sourceContext = Array.isArray(raw.sourceContext)
     ? raw.sourceContext.filter((item): item is string => typeof item === "string" && ["tasks", "carry_over", "previous_plan", "blockers", "recent_updates", "github"].includes(item)).slice(0, 6)
     : [];
   const clarificationCount = Number(raw.clarificationCount);
-  if (!Number.isInteger(clarificationCount) || clarificationCount < 0 || clarificationCount > 2) throw new Error("interpretation_metadata clarificationCount must be between 0 and 2.");
+  if (!Number.isInteger(clarificationCount) || clarificationCount < 0 || clarificationCount > 2) throw new WorkOsValidationError("interpretation_metadata clarificationCount must be between 0 and 2.");
   const result: Json = { clarificationCount, sourceContext };
   for (const key of ["model", "promptVersion", "interpretedAt"] as const) {
     const entry = valueText(raw[key]);
@@ -685,16 +685,16 @@ function interpretationMetadata(value: unknown) {
 
 function clarificationAnswers(value: unknown, metadata: Json) {
   if (value === undefined) return null;
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("clarification_answers must be an object.");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new WorkOsValidationError("clarification_answers must be an object.");
   const allowedIds = new Set(Array.isArray(metadata.clarifications)
     ? metadata.clarifications.flatMap((entry) => entry && typeof entry === "object" && !Array.isArray(entry) && valueText((entry as Json).id) ? [valueText((entry as Json).id)!] : [])
     : []);
   const entries = Object.entries(value as Json);
-  if (entries.length > 2) throw new Error("A plan can include at most two clarification answers.");
+  if (entries.length > 2) throw new WorkOsValidationError("A plan can include at most two clarification answers.");
   const answers: Json = {};
   for (const [id, rawAnswer] of entries) {
     const answer = valueText(rawAnswer);
-    if (!allowedIds.has(id) || !answer || answer.length > 1_000) throw new Error("Clarification answers must address the current planning questions.");
+    if (!allowedIds.has(id) || !answer || answer.length > 1_000) throw new WorkOsValidationError("Clarification answers must address the current planning questions.");
     answers[id] = answer;
   }
   return answers;
@@ -703,31 +703,33 @@ function clarificationAnswers(value: unknown, metadata: Json) {
 export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const { shiftDate: currentDate } = await localWorkDate(access);
   const shiftDate = planDate(body.shift_date) ?? currentDate;
-  if (shiftDate !== currentDate) throw new Error("Only today's plan can be edited.");
+  if (shiftDate !== currentDate) throw new WorkOsValidationError("Only today's plan can be edited.");
   const session = await activeSession(access);
   const plan = session ? await ensureDailyPlan(access, session) : await ensureDailyPlanForDate(access, shiftDate);
-  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  if (!plan || plan.status === "closed") throw new WorkOsValidationError("This plan is read-only.");
   const confirm = body.confirm === true;
-  if (confirm && !session) throw new Error("Clock in before confirming a plan.");
+  if (confirm && !session) throw new WorkOsValidationError("Clock in before confirming a plan.");
   const expectedRevision = Number(body.revision ?? plan.revision ?? 1);
-  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new Error("A valid plan revision is required.");
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) throw new WorkOsValidationError("A valid plan revision is required.");
   const submitted = Array.isArray(body.items) ? body.items as DraftItem[] : null;
-  if (submitted && submitted.length > 100) throw new Error("A daily plan can contain at most 100 items.");
+  // The seed and task-surface paths keep plans below this bound, so a plan the
+  // server built always fits; only an oversized client payload is rejected.
+  if (submitted && submitted.length > MAX_DAILY_PLAN_ITEMS) throw new WorkOsValidationError(`A daily plan can contain at most ${MAX_DAILY_PLAN_ITEMS} items.`);
   const hasIntent = Object.prototype.hasOwnProperty.call(body, "freeform_intent");
   const freeformIntent = hasIntent ? value(body.freeform_intent) : value(plan.freeform_intent);
-  if (freeformIntent && freeformIntent.length > 4000) throw new Error("Plan intent must be 4000 characters or fewer.");
+  if (freeformIntent && freeformIntent.length > 4000) throw new WorkOsValidationError("Plan intent must be 4000 characters or fewer.");
   const buildId = confirm ? value(body.build_id) : null;
-  if (confirm && !buildId) throw new Error("An AI build id is required for plan confirmation.");
-  if (buildId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(buildId)) throw new Error("build_id must be a valid AI build id.");
+  if (confirm && !buildId) throw new WorkOsValidationError("An AI build id is required for plan confirmation.");
+  if (buildId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(buildId)) throw new WorkOsValidationError("build_id must be a valid AI build id.");
   const intentFingerprint = confirm ? planIntentFingerprint(freeformIntent) : null;
   const requestedProvenance = body.goal_provenance === undefined ? value(plan.goal_provenance) : value(body.goal_provenance);
-  if (requestedProvenance && !["employee", "accepted_suggestion", "ai_draft"].includes(requestedProvenance)) throw new Error("goal_provenance must identify an employee goal, an accepted suggestion, or an AI draft");
+  if (requestedProvenance && !["employee", "accepted_suggestion", "ai_draft"].includes(requestedProvenance)) throw new WorkOsValidationError("goal_provenance must identify an employee goal, an accepted suggestion, or an AI draft");
   const suggestionTaskIds = Array.isArray(body.suggestion_task_ids)
     ? [...new Set(body.suggestion_task_ids.filter((item): item is string => typeof item === "string" && !!item.trim()).map((item) => item.trim()))]
     : Array.isArray(plan.suggestion_task_ids) ? plan.suggestion_task_ids.filter((item: unknown): item is string => typeof item === "string") : [];
-  if (suggestionTaskIds.length > 20) throw new Error("A goal suggestion can reference at most 20 tasks.");
+  if (suggestionTaskIds.length > 20) throw new WorkOsValidationError("A goal suggestion can reference at most 20 tasks.");
   const focusSummary = body.focus_summary === undefined ? undefined : value(body.focus_summary);
-  if (focusSummary && focusSummary.length > 500) throw new Error("Plan focus_summary must be 500 characters or fewer.");
+  if (focusSummary && focusSummary.length > 500) throw new WorkOsValidationError("Plan focus_summary must be 500 characters or fewer.");
   const metadata = interpretationMetadata(body.interpretation_metadata)
     ?? (plan.interpretation_metadata && typeof plan.interpretation_metadata === "object" && !Array.isArray(plan.interpretation_metadata) ? plan.interpretation_metadata as Json : {});
   const answers = clarificationAnswers(body.clarification_answers, metadata)
@@ -747,7 +749,7 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
       if (existing) {
         const outcome = existing.item_kind === "outcome" || !existing.task_id;
         const title = outcome ? value(item.title_snapshot) : value(existing.title_snapshot);
-        if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
+        if (!title || title.length > 240) throw new WorkOsValidationError("Plan outcomes require a title of 240 characters or fewer.");
         const fields = commitmentFields(item, existing.task_id ? String(existing.task_id) : null);
         preparedItems.push({
           id: String(existing.id), rank: index, disposition, title_snapshot: title,
@@ -761,9 +763,9 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
         if (outcome) retainedOutcomes.add(String(existing.id));
         continue;
       }
-      if (item.item_kind !== "outcome" && item.task_id) throw new Error("New Nifty plan items must come from the server-provided task list.");
+      if (item.item_kind !== "outcome" && item.task_id) throw new WorkOsValidationError("New Nifty plan items must come from the server-provided task list.");
       const title = value(item.title_snapshot);
-      if (!title || title.length > 240) throw new Error("Plan outcomes require a title of 240 characters or fewer.");
+      if (!title || title.length > 240) throw new WorkOsValidationError("Plan outcomes require a title of 240 characters or fewer.");
       preparedItems.push({
         rank: index, disposition, title_snapshot: title, item_kind: "outcome", completion_state: completionState,
         objective: null, success_criteria: [], estimate_minutes: null, source_refs: [], clarification_state: null,
@@ -882,15 +884,15 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
 
 export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const taskId = value(body.surface_task_id) ?? value(body.defer_task_id);
-  if (!taskId) throw new Error("surface_task_id or defer_task_id is required");
+  if (!taskId) throw new WorkOsValidationError("surface_task_id or defer_task_id is required");
   const disposition = body.defer_task_id ? "deferred" : "selected";
   const { shiftDate } = await localWorkDate(access);
   const plan = await ensureDailyPlanForDate(access, shiftDate, await activeSession(access));
-  if (!plan || plan.status === "closed") throw new Error("Today's task workspace is read-only.");
+  if (!plan || plan.status === "closed") throw new WorkOsValidationError("Today's task workspace is read-only.");
   const ownerId = workOsOrganizationOwnerId(access);
   const attributableTasks = await listPersonTasks(ownerId, access.personId as string, { completed: "false", includeLedgerHistory: true, limit: 1000 });
   const task = attributableTasks.find((item) => String(item.id) === taskId || String(item.provider_task_id) === taskId);
-  if (!task) throw new Error("The Nifty task is not attributable to this employee.");
+  if (!task) throw new WorkOsValidationError("The Nifty task is not attributable to this employee.");
   const existing = await db().from("work_daily_plan_items").select("id,disposition")
     .eq("organization_id", access.organizationId).eq("plan_id", plan.id).eq("task_id", task.id).maybeSingle();
   if (existing.error) throw new Error(`load surfaced task: ${existing.error.message}`);
@@ -900,7 +902,13 @@ export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, i
       .eq("organization_id", access.organizationId).eq("id", existing.data.id).select("id").single();
     if (updated.error) throw new Error(`update surfaced task: ${updated.error.message}`);
   } else {
-    const rank = Array.isArray(plan.items) ? plan.items.length : 0;
+    // Single-task additions stay under the seed bound so a later confirm can
+    // still append its drafted outcomes without crossing the hard item cap.
+    const itemCount = Array.isArray(plan.items) ? plan.items.length : 0;
+    if (itemCount >= MAX_DAILY_PLAN_ITEMS - PLAN_ITEM_DRAFT_HEADROOM) {
+      throw new WorkOsValidationError("This plan is already holding the maximum number of items. Existing items can still be updated, but no new task can be surfaced.");
+    }
+    const rank = itemCount;
     const inserted = await db().from("work_daily_plan_items").insert({
       organization_id: access.organizationId, plan_id: plan.id, person_id: access.personId, task_id: task.id,
       source: "carry_over", disposition, rank, title_snapshot: task.title,
@@ -921,12 +929,12 @@ export async function updateDailyTaskSurface(access: WorkOsAccess, body: Json, i
 
 export async function updateDailyPlanOutcome(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const outcomeId = value(body.outcome_id);
-  if (!outcomeId) throw new Error("outcome_id is required");
+  if (!outcomeId) throw new WorkOsValidationError("outcome_id is required");
   const completionState = body.completion_state === "completed" ? "completed" : body.completion_state === "open" ? "open" : null;
-  if (!completionState) throw new Error("completion_state must be open or completed");
+  if (!completionState) throw new WorkOsValidationError("completion_state must be open or completed");
   const { shiftDate } = await localWorkDate(access);
   const plan = await loadPlanByDate(access, shiftDate);
-  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  if (!plan || plan.status === "closed") throw new WorkOsValidationError("This plan is read-only.");
   const now = new Date().toISOString();
   const { data, error } = await db().from("work_daily_plan_items").update({
     completion_state: completionState,
@@ -943,15 +951,15 @@ export async function updateDailyPlanOutcome(access: WorkOsAccess, body: Json, i
 export async function convertDailyPlanOutcome(access: WorkOsAccess, body: Json, idempotencyKey: string) {
   const outcomeId = value(body.convert_outcome_id);
   const taskId = value(body.task_id);
-  if (!outcomeId || !taskId) throw new Error("convert_outcome_id and task_id are required");
+  if (!outcomeId || !taskId) throw new WorkOsValidationError("convert_outcome_id and task_id are required");
   const { shiftDate } = await localWorkDate(access);
   const plan = await loadPlanByDate(access, shiftDate);
-  if (!plan || plan.status === "closed") throw new Error("This plan is read-only.");
+  if (!plan || plan.status === "closed") throw new WorkOsValidationError("This plan is read-only.");
   const ownerId = workOsOrganizationOwnerId(access);
   const taskResult = await db().from("work_tasks").select("id,title,completed,completed_at").eq("user_id", ownerId)
     .eq("id", taskId).contains("assignee_person_ids", [access.personId as string]).maybeSingle();
   if (taskResult.error) throw new Error(`validate converted Nifty task: ${taskResult.error.message}`);
-  if (!taskResult.data) throw new Error("The confirmed Nifty task is not assigned to this employee.");
+  if (!taskResult.data) throw new WorkOsValidationError("The confirmed Nifty task is not assigned to this employee.");
   const now = new Date().toISOString();
   const { data, error } = await db().from("work_daily_plan_items").update({
     task_id: taskResult.data.id,

@@ -169,6 +169,15 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
   return progress;
 }
 
+/** Hard bound on the items one daily plan may hold and one save may submit.
+ * The seed and single-task additions are kept below it (see the draft
+ * headroom) so a plan the server built can always be saved back, even after a
+ * confirm appends its drafted outcomes. */
+export const MAX_DAILY_PLAN_ITEMS = 250;
+/** Room under the hard bound reserved for drafted outcomes a save may append
+ * on top of the seeded list. Seeds and single-task additions stay below it. */
+export const PLAN_ITEM_DRAFT_HEADROOM = 50;
+
 export function dedupePlanCandidates<T extends { id?: string | null; provider_task_id?: string | null; title?: string | null }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -184,7 +193,7 @@ export type PlanCandidateDisposition = "selected" | "deferred";
 export interface CarryOverSelection { disposition: PlanCandidateDisposition; rank: number }
 
 export function prioritizePlanCandidates<T extends { id?: string | null; provider_task_id?: string | null; title?: string | null; due_date?: string | null }>(
-  items: T[], shiftDate: string, carryOver: ReadonlyMap<string, CarryOverSelection>,
+  items: T[], shiftDate: string, carryOver: ReadonlyMap<string, CarryOverSelection>, limit = Number.POSITIVE_INFINITY,
 ): Array<T & { source: PlanCandidateSource; disposition: PlanCandidateDisposition; rank: number }> {
   const sourceOrder: Record<PlanCandidateSource, number> = { carry_over: 0, overdue: 1, due_today: 2, existing: 3 };
   const dateKey = (value: unknown): string | null => {
@@ -208,5 +217,6 @@ export function prioritizePlanCandidates<T extends { id?: string | null; provide
           : "existing";
     return { task, source, disposition: previous?.disposition ?? "selected", previousRank: previous?.rank ?? Number.MAX_SAFE_INTEGER };
   }).sort((left, right) => sourceOrder[left.source] - sourceOrder[right.source] || left.previousRank - right.previousRank || String(left.task.title).localeCompare(String(right.task.title)))
+    .slice(0, Math.max(0, limit))
     .map(({ task, source, disposition }, rank) => ({ ...task, source, disposition, rank }));
 }

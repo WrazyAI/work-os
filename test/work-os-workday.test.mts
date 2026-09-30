@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, nextSessionState, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -94,4 +94,28 @@ test("a confirmed plan anchors the first follow-up at seventy-five minutes", () 
 
 test("daily plan candidates deduplicate provider and local tasks", () => {
   assert.deepEqual(dedupePlanCandidates([{ id: "a", title: "A" }, { id: "a", title: "A duplicate" }, { provider_task_id: "b", title: "B" }]).map((item) => item.title), ["A", "B"]);
+});
+
+test("plan candidate prioritization keeps carry-over work when a seed limit applies", () => {
+  const candidates = [
+    { id: "new-task", title: "New task", due_date: "2026-09-12" },
+    { id: "carried", title: "Carried task", due_date: "2026-09-12" },
+    { id: "later", title: "Later task", due_date: "2026-09-12" },
+  ];
+  const carryOver = new Map([["carried", { disposition: "selected" as const, rank: 0 }]]);
+  const limited = prioritizePlanCandidates(candidates, "2026-09-12", carryOver, 2);
+  assert.deepEqual(limited.map((item) => item.id), ["carried", "later"]);
+  assert.deepEqual(limited.map((item) => item.rank), [0, 1]);
+  assert.equal(limited[0].source, "carry_over");
+  assert.equal(prioritizePlanCandidates(candidates, "2026-09-12", carryOver).length, 3);
+});
+
+test("plan item bounds are coherent so a seeded plan can always be saved back", () => {
+  // The seed loader reads at most a 100-task candidate window and a confirm
+  // appends at most eight drafted outcomes, so the seed bound must fit both
+  // under the submitted-item cap with headroom to spare.
+  const seedLimit = MAX_DAILY_PLAN_ITEMS - PLAN_ITEM_DRAFT_HEADROOM;
+  assert.ok(PLAN_ITEM_DRAFT_HEADROOM > 0);
+  assert.ok(seedLimit >= 100);
+  assert.ok(MAX_DAILY_PLAN_ITEMS >= seedLimit + 8);
 });

@@ -29,6 +29,16 @@ export class WorkOsConflictError extends Error {
   }
 }
 
+/** Caller-fixable input (bounded fields, unsupported edits). `jsonError` maps
+ * it to 400 so clients never retry or offline-queue a request that cannot
+ * succeed on replay. */
+export class WorkOsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkOsValidationError";
+  }
+}
+
 type WorkOsAccessResult =
   | { access: WorkOsAccess; response?: never }
   | { response: NextResponse; access?: never };
@@ -257,6 +267,9 @@ export function jsonError(err: unknown, status?: number) {
   }
   if (err instanceof WorkOsConflictError) {
     return NextResponse.json({ error: err.message }, { status: 409 });
+  }
+  if (err instanceof WorkOsValidationError) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
   }
   const message = err instanceof Error ? err.message : "Request failed";
   if (message.includes("Employee Companion migration required")) {
