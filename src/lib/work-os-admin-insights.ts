@@ -193,10 +193,10 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
       .select("id,person_id,shift_date,state,clocked_in_at,clocked_out_at,paused_seconds,correction_status")
       .eq("organization_id", organizationId)
       .gte("shift_date", windowFrom).lte("shift_date", current.through),
-    db.from("work_daily_plan_items")
-      .select("id,person_id,disposition,completion_state,item_kind,task_id,plan:work_daily_plans!inner(shift_date)")
+    db.from("work_daily_plans")
+      .select("id,person_id,shift_date")
       .eq("organization_id", organizationId)
-      .gte("plan.shift_date", windowFrom).lte("plan.shift_date", current.through),
+      .gte("shift_date", windowFrom).lte("shift_date", current.through),
     scopedPersonIds && scopedPersonIds.length === 0
       ? Promise.resolve({ count: 0, error: null })
       : personFilter
@@ -245,16 +245,23 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   const previousSessions = sessions.filter((row) => inRange(row.shift_date, previous.from, previous.through) && matchesPerson(row));
 
   // Plan commitment uses selected plan items for plans inside the current
-  // window and the allowed people scope; disposition and completion state are
-  // the reliable fields for the commitment rate.
-  const planDate = (item: Json) => {
-    const plan = Array.isArray(item.plan) ? item.plan[0] : item.plan;
-    return dateOnly(plan?.shift_date);
-  };
-  const planItems = ((plansResult.data ?? []) as Json[])
+  // window and the allowed people scope. The plan date is resolved through a
+  // plan-id lookup because the query shim supports embeds for selects only,
+  // never filters on embedded columns.
+  const planRows = (plansResult.data ?? []) as Json[];
+  const planIds = planRows.map((row) => String(row.id));
+  const planItemsResult = planIds.length
+    ? await db.from("work_daily_plan_items")
+        .select("id,person_id,plan_id,disposition,completion_state,item_kind,task_id")
+        .eq("organization_id", organizationId)
+        .in("plan_id", planIds)
+    : { data: [], error: null };
+  if (planItemsResult.error) throw new Error(`load admin insights plans: ${planItemsResult.error.message}`);
+  const planDateById = new Map(planRows.map((row) => [String(row.id), dateOnly(row.shift_date)]));
+  const planItems = ((planItemsResult.data ?? []) as Json[])
     .filter((item) => personIds.has(String(item.person_id)) && matchesPerson(item))
     .filter((item) => {
-      const date = planDate(item);
+      const date = planDateById.get(String(item.plan_id));
       return !!date && date >= current.from && date <= current.through;
     });
 

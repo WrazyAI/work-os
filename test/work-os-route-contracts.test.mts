@@ -430,3 +430,16 @@ test("evidence and report lists expose bounded filters for the admin surfaces", 
   assert.match(reports, /pending_review/);
   assert.match(reports, /requireWorkOsPersonAccess/);
 });
+
+test("admin queries stay within the Postgres shim's filter capabilities", async () => {
+  // The query shim supports embeds for selects only; filters on embedded
+  // columns fail at runtime with `invalid identifier`, so plan dates resolve
+  // through a plan-id lookup and correction filters resolve event ids first.
+  const insights = await source("src/lib/work-os-admin-insights.ts");
+  assert.match(insights, /work_daily_plans/);
+  assert.doesNotMatch(insights, /plan\.shift_date/);
+  assert.match(insights, /\.in\("plan_id", planIds\)/);
+  const evidence = await source("src/app/api/work-os/evidence/route.ts");
+  assert.match(evidence, /correctionEventIds/);
+  assert.doesNotMatch(evidence, /event\.correction_status/);
+});

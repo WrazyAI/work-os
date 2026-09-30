@@ -8,8 +8,6 @@ export const dynamic = "force-dynamic";
 
 const EVIDENCE_SELECT =
   "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events(correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
-const EVIDENCE_SELECT_DISPUTED =
-  "*, person:work_people(id,display_name), task:work_tasks(id,title), event:work_evidence_events!inner(correction_status,evidence_class,metadata,screenshot:work_screenshot_summaries(id,processing_status,summary,confidence,storage_path,deleted_at))";
 
 export async function GET(req: Request) {
   try {
@@ -23,9 +21,22 @@ export async function GET(req: Request) {
     }
     const personIds = requestedPersonId ? [requestedPersonId] : await accessibleWorkOsPersonIds(auth.access);
     if (personIds && !personIds.length) return NextResponse.json({ evidence: [] });
+    // The query shim cannot filter on embedded columns, so a correction filter
+    // resolves the matching event ids first and filters evidence by event id.
     const correction = sp.get("correction");
+    let correctionEventIds: string[] | null = null;
+    if (correction) {
+      const events = await createAdminClient().from("work_evidence_events")
+        .select("id")
+        .eq("organization_id", auth.access.organizationId)
+        .eq("correction_status", correction)
+        .limit(500);
+      if (events.error) throw new Error(`load ${correction} evidence events: ${events.error.message}`);
+      correctionEventIds = (events.data ?? []).map((row: Record<string, unknown>) => String(row.id));
+      if (!correctionEventIds.length) return NextResponse.json({ evidence: [] });
+    }
     let query = createAdminClient().from("work_evidence")
-      .select(correction ? EVIDENCE_SELECT_DISPUTED : EVIDENCE_SELECT)
+      .select(EVIDENCE_SELECT)
       .eq("organization_id", auth.access.organizationId);
     if (personIds) query = query.in("person_id", personIds);
     if (sp.get("taskId")) query = query.eq("task_id", sp.get("taskId"));
@@ -39,7 +50,7 @@ export async function GET(req: Request) {
       if (to) query = query.lte("evidence_date", to);
     }
     if (sp.get("source")) query = query.eq("source", sp.get("source"));
-    if (correction) query = query.eq("event.correction_status", correction);
+    if (correctionEventIds) query = query.in("evidence_event_id", correctionEventIds);
     const rawLimit = sp.get("limit");
     const limitParam = rawLimit == null || rawLimit === "" ? Number.NaN : Number(rawLimit);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(500, Math.floor(limitParam))) : 200;
