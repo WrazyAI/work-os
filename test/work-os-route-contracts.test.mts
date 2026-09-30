@@ -286,8 +286,7 @@ test("employee destinations are nested routes with legacy ?tab= redirects", asyn
   assert.match(routes, /people: "today"/);
   const page = await source("src/app/work-os/page.tsx");
   assert.match(page, /redirect\(employeeDestinationForLegacyTab\(tab\)\)/);
-  assert.match(page, /role === "admin" && personId && !adminSurface && !tab/);
-  assert.match(page, /redirect\("\/work-os\/today"\)/);
+  assert.match(page, /redirect\(tab \? LEGACY_ADMIN_TAB_ROUTES\[tab\] \?\? "\/work-os\/admin" : "\/work-os\/admin"\)/);
   for (const route of ["today", "tasks", "review", "insights", "settings"]) {
     assert.ok(existsSync(new URL(`src/app/work-os/(employee)/${route}/page.tsx`, root)), `missing employee route ${route}`);
   }
@@ -299,13 +298,18 @@ test("employee destinations are nested routes with legacy ?tab= redirects", asyn
   assert.match(access, /status === 401\) redirect\("\/login"\)/);
 });
 
-test("the Work OS dispatcher keeps manager review and the admin console", async () => {
+test("the Work OS dispatcher keeps manager review and the admin workspace", async () => {
   const workOsHome = await source("src/modules/work-os/WorkOsHome.tsx");
   assert.match(workOsHome, /session\.data\?\.role === "manager"/);
   assert.match(workOsHome, /<ManagerWorkOsHome \/>/);
   assert.doesNotMatch(workOsHome, /EmployeeWorkOsHome/);
-  assert.doesNotMatch(workOsHome, /adminSurface/);
-  assert.match(workOsHome, /router\.push\("\/work-os\/today"\)/);
+  assert.doesNotMatch(workOsHome, /surface=admin/);
+  assert.match(workOsHome, /Opening your workspace/);
+  assert.match(workOsHome, /href="\/work-os\/admin"/);
+  const adminLayout = await source("src/app/work-os/admin/layout.tsx");
+  assert.match(adminLayout, /resolveWorkOsPageAccess/);
+  assert.match(adminLayout, /resolved\.access\.role !== "admin"/);
+  assert.match(adminLayout, /redirect\("\/work-os"\)/);
 });
 
 test("web onboarding reads back authoritative organization context", async () => {
@@ -391,4 +395,38 @@ test("admin routes honor the selected organization", async () => {
 test("local task completion is idempotent", async () => {
   const tasks = await source("src/lib/work-os-tasks.ts");
   assert.match(tasks, /if \(task\.completed === completed\) return task;/);
+});
+
+test("admin workspace routes are role-gated and organization-scoped", async () => {
+  const overview = await source("src/app/api/work-os/admin/overview/route.ts");
+  assert.match(overview, /requireWorkOsAdmin/);
+  const insights = await source("src/app/api/work-os/admin/insights/route.ts");
+  assert.match(insights, /roles: \["manager", "admin"\]/);
+  assert.match(insights, /getAdminInsights/);
+  assert.match(insights, /requireWorkOsPersonAccess/);
+  assert.match(insights, /accessibleWorkOsPersonIds/);
+  const intervals = await source("src/app/api/work-os/admin/activity-intervals/route.ts");
+  assert.match(intervals, /requireWorkOsPersonAccess/);
+  assert.match(intervals, /accessibleWorkOsPersonIds/);
+  assert.match(intervals, /listAdminActivityIntervals/);
+  const person = await source("src/app/api/work-os/admin/people/[personId]/route.ts");
+  assert.match(person, /requireWorkOsPersonAccess/);
+  assert.match(person, /organizationId/);
+  const layout = await source("src/app/work-os/admin/layout.tsx");
+  assert.match(layout, /resolveWorkOsPageAccess/);
+  assert.match(layout, /redirect\("\/work-os"\)/);
+  const shell = await source("src/modules/work-os/admin/AdminShell.tsx");
+  assert.match(shell, /data-work-os-workspace/);
+  assert.match(shell, /\/work-os\/today/);
+});
+
+test("evidence and report lists expose bounded filters for the admin surfaces", async () => {
+  const evidence = await source("src/app/api/work-os/evidence/route.ts");
+  assert.match(evidence, /correction/);
+  assert.match(evidence, /evidence_date/);
+  assert.match(evidence, /Math\.min\(500/);
+  const reports = await source("src/app/api/work-os/reports/route.ts");
+  assert.match(reports, /counts/);
+  assert.match(reports, /pending_review/);
+  assert.match(reports, /requireWorkOsPersonAccess/);
 });

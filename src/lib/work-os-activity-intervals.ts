@@ -909,9 +909,16 @@ export async function listActivityIntervals(
   if (rows.error) throw new Error(`list activity intervals: ${rows.error.message}`);
   const intervals = (rows.data ?? []) as ActivityIntervalRecord[];
   if (!intervals.length) return { date, intervals: [] };
+  const evidenceByInterval = await loadIntervalEvidence(intervals.map((row) => String(row.id)));
+  return { date, intervals: intervals.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])) };
+}
+
+/** Loads the evidence disclosure rows (and raw-image retention state) for a set
+ * of intervals. Shared by the employee stream and the admin review surface. */
+async function loadIntervalEvidence(intervalIds: string[]): Promise<Map<string, ActivityIntervalEvidenceView[]>> {
   const evidenceRows = await db().from("work_activity_interval_evidence")
     .select("interval_id,screenshot_summary_id,captured_at,ordinal,used_in_model,raw_image_shown,selection_reason,visible_app_snapshot,frame_summary_snapshot")
-    .in("interval_id", intervals.map((row) => String(row.id)))
+    .in("interval_id", intervalIds)
     .order("ordinal", { ascending: true });
   if (evidenceRows.error) throw new Error(`list activity interval evidence: ${evidenceRows.error.message}`);
   const summaryIds = [...new Set((evidenceRows.data ?? []).map((row: any) => row.screenshot_summary_id).filter(Boolean).map(String))];
@@ -940,7 +947,39 @@ export async function listActivityIntervals(
     });
     evidenceByInterval.set(String(row.interval_id), list);
   }
-  return { date, intervals: intervals.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])) };
+  return evidenceByInterval;
+}
+
+/** Admin view of the activity-interval record across people and days. The
+ * payload carries the same evidence disclosure as the employee stream — frame
+ * summaries and retention state, never raw image bytes or storage paths. */
+export async function listAdminActivityIntervals(
+  access: WorkOsAccess,
+  options: { from?: string | null; to?: string | null; personId?: string | null; limit?: number } = {},
+): Promise<Array<ActivityIntervalView & { personId: string; personName: string | null }>> {
+  const to = options.to && /^\d{4}-\d{2}-\d{2}$/.test(options.to) ? options.to : localDateForTimezone(new Date(), "UTC");
+  const from = options.from && /^\d{4}-\d{2}-\d{2}$/.test(options.from) ? options.from : to;
+  const limit = Math.max(1, Math.min(200, Math.floor(options.limit ?? 60)));
+  let query = db().from("work_activity_intervals").select("*")
+    .eq("organization_id", access.organizationId)
+    .gte("local_date", from).lte("local_date", to)
+    .order("window_end", { ascending: false }).limit(limit);
+  if (options.personId) query = query.eq("person_id", options.personId);
+  const rows = await query;
+  if (rows.error) throw new Error(`list admin activity intervals: ${rows.error.message}`);
+  const intervals = (rows.data ?? []) as ActivityIntervalRecord[];
+  if (!intervals.length) return [];
+  const [evidenceByInterval, people] = await Promise.all([
+    loadIntervalEvidence(intervals.map((row) => String(row.id))),
+    db().from("work_people").select("id,display_name").eq("organization_id", access.organizationId),
+  ]);
+  if (people.error) throw new Error(`load activity interval people: ${people.error.message}`);
+  const nameById = new Map((people.data ?? []).map((person: any) => [String(person.id), String(person.display_name)]));
+  return intervals.map((row) => ({
+    ...intervalView(row, evidenceByInterval.get(String(row.id)) ?? []),
+    personId: String(row.person_id),
+    personName: nameById.get(String(row.person_id)) ?? null,
+  }));
 }
 
 /** Provenance prefix for every downstream consumer (EOD activity context and

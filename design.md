@@ -1037,7 +1037,66 @@ The selected-row review specifically asks:
 Record what was actually rendered and exercised. A build or static assertion is
 not visual acceptance.
 
-## 16. Implementation checklist
+## 16. Administration workspace
+
+The web administration surface is a first-class Work OS workspace, not a
+diagnostic form. It follows the same material system, typography, and
+provenance language as the employee and manager surfaces, and it answers the
+operator's questions in order: who is working, what needs a decision, what the
+record shows, and what the next useful action is.
+
+### 16.1 Shell and navigation
+
+The workspace lives at `/work-os/admin` with real routes: Overview, People,
+Tasks, EOD Review, Insights, Evidence, and Settings. The server route gates the
+whole subtree to Work OS admins; employees and managers keep their own
+surfaces, and a mapped administrator reaches their employee workspace through
+`/work-os/me`. Legacy `?surface=admin&tab=…` links redirect to the closest new
+destination instead of rendering a dead tab.
+
+The workspace owns its navigation: a horizontal section nav in the masthead,
+not a second sidebar. The host shell keeps its chrome, and the Work OS surface
+paints its own `.work-os-surface` token scope (the §3.1 palette in light and
+dark) so the workspace reads as one material even inside a host application.
+
+### 16.2 Page contracts
+
+- **Overview** is the command center: a needs-attention list (reviews pending,
+  outstanding EODs, overdue tasks, disputed evidence, configuration blockers),
+  a right-now roster with attendance state and observation freshness, a recent
+  activity stream (updates, interval recaps, completed tasks, evidence,
+  submissions), today's counts, and a quiet workspace-health panel. Readiness
+  is context, never the lead.
+- **EOD Review** renders the report as a structured document — meta lines,
+  sections, and the activity-context disclaimer — beside its sourced evidence
+  and interval recaps. The decision record keeps manager notes and an optional
+  manager version, and the raw markdown stays available behind a disclosure.
+- **Insights** uses fixed ranges with deterministic facts first: a written
+  brief, a metric strip with equal-earlier-period comparisons, one daily-record
+  chart, observed-app context, backlog pressure, and a per-person facts table
+  with a detail drawer. It never converts activity into a productivity score.
+- **Evidence** separates evidence from activity recaps, filters by date range,
+  person, source, and disputed state, and groups rows by day. The detail drawer
+  exposes provenance and, for flagged or disputed items only, restricted
+  screenshot access with a recorded reason and audit entry.
+- **People** is a roster with a person drawer: mappings, schedule and
+  exceptions, recent workdays, reports, updates and recaps, and a seven-day
+  evidence summary.
+- **Tasks** is the organization task record with bounded filters and the local
+  add-task flow; **Settings** groups system status, features, memberships,
+  teams, provider connections, field mappings, and blueprints into sections
+  with one action per decision area.
+
+### 16.3 Data and provenance
+
+Administration endpoints are admin- or manager-scoped and organization-scoped
+on every query, with bounded limits and no raw storage paths. Observed activity
+keeps its cool observation treatment and its labels; employee-authored updates,
+task records, provider evidence, and review state remain visually distinct.
+Empty, loading, and degraded states follow §9's state matrix: skeletons reserve
+geometry, empty states name the next action, and errors stay local.
+
+## 17. Implementation checklist
 
 Before editing:
 

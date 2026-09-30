@@ -39,7 +39,7 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
               <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
                 <ShieldHalf size={13} /> Your employee workspace
               </span>
-              <Link href="/work-os?surface=admin" className="text-[12px] font-semibold underline-offset-2 hover:underline" style={{ color: "var(--accent-deep)" }}>
+              <Link href="/work-os/admin" className="text-[12px] font-semibold underline-offset-2 hover:underline" style={{ color: "var(--accent-deep)" }}>
                 Administration
               </Link>
             </div>

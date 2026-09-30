@@ -15,6 +15,8 @@ import EmployeeInsights from "@/modules/work-os/employee/EmployeeInsights";
 import EmployeeSettings from "@/modules/work-os/employee/EmployeeSettings";
 import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
 import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
+import AdminPreview from "./admin-preview";
+import AdminPreview from "./admin-preview";
 
 const TODAY = "2026-09-11";
 
@@ -212,9 +214,11 @@ const DESTINATIONS = [
  * these fixtures are reached through the server render, not by clicking
  * (design §8.8). */
 function PreviewBody() {
-  const voice = useSearchParams().get("voice");
+  const searchParams = useSearchParams();
   const [destination, setDestination] = useState<(typeof DESTINATIONS)[number]["id"]>("today");
-
+  const admin = searchParams.get("admin");
+  if (admin) return <AdminPreview section={admin} />;
+  const voice = searchParams.get("voice");
   if (voice) {
     const entries = VOICE_FIXTURES[voice] ? [[voice, VOICE_FIXTURES[voice]] as const] : Object.entries(VOICE_FIXTURES);
     return (
