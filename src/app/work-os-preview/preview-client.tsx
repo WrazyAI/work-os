@@ -13,6 +13,7 @@ import EmployeeTasks from "@/modules/work-os/employee/EmployeeTasks";
 import EmployeeReview from "@/modules/work-os/employee/EmployeeReview";
 import EmployeeInsights from "@/modules/work-os/employee/EmployeeInsights";
 import EmployeeSettings from "@/modules/work-os/employee/EmployeeSettings";
+import { EmployeeWorkspaceProvider } from "@/modules/work-os/employee/EmployeeWorkspaceShell";
 import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
 import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
 import AdminPreview from "./admin-preview";
@@ -26,7 +27,7 @@ const workspace = (date: string, goal: string) => ({
   total: 9,
   overdueCount: 1,
   goal: { text: goal, provenance: "employee", revision: 1 },
-  carryOverGroups: [{ key: "older", label: "Older", tasks: [{ id: "carry-1" }, { id: "carry-2" }] }],
+  carryOverGroups: [{ key: "older", label: "Older", tasks: [{ id: "carry-1", title: "Reconcile the August close", due_date: "2026-09-08" }, { id: "carry-2", title: "Update the intake checklist" }] }],
   sessionQuality: { status: "valid", message: null },
 });
 
@@ -109,8 +110,19 @@ const rejectedFixture = (date: string) => ({
 const todayFixture = () => ({
   ...historyFixture(TODAY, "Ship the outstanding EOD flow."),
   readOnly: false,
-  prompt: { kind: "eod", nextPromptAt: `${TODAY}T17:30:00.000Z`, required: false, reason: "Wrap up the day with your EOD report." },
+  prompt: { kind: "plan", nextPromptAt: `${TODAY}T17:30:00.000Z`, required: false, reason: "Start the day by building your plan." },
   report: { id: "report-today", status: "draft", markdown: "## Summary\nOutlined the review flow and drafted the employee workspace routes." },
+  plan: {
+    id: "plan-today",
+    status: "draft",
+    freeform_intent: "Ship the outstanding EOD flow.",
+    focus_summary: null,
+    revision: 2,
+    items: [
+      { id: "item-1", task_id: "nifty-1", title_snapshot: "Reconcile September settlements", disposition: "selected", item_kind: "task", completion_state: "open" },
+    ],
+  },
+  niftySync: { fresh: true, syncing: false, syncedAt: `${TODAY}T11:35:00.000Z` },
   tasks: dayTasks,
   evidence: [
     { id: "ev-1", title: "Worktivity interval · 10:00–11:00", summary: "Reconciled settlement rows in the ledger and updated the operations sheet.", source: "screenshot", evidence_event_id: "event-1", event: { correction_status: "original" } },
@@ -119,9 +131,105 @@ const todayFixture = () => ({
   proposals: [
     { id: "proposal-1", operation: "task_update", status: "pending", input_text: "Mark the provider export as done", proposed_change: { progress: "Completed the provider export and started the ledger match." }, task: { title: "Pull the provider export" }, before_state: null, failure_reason: null },
   ],
-  session: { id: "session-today", state: "clocked_in" },
+  session: { id: "session-today", state: "clocked_in", clocked_in_at: `${TODAY}T09:04:00.000Z`, paused_seconds: 1800 },
   attendance: { source: "worktivity", state: "active", status: "working", observedAt: `${TODAY}T11:42:00.000Z`, clockedInAt: `${TODAY}T09:04:00.000Z`, clockedOutAt: null, stale: false, message: "Worktivity activity observed; the Work OS workday is synchronized." },
+  access: { featureFlags: { voice_input: true, loom_updates: true, work_memory: true, screenshot_summaries: true }, capabilities: { voice_input: true } },
 });
+
+const memoryFixture = {
+  facts: [
+    { id: "fact-1", content: "The settlement reconciliation is David's responsibility on Mondays.", summary: null, review_status: "candidate", fact_key: null, local_date: TODAY, occurred_at: `${TODAY}T10:00:00.000Z`, created_at: `${TODAY}T10:00:00.000Z` },
+    { id: "fact-2", content: "The intake queue uses the shared ops rotation.", summary: null, review_status: "confirmed", fact_key: null, local_date: "2026-09-28", occurred_at: "2026-09-28T09:00:00.000Z", created_at: "2026-09-28T09:00:00.000Z" },
+  ],
+  recent: [
+    { id: "recent-1", kind: "check_in", content: "Recorded a progress update about the settlement batch.", summary: "Progress update about the settlement batch", local_date: TODAY, occurred_at: `${TODAY}T11:00:00.000Z`, source_table: "work_check_ins", created_at: `${TODAY}T11:00:00.000Z` },
+    { id: "recent-2", kind: "completed", content: "Completed the provider export task.", summary: null, local_date: "2026-09-29", occurred_at: "2026-09-29T15:00:00.000Z", source_table: "work_task_events", created_at: "2026-09-29T15:00:00.000Z" },
+  ],
+};
+
+const intervalsFixture = {
+  date: TODAY,
+  intervals: [
+    {
+      id: "interval-1",
+      windowStart: `${TODAY}T10:00:00.000Z`,
+      windowEnd: `${TODAY}T11:00:00.000Z`,
+      label: "10:00 – 11:00",
+      promptKind: "hourly_fallback",
+      generationStatus: "ready",
+      reviewStatus: "inferred",
+      headline: "Reconciled the settlement batch and updated the operations sheet",
+      detail: "The interval shows ledger work, a short review of the intake queue, and a handoff note draft.",
+      activities: ["Ledger reconciliation in the finance sheet", "Intake queue review", "Handoff note drafting"],
+      workflow: ["Open provider export", "Match ledger rows", "Draft the handoff note"],
+      uncertainties: ["No frame establishes that the reconciliation was approved"],
+      employeeFeedback: null,
+      failureReason: null,
+      generatedAt: `${TODAY}T11:05:00.000Z`,
+      reviewedAt: null,
+      evidenceExpired: false,
+      evidenceCount: 2,
+      evidence: [
+        { summaryId: "frame-1", capturedAt: `${TODAY}T10:14:00.000Z`, visibleApp: "Sheets", frameSummary: "Settlement rows being matched against the export.", usedInModel: true, rawImageShown: false, selectionReason: "representative", retained: true },
+        { summaryId: "frame-2", capturedAt: `${TODAY}T10:41:00.000Z`, visibleApp: "Notes", frameSummary: "Handoff note draft in progress.", usedInModel: true, rawImageShown: false, selectionReason: "representative", retained: true },
+      ],
+    },
+    {
+      id: "interval-2",
+      windowStart: `${TODAY}T09:00:00.000Z`,
+      windowEnd: `${TODAY}T10:00:00.000Z`,
+      label: "09:00 – 10:00",
+      promptKind: "follow_up",
+      generationStatus: "ready",
+      reviewStatus: "confirmed",
+      headline: "Started the settlement export and cleared the intake queue",
+      detail: "The first interval shows the export being pulled and the intake queue triaged.",
+      activities: ["Provider export", "Intake triage"],
+      workflow: [],
+      uncertainties: [],
+      employeeFeedback: null,
+      failureReason: null,
+      generatedAt: `${TODAY}T10:05:00.000Z`,
+      reviewedAt: `${TODAY}T10:12:00.000Z`,
+      evidenceExpired: true,
+      evidenceCount: 0,
+      evidence: [],
+    },
+  ],
+};
+
+const screenshotGalleryFixture = {
+  processed: 3,
+  excludedPolicy: 1,
+  excludedSensitive: 0,
+  unavailable: 0,
+  pending: 2,
+  total: 6,
+  viewable: [
+    { summaryId: "shot-1", capturedAt: `${TODAY}T09:12:00.000Z`, visibleApp: "Sheets", summary: "Provider export open with settlement rows selected.", confidence: 0.82 },
+    { summaryId: "shot-2", capturedAt: `${TODAY}T10:14:00.000Z`, visibleApp: "Sheets", summary: "Ledger rows matched against the export.", confidence: 0.66 },
+    { summaryId: "shot-3", capturedAt: `${TODAY}T10:41:00.000Z`, visibleApp: "Notes", summary: "Handoff note draft in progress.", confidence: 0.58 },
+  ],
+  hours: [
+    { hourStart: 9, label: "09:00", summary: "Pulled the provider export and triaged the intake queue.", frameCount: 2, summaryId: "hour-9", visibleApp: "Sheets", synthesized: true },
+    { hourStart: 10, label: "10:00", summary: "Matched ledger rows and drafted the handoff note.", frameCount: 2, summaryId: "hour-10", visibleApp: "Sheets", synthesized: true },
+    { hourStart: 11, label: "11:00", summary: "2 frames recorded.", frameCount: 2, summaryId: null, visibleApp: null, synthesized: false },
+  ],
+};
+
+const interpretationFixture = {
+  interpretation: {
+    rawIntent: "Ship the outstanding EOD flow.",
+    summary: "Close the settlement reconciliation and hand off the EOD flow.",
+    commitments: [
+      { clientId: "c1", linkedTaskId: "nifty-1", title: "Reconcile September settlements", objective: "Close the September reconciliation today.", successCriteria: ["Ledger matches the export"], sourceRefs: [{ provider: "work_os", type: "task", id: "nifty-1", label: "Reconcile September settlements" }], confidence: 0.9 },
+      { clientId: "c2", title: "Write the handoff note", objective: "Document the reconciliation for the team.", successCriteria: ["Note shared with ops"], sourceRefs: [{ provider: "employee", type: "intent", id: "raw_intent" }], confidence: 0.6 },
+    ],
+    clarifications: [{ id: "q1", commitmentId: "c2", question: "Who needs the handoff note?", reason: "The audience is unclear." }],
+    readiness: "needs_one_clarification",
+  },
+  build_id: "11111111-1111-4111-8111-111111111111",
+};
 
 const outstandingFixture = {
   from: "2026-08-28",
@@ -139,12 +247,16 @@ const insightsFixture = {
   from: "2026-09-04",
   through: TODAY,
   days: [
-    { date: "2026-09-10", goal: { text: "Finish the settlement reconciliation.", provenance: "employee" }, completed: 7, progressed: 2, deferred: 1, carried: 1, unplanned: 0, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [] },
-    { date: "2026-09-09", goal: { text: "Clear the intake queue.", provenance: "employee" }, completed: 5, progressed: 3, deferred: 0, carried: 2, unplanned: 1, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [{ id: "r1", label: "Intake review", target: "/work-os/tasks" }] },
-    { date: TODAY, goal: { text: "Ship the outstanding EOD flow.", provenance: "employee" }, completed: 3, progressed: 1, deferred: 0, carried: 0, unplanned: 0, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [] },
+    { date: "2026-09-10", goal: { text: "Finish the settlement reconciliation.", provenance: "employee" }, completed: 7, progressed: 2, deferred: 1, carried: 1, unplanned: 0, observedSeconds: 18000, pausedSeconds: 1800, planStatus: "confirmed", planned: 6, plannedCompleted: 5, carryOver: 1, overdue: 0, updates: 3, outputEvidence: 2, activityContext: 2, trackedMinutes: 210, tasksCompleted: 4, tasksOpen: 2, outcomesOnTime: 3, outcomesLate: 1, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [], updatesByKind: { progress: 2, blocked: 1 } },
+    { date: "2026-09-09", goal: { text: "Clear the intake queue.", provenance: "employee" }, completed: 5, progressed: 3, deferred: 0, carried: 2, unplanned: 1, observedSeconds: 16200, pausedSeconds: 0, planStatus: "confirmed", planned: 5, plannedCompleted: 4, carryOver: 2, overdue: 1, updates: 2, outputEvidence: 1, activityContext: 1, trackedMinutes: 150, tasksCompleted: 3, tasksOpen: 3, outcomesOnTime: 2, outcomesLate: 1, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [{ id: "r1", label: "Intake review", target: "/work-os/tasks" }], updatesByKind: { progress: 2 } },
+    { date: TODAY, goal: { text: "Ship the outstanding EOD flow.", provenance: "employee" }, completed: 3, progressed: 1, deferred: 0, carried: 0, unplanned: 0, observedSeconds: 10800, pausedSeconds: 1800, planStatus: "draft", planned: 3, plannedCompleted: 1, carryOver: 0, overdue: 0, updates: 2, outputEvidence: 1, activityContext: 1, trackedMinutes: 90, tasksCompleted: 2, tasksOpen: 1, outcomesOnTime: 1, outcomesLate: 0, breakFreshness: "fresh", sessionQuality: { status: "valid", message: null }, references: [], updatesByKind: { progress: 2 } },
   ],
+  totals: { observedSeconds: 45000, pausedSeconds: 3600, planned: 14, plannedCompleted: 10, carryOver: 3, overdue: 1, updates: 7, outputEvidence: 4, activityContext: 4, trackedMinutes: 450, tasksCompleted: 9, tasksOpen: 6, progressed: 6, deferred: 1, carried: 3, unplanned: 1, outcomesOnTime: 6, outcomesLate: 2, completed: 15 },
+  updateKinds: { progress: 6, blocked: 1 },
+  comparison: { from: "2026-08-28", through: "2026-09-03", totals: { planned: 12, plannedCompleted: 7, tasksCompleted: 7, observedSeconds: 41000, updates: 5, outputEvidence: 3, activityContext: 3, trackedMinutes: 380 }, days: [] },
+  consistency: { dayCount: 3, daysWithGoal: 3, daysWithUpdate: 3, daysWithCompletion: 3, bestDay: { date: "2026-09-10", tasksCompleted: 4 }, currentStreak: 3, commitmentRate: 71 },
   brief: { summary: "A steady week: the settlement work closed and the intake queue moved. Two carry-over items remain from older work.", wins: ["Settlement reconciliation finished", "Intake backlog reduced"], attention: ["Two older carry-over items are still open"], nextFocus: ["Draft the EOD before the shift ends"] },
-  freshness: { stale: false, staleAt: null, error: null },
+  freshness: { stale: false, staleAt: null, error: null, niftySyncedAt: `${TODAY}T11:35:00.000Z`, worktivityObservedAt: `${TODAY}T11:42:00.000Z` },
 };
 
 const onboardingFixture = {
@@ -176,6 +288,15 @@ function installFetchStub() {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url.includes("/api/work-os/me/onboarding")) return respond(onboardingFixture);
     if (url.includes("/api/work-os/me/eod/outstanding")) return respond(outstandingFixture);
+    if (url.includes("/api/work-os/me/eod/screenshots/prepare")) return respond({ date: TODAY, analyzed: 2, failed: 0, pending: 1, total: 6, sampled: 2, unavailable: false });
+    if (url.includes("/api/work-os/me/eod/screenshots")) return respond(screenshotGalleryFixture);
+    if (url.includes("/api/work-os/me/memory/")) return respond({});
+    if (url.includes("/api/work-os/me/memory")) return respond(memoryFixture);
+    if (url.includes("/api/work-os/me/activity-intervals/")) return respond({ interval: intervalsFixture.intervals[0] });
+    if (url.includes("/api/work-os/me/activity-intervals")) return respond(intervalsFixture);
+    if (url.includes("/api/work-os/me/plan/interpret")) return respond(interpretationFixture);
+    if (url.includes("/api/work-os/me/plan/refine")) return respond(interpretationFixture);
+    if (url.includes("/api/work-os/me/plan")) return respond(todayFixture().plan);
     if (url.includes("/api/work-os/me/day?date=2026-09-03")) return respond(rejectedFixture("2026-09-03"));
     if (url.includes("/api/work-os/me/day?date=2026-09-10")) return respond(historyFixture("2026-09-10", "Finish the settlement reconciliation."));
     if (url.includes("/api/work-os/me/day")) return respond(todayFixture());
@@ -268,7 +389,11 @@ function PreviewBody() {
             </button>
           ))}
         </nav>
-        {active.render()}
+        <EmployeeWorkspaceProvider
+          access={{ role: "employee", personId: "preview-person", featureFlags: { voice_input: true, loom_updates: true, work_memory: true, screenshot_summaries: true } }}
+        >
+          {active.render()}
+        </EmployeeWorkspaceProvider>
       </div>
     </div>
   );

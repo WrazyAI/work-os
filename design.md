@@ -272,6 +272,18 @@ page:
   and freshness, keeps the activity watch truthful, and points to the Windows
   Companion for Clock in, Pause/Resume, and Clock out.
 
+The web workspace also carries the companion's employee-facing capabilities so
+the two surfaces tell the same story: the two-view Plan your day session
+(input → drafted review → refine/confirm, with the Loom attachment), the
+Activity Interval Review stream with confirm/amend, Work Memory management
+(Needs review / Remembered), the shift-time instrument (elapsed, bounded
+scheduled-window progress, remaining time), optimistic task adds with
+surface/defer, per-day screenshot evidence, and the deterministic insights
+record with exact-value charts. Surfaces that stay companion-only by design:
+Worktivity attendance mutations, the system-wide hold-to-talk shortcut, the
+floating window and orb chat, OS notifications and sounds, the offline queue,
+appearance settings, and device sessions.
+
 ## 5. Dashboard blueprint
 
 The dashboard is a command center, not a report of everything Work OS knows.

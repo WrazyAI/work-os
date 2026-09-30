@@ -18,6 +18,12 @@ export function useEmployeeWorkspaceAccess(): EmployeeWorkspaceAccess {
   return value;
 }
 
+/** The access provider alone, so dev fixtures can render destinations with a
+ * shaped access record without the full route shell. */
+export function EmployeeWorkspaceProvider({ access, children }: { access: EmployeeWorkspaceAccess; children: ReactNode }) {
+  return <EmployeeWorkspaceContext.Provider value={access}>{children}</EmployeeWorkspaceContext.Provider>;
+}
+
 /**
  * The employee workspace frame.
  *
@@ -28,7 +34,7 @@ export function useEmployeeWorkspaceAccess(): EmployeeWorkspaceAccess {
  */
 export default function EmployeeWorkspaceShell({ access, children }: { access: EmployeeWorkspaceAccess; children: ReactNode }) {
   return (
-    <EmployeeWorkspaceContext.Provider value={access}>
+    <EmployeeWorkspaceProvider access={access}>
       <div data-work-os-workspace="" className="min-h-[calc(100vh-6rem)] bg-[var(--bg-primary)]">
         <div className="mx-auto w-full max-w-[1240px] px-6 py-8 md:px-10 md:py-10">
           {access.role === "admin" ? (
@@ -47,6 +53,6 @@ export default function EmployeeWorkspaceShell({ access, children }: { access: E
           {children}
         </div>
       </div>
-    </EmployeeWorkspaceContext.Provider>
+    </EmployeeWorkspaceProvider>
   );
 }

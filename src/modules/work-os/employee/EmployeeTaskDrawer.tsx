@@ -18,6 +18,7 @@ export default function EmployeeTaskDrawer({
   isWorkOsTask,
   onClose,
   onSaved,
+  onCreate,
 }: {
   mode: "create" | "edit";
   task?: AnyRow | null;
@@ -25,6 +26,9 @@ export default function EmployeeTaskDrawer({
   isWorkOsTask?: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /** Create is owned by the list so it can show a pending row until the
+   * server confirms (the companion's optimistic-add receipt). */
+  onCreate?: (title: string, description: string) => void;
 }) {
   const [title, setTitle] = useState(mode === "edit" ? String(task?.title ?? "") : "");
   const [description, setDescription] = useState(mode === "edit" ? String(task?.description ?? "") : "");
@@ -50,20 +54,11 @@ export default function EmployeeTaskDrawer({
   }, []);
 
   const save = useMutation({
-    mutationFn: () => {
-      if (mode === "create") {
-        return fetchJson("/api/work-os/me/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-          body: JSON.stringify({ name: title.trim(), description: description.trim() || undefined }),
-        });
-      }
-      return fetchJson(`/api/work-os/me/tasks/${encodeURIComponent(String(task?.provider_task_id || task?.id))}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
-        body: JSON.stringify({ name: title.trim(), description }),
-      });
-    },
+    mutationFn: () => fetchJson(`/api/work-os/me/tasks/${encodeURIComponent(String(task?.provider_task_id || task?.id))}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify({ name: title.trim(), description }),
+    }),
     onSuccess: () => {
       onSaved();
       onClose();
@@ -168,9 +163,21 @@ export default function EmployeeTaskDrawer({
           ) : <span />}
           <div className="flex gap-2">
             <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
-            <PrimaryButton disabled={!title.trim() || save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Saving…" : mode === "create" ? "Add task" : "Save changes"}
-            </PrimaryButton>
+            {mode === "create" ? (
+              <PrimaryButton
+                disabled={!title.trim()}
+                onClick={() => {
+                  onCreate?.(title.trim(), description.trim());
+                  onClose();
+                }}
+              >
+                Add task
+              </PrimaryButton>
+            ) : (
+              <PrimaryButton disabled={!title.trim() || save.isPending} onClick={() => save.mutate()}>
+                {save.isPending ? "Saving…" : "Save changes"}
+              </PrimaryButton>
+            )}
           </div>
         </footer>
       </aside>

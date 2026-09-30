@@ -11,25 +11,32 @@ import {
   FileCheck2,
   ListTodo,
   MessageSquareText,
-  RefreshCw,
+  RotateCcw,
+  Sparkles,
   Video,
 } from "lucide-react";
 import { CheckInComposer, useCheckInVoice } from "../CheckInComposer";
 import { lateReasonRequired } from "@/lib/work-os-late-start";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
+import EmployeePlanBuilder from "./EmployeePlanBuilder";
+import EmployeeActivityRecaps from "./EmployeeActivityRecaps";
+import { planStatusLabel } from "./planning";
+import { useNow } from "./useNow";
+import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "./shiftPulse";
 import { fetchJson, formatTime, longDateLabel, operationLabel, requestId, type AnyRow } from "./model";
 import {
   EmptyState,
-  IconButton,
   Masthead,
   Metric,
   Notice,
   Panel,
   PanelHeader,
   PrimaryButton,
+  QuietButton,
   SecondaryButton,
   Skeleton,
   StatusPill,
+  SyncChip,
   inputClass,
   inputStyle,
 } from "./ui";
@@ -41,7 +48,8 @@ function goalProvenanceLabel(provenance: string | null | undefined, hasGoal: boo
 }
 
 export default function EmployeeToday() {
-  const { day, refresh, watchExpectation } = useEmployeeDay();
+  const { day, refresh, watchExpectation, sync, syncing } = useEmployeeDay();
+  const now = useNow();
   const [input, setInput] = useState("");
   const [goal, setGoal] = useState("");
   const [lateReasonDraft, setLateReasonDraft] = useState("");
@@ -49,6 +57,9 @@ export default function EmployeeToday() {
   const [goalLoomUrl, setGoalLoomUrl] = useState("");
   const [goalLoomTranscript, setGoalLoomTranscript] = useState("");
   const [goalLoomNote, setGoalLoomNote] = useState<string | null>(null);
+  const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
+  const [planSeed, setPlanSeed] = useState<string | undefined>(undefined);
+  const [planReceipt, setPlanReceipt] = useState<string | null>(null);
 
   const outstanding = useOutstandingEods();
   const onboarding = useQuery<AnyRow>({
@@ -82,7 +93,7 @@ export default function EmployeeToday() {
   const checkInVoice = useCheckInVoice(input, setInput, voiceAvailable);
 
   const saveGoal = useMutation({
-    mutationFn: () => fetchJson("/api/work-os/me/plan", {
+    mutationFn: (options?: { openBuilder?: boolean }) => fetchJson("/api/work-os/me/plan", {
       method: "PUT",
       headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
       body: JSON.stringify({
@@ -94,7 +105,13 @@ export default function EmployeeToday() {
         suggestion_task_ids: [],
       }),
     }),
-    onSuccess: () => void refresh(),
+    onSuccess: (_data, options) => {
+      void refresh();
+      if (options?.openBuilder) {
+        setPlanSeed(goal.trim());
+        setPlanBuilderOpen(true);
+      }
+    },
   });
 
   const goalLoom = useMutation({
@@ -147,6 +164,17 @@ export default function EmployeeToday() {
     onSuccess: () => void refresh(),
   });
 
+  // Carry-over tasks can be pulled onto today (surface) or explicitly deferred;
+  // the plan surface owns both transitions, exactly like the companion.
+  const surfaceTask = useMutation({
+    mutationFn: ({ task, disposition }: { task: AnyRow; disposition: "selected" | "deferred" }) => fetchJson("/api/work-os/me/plan", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify(disposition === "selected" ? { surface_task_id: task.id } : { defer_task_id: task.id }),
+    }),
+    onSuccess: () => void refresh(),
+  });
+
   const workspace = day.data?.workspaceSummary;
   const shift = day.data?.shift;
   const timezone = shift?.timezone;
@@ -159,8 +187,11 @@ export default function EmployeeToday() {
   const openTasks = useMemo(() => (day.data?.tasks ?? []).filter((task) => !task.completed), [day.data?.tasks]);
   const firstMoves = openTasks.slice(0, 5);
   const carryOverCount = workspace?.carryOverGroups?.reduce((sum, group) => sum + (group.tasks?.length ?? 0), 0) ?? 0;
+  const pulse = shiftPulse(day.data?.session, shift, new Date(now), day.data?.breakPolicy?.worktivityAuthoritative === true, attendance ?? null);
+  const remainingLabel = remainingShiftLabel(shift, new Date(now));
+  const upcomingLabel = pulse.schedulePhase === "upcoming" ? untilShiftLabel(shift, new Date(now)) : null;
   const goalChanged = goal !== (day.data?.workspaceSummary?.goal.text ?? day.data?.plan?.freeform_intent ?? "");
-  const error = onboarding.error || day.error || checkIn.error || saveGoal.error || sessionAction.error || changeTask.error || goalLoom.error;
+  const error = onboarding.error || day.error || checkIn.error || saveGoal.error || sessionAction.error || changeTask.error || surfaceTask.error || goalLoom.error;
 
   if (day.isLoading && !day.data) {
     return (
@@ -190,9 +221,7 @@ export default function EmployeeToday() {
                 <FileCheck2 size={14} /> {outstandingCount} outstanding EOD{outstandingCount === 1 ? "" : "s"}
               </Link>
             ) : null}
-            <IconButton label="Refresh my day" onClick={() => void refresh()} disabled={day.isFetching}>
-              <RefreshCw size={15} className={day.isFetching ? "animate-spin" : undefined} />
-            </IconButton>
+            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
           </>
         }
       />
@@ -233,6 +262,31 @@ export default function EmployeeToday() {
         </Notice>
       ) : null}
 
+      {planReceipt ? (
+        <Notice tone="info" className="mb-5">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            <span>{planReceipt}</span>
+            <button type="button" className="font-semibold" onClick={() => setPlanReceipt(null)}>Dismiss</button>
+          </span>
+        </Notice>
+      ) : null}
+
+      {day.data?.prompt.kind === "plan" && day.data?.plan?.status !== "confirmed" ? (
+        <Notice tone="info" className="mb-5">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            <span>{day.data.prompt.reason || "Start the day by building your plan."}</span>
+            <button
+              type="button"
+              className="font-semibold underline underline-offset-2"
+              style={{ color: "var(--text-primary)" }}
+              onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }}
+            >
+              Build my plan
+            </button>
+          </span>
+        </Notice>
+      ) : null}
+
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid content-start gap-5">
           <Panel>
@@ -250,6 +304,34 @@ export default function EmployeeToday() {
                 </StatusPill>
               }
             />
+            {pulse.schedulePhase !== "unavailable" || pulse.observedElapsedLabel !== "00:00" ? (
+              <div className="border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[24px] font-bold leading-none tabular-nums text-[var(--text-primary)]">{pulse.elapsedLabel}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">elapsed today</span>
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+                    {pulse.breakSeconds > 0 ? <span>Break {pulse.breakLabel}</span> : null}
+                    {pulse.observedElapsedLabel !== "00:00" ? <span>Worktivity observed {pulse.observedElapsedLabel}</span> : null}
+                    {upcomingLabel ? <span>{upcomingLabel}</span> : null}
+                    {remainingLabel ? <span>{remainingLabel}</span> : null}
+                  </div>
+                </div>
+                <div
+                  className="mt-3 h-1.5 overflow-hidden rounded-full"
+                  style={{ background: "var(--bg-tertiary)" }}
+                  role="progressbar"
+                  aria-label="Scheduled shift progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pulse.progressPercent)}
+                >
+                  <div className="h-full rounded-full" style={{ width: `${pulse.progressPercent}%`, background: "var(--accent-deep)" }} />
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">Scheduled-window progress only — not a productivity measure.</p>
+              </div>
+            ) : null}
             <div className="grid gap-3 px-5 py-4 text-[12px] leading-5">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span className="text-[var(--text-secondary)]">
@@ -277,14 +359,22 @@ export default function EmployeeToday() {
             <PanelHeader
               icon={<ListTodo size={16} />}
               title="Today’s focus"
-              meta={`Goal · ${goalProvenanceLabel(workspace?.goal.provenance, !!goal.trim())}`}
+              meta={`Goal · ${goalProvenanceLabel(workspace?.goal.provenance, !!goal.trim())} · ${planStatusLabel(day.data?.plan)}`}
               actions={
-                <PrimaryButton
-                  disabled={!goalChanged || saveGoal.isPending}
-                  onClick={() => saveGoal.mutate()}
-                >
-                  {saveGoal.isPending ? "Saving…" : "Save focus"}
-                </PrimaryButton>
+                <>
+                  <SecondaryButton onClick={() => { setPlanSeed(goal.trim() || undefined); setPlanBuilderOpen(true); }} disabled={!day.data}>
+                    <Sparkles size={13} /> Plan your day
+                  </SecondaryButton>
+                  <PrimaryButton
+                    disabled={!goalChanged || saveGoal.isPending}
+                    onClick={() => {
+                      const firstGoal = !(workspace?.goal.text ?? day.data?.plan?.freeform_intent ?? "").trim();
+                      saveGoal.mutate({ openBuilder: firstGoal && goal.trim().length > 0 });
+                    }}
+                  >
+                    {saveGoal.isPending ? "Saving…" : "Save focus"}
+                  </PrimaryButton>
+                </>
               }
             />
             <div className="px-5 py-4">
@@ -298,7 +388,7 @@ export default function EmployeeToday() {
                 style={inputStyle}
                 aria-label="What will you do today?"
               />
-              <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Goal setting is independent of attendance.</p>
+              <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Goal setting is independent of attendance. Building a plan drafts reviewable commitments — nothing is filed until you confirm it.</p>
 
               {day.data?.access?.featureFlags?.loom_updates === true ? (
                 <div className="mt-4 rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
@@ -369,6 +459,8 @@ export default function EmployeeToday() {
             </div>
           </Panel>
 
+          <EmployeeActivityRecaps date={day.data?.shiftDate ?? ""} timezone={day.data?.shift?.timezone} />
+
           <Panel>
             <PanelHeader
               icon={<Check size={16} />}
@@ -413,6 +505,49 @@ export default function EmployeeToday() {
               />
             )}
           </Panel>
+
+          {carryOverCount > 0 ? (
+            <Panel>
+              <PanelHeader
+                icon={<RotateCcw size={16} />}
+                title="Carry-over"
+                meta={`${carryOverCount} older open task${carryOverCount === 1 ? "" : "s"} not attributed to today. Surface one to bring it into today’s plan, or defer it explicitly.`}
+              />
+              <div>
+                {(workspace?.carryOverGroups ?? []).map((group) => (
+                  <div key={group.key} className="border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
+                      {group.label} · {group.tasks?.length ?? 0}
+                    </p>
+                    <ul className="mt-1.5 grid gap-1.5">
+                      {(group.tasks ?? []).map((task: AnyRow) => (
+                        <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--text-primary)]">{task.title || "Untitled task"}</span>
+                          {task.due_date ? <span className="text-[11px] tabular-nums text-[var(--text-tertiary)]">Due {task.due_date}</span> : null}
+                          <span className="flex shrink-0 gap-1.5">
+                            <SecondaryButton
+                              className="!px-2 !py-1 !text-[11px]"
+                              disabled={surfaceTask.isPending}
+                              onClick={() => surfaceTask.mutate({ task, disposition: "selected" })}
+                            >
+                              Add to today
+                            </SecondaryButton>
+                            <QuietButton
+                              className="!px-2 !py-1 !text-[11px]"
+                              disabled={surfaceTask.isPending}
+                              onClick={() => surfaceTask.mutate({ task, disposition: "deferred" })}
+                            >
+                              Defer
+                            </QuietButton>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          ) : null}
         </div>
 
         <aside className="grid content-start gap-5">
@@ -453,6 +588,20 @@ export default function EmployeeToday() {
           {day.data?.niftySync?.error ? <Notice tone="warn">Nifty sync failed: {day.data.niftySync.error}</Notice> : null}
         </aside>
       </div>
+
+      {planBuilderOpen && day.data ? (
+        <EmployeePlanBuilder
+          open
+          day={day.data}
+          seed={planSeed}
+          onClose={() => setPlanBuilderOpen(false)}
+          onSaved={(message) => {
+            setPlanBuilderOpen(false);
+            setPlanReceipt(message);
+            void refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

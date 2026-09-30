@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Archive,
   Check,
   ChevronDown,
@@ -30,6 +31,7 @@ import {
   SecondaryButton,
   Skeleton,
   StatusPill,
+  SyncChip,
   cx,
   inlineInputClass,
   inputClass,
@@ -37,6 +39,8 @@ import {
 } from "./ui";
 
 type TaskView = "day" | "open" | "completed" | "all";
+
+type PendingTask = { id: string; title: string; description: string; status: "syncing" | "failed"; error?: string; idempotencyKey: string };
 
 const VIEWS: Array<{ id: TaskView; label: string }> = [
   { id: "day", label: "My day" },
@@ -67,7 +71,7 @@ function TaskAssigneeTags({ task }: { task: AnyRow }) {
 }
 
 export default function EmployeeTasks() {
-  const { day, refresh } = useEmployeeDay();
+  const { day, refresh, sync, syncing } = useEmployeeDay();
   const [view, setView] = useState<TaskView>("day");
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
@@ -76,6 +80,7 @@ export default function EmployeeTasks() {
   const [menuTaskId, setMenuTaskId] = useState<string | null>(null);
   const [subtaskMenuId, setSubtaskMenuId] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; task: AnyRow } | null>(null);
+  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
 
   useEffect(() => {
     if (day.data?.shiftDate) setDate((current) => current || day.data!.shiftDate);
@@ -97,9 +102,25 @@ export default function EmployeeTasks() {
   });
 
   const history = useInfiniteQuery<{ tasks: AnyRow[]; nextOffset: number | null }>({
-    queryKey: ["work-os", "employee-tasks", "history", view],
+    queryKey: ["work-os", "employee-tasks", "history", view, sort?.key ?? "default", sort?.direction ?? "default"],
     enabled: view === "completed" || view === "all",
-    queryFn: ({ pageParam }) => fetchJson<{ tasks: AnyRow[]; nextOffset: number | null }>(`/api/work-os/me/tasks?view=history${view === "completed" ? "&completed=true" : ""}&includeCompleted=true&limit=50&offset=${typeof pageParam === "number" ? pageParam : 0}`),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        view: "history",
+        includeCompleted: "true",
+        limit: "50",
+        offset: String(typeof pageParam === "number" ? pageParam : 0),
+      });
+      if (view === "completed") params.set("completed", "true");
+      // History is paginated, so ordering has to happen before pagination —
+      // the server sorts the complete result set, not just the loaded pages.
+      if (sort) {
+        params.set("sort", sort.key);
+        params.set("direction", sort.direction);
+      }
+      if (day.data?.shiftDate) params.set("sortDate", day.data.shiftDate);
+      return fetchJson<{ tasks: AnyRow[]; nextOffset: number | null }>(`/api/work-os/me/tasks?${params}`);
+    },
     initialPageParam: 0,
     getNextPageParam: (last) => (typeof last.nextOffset === "number" ? last.nextOffset : undefined),
     staleTime: 60_000,
@@ -114,6 +135,43 @@ export default function EmployeeTasks() {
     onSuccess: () => {
       setMenuTaskId(null);
       setSubtaskMenuId(null);
+      void refresh();
+    },
+  });
+
+  // Optimistic add: the row stays visible as syncing until the server
+  // confirms it, and a failed add keeps the text with Retry / Discard.
+  const createTask = useMutation({
+    mutationFn: ({ pending }: { pending: PendingTask }) => fetchJson("/api/work-os/me/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": pending.idempotencyKey },
+      body: JSON.stringify({ name: pending.title, description: pending.description || undefined }),
+    }),
+    onSuccess: (_data, { pending }) => {
+      setPendingTasks((current) => current.filter((item) => item.id !== pending.id));
+      void refresh();
+    },
+    onError: (error, { pending }) => {
+      setPendingTasks((current) => current.map((item) => item.id === pending.id ? { ...item, status: "failed", error: (error as Error).message } : item));
+    },
+  });
+
+  const submitCreate = (title: string, description: string) => {
+    const pending: PendingTask = { id: `pending-${globalThis.crypto.randomUUID()}`, title, description, status: "syncing", idempotencyKey: requestId() };
+    setPendingTasks((current) => [pending, ...current]);
+    createTask.mutate({ pending });
+  };
+
+  // Backlog tasks can be pulled onto today or explicitly deferred, exactly
+  // like the companion's surface/defer actions.
+  const surfaceTask = useMutation({
+    mutationFn: ({ task, disposition }: { task: AnyRow; disposition: "selected" | "deferred" }) => fetchJson("/api/work-os/me/plan", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": requestId() },
+      body: JSON.stringify(disposition === "selected" ? { surface_task_id: task.id } : { defer_task_id: task.id }),
+    }),
+    onSuccess: () => {
+      setMenuTaskId(null);
       void refresh();
     },
   });
@@ -151,11 +209,15 @@ export default function EmployeeTasks() {
       ? rawRows.filter((task) => `${String(task.title ?? "")} ${String(task.description ?? "")}`.toLowerCase().includes(query))
       : rawRows;
     const list = [...filtered];
-    if (sort?.key === "name") list.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? "")) * (sort.direction === "asc" ? 1 : -1));
-    if (sort?.key === "due") list.sort((a, b) => String(a.due_date ?? "9999-12-31").localeCompare(String(b.due_date ?? "9999-12-31")) * (sort.direction === "asc" ? 1 : -1));
-    if (sort?.key === "status") list.sort((a, b) => (Number(a.completed === true) - Number(b.completed === true)) * (sort.direction === "asc" ? 1 : -1));
+    // History views are already ordered by the server before pagination; only
+    // the fully loaded views sort locally.
+    if (!isHistoryView) {
+      if (sort?.key === "name") list.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? "")) * (sort.direction === "asc" ? 1 : -1));
+      if (sort?.key === "due") list.sort((a, b) => String(a.due_date ?? "9999-12-31").localeCompare(String(b.due_date ?? "9999-12-31")) * (sort.direction === "asc" ? 1 : -1));
+      if (sort?.key === "status") list.sort((a, b) => (Number(a.completed === true) - Number(b.completed === true)) * (sort.direction === "asc" ? 1 : -1));
+    }
     return list;
-  }, [rawRows, search, sort]);
+  }, [rawRows, search, sort, isHistoryView]);
 
   const activateSort = (key: SortKey) => {
     setSort((current) => {
@@ -200,6 +262,7 @@ export default function EmployeeTasks() {
             <IconButton label="Refresh tasks" onClick={() => void refresh()} disabled={scoped.isFetching || history.isFetching}>
               <RefreshCw size={15} className={scoped.isFetching || history.isFetching ? "animate-spin" : undefined} />
             </IconButton>
+            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
             <PrimaryButton disabled={historical} onClick={() => setDrawer({ mode: "create" })}>
               <Plus size={14} /> Add task
             </PrimaryButton>
@@ -274,6 +337,43 @@ export default function EmployeeTasks() {
               <span className="w-9 shrink-0" aria-hidden="true" />
             </div>
             <ul>
+              {pendingTasks.map((pending) => (
+                <li
+                  key={pending.id}
+                  className="border-b px-5 py-3.5"
+                  style={{ borderColor: "var(--border)", background: pending.status === "failed" ? "color-mix(in srgb, var(--status-error) 5%, transparent)" : undefined }}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center" aria-hidden="true">
+                      {pending.status === "syncing"
+                        ? <span className="size-3.5 animate-spin rounded-full border-2" style={{ borderColor: "var(--border-hot)", borderTopColor: "transparent" }} />
+                        : <AlertTriangle size={14} style={{ color: "var(--status-error)" }} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium text-[var(--text-primary)]">{pending.title}</p>
+                      <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+                        {pending.status === "syncing" ? "Adding to your workspace…" : `Failed to add — ${pending.error || "retry or discard"}`}
+                      </p>
+                    </div>
+                    {pending.status === "failed" ? (
+                      <span className="flex shrink-0 gap-2">
+                        <SecondaryButton
+                          className="!px-2.5 !py-1.5 !text-[11px]"
+                          onClick={() => {
+                            setPendingTasks((current) => current.map((item) => item.id === pending.id ? { ...item, status: "syncing", error: undefined } : item));
+                            createTask.mutate({ pending });
+                          }}
+                        >
+                          Retry
+                        </SecondaryButton>
+                        <SecondaryButton className="!px-2.5 !py-1.5 !text-[11px]" onClick={() => setPendingTasks((current) => current.filter((item) => item.id !== pending.id))}>
+                          Discard
+                        </SecondaryButton>
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
               {visible.map((task) => {
                 const taskId = String(task.provider_task_id || task.id);
                 const subtasks = historical ? [] : Array.isArray(task.subtasks) ? task.subtasks : [];
@@ -346,6 +446,21 @@ export default function EmployeeTasks() {
                               <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => changeTask.mutate({ task, body: { completed: !completed } })}>
                                 {completed ? <RotateCcw size={13} /> : <Check size={13} />}{completed ? "Reopen" : "Mark done"}
                               </button>
+                              {view === "open" && !completed ? (
+                                <>
+                                  <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => surfaceTask.mutate({ task, disposition: "selected" })}>
+                                    <Plus size={13} /> Add to today
+                                  </button>
+                                  <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => surfaceTask.mutate({ task, disposition: "deferred" })}>
+                                    <CircleDot size={13} /> Defer
+                                  </button>
+                                </>
+                              ) : null}
+                              {view === "day" && task.dayAttribution?.date && String(task.dayAttribution.date) < date ? (
+                                <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setMenuTaskId(null); setDate(String(task.dayAttribution.date)); }}>
+                                  <ChevronRight size={13} /> Open original day
+                                </button>
+                              ) : null}
                               <button role="menuitem" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--bg-tertiary)]" onClick={() => { setDrawer({ mode: "edit", task }); setMenuTaskId(null); }}>
                                 <Pencil size={13} /> Edit
                               </button>
@@ -452,6 +567,7 @@ export default function EmployeeTasks() {
           isWorkOsTask={drawer.mode === "edit" ? String(drawer.task.provider ?? "") === "local" : false}
           onClose={() => setDrawer(null)}
           onSaved={() => void refresh()}
+          onCreate={submitCreate}
         />
       ) : null}
     </div>

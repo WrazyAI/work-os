@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Bell, HardDriveDownload, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
 import { supportedTimezones, timezoneLabel } from "../timezones";
+import EmployeeMemory from "./EmployeeMemory";
+import { useEmployeeWorkspaceAccess } from "./EmployeeWorkspaceShell";
 import { fetchJson, requestId, type AnyRow } from "./model";
 import {
   Field,
@@ -22,6 +24,7 @@ import {
 
 export default function EmployeeSettings() {
   const queryClient = useQueryClient();
+  const access = useEmployeeWorkspaceAccess();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
@@ -231,6 +234,8 @@ export default function EmployeeSettings() {
             ) : null}
           </Panel>
         )}
+
+        <EmployeeMemory enabled={access.featureFlags.work_memory === true} />
 
         <Panel>
           <PanelHeader icon={<Bell size={16} />} title="This device" meta="Preferences stay on this device only." />

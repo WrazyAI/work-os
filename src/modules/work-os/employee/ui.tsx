@@ -8,6 +8,8 @@
  * globals.css while these routes are mounted. */
 
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
+import { formatDateTimeShort } from "./model";
 
 export function cx(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
@@ -242,4 +244,47 @@ export function Metric({
 
 export function Skeleton({ className }: { className?: string }) {
   return <span aria-hidden="true" className={cx("block animate-pulse rounded-lg", className)} style={{ background: "var(--bg-tertiary)" }} />;
+}
+
+/** Provider sync state and the explicit "sync now" action (companion parity:
+ * fresh / syncing / delayed, never a spinner without a name). */
+export function SyncChip({
+  sync,
+  syncing,
+  onSync,
+  className,
+}: {
+  sync?: { fresh?: boolean; syncing?: boolean; syncedAt?: string | null; error?: string };
+  syncing?: boolean;
+  onSync?: () => void;
+  className?: string;
+}) {
+  const degraded = !!sync?.error;
+  const busy = syncing || sync?.syncing === true;
+  const label = degraded ? "Sync delayed" : busy ? "Syncing…" : "Sync";
+  const detail = degraded
+    ? sync?.error || "The provider refresh did not complete."
+    : busy
+      ? "Refreshing Nifty and Worktivity state…"
+      : sync?.syncedAt
+        ? `Last provider sync ${formatDateTimeShort(sync.syncedAt)}`
+        : "Refresh Nifty and Worktivity state for this day.";
+  const color = degraded ? "var(--status-warn)" : busy ? "var(--text-secondary)" : "var(--text-secondary)";
+  return (
+    <button
+      type="button"
+      onClick={onSync}
+      disabled={busy || !onSync}
+      title={detail}
+      aria-label={detail}
+      className={cx(
+        "inline-flex items-center gap-1.5 rounded-[10px] border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:cursor-default disabled:opacity-80",
+        className,
+      )}
+      style={{ borderColor: degraded ? "color-mix(in srgb, var(--status-warn) 45%, var(--border))" : "var(--border)", background: "var(--bg-card)", color }}
+    >
+      <RefreshCw size={12} className={busy ? "animate-spin" : undefined} />
+      {label}
+    </button>
+  );
 }

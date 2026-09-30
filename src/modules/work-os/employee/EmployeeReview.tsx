@@ -12,6 +12,7 @@ import {
   Send,
   X,
 } from "lucide-react";
+import EmployeeEodEvidence from "./EmployeeEodEvidence";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
 import {
@@ -25,6 +26,7 @@ import {
   SecondaryButton,
   Skeleton,
   StatusPill,
+  SyncChip,
   inlineInputClass,
   inputClass,
   inputStyle,
@@ -54,7 +56,7 @@ function proposalSummary(proposal: AnyRow) {
 }
 
 export default function EmployeeReview() {
-  const { day, refresh } = useEmployeeDay();
+  const { day, refresh, sync, syncing } = useEmployeeDay();
   const outstanding = useOutstandingEods();
   const [selectedDate, setSelectedDate] = useState("");
   const [reportMarkdown, setReportMarkdown] = useState("");
@@ -218,6 +220,7 @@ export default function EmployeeReview() {
             <IconButton label="Refresh review" onClick={() => void refresh()} disabled={day.isFetching || selectedDay.isFetching}>
               <RefreshCw size={15} className={day.isFetching || selectedDay.isFetching ? "animate-spin" : undefined} />
             </IconButton>
+            <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
           </>
         }
       />
@@ -301,6 +304,12 @@ export default function EmployeeReview() {
               <EmptyState icon={<FileSearch size={20} />} title="No evidence recorded for this day" message="Sampled activity shows up here once Worktivity has observations." />
             )}
           </Panel>
+
+          <EmployeeEodEvidence
+            date={selectedDate}
+            timezone={day.data?.shift?.timezone}
+            enabled={day.data?.access?.featureFlags?.screenshot_summaries === true}
+          />
         </div>
 
         <aside className="grid content-start gap-5">
