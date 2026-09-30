@@ -282,6 +282,9 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain(".pending-retry");
     expect(workspaceStyles).toContain(".goal-retry");
     expect(planningSession).toContain("Review commitments");
+    expect(planningSession).toContain('className="planning-back"');
+    expect(planningSession).toContain("Review draft");
+    expect(workspaceStyles).toContain(".planning-review:focus");
     expect(planningSession).toContain("Your daily commitments are confirmed.");
     expect(planningSession).toContain("queued locally");
     expect(planningSession).toContain("Your plan was not saved.");

@@ -695,6 +695,36 @@ color, and the transcript is the only artifact that survives. The
 hold-to-talk shortcut is named in the composer so it is never discovered by
 accident.
 
+### 8.9 Two-view workflow modals: input view and drafted view
+
+A workflow modal that produces a reviewable draft keeps the input and the draft
+apart. The modal opens on the input view; the moment the draft is ready it opens
+its own view, so the drafted document never stacks under the input and never
+forces a scroll to reach it. The planning session (`Plan your day`) is the
+reference implementation.
+
+- **Input view** — the intent field, any attached source (such as a Loom
+  recording), and the one primary action that produces the draft (`Build my
+  plan`).
+- **Drafted view** — the review document with its own in-place actions (edit,
+  delete), starting at the top of the body with no inherited scroll position.
+  Focus follows into the view so keyboard and screen-reader users land on what
+  changed.
+- **Back** — the drafted view carries one quiet Back control in the dialog
+  header's top-left corner. It returns to the input view and keeps the draft;
+  nothing is discarded, and the primary action then reads `Review draft` so the
+  way back to the reviewed document is always one click.
+- **Delete** — deleting the draft (the double-confirm trash) returns to the
+  input view and clears the draft.
+- **Footer** — exactly one primary forward action per view: `Build` on the
+  input view without a draft, `Review draft` on the input view with a kept
+  draft, and `Confirm`/`Save` on the drafted view. Close and the secondary
+  actions stay available in both views.
+- **Copy** — the modal ships only copy the surface cannot carry itself. Helper
+  lines that explain mechanics ("your words stay attached", "nothing is filed
+  until…") are omitted; the input, the readback card, and the review document
+  state the contract through their own structure.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:

@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.77
+
+- The planner now opens your drafted plan in its own view, with a back button to return to the brief and a Review draft action to move forward again.
+- The planner no longer shows the extra helper lines under the brief and the Loom section.
+
 ## 0.3.76
 
 - Insights now lead with outcomes, commitment reliability, closing backlog, and source health, with exact daily data tucked into a breakdown.

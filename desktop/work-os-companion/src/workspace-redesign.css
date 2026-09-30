@@ -42,6 +42,7 @@
   display: grid;
   min-width: 0;
   gap: 2px;
+  margin-right: auto;
 }
 
 .planning-session > header small {
@@ -127,7 +128,6 @@
   box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
 }
 .planning-session-body > textarea:disabled { background: var(--surface); color: var(--muted); }
-.planning-provenance { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .planning-intent-heading {
   display: flex;
   align-items: baseline;
@@ -142,6 +142,9 @@
 .planning-notice { border: 1px solid #e7c887; background: #fff8e8; color: #755515; }
 .planning-confirmed { background: #e4f4d3; color: #244513; }
 .planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #f3f5ef; }
+/* The review section takes programmatic focus when its view opens, so the
+   scrollable card never paints a focus ring. */
+.planning-review:focus { outline: none; }
 .planning-review h3 { margin: 5px 0 6px; color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .planning-review article { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
 .planning-review article:first-of-type { border-top: 0; }
@@ -304,7 +307,6 @@
 
 .planning-loom-heading > div { display: grid; gap: 2px; }
 .planning-loom-heading strong { color: var(--ink); font-size: 11.5px; }
-.planning-loom-heading small { color: var(--muted); font-size: 10.5px; }
 .planning-loom-badge { padding: 4px 7px; border-radius: 999px; background: #edf0ea; color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.06em; }
 
 .planning-loom-row {
@@ -415,7 +417,6 @@
 .planning-loom-use:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
 .planning-loom-use:disabled { cursor: not-allowed; opacity: 0.5; }
 .planning-loom-use span { color: #5c7652; font-size: 10px; font-weight: 550; }
-.planning-loom-note { display: block; color: var(--muted); font-size: 10px; line-height: 1.4; }
 
 @media (max-width: 560px) {
   .planning-session { width: min(calc(100% - 20px), 620px); max-height: calc(100vh - 20px); }

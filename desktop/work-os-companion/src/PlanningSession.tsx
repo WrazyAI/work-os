@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X } from "lucide-react";
 import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
 import { FadeArc, Wave } from "./LoadingUi";
@@ -21,6 +21,13 @@ import {
 } from "./planningAnnotations";
 
 export type PlanningSessionState = "idle" | "drafting" | "interpreting" | "refining" | "clarifying" | "reviewing" | "saving" | "saved" | "confirmed" | "offline_fallback" | "ai_unavailable" | "save_error" | "conflict";
+/** The planning modal is a two-view flow: the input view and the drafted plan. */
+export type PlanningView = "compose" | "review";
+/** The one primary forward action the footer offers for the visible view. */
+export function planningPrimaryAction(view: PlanningView, hasDraft: boolean, fallbackSave: boolean): "build" | "review" | "confirm" {
+  if (!hasDraft) return fallbackSave ? "confirm" : "build";
+  return view === "compose" ? "review" : "confirm";
+}
 export const LOOM_ONLY_PLAN_INTENT = "Use the attached Loom recording to build today's plan.";
 export type PlanningInterpretation = {
   buildId?: string;
@@ -194,6 +201,7 @@ export function PlanningSession({
 }) {
   const [input, setInput] = useState("");
   const [state, setState] = useState<PlanningSessionState>("idle");
+  const [view, setView] = useState<PlanningView>("compose");
   const [loomOpen, setLoomOpen] = useState(false);
   const [loomUrl, setLoomUrl] = useState("");
   const [loomTranscript, setLoomTranscript] = useState("");
@@ -217,7 +225,17 @@ export function PlanningSession({
   const [lateReasonSaving, setLateReasonSaving] = useState(false);
   const [lateReasonSaved, setLateReasonSaved] = useState(false);
   const reviewRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   useModalScrollLock(open);
+
+  // Each view is its own screen: entering one starts at the top instead of
+  // inheriting the other view's scroll position, and focus follows into the
+  // drafted plan so keyboard users land on what just changed.
+  useDocumentLayoutEffect(() => {
+    if (!open) return;
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+    if (view === "review") reviewRef.current?.focus();
+  }, [open, view]);
 
   useEffect(() => {
     if (!open) return;
@@ -229,6 +247,7 @@ export function PlanningSession({
     setLoomReadback(null);
     setInterpretation(null);
     setBuiltIntent("");
+    setView("compose");
     setClarificationAnswers(plan?.clarification_answers ?? {});
     setError("");
     setAnnotations([]);
@@ -314,6 +333,7 @@ export function PlanningSession({
       const result = await onInterpret(requestedInput, loom);
       setInterpretation(result);
       setBuiltIntent(requestedInput);
+      setView("review");
       setState(result.clarifications.length ? "clarifying" : "reviewing");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Planning assistance is unavailable.");
@@ -364,6 +384,7 @@ export function PlanningSession({
     setPendingComment("");
     setOpenAnnotation(null);
     setState("refining");
+    setView("review");
     setError("");
     try {
       const result = await onRefine(planningInput, draftForServer, settled, edits);
@@ -396,6 +417,7 @@ export function PlanningSession({
         // The AI build expired or was already used. Drop the stale draft so the
         // footer offers Build again instead of retrying a dead build id.
         resetDraftState();
+        setView("compose");
         setError("The AI plan build expired. Build the plan again to confirm it.");
         setState("drafting");
         return;
@@ -411,6 +433,14 @@ export function PlanningSession({
   const discardDraft = () => {
     resetDraftState();
     setState("drafting");
+    setView("compose");
+  };
+
+  /** Back keeps the draft: it only returns to the plan input view. */
+  const goToCompose = () => {
+    if (busy || state === "saving") return;
+    setDeleteArmed(false);
+    setView("compose");
   };
 
   const toggleFeedback = () => {
@@ -509,21 +539,25 @@ export function PlanningSession({
 
   return <div className="task-modal-backdrop planning-backdrop" role="presentation">
     <section className="planning-session" role="dialog" aria-modal="true" aria-labelledby="planning-session-title">
-      <header><div><small>Today</small><h2 id="planning-session-title">Plan your day</h2></div><button aria-label="Close planning session" onClick={onClose} disabled={busy || state === "saving"}><X size={16} /></button></header>
-      <div className="planning-session-body">
+      <header>
+        {view === "review" && <button type="button" className="planning-back" aria-label="Back to plan input" title="Back" onClick={goToCompose} disabled={busy || state === "saving"}><ArrowLeft size={16} /></button>}
+        <div><small>Today</small><h2 id="planning-session-title">Plan your day</h2></div>
+        <button aria-label="Close planning session" onClick={onClose} disabled={busy || state === "saving"}><X size={16} /></button>
+      </header>
+      <div className="planning-session-body" ref={bodyRef}>
+        {view === "compose" ? <>
         <div className="planning-intent-heading">
           <label htmlFor="planning-intent">What should today's plan focus on?</label>
           <span>{loomEnabled ? "Optional when you use a Loom" : "Start with a clear outcome"}</span>
         </div>
         <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder={loomEnabled ? "Add a direction, or build directly from your Loom below." : "Fix the failing integration test, then get the migration ready for review."} />
-        <small className="planning-provenance">Your words stay attached to the plan. Work OS only suggests structure for your review.</small>
         {loomEnabled && <div className="planning-loom">
           <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={toggleLoom} disabled={working}>
             <span className="planning-loom-toggle-label"><Video size={15} /><span><strong>{loomOpen ? "Loom source attached" : "Plan from a Loom recording"}</strong><small>{loomOpen ? "Recording details and transcript" : "Use the recording instead of writing a brief"}</small></span></span>
             <span className="planning-loom-toggle-action">{loomOpen ? "Remove" : "Add"}</span>
           </button>
           {loomOpen ? <div className="planning-loom-panel">
-            <div className="planning-loom-heading"><div><strong>Recording link</strong><small>Read the date first, then build from its transcript.</small></div><span className="planning-loom-badge">Optional</span></div>
+            <div className="planning-loom-heading"><div><strong>Recording link</strong></div><span className="planning-loom-badge">Optional</span></div>
             <div className="planning-loom-row">
               <input value={loomUrl} onChange={(event) => { setLoomUrl(event.target.value); setLoomReadback(null); setLoomError(""); }} placeholder="https://www.loom.com/share/…" maxLength={500} aria-label="Loom share link" />
               <button type="button" className="secondary" disabled={!loomUrl.trim() || loomReading || working} onClick={() => void readLoom()}>{loomReading ? "Reading…" : "Read Loom"}</button>
@@ -531,9 +565,7 @@ export function PlanningSession({
             {loomError ? <p className="planning-loom-message is-error" role="alert"><AlertTriangle size={14} />{loomError}</p> : null}
             {loomReadback ? <div className={`planning-loom-readback${loomReadback.usableForDay ? "" : " is-warning"}`} role="status"><CheckCircle2 size={15} /><span><strong>{loomReadback.title ?? "Loom recording"}</strong><small>Recorded {loomReadback.createdLocalDate ? formatWorkOsDate(loomReadback.createdLocalDate) : "on an unverified date"}{loomReadback.durationSeconds ? ` - ${Math.round(loomReadback.durationSeconds / 60)} min` : ""}</small>{loomReadback.usableForDay ? <em>Ready for today's plan</em> : <em>Not usable for today's plan</em>}</span></div> : null}
             <details className="planning-loom-transcript"><summary>{loomTranscript.trim() ? "Transcript attached" : "Add your own transcript (optional)"}</summary><textarea value={loomTranscript} onChange={(event) => setLoomTranscript(event.target.value)} rows={3} maxLength={50000} placeholder="Only if Loom has no transcript: open Transcript in Loom, Copy, and paste it here." aria-label="Loom transcript" /></details>
-            {loomReadback && !loomTranscript.trim() ? <p className="planning-loom-message"><Video size={14} /><span>Work OS reads the recording's own transcript when Loom exposes one. Paste yours only to correct or replace it.</span></p> : null}
             {loomReadback && loomReady && input.trim() ? <button type="button" className="planning-loom-use" onClick={() => void build(true)} disabled={working}>Use Loom only <span>Build without the text above</span></button> : null}
-            <small className="planning-loom-note">Nothing is filed from the recording. You will review the plan before anything is saved.</small>
           </div> : null}
         </div>}
         {lateReasonRequired && <div className="planning-notice planning-late-reason" role="status">
@@ -547,8 +579,9 @@ export function PlanningSession({
         </div>}
         {lateReasonSaved && !lateReasonRequired && <div className="planning-confirmed" role="status"><CheckCircle2 size={17} /><span>Late-start reason recorded — Otto is back to his usual colour.</span></div>}
         {state === "interpreting" && <div className="planning-loading" role="status"><Wave className="planning-wave" /><span>Building a reviewable plan…</span></div>}
+        </> : <>
         {state === "refining" && <div className="planning-loading" role="status"><FadeArc size={16} /><span>Refining your plan with your feedback…</span></div>}
-        {interpretation && <section className={`planning-review${feedbackMode ? " is-editing" : ""}`} ref={reviewRef} onMouseUp={captureDocumentSelection} onKeyUp={captureDocumentSelection}>
+        {interpretation && <section className={`planning-review${feedbackMode ? " is-editing" : ""}`} ref={reviewRef} tabIndex={-1} onMouseUp={captureDocumentSelection} onKeyUp={captureDocumentSelection}>
           <div className="planning-review-head">
             <small>Review commitments</small>
             <div className="planning-review-actions">
@@ -595,6 +628,7 @@ export function PlanningSession({
           })}
           {interpretation.clarifications.length > 0 && <div className="planning-clarifications"><strong>{interpretation.clarifications.length === 1 ? "One thing to clarify" : `${interpretation.clarifications.length} things to clarify`}</strong>{interpretation.clarifications.map((question) => <label key={question.id} htmlFor={`planning-clarification-${question.id}`}><span>{question.question}</span><textarea id={`planning-clarification-${question.id}`} maxLength={1000} value={clarificationAnswers[question.id] ?? ""} disabled={busy || state === "saving" || state === "refining" || state === "confirmed"} onChange={(event) => setClarificationAnswers((current) => ({ ...current, [question.id]: event.target.value }))} /></label>)}</div>}
         </section>}
+        </>}
         {state === "ai_unavailable" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error} {hasDraft ? "Your current draft is kept." : active ? "Try building again — confirming needs an AI-built plan while on shift." : "You can still save your own planning note."}</span></div>}
         {state === "offline_fallback" && <div className="planning-notice"><AlertTriangle size={16} /><span>{interpretation ? "Your structured plan is queued locally. It is not confirmed until sync succeeds." : "Your raw planning note is queued locally."}</span></div>}
         {state === "conflict" && <div className="planning-notice"><AlertTriangle size={16} /><span>Your workspace has a newer confirmed plan, and it is showing now. Close this and reopen the focus editor to change it.</span></div>}
@@ -604,13 +638,16 @@ export function PlanningSession({
       </div>
       <footer>
         {state !== "confirmed" && state !== "saved" && <>
-          {confirmBlockedReason && planningInput && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
+          {confirmBlockedReason && planningInput && !(hasDraft && view === "compose") && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
           <button className="secondary" onClick={onClose} disabled={busy || state === "saving"}>Close</button>
           {annotations.length > 0 && <span className="planning-annotation-pill">{annotations.length} Annotation{annotations.length === 1 ? "" : "s"}<button type="button" aria-label="Clear all annotations" title="Clear all annotations" onClick={() => { setAnnotations([]); setPendingSelection(null); setPendingComment(""); }}><X size={12} /></button></span>}
           <button className="secondary planning-refine-button" onClick={() => void refine()} disabled={!hasDraft || working || !refineReady} title={!hasDraft ? "Build your plan first" : !refineReady ? "Add feedback or edits to refine" : "Refine the draft with your feedback"}>Refine plan{annotations.length > 0 && <span className="planning-refine-count" aria-label={`${annotations.length} annotations`}>{annotations.length}</span>}</button>
-           {!hasDraft && !fallbackSave
-             ? <button className="primary" onClick={() => void build()} disabled={!canBuild || working}>{input.trim() || !loomReady ? "Build my plan" : "Build from Loom"}</button>
-             : <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>}
+          {(() => {
+            const primary = planningPrimaryAction(view, hasDraft, fallbackSave);
+            if (primary === "build") return <button className="primary" onClick={() => void build()} disabled={!canBuild || working}>{input.trim() || !loomReady ? "Build my plan" : "Build from Loom"}</button>;
+            if (primary === "review") return <button className="primary" onClick={() => setView("review")} disabled={working}>Review draft</button>;
+            return <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>;
+          })()}
         </>}
         {(state === "confirmed" || state === "saved") && <button className="primary" onClick={onClose}>Continue working</button>}
       </footer>

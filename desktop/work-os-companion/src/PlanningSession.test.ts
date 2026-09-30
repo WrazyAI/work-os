@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { PlanningDocumentText, PlanningSession } from "./PlanningSession";
+import { PlanningDocumentText, PlanningSession, planningPrimaryAction } from "./PlanningSession";
 
 const props = {
   open: true,
@@ -37,5 +37,29 @@ describe("PlanningSession footer gating", () => {
 
     const readOnly = renderToStaticMarkup(createElement(PlanningDocumentText, { ...base, editing: false }));
     expect(readOnly).toContain("Improve Work OS ease of use");
+  });
+});
+
+describe("PlanningSession two-view flow", () => {
+  it("offers one primary action per view", () => {
+    expect(planningPrimaryAction("compose", false, false)).toBe("build");
+    expect(planningPrimaryAction("compose", true, false)).toBe("review");
+    expect(planningPrimaryAction("review", true, false)).toBe("confirm");
+    expect(planningPrimaryAction("compose", false, true)).toBe("confirm");
+  });
+
+  it("opens on the input view without the removed helper copy", () => {
+    const markup = renderToStaticMarkup(createElement(PlanningSession, props));
+    expect(markup).toContain("What should today");
+    expect(markup).toContain("Build my plan");
+    // The drafted plan is its own view: the input view never renders the
+    // review screen or the back control that returns from it.
+    expect(markup).not.toContain("Review commitments");
+    expect(markup).not.toContain('className="planning-back"');
+    // The mechanical helper copy no longer ships with the input view.
+    expect(markup).not.toContain("Your words stay attached");
+    expect(markup).not.toContain("Read the date first");
+    expect(markup).not.toContain("reads the recording's own transcript");
+    expect(markup).not.toContain("Nothing is filed from the recording");
   });
 });
