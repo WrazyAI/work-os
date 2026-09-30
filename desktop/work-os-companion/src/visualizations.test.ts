@@ -29,7 +29,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("Worktivity owns clock actions; the Windows Companion waits for provider confirmation.");
     expect(app).toContain("Worktivity attendance");
     expect(workspaceStyles).toContain(".pulse-provider-popover.active");
-    expect(app).toContain("Observed time and planned commitments · separate scales, named in the legend");
+    expect(app).toContain("Observed time and planned commitments · separate scales");
     expect(insightChartStyles).toContain("Every series keeps its own scale");
     expect(app).toContain("Observed active time");
     expect(app).toContain("Clocked in");
@@ -422,7 +422,8 @@ describe("operational visualizations", () => {
 
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
     expect(app).toContain("TrendChart");
-    expect(app).toContain("FlowDonut");
+    expect(app).toContain("DailyRhythmStrip");
+    expect(app).not.toContain('className="panel insight-flow"');
     expect(app).toContain("HeatmapGrid");
     expect(app).toContain("OnTimeBar");
     expect(app).toContain("DeltaBadge");
@@ -446,7 +447,7 @@ describe("operational visualizations", () => {
     expect(insightChartStyles).toContain(".heatmap-scroll");
     expect(insightChartStyles).toMatch(/\.heatmap-scroll \{[\s\S]*overflow-y: clip/);
     expect(insightChartStyles).toContain(".scroll-fade-region");
-    expect(insightChartStyles).toContain(".insight-split.mirror");
+    expect(insightChartStyles).toContain(".insight-activity-inline");
     expect(insightChartStyles).toContain(".scroll-fade-strip.top");
     expect(insightCharts).toContain("useScrollEdges");
     expect(insightCharts).toContain("trendLineSegments");
@@ -455,8 +456,19 @@ describe("operational visualizations", () => {
     expect(insightCharts).toContain("sharePercent");
     expect(app).toContain("maxHeight={360}");
     expect(app).toContain("maxHeight={320}");
-    expect(app).toContain('className="insight-split mirror"');
+    expect(app).toContain('className="insight-activity-inline"');
     expect(readFileSync(resolve(root, "src/ScrollFadeRegion.tsx"), "utf8")).toContain('role="region"');
+  });
+
+  it("uses an editorial Insights hierarchy with progressive disclosure", () => {
+    expect(app).toContain('className="panel insight-hero"');
+    expect(app).toContain("Your work, without the noise.");
+    expect(app).toContain("Closing carry-over");
+    expect(app).toContain('className="panel insight-detail-disclosure"');
+    expect(app).toContain('range === "30d" ? <div className="split-chart"><HeatmapGrid');
+    expect(insightChartStyles).toContain(".insight-hero-stats");
+    expect(insightChartStyles).toContain(".daily-rhythm-strip");
+    expect(insightChartStyles).toContain(".insight-detail-disclosure");
   });
 
   it("renders the grounded synthesis as bold-labelled short paragraphs with an evidence fallback", () => {
@@ -465,7 +477,7 @@ describe("operational visualizations", () => {
     expect(synthesisCard).toContain('<ChatMarkdown text={state.text} />');
     expect(synthesisCard).toContain('state.mode === "evidence"');
     expect(synthesisCard).toContain("showing the exact fact record instead");
-    expect(synthesisCard).toContain("every figure is checked against the record");
+    expect(synthesisCard).toContain("Every figure is checked against the record");
     expect(synthesisCard).not.toContain("Selects only from the verified facts below");
   });
 });

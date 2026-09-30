@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { BarBreakdown, FlowDonut, HeatmapGrid, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { BarBreakdown, DailyRhythmStrip, FlowDonut, HeatmapGrid, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { flowBreakdown, heatmapCells, insightSeries, updateKindBreakdown } from "./insights";
 import type { InsightDay } from "./types";
 
@@ -58,6 +58,20 @@ describe("insight chart rendering", () => {
     expect(markup).toContain("darker means more completed work");
     expect((markup.match(/heatmap-cell bucket-/g) ?? []).length).toBe(2);
     expect(markup).toContain("August 24: 5 completed outcomes");
+  });
+
+  it("renders seven-day rhythm as a compact daily strip with exact accessible values", () => {
+    const markup = renderToStaticMarkup(createElement(DailyRhythmStrip, {
+      points: insightSeries([
+        day({ date: "2026-08-17", tasksCompleted: 2, planned: 4, plannedCompleted: 3 }),
+        day({ date: "2026-08-18", tasksCompleted: 0, planned: 0, plannedCompleted: 0 }),
+      ]),
+      rangeLabel: "these 7 days",
+    }));
+    expect(markup).toContain("daily-rhythm-strip");
+    expect(markup).toContain("75% plan");
+    expect(markup).toContain("No plan");
+    expect(markup).toContain("August 17: 2 completed outcomes");
   });
 
   it("scales the trend axis to round ticks and breaks the line at unrecorded days", () => {

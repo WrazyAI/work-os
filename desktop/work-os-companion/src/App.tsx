@@ -68,8 +68,8 @@ import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./Pro
 import { InsightSynthesisCard, type InsightSynthesisState } from "./InsightSynthesis";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { useModalScrollLock } from "./modalScrollLock";
-import { consistencyChips, flowBreakdown, heatmapCells, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
-import { BarBreakdown, ConsistencyChips, DeltaBadge, FlowDonut, HeatmapGrid, MetricTile, OnTimeBar, Sparkline, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { consistencyChips, heatmapCells, insightRangeSummary, insightSeries, onTimeRate, periodDeltas, updateKindBreakdown } from "./insights";
+import { BarBreakdown, ConsistencyChips, DailyRhythmStrip, DeltaBadge, HeatmapGrid, OnTimeBar, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
@@ -4079,7 +4079,7 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
 
   const rangeLabel = range === "day" ? "this day" : range === "7d" ? "these 7 days" : "these 30 days";
   const series = useMemo(() => (data ? insightSeries(data.days) : []), [data]);
-  const flowSlices = useMemo(() => (data ? flowBreakdown(data.days) : []), [data]);
+  const rangeSummary = useMemo(() => (data ? insightRangeSummary(data) : null), [data]);
   const updateSlices = useMemo(() => (data ? updateKindBreakdown(data.updateKinds ?? data.days) : []), [data]);
   const timing = useMemo(() => (data ? onTimeRate(data.days) : null), [data]);
   const heatmap = useMemo(() => (data ? heatmapCells(data.days) : []), [data]);
@@ -4091,144 +4091,156 @@ function PersonalInsights({ data, loading, range, onRange, onReference, onCorrec
   const pausedTotal = data ? data.totals.pausedSeconds : 0;
   const observedTotal = data ? data.totals.observedSeconds : 0;
   const pauseShare = observedTotal + pausedTotal > 0 ? Math.round((pausedTotal / (observedTotal + pausedTotal)) * 100) : null;
+  const githubSource = data?.evidenceSources?.find((source) => source.provider === "github") ?? null;
+  const outcomePerRecordedDay = rangeSummary?.recordedDays ? Math.round((Number(data?.totals.tasksCompleted ?? 0) / rangeSummary.recordedDays) * 10) / 10 : 0;
 
   return <main className="page insights-page">
     <div className="insights-heading">
-      <PageIntro eyebrow="Personal insights" title="Progress, with the evidence labels intact." body="Daily goals, employee updates, task outcomes, output evidence, and Worktivity context are analyzed separately—never collapsed into a surveillance score." />
+      <PageIntro eyebrow="Personal insights" title="Your work, without the noise." body="Outcomes, plan reliability, updates, evidence, and Worktivity context stay separate so the story is useful without becoming a score." />
       <div className="range-switch" aria-label="Insight range">{(["day", "7d", "30d"] as const).map((value) => <button className={range === value ? "active" : ""} key={value} aria-pressed={range === value} onClick={() => onRange(value)}>{value === "day" ? "Today" : value}</button>)}</div>
     </div>
-    <div className="freshness-chips">
-      {data?.freshness.stale ? <span className="stale">Nifty sync delayed{staleAt ? ` · ${formatWorkOsDateTime(staleAt)}` : ""}</span> : null}
-      <span>Nifty synced {data?.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"}</span>
-      <span>Worktivity observed {data?.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</span>
-    </div>
-
-    {data && !loading && <InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />}
 
     {loading && !data ? <section className="panel"><InsightsSkeleton /></section> : data ? <>
-      <div className="metric-grid">
-        <MetricTile icon={Clock3} label="Observed work time" value={durationLabel(data.totals.observedSeconds)} detail={rangeLabel}>
-          <Sparkline values={series.map((point) => point.observedMinutes)} label={`Observed minutes per day for ${rangeLabel}`} />
-          {deltaFor("observedMinutes") ? <DeltaBadge stat={deltaFor("observedMinutes")!} /> : null}
-        </MetricTile>
-        <MetricTile icon={ListChecks} label="Commitments completed" value={`${data.totals.plannedCompleted}/${data.totals.planned}`} detail={`planned commitments · ${rangeLabel}`}>
-          <Sparkline values={data.days.map((day) => day.plannedCompleted)} label={`Planned commitments completed per day for ${rangeLabel}`} />
-          {deltaFor("plannedCompleted") ? <DeltaBadge stat={deltaFor("plannedCompleted")!} /> : null}
-        </MetricTile>
-        <MetricTile icon={FileCheck2} label="Nifty outcomes" value={String(data.totals.tasksCompleted)} detail={`completed task outcomes · ${rangeLabel}`}>
-          <Sparkline values={data.days.map((day) => day.tasksCompleted)} label={`Completed task outcomes per day for ${rangeLabel}`} />
-          {deltaFor("tasksCompleted") ? <DeltaBadge stat={deltaFor("tasksCompleted")!} /> : null}
-        </MetricTile>
-        <MetricTile icon={Fingerprint} label="Output evidence" value={String(data.totals.outputEvidence)} detail={`artifacts and records · ${rangeLabel}`}>
-          <Sparkline values={data.days.map((day) => day.outputEvidence)} label={`Output evidence items per day for ${rangeLabel}`} />
-          {deltaFor("outputEvidence") ? <DeltaBadge stat={deltaFor("outputEvidence")!} /> : null}
-        </MetricTile>
-      </div>
-      {!hasRecord ? <p className="insight-empty-note">No work record is stored for {rangeLabel} yet. Charts fill in as days are recorded — the goal, updates, and evidence you add show up here first.</p> : null}
-
-      <section className="panel insight-brief">
-        <header>
-          <div><span>{data.brief.generated ? "Agent brief" : "Deterministic brief"}</span><h3>{data.brief.summary}</h3></div>
-          <small>{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</small>
+      <section className="panel insight-hero">
+        <header className="insight-hero-head">
+          <div>
+            <span className="insight-eyebrow">{formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</span>
+            <h2>{data.totals.tasksCompleted} outcome{data.totals.tasksCompleted === 1 ? "" : "s"} completed</h2>
+            <p>{data.totals.planned > 0
+              ? <>{data.totals.plannedCompleted} of {data.totals.planned} planned commitments landed{rangeSummary?.commitmentRate != null ? <> · <strong>{rangeSummary.commitmentRate}%</strong> completion</> : null}.</>
+              : <>No planned commitments were recorded in this range.</>}</p>
+          </div>
+          <div className="insight-source-status">
+            {data.freshness.stale
+              ? <span className="stale">Nifty sync delayed{staleAt ? " · " + formatWorkOsDateTime(staleAt) : ""}</span>
+              : <span>Nifty updated {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "—"}</span>}
+            <span>Worktivity {data.freshness.worktivityObservedAt ? "observed " + formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "not observed"}</span>
+          </div>
         </header>
-        <div>
-          <section><strong>Wins</strong>{data.brief.wins.length ? data.brief.wins.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">Nothing recorded for this range yet.</p>}</section>
-          <section><strong>Needs attention</strong>{data.brief.attention.length ? data.brief.attention.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">Nothing needs attention in this range.</p>}</section>
-          <section><strong>Next focus</strong>{data.brief.nextFocus.length ? data.brief.nextFocus.map((item) => <p key={item}>{item}</p>) : <p className="insight-empty-note">No next focus was recorded.</p>}</section>
+        <div className="insight-hero-stats">
+          <div><small>Recorded days</small><strong>{rangeSummary?.recordedDays ?? 0}/{data.days.length}</strong></div>
+          <div><small>Avg recorded day</small><strong>{durationLabel(rangeSummary?.averageObservedSeconds ?? 0)}</strong></div>
+          <div><small>Outcomes / recorded day</small><strong>{outcomePerRecordedDay || "—"}</strong></div>
+          <div><small>Closing carry-over</small><strong>{rangeSummary?.closingCarryOver ?? 0}</strong></div>
         </div>
+        {!hasRecord ? <p className="insight-empty-note">No work record is stored for {rangeLabel} yet. Goals, updates, task outcomes, and evidence will appear here as they are recorded.</p> : null}
       </section>
 
-      {series.length >= 2 ? <section className="panel trend-panel">
-        <div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>Observed time and planned commitments · separate scales, named in the legend</small></div>
-        <TrendChart points={series} rangeLabel={rangeLabel} />
-      </section> : <section className="panel trend-panel">
-        <div className="card-title"><span><Gauge size={17} /> Workday trend</span><small>A trend needs at least two recorded days</small></div>
-        <p className="insight-empty-note">Switch to 7 days or 30 days to compare observed time against planned commitments.</p>
-      </section>}
+      <InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />
 
-      <div className="insights-split">
-        <section className="panel insight-flow">
-          <div className="card-title"><span><LayoutDashboard size={17} /> Work mix</span><small>Every record kept in its own class</small></div>
-          {flowSlices.some((slice) => slice.value > 0)
-            ? <FlowDonut slices={flowSlices} ariaLabel={`Work mix for ${rangeLabel}: ${flowSlices.map((slice) => `${slice.value} ${slice.label.toLowerCase()}`).join(", ")}`} />
-            : <p className="insight-empty-note">No outcomes, updates, deferrals, or carry-over recorded in this range.</p>}
+      <div className="insight-decision-grid">
+        <section className="panel insight-decision-panel">
+          <div className="card-title"><span><MoveRight size={17} /> What changed</span><small>Compared with the equal earlier period</small></div>
+          <div className="insight-change-list">
+            {deltaFor("plannedCompleted") ? <div><span>Commitment rate</span><DeltaBadge stat={deltaFor("plannedCompleted")!} /></div> : null}
+            {deltaFor("tasksCompleted") ? <div><span>Completed outcomes</span><DeltaBadge stat={deltaFor("tasksCompleted")!} /></div> : null}
+            {deltaFor("observedMinutes") ? <div><span>Observed context</span><DeltaBadge stat={deltaFor("observedMinutes")!} /></div> : null}
+          </div>
         </section>
-        <section className="panel insight-updates">
-          <div className="card-title"><span><MessageSquareText size={17} /> Updates &amp; blockers</span><small>{blockedTotal > 0 ? `${blockedTotal} blocker${blockedTotal === 1 ? "" : "s"} raised — reviewed below` : "No blockers raised in this range"}</small></div>
-          <UpdateKindChart slices={updateSlices} />
-          <p className="activity-provenance">Update kinds come from the employee&apos;s own recorded updates. Blockers and priority changes are shown rather than folded into a single count.</p>
+        <section className="panel insight-decision-panel insight-attention-panel">
+          <div className="card-title"><span><AlertTriangle size={17} /> Needs attention</span><small>Closing state, not accumulated snapshots</small></div>
+          <div className="insight-attention-list">
+            <p><strong>{rangeSummary?.closingCarryOver ?? 0}</strong><span>carried items still open at the end of the range</span></p>
+            <p><strong>{rangeSummary?.closingOverdue ?? 0}</strong><span>overdue items in the latest day</span></p>
+            <p><strong>{blockedTotal}</strong><span>blocker{blockedTotal === 1 ? "" : "s"} raised through recorded updates</span></p>
+            {data.consistency && data.consistency.daysWithUpdate === 0 ? <p className="attention-copy"><span>No substantive updates were recorded in this range.</span></p> : null}
+            {data.brief.nextFocus[0] ? <p className="attention-next"><span>Next focus</span><b>{data.brief.nextFocus[0]}</b></p> : null}
+          </div>
         </section>
       </div>
 
+      <section className="panel insight-primary-chart">
+        <div className="card-title"><span><Gauge size={17} /> {range === "7d" ? "Weekly rhythm" : "Workday trend"}</span><small>{range === "7d" ? "Daily outcomes with planned-commitment completion" : "Observed time and planned commitments · separate scales"}</small></div>
+        {range === "7d" && series.length
+          ? <DailyRhythmStrip points={series} rangeLabel={rangeLabel} />
+          : series.length >= 2
+            ? <TrendChart points={series} rangeLabel={rangeLabel} />
+            : <p className="insight-empty-note">A trend needs at least two recorded days. Switch to 7 days or 30 days for comparison.</p>}
+      </section>
+
       <section className="panel insight-rhythm">
-        <div className="card-title"><span><CalendarDays size={17} /> Consistency &amp; rhythm</span><small>{pauseShare === null ? "Days, updates, and closing streak" : `Paused share ${pauseShare}% of observed+paused time`}</small></div>
-        <div className="insight-split">
-          <div className="split-chart">
-            <HeatmapGrid cells={heatmap} rangeLabel={rangeLabel} />
-          </div>
+        <div className="card-title"><span><CalendarDays size={17} /> Work rhythm</span><small>{pauseShare === null ? "Goals, updates, outcomes, and closing streak" : "Paused share " + pauseShare + "% of observed+paused time"}</small></div>
+        <div className="insight-rhythm-layout">
+          {range === "30d" ? <div className="split-chart"><HeatmapGrid cells={heatmap} rangeLabel={rangeLabel} /></div> : null}
           <div className="split-data">
             <ConsistencyChips chips={chips} />
             <div className="rhythm-timing">
-              <div className="card-title"><span><CheckCircle2 size={16} /> Completed outcomes with a due date</span><small>Undated work is never classified either way</small></div>
+              <div className="card-title"><span><CheckCircle2 size={16} /> Outcomes with a due date</span><small>Undated work is never classified either way</small></div>
               {timing ? <OnTimeBar onTime={timing.onTime} late={timing.late} percent={timing.percent} /> : null}
             </div>
           </div>
         </div>
       </section>
 
-      {activityTotals.trackedMinutes > 0 && <section className="panel insight-activity">
-        <div className="card-title"><span><Activity size={17} /> Activity context</span><small>{activityTotals.trackedMinutes} tracked minutes · Worktivity app/site summary</small></div>
-        <div className="insight-split mirror">
+      <section className="panel insight-evidence-context">
+        <div className="card-title"><span><Fingerprint size={17} /> Evidence &amp; context</span><small>Source health and neutral activity context</small></div>
+        <div className="insight-source-grid">
+          <div><strong>Nifty</strong><span>{data.freshness.stale ? "Sync delayed" : "Synced"}{data.freshness.niftySyncedAt ? " · " + formatWorkOsDateTime(data.freshness.niftySyncedAt) : ""}</span></div>
+          <div><strong>Worktivity</strong><span>{data.freshness.worktivityObservedAt ? "Observed · " + formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "No observation in range"}</span></div>
+          <div><strong>GitHub</strong><span>{githubSource?.connected ? !githubSource.enabled ? "Connected · evidence disabled" : githubSource.verifiedForPerson ? githubSource.evidenceCount + " evidence item" + (githubSource.evidenceCount === 1 ? "" : "s") + " · verified account" : "Connected · employee account not verified" : "Not connected"}</span></div>
+          <div><strong>Output evidence</strong><span>{data.totals.outputEvidence} linked artifact{data.totals.outputEvidence === 1 ? "" : "s"} or record{data.totals.outputEvidence === 1 ? "" : "s"}</span></div>
+        </div>
+        {activityTotals.trackedMinutes > 0 ? <div className="insight-activity-inline">
           <div className="split-data">
             <BarBreakdown
-              ariaLabel={`Tracked minutes by app for ${rangeLabel}`}
+              ariaLabel={"Tracked minutes by app for " + rangeLabel}
               rows={activityTotals.topApps.map((app) => ({ key: app.name, label: app.name, value: app.minutes, detail: "min" }))}
               total={activityTotals.trackedMinutes}
               emptyNote="No tracked app activity in this range."
             />
-            <p className="activity-provenance">Observed app and site usage, shown as neutral context. It is not a productivity score and never proves task completion.</p>
+            <p className="activity-provenance">Observed app and site usage is neutral context. It is not a productivity score and never proves task completion.</p>
           </div>
           <div className="split-chart">
             <p className="split-chart-title">Tracked minutes per day</p>
             <TrackedBars points={series} rangeLabel={rangeLabel} />
           </div>
-        </div>
-      </section>}
-
-      <ScrollFadeRegion label="Exact personal insight values" maxHeight={360} scrollAxis="both" className="insight-table-wrap">
-        <table>
-          <caption>Exact personal insight values · {formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</caption>
-          <thead>
-            <tr><th>Date</th><th>Observed</th><th>Paused</th><th>Commitments</th><th>Outcomes</th><th>On time</th><th>Late</th><th>Updates</th><th>Blockers</th><th>Tracked</th><th>Output evidence</th><th>Session quality</th></tr>
-          </thead>
-          <tbody>
-            {data.days.map((day) => <tr key={day.date}>
-              <td>{formatWorkOsDate(day.date)}</td>
-              <td>{durationLabel(day.observedSeconds)}</td>
-              <td>{durationLabel(day.pausedSeconds)}</td>
-              <td>{day.plannedCompleted}/{day.planned}</td>
-              <td>{day.tasksCompleted}</td>
-              <td>{day.outcomesOnTime ?? 0}</td>
-              <td>{(day.outcomesLate ?? 0) > 0 ? day.outcomesLate : "—"}</td>
-              <td>{day.updates}</td>
-              <td>{(day.updatesByKind?.blocked ?? 0) > 0 ? day.updatesByKind!.blocked : "—"}</td>
-              <td>{day.trackedMinutes ? `${day.trackedMinutes}m` : "—"}</td>
-              <td>{day.outputEvidence}</td>
-              <td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td>
-            </tr>)}
-          </tbody>
-        </table>
-      </ScrollFadeRegion>
-
-      <section className="panel insight-drilldown">
-        <div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>
-        {latest?.references?.length
-          ? <ScrollFadeRegion label="Latest-day linked records" maxHeight={320}>
-              <div className="drilldown-list">{(latest.references ?? []).map((reference) => <button key={`${reference.type}:${reference.id}`} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div>
-            </ScrollFadeRegion>
-          : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}
-        <footer>Nifty synced {data.freshness.niftySyncedAt ? formatWorkOsDateTime(data.freshness.niftySyncedAt) : "unavailable"} · Worktivity observed {data.freshness.worktivityObservedAt ? formatWorkOsDateTime(data.freshness.worktivityObservedAt) : "unavailable"}</footer>
+        </div> : null}
       </section>
+
+      {updateSlices.some((slice) => slice.value > 0) ? <section className="panel insight-updates">
+        <div className="card-title"><span><MessageSquareText size={17} /> Recorded updates</span><small>{blockedTotal > 0 ? blockedTotal + " blocker" + (blockedTotal === 1 ? "" : "s") + " raised" : "No blockers raised"}</small></div>
+        <UpdateKindChart slices={updateSlices} />
+        <p className="activity-provenance">Update kinds come from the employee&apos;s own recorded updates. Blockers and priority changes remain separate.</p>
+      </section> : null}
+
+      <details className="panel insight-detail-disclosure">
+        <summary><span>View daily breakdown</span><small>Exact values, linked records, and provenance</small><ChevronRight size={16} /></summary>
+        <div className="insight-detail-body">
+          <ScrollFadeRegion label="Exact personal insight values" maxHeight={360} scrollAxis="both" className="insight-table-wrap">
+            <table>
+              <caption>Exact personal insight values · {formatWorkOsDate(data.from)} → {formatWorkOsDate(data.through)}</caption>
+              <thead>
+                <tr><th>Date</th><th>Observed</th><th>Paused</th><th>Commitments</th><th>Outcomes</th><th>On time</th><th>Late</th><th>Updates</th><th>Blockers</th><th>Tracked</th><th>Output evidence</th><th>Session quality</th></tr>
+              </thead>
+              <tbody>
+                {data.days.map((day) => <tr key={day.date}>
+                  <td>{formatWorkOsDate(day.date)}</td>
+                  <td>{durationLabel(day.observedSeconds)}</td>
+                  <td>{durationLabel(day.pausedSeconds)}</td>
+                  <td>{day.plannedCompleted}/{day.planned}</td>
+                  <td>{day.tasksCompleted}</td>
+                  <td>{day.outcomesOnTime ?? 0}</td>
+                  <td>{(day.outcomesLate ?? 0) > 0 ? day.outcomesLate : "—"}</td>
+                  <td>{day.updates}</td>
+                  <td>{(day.updatesByKind?.blocked ?? 0) > 0 ? day.updatesByKind!.blocked : "—"}</td>
+                  <td>{day.trackedMinutes ? day.trackedMinutes + "m" : "—"}</td>
+                  <td>{day.outputEvidence}</td>
+                  <td>{day.sessionQuality?.status === "needs_correction" ? <button onClick={() => onCorrect(day.sessionQuality!, day.date)}>Needs correction</button> : sentence(day.sessionQuality?.status ?? "none")}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </ScrollFadeRegion>
+          <section className="insight-drilldown-flat">
+            <div className="card-title"><span><Inbox size={17} /> Latest-day record</span><small>{formatWorkOsDate(latest?.date)}</small></div>
+            {latest?.references?.length
+              ? <ScrollFadeRegion label="Latest-day linked records" maxHeight={320}>
+                  <div className="drilldown-list">{(latest.references ?? []).map((reference) => <button key={[reference.type, reference.id].join(":")} onClick={() => onReference(reference)}><span>{reference.type === "plan" ? "Daily workspace" : sentence(reference.type)}</span><strong>{reference.label}</strong><ChevronRight size={15} /></button>)}</div>
+                </ScrollFadeRegion>
+              : <Empty title="No linked records" body="This day has no daily goal, task completion, substantive update, or evidence record yet." />}
+          </section>
+        </div>
+      </details>
+
       <p className="insight-disclaimer">These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.</p>
     </> : <section className="panel"><Empty title="Insights unavailable" body="Refresh to retry the personal insights record." /></section>}
   </main>;

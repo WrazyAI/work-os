@@ -18,6 +18,15 @@ test("deterministic insight brief keeps activity separate from outcomes", () => 
   assert.deepEqual(brief.referenceIds, ["plan-1"]);
 });
 
+test("deterministic brief treats carry-over as a closing snapshot instead of summing daily backlog", () => {
+  const brief = deterministicInsightBrief([
+    { date: "2026-08-19", tasksCompleted: 1, carried: 7 },
+    { date: "2026-08-20", tasksCompleted: 1, carried: 4 },
+  ], []);
+  assert.match(brief.attention.join(" "), /4 carried or overdue items remained visible/i);
+  assert.doesNotMatch(brief.attention.join(" "), /11 carried/i);
+});
+
 test("authoritative insights use provider breaks and expose stale or unknown provenance", () => {
   const now = new Date("2026-08-21T12:00:00Z");
   assert.deepEqual(effectiveBreakObservation({ paused_seconds: 99, provider_break_seconds: 600, provider_break_observed_at: "2026-08-21T11:58:00Z" }, now, true), { seconds: 600, freshness: "observed" });

@@ -396,6 +396,10 @@ export function insightsFixture(day: DayData, range: "day" | "7d" | "30d"): impo
     updateKinds,
     consistency,
     comparison: { range, from: previousDays[0]?.date ?? shiftDate, through: previousDays.at(-1)?.date ?? shiftDate, days: previousDays, totals: totalsOf(previousDays) },
+    evidenceSources: [
+      { provider: "github", connected: true, enabled: true, verifiedForPerson: true, evidenceCount: days.reduce((count, row) => count + row.outputEvidence, 0) },
+      { provider: "ghl", connected: false, enabled: false, verifiedForPerson: false, evidenceCount: 0 },
+    ],
     brief: {
       generated: false,
       summary: `Offline record — ${open ? `${open} task${open === 1 ? "" : "s"} still open.` : "Everything on today's plate is complete."}`,

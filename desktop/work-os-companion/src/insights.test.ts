@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consistencyChips, flowBreakdown, heatmapCells, heatmapColumns, insightChartData, insightSeries, niceCeil, niceTicks, onTimeRate, periodDeltas, sharePercent, trendAxis, trendLineSegments, trendSummary, updateKindBreakdown } from "./insights";
+import { consistencyChips, flowBreakdown, heatmapCells, heatmapColumns, insightChartData, insightRangeSummary, insightSeries, niceCeil, niceTicks, onTimeRate, periodDeltas, sharePercent, trendAxis, trendLineSegments, trendSummary, updateKindBreakdown } from "./insights";
 import type { DayData, InsightDay } from "./types";
 
 const baseDay: DayData = {
@@ -88,10 +88,11 @@ describe("insight chart builders", () => {
 
   it("compares the equal previous period without implying a score", () => {
     const deltas = periodDeltas(
-      { tasksCompleted: 12, plannedCompleted: 10, updates: 6, outcomesLate: 2, observedSeconds: 36000, trackedMinutes: 300 },
-      { tasksCompleted: 8, plannedCompleted: 9, updates: 6, outcomesLate: 4, observedSeconds: 32400, trackedMinutes: 420 },
+      { tasksCompleted: 12, planned: 20, plannedCompleted: 16, updates: 6, outcomesLate: 2, observedSeconds: 36000, trackedMinutes: 300 },
+      { tasksCompleted: 8, planned: 20, plannedCompleted: 14, updates: 6, outcomesLate: 4, observedSeconds: 32400, trackedMinutes: 420 },
     );
     expect(deltas.find((stat) => stat.key === "tasksCompleted")).toMatchObject({ delta: 4, unit: "count", goodDirection: true });
+    expect(deltas.find((stat) => stat.key === "plannedCompleted")).toMatchObject({ current: 80, previous: 70, delta: 10, unit: "percent" });
     expect(deltas.find((stat) => stat.key === "outcomesLate")).toMatchObject({ delta: -2, goodDirection: false });
     expect(deltas.find((stat) => stat.key === "observedMinutes")).toMatchObject({ current: 600, previous: 540, delta: 60, goodDirection: null });
     expect(deltas.find((stat) => stat.key === "trackedMinutes")?.delta).toBe(-120);
@@ -161,11 +162,41 @@ describe("insight chart builders", () => {
     ]);
     const summary = trendSummary(series);
     expect(summary.peak).toMatchObject({ date: "2026-08-19", observedMinutes: 240 });
-    expect(summary.averageMinutes).toBe(120);
+    expect(summary.averageMinutes).toBe(180);
     expect(summary.zeroDays).toBe(1);
     expect(summary.recordedDays).toBe(2);
     expect(summary.averageCompletionPercent).toBe(75);
     expect(trendSummary([])).toMatchObject({ peak: null, averageMinutes: 0, zeroDays: 0, averageCompletionPercent: null });
+  });
+
+  it("uses closing backlog snapshots and recorded-day averages for the hero", () => {
+    const currentDays = [
+      day({ date: "2026-08-17", observedSeconds: 7200, carryOver: 7, carried: 7, overdue: 2 }),
+      day({ date: "2026-08-18", observedSeconds: 0, carryOver: 6, carried: 6, overdue: 1 }),
+      day({ date: "2026-08-19", observedSeconds: 14400, carryOver: 4, carried: 4, overdue: 1 }),
+    ];
+    const previousDays = [
+      day({ date: "2026-08-14", carryOver: 3, carried: 3 }),
+      day({ date: "2026-08-15", carryOver: 5, carried: 5 }),
+      day({ date: "2026-08-16", carryOver: 6, carried: 6 }),
+    ];
+    const summary = insightRangeSummary({
+      range: "7d",
+      from: "2026-08-13",
+      through: "2026-08-19",
+      days: currentDays,
+      totals: { ...day({}), observedSeconds: 21600, planned: 10, plannedCompleted: 8, tasksCompleted: 6 } as any,
+      comparison: { range: "7d", from: "2026-08-06", through: "2026-08-12", days: previousDays, totals: { ...day({}), planned: 10, plannedCompleted: 7 } as any },
+      brief: { generated: false, summary: "", wins: [], attention: [], nextFocus: [], referenceIds: [] },
+      freshness: { niftySyncedAt: null, worktivityObservedAt: null },
+    });
+    expect(summary.recordedDays).toBe(2);
+    expect(summary.averageObservedSeconds).toBe(10800);
+    expect(summary.commitmentRate).toBe(80);
+    expect(summary.commitmentRateDelta).toBe(10);
+    expect(summary.closingCarryOver).toBe(4);
+    expect(summary.carryOverDelta).toBe(-2);
+    expect(summary.closingOverdue).toBe(1);
   });
 
   it("computes range shares without dividing by zero", () => {

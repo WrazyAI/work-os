@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Insights now lead with outcomes, commitment reliability, closing backlog, and source health, with exact daily data tucked into a breakdown.
+
 ## 0.3.75
 
 - Editing a planned task or its "done when" lines no longer jumps your cursor back to the start of the sentence.

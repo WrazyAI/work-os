@@ -140,6 +140,8 @@ export interface InsightsData {
   consistency?: InsightConsistency;
   /** The equal-length window immediately before this one, when the server provides it. */
   comparison?: InsightComparison;
+  /** Optional evidence-provider health so a zero can be distinguished from an unconnected source. */
+  evidenceSources?: Array<{ provider: string; connected: boolean; enabled: boolean; verifiedForPerson: boolean; evidenceCount: number }>;
   brief: { generated: boolean; summary: string; wins: string[]; attention: string[]; nextFocus: string[]; referenceIds: string[] };
   freshness: { niftySyncedAt: string | null; worktivityObservedAt: string | null; stale?: boolean; staleAt?: string | null; error?: string | null };
 }
