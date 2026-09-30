@@ -24,11 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Ctrl + M now records in the window you are actually using — the app when it's in front, the floating companion otherwise — instead of both, and it never pulls the app forward over what you were doing.
+
 ## 0.3.78
 
 - Drafting your plan no longer fails when you carry a long task list forward.
 - A plan save that didn't go through now clears once a newer save succeeds, instead of lingering in Needs attention.
-- Ctrl + M now records in the window you are actually using — the app when it's in front, the floating companion otherwise — instead of both, and it never pulls the app forward over what you were doing.
 
 ## 0.3.77
 
