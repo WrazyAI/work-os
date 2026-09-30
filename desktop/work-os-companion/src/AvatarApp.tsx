@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -169,20 +169,22 @@ export default function AvatarApp(): React.ReactElement {
   // check the avatar's recorded-result rendering. Inert in production.
   const avatarAttentionFixture = avatarAttentionFixtureRequested(window.location.search);
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
+  const avatarObservedFixture = avatarObservedFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
+    : avatarObservedFixture ? avatarObservedFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
     : (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
-    shiftStartsAt: null, shiftEndsAt: null, sessionState: null, clockedInAt: null,
+    shiftStartsAt: null, shiftEndsAt: null, sessionState: null, attendanceState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
     timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [], lateReasonRequired: false,
   });
@@ -400,6 +402,7 @@ export default function AvatarApp(): React.ReactElement {
         shiftStartsAt: day?.shift?.startsAt ?? session.scheduled_starts_at ?? null,
         shiftEndsAt: day?.shift?.endsAt ?? session.scheduled_ends_at ?? null,
         sessionState: session.state ?? null,
+        attendanceState: day?.attendance?.state ?? null,
         clockedInAt: session.clocked_in_at ?? null,
         clockedOutAt: session.clocked_out_at ?? null,
         pausedSeconds: Number(session.paused_seconds ?? 0) || 0,

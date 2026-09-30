@@ -25,6 +25,7 @@ import type { ActivityIntervalCard } from "./types";
 export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
 export const AVATAR_RECORDED_FIXTURE = "recorded-completion";
 export const AVATAR_SHIFT_PROGRESS_FIXTURE = "shift-progress";
+export const AVATAR_OBSERVED_FIXTURE = "observed-working";
 export const AVATAR_ATTENTION_PARAM = "avatar-attention";
 export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
 export const AVATAR_RECAP_FIXTURE = "recap";
@@ -69,7 +70,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarRecapFixtureRequested(search: string): boolean {
@@ -92,6 +93,28 @@ export function avatarMascotSizeFixture(search: string): "small" | "large" | nul
 export function avatarShiftProgressFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_SHIFT_PROGRESS_FIXTURE;
+}
+
+/** Worktivity observes an active workday while Work OS has not mirrored a
+ * session yet, so the companion must stay awake instead of sleeping. */
+export function avatarObservedFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_OBSERVED_FIXTURE;
+}
+
+export function avatarObservedFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  const instant = new Date(now);
+  return {
+    ...avatarFixtureFacts(),
+    shiftDate: instant.toISOString().slice(0, 10),
+    shiftStartsAt: new Date(now - 3 * 60 * 60_000).toISOString(),
+    shiftEndsAt: new Date(now + 3 * 60 * 60_000).toISOString(),
+    sessionState: "clocked_out",
+    clockedInAt: new Date(now - 3 * 60 * 60_000).toISOString(),
+    clockedOutAt: new Date(now - 30 * 60_000).toISOString(),
+    attendanceState: "active",
+    planStatus: "confirmed",
+  };
 }
 
 export function avatarAttentionFixtureRequested(search: string): boolean {

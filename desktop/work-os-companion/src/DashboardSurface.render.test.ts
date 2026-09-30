@@ -63,6 +63,10 @@ describe("dashboard surfaces", () => {
     const observedModel = buildWorkdayDashboardModel({ active: true, observedOnly: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: observedAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, observedAttendance), tasks: [task], carryover: [], reviews: 0, focus: "Make the first task visible", focusSource: "Observed context", niftySync: { fresh: true, syncedAt: "2026-08-26T13:40:00Z" } }, now);
     const observedMarkup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model: observedModel, tasks: [task], previousTasks: [], otherTasks: [], currentDate: "2026-08-26", observedOnly: true, canPause: false, canClockOut: false, onAddTask: noop }));
     expect(observedMarkup).toContain("03:46");
+    // A confirmed provider observation keeps the dashboard's Otto awake even
+    // before Work OS mirrors the session.
+    expect(observedMarkup).toContain('data-workday="active"');
+    expect(observedMarkup).not.toContain("studio-sleep-zs");
   });
 
   it("shows a quiet activity-watch note while a clock-in is expected and keeps the manual control", () => {

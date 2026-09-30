@@ -21,6 +21,9 @@ export interface MascotScenario extends MascotDebugOverrides {
 export interface MascotPlatformFacts {
   connected: boolean;
   sessionState?: string | null;
+  /** Worktivity's observed attendance when Work OS has no open session of its
+   * own. A confirmed active observation still means the employee is working. */
+  attendanceState?: "active" | "paused" | "off_shift" | "unknown" | null;
   lateReasonRequired?: boolean;
   promptRequired?: boolean;
   promptKind?: string | null;
@@ -62,8 +65,14 @@ export function mergeMascotActivities(local: MascotAgentActivity, peer?: MascotA
 
 export function mascotWorkdayFromFacts(facts: MascotPlatformFacts): MascotWorkdayState {
   if (!facts.connected) return "disconnected";
-  // Provider observation alone is NOT a Work OS clock-in.
-  if (!["clocked_in", "active", "paused", "eod_due"].includes(facts.sessionState ?? "")) return "off-shift";
+  // Provider observation alone is NOT a Work OS clock-in, but it is still a
+  // working employee: a confirmed observation keeps the mascot awake instead
+  // of sleeping through a workday Work OS has not mirrored yet.
+  if (!["clocked_in", "active", "paused", "eod_due"].includes(facts.sessionState ?? "")) {
+    if (facts.attendanceState === "active") return "active";
+    if (facts.attendanceState === "paused") return "paused";
+    return "off-shift";
+  }
   if (facts.lateReasonRequired) return "late";
   if (facts.sessionState === "paused") return "paused";
   if (facts.sessionState === "eod_due" || (facts.promptRequired && facts.promptKind === "eod")) return "eod-due";

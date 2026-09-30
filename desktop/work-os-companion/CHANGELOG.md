@@ -24,7 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.81
+
 - Insights charts now connect weekly plan progress, show an interactive app/site distribution, and reflow the daily breakdown cleanly on smaller windows.
+- Otto in the floating companion stays awake whenever Worktivity confirms you are working, even before Work OS mirrors the session.
 
 ## 0.3.80
 

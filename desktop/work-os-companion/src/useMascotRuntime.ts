@@ -10,7 +10,7 @@ const emit = (event: string, payload?: unknown) => emitEvent(event, payload).cat
 const LEASE_MS = 20_000;
 const READY_MS = 1_800;
 export function mascotFactsFromDay(day: DayData | null, connected: boolean): MascotPlatformFacts {
-  return { connected, sessionState: day?.session?.state, lateReasonRequired: lateReasonRequired(day?.session), promptRequired: day?.prompt?.required,
+  return { connected, sessionState: day?.session?.state, attendanceState: day?.attendance?.state ?? null, lateReasonRequired: lateReasonRequired(day?.session), promptRequired: day?.prompt?.required,
     promptKind: day?.prompt?.kind, niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null };
 }
 

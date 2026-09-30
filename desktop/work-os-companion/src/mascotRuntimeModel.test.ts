@@ -10,8 +10,20 @@ describe("shared mascot runtime", () => {
   it.each(["active", "clocked_in", "paused", "eod_due"])("recognizes live %s sessions", (sessionState) => {
     expect(mascotWorkdayFromFacts({ ...active, sessionState })).toBe(sessionState === "paused" ? "paused" : sessionState === "eod_due" ? "eod-due" : "active");
   });
-  it.each([null, "scheduled", "clocked_out", "unknown"])("does not mistake %s for attendance", (sessionState) => {
+  it.each([null, "scheduled", "clocked_out", "unknown"])("keeps %s sessions off shift without an observed workday", (sessionState) => {
     expect(mascotWorkdayFromFacts({ connected: true, sessionState })).toBe("off-shift");
+  });
+  it("stays awake for a confirmed provider observation before Work OS mirrors the session", () => {
+    // Clocked out in Work OS while Worktivity still observes the employee
+    // working: the companion must not sleep through an observed workday.
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "clocked_out", attendanceState: "active" })).toBe("active");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: null, attendanceState: "paused" })).toBe("paused");
+    // An unobserved, stale, or unattributed provider stays off shift, and an
+    // open Work OS session still owns the state.
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "clocked_out", attendanceState: "off_shift" })).toBe("off-shift");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "clocked_out", attendanceState: "unknown" })).toBe("off-shift");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "scheduled", attendanceState: "off_shift" })).toBe("off-shift");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "paused", attendanceState: "active" })).toBe("paused");
   });
   it("maps required prompts, late starts and disconnected state", () => {
     expect(mascotWorkdayFromFacts({ ...active, promptRequired: true, promptKind: "eod" })).toBe("eod-due");

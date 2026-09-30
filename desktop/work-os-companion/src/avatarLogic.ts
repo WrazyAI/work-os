@@ -13,6 +13,9 @@ export interface CompanionDayFacts {
   shiftStartsAt: string | null;
   shiftEndsAt: string | null;
   sessionState: string | null;
+  /** Worktivity's observed attendance; lets the companion stay awake for a
+   * confirmed observation before Work OS mirrors its own session. */
+  attendanceState?: "active" | "paused" | "off_shift" | "unknown" | null;
   clockedInAt: string | null;
   clockedOutAt: string | null;
   pausedSeconds: number;
