@@ -55,7 +55,9 @@ export function DeltaBadge({ stat }: { stat: DeltaStat }) {
     ? minutesLabel(Math.abs(stat.delta))
     : stat.unit === "hours"
       ? durationLabel(Math.abs(stat.delta) * 3600)
-      : String(Math.abs(stat.delta));
+      : stat.unit === "percent"
+        ? `${Math.abs(stat.delta)}pp`
+        : String(Math.abs(stat.delta));
   const tone = stat.delta === 0 || stat.goodDirection === null
     ? "neutral"
     : (stat.delta > 0 ? stat.goodDirection : !stat.goodDirection)
@@ -156,9 +158,9 @@ export function TrendChart({ points, rangeLabel }: { points: InsightSeriesPoint[
           <p className="trend-summary-title">Range summary</p>
           <dl>
             <div><dt>Peak day</dt><dd>{summary.peak ? `${summary.peak.label} · ${minutesLabel(summary.peak.observedMinutes)}` : "—"}</dd></div>
-            <div><dt>Daily average</dt><dd>{minutesLabel(summary.averageMinutes)}</dd></div>
+            <div><dt>Avg recorded day</dt><dd>{minutesLabel(summary.averageMinutes)}</dd></div>
             <div><dt>Days recorded</dt><dd>{summary.recordedDays} of {points.length}</dd></div>
-            <div><dt>Avg commitments</dt><dd>{summary.averageCompletionPercent === null ? "—" : `${summary.averageCompletionPercent}%`}</dd></div>
+            <div><dt>Commitment rate</dt><dd>{summary.averageCompletionPercent === null ? "—" : `${summary.averageCompletionPercent}%`}</dd></div>
           </dl>
           <div className="trend-legend">
             <span><i aria-hidden="true" /><span className="trend-legend-copy">Observed session time<small>minutes on the left scale</small></span></span>
@@ -305,6 +307,30 @@ export function OnTimeBar({ onTime, late, percent }: { onTime: number; late: num
         <span><i className="swatch on-time" /> {onTime} on time</span>
         <span><i className="swatch late" /> {late} late</span>
         <b>{percent === null ? "No dated outcomes" : `${percent}% on time`}</b>
+      </div>
+    </div>
+  );
+}
+
+export function DailyRhythmStrip({ points, rangeLabel }: { points: InsightSeriesPoint[]; rangeLabel: string }) {
+  const maxOutcomes = Math.max(1, ...points.map((point) => point.outcomes));
+  return (
+    <div className="daily-rhythm-strip" role="list" aria-label={`Daily outcomes and commitment completion for ${rangeLabel}`}>
+      {points.map((point) => (
+        <div className="daily-rhythm-day" role="listitem" key={point.date}>
+          <span className="daily-rhythm-label">{point.label}</span>
+          <span className="daily-rhythm-plot" aria-hidden="true">
+            <i className="daily-rhythm-outcomes" style={{ height: `${point.outcomes > 0 ? Math.max(18, (point.outcomes / maxOutcomes) * 100) : 0}%` }} />
+            {point.completionPercent !== null ? <b style={{ bottom: `${Math.min(100, point.completionPercent)}%` }} /> : null}
+          </span>
+          <strong>{point.outcomes}</strong>
+          <small>{point.completionPercent === null ? "No plan" : `${point.completionPercent}% plan`}</small>
+          <span className="sr-only">{formatWorkOsDate(point.date)}: {point.outcomes} completed outcome{point.outcomes === 1 ? "" : "s"}; {point.completionPercent === null ? "no planned commitments" : `${point.completionPercent}% of planned commitments completed`}.</span>
+        </div>
+      ))}
+      <div className="daily-rhythm-legend" aria-hidden="true">
+        <span><i /> Outcomes</span>
+        <span><b /> Plan completion</span>
       </div>
     </div>
   );

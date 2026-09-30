@@ -179,7 +179,10 @@ export function deterministicInsightBrief(days: Json[], references: Json[], extr
   const latest = days.at(-1) ?? {};
   const completed = days.reduce((sum, day) => sum + Number(day.tasksCompleted ?? 0), 0);
   const progressed = days.reduce((sum, day) => sum + Number(day.progressed ?? 0), 0);
-  const carried = days.reduce((sum, day) => sum + Number(day.carried ?? day.carryOver ?? 0), 0);
+  // Carry-over is a point-in-time backlog snapshot. Summing it across days
+  // double-counts the same still-open task, so attention uses the range's
+  // closing snapshot instead.
+  const carried = Number(latest.carried ?? latest.carryOver ?? 0);
   const deferred = days.reduce((sum, day) => sum + Number(day.deferred ?? 0), 0);
   const tracked = days.reduce((sum, day) => sum + Number(day.trackedMinutes ?? 0), 0);
   const onTime = sumDays(days, "outcomesOnTime");
@@ -263,7 +266,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const personId = access.personId as string;
   const ownerId = workOsOrganizationOwnerId(access);
   const context = await employeeContext(access, now);
-  const [tasksResult, eventsResult, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult] = await Promise.all([
+  const [tasksResult, eventsResult, plansResult, sessionsResult, checkInsResult, evidenceResult, orgResult, providerConnectionsResult, sourceAccountsResult] = await Promise.all([
     db().from("work_tasks")
       .select("*,project:work_projects(id,name,provider_project_id)")
       .eq("user_id", ownerId)
@@ -284,8 +287,10 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     db().from("work_evidence").select("id,evidence_date,source,title,metrics").eq("user_id", ownerId).eq("person_id", personId)
       .gte("evidence_date", windowFrom).lte("evidence_date", through),
     db().from("work_organizations").select("nifty_synced_at,nifty_sync_error,feature_flags").eq("id", access.organizationId).single(),
+    db().from("work_provider_connections").select("provider,active").eq("organization_id", access.organizationId),
+    db().from("work_source_accounts").select("provider,person_id,verified").eq("organization_id", access.organizationId).eq("person_id", personId),
   ]);
-  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult]] as const) {
+  for (const [label, result] of [["tasks", tasksResult], ["events", eventsResult], ["plans", plansResult], ["sessions", sessionsResult], ["check-ins", checkInsResult], ["evidence", evidenceResult], ["organization", orgResult], ["provider connections", providerConnectionsResult], ["source accounts", sourceAccountsResult]] as const) {
     if (result.error) throw new Error(`load Work OS insight ${label}: ${result.error.message}`);
   }
   const allTasks = await hydrateTaskAssignees(ownerId, (tasksResult.data ?? []) as Json[]) as Json[];
@@ -384,6 +389,17 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
   const observed = (sessionsResult.data ?? []).map((item: any) => item.attendance_observed_at).filter(Boolean).sort().at(-1) ?? null;
   const niftySyncedAt = orgResult.data?.nifty_synced_at ?? null;
   const stale = !!orgResult.data?.nifty_sync_error || !niftySyncedAt || now.getTime() - Date.parse(niftySyncedAt) > 10 * 60_000;
+  const activeProviders = new Set((providerConnectionsResult.data ?? []).filter((row: any) => row.active === true).map((row: any) => String(row.provider)));
+  const verifiedProviders = new Set((sourceAccountsResult.data ?? []).filter((row: any) => row.verified === true).map((row: any) => String(row.provider)));
+  const currentEvidenceRows = ((evidenceResult.data ?? []) as Json[]).filter((item) => String(item.evidence_date ?? "") >= from);
+  const featureFlags = (orgResult.data?.feature_flags ?? {}) as Json;
+  const evidenceSources = ["github", "ghl"].map((provider) => ({
+    provider,
+    connected: activeProviders.has(provider),
+    enabled: featureFlags[provider === "github" ? "github_evidence" : "ghl_evidence"] === true,
+    verifiedForPerson: verifiedProviders.has(provider),
+    evidenceCount: currentEvidenceRows.filter((item) => String(item.source ?? "") === provider).length,
+  }));
   return {
     range,
     from,
@@ -393,6 +409,7 @@ export async function getPersonalInsights(access: WorkOsAccess, range: InsightRa
     updateKinds: updateKindRollup((checkInsResult.data ?? []).filter((item: any) => String(dateOnly(item.shift_date) ?? "") >= from)),
     consistency,
     comparison,
+    evidenceSources,
     brief: deterministicInsightBrief(currentDays, allReferences, { comparison, consistency }),
     freshness: {
       niftySyncedAt,

@@ -1,4 +1,4 @@
-import type { DayData, InsightConsistency, InsightDay, InsightUpdateKinds } from "./types";
+import type { DayData, InsightConsistency, InsightDay, InsightsData, InsightUpdateKinds } from "./types";
 
 export interface InsightSignal {
   label: string;
@@ -46,6 +46,8 @@ export interface InsightSeriesPoint {
   date: string;
   label: string;
   observedMinutes: number;
+  planned: number;
+  plannedCompleted: number;
   completionPercent: number | null;
   outcomes: number;
   updates: number;
@@ -64,6 +66,8 @@ export function insightSeries(days: InsightDay[]): InsightSeriesPoint[] {
     date: day.date,
     label: shortDateLabel(day.date),
     observedMinutes: Math.round((Number(day.observedSeconds ?? 0) / 60) * 10) / 10,
+    planned: Number(day.planned ?? 0),
+    plannedCompleted: Number(day.plannedCompleted ?? 0),
     completionPercent: day.planned > 0 ? Math.round((Number(day.plannedCompleted ?? 0) / day.planned) * 100) : null,
     outcomes: Number(day.tasksCompleted ?? 0),
     updates: Number(day.updates ?? 0),
@@ -157,15 +161,14 @@ export interface TrendSummary {
 export function trendSummary(points: InsightSeriesPoint[]): TrendSummary {
   const recorded = points.filter((point) => point.observedMinutes > 0);
   const peak = recorded.reduce<InsightSeriesPoint | null>((best, point) => (!best || point.observedMinutes > best.observedMinutes ? point : best), null);
-  const completions = points.filter((point) => point.completionPercent !== null);
+  const planned = points.reduce((sum, point) => sum + point.planned, 0);
+  const plannedCompleted = points.reduce((sum, point) => sum + point.plannedCompleted, 0);
   return {
     peak: peak ? { date: peak.date, label: peak.label, observedMinutes: peak.observedMinutes } : null,
-    averageMinutes: points.length ? Math.round(points.reduce((sum, point) => sum + point.observedMinutes, 0) / points.length) : 0,
+    averageMinutes: recorded.length ? Math.round(recorded.reduce((sum, point) => sum + point.observedMinutes, 0) / recorded.length) : 0,
     zeroDays: points.filter((point) => point.observedMinutes === 0).length,
     recordedDays: recorded.length,
-    averageCompletionPercent: completions.length
-      ? Math.round(completions.reduce((sum, point) => sum + (point.completionPercent ?? 0), 0) / completions.length)
-      : null,
+    averageCompletionPercent: planned > 0 ? Math.round((plannedCompleted / planned) * 100) : null,
   };
 }
 
@@ -294,7 +297,7 @@ export interface DeltaStat {
 export function periodDeltas(totals: Partial<InsightDay> | null | undefined, previousTotals: Partial<InsightDay> | null | undefined): DeltaStat[] {
   const raw: Array<{ key: string; label: string; read: (row: Partial<InsightDay>) => number; unit: DeltaStat["unit"]; goodDirection: boolean | null }> = [
     { key: "tasksCompleted", label: "Outcomes", read: (row) => Number(row.tasksCompleted ?? 0), unit: "count", goodDirection: true },
-    { key: "plannedCompleted", label: "Commitments done", read: (row) => Number(row.plannedCompleted ?? 0), unit: "count", goodDirection: true },
+    { key: "plannedCompleted", label: "Commitment rate", read: (row) => Number(row.planned ?? 0) > 0 ? Math.round((Number(row.plannedCompleted ?? 0) / Number(row.planned)) * 100) : 0, unit: "percent", goodDirection: true },
     { key: "updates", label: "Updates", read: (row) => Number(row.updates ?? 0), unit: "count", goodDirection: true },
     { key: "outcomesLate", label: "Late outcomes", read: (row) => Number(row.outcomesLate ?? 0), unit: "count", goodDirection: false },
     { key: "outputEvidence", label: "Output evidence", read: (row) => Number(row.outputEvidence ?? 0), unit: "count", goodDirection: true },
@@ -308,6 +311,45 @@ export function periodDeltas(totals: Partial<InsightDay> | null | undefined, pre
     const before = read(previous);
     return { key, label, current, previous: before, delta: current - before, unit, goodDirection };
   });
+}
+
+export interface InsightRangeSummary {
+  recordedDays: number;
+  averageObservedSeconds: number;
+  commitmentRate: number | null;
+  commitmentRateDelta: number | null;
+  closingCarryOver: number;
+  carryOverDelta: number;
+  closingOverdue: number;
+  blockers: number;
+}
+
+/** Decision-oriented rollup for the Insights hero. Snapshot values (carry-over
+ * and overdue) come from the end of the range; flow values remain range totals. */
+export function insightRangeSummary(data: InsightsData): InsightRangeSummary {
+  const recorded = data.days.filter((day) => Number(day.observedSeconds ?? 0) > 0);
+  const latest = data.days.at(-1);
+  const previousLatest = data.comparison?.days.at(-1);
+  const commitmentRate = Number(data.totals.planned ?? 0) > 0
+    ? Math.round((Number(data.totals.plannedCompleted ?? 0) / Number(data.totals.planned)) * 100)
+    : null;
+  const previousCommitmentRate = Number(data.comparison?.totals?.planned ?? 0) > 0
+    ? Math.round((Number(data.comparison?.totals?.plannedCompleted ?? 0) / Number(data.comparison?.totals?.planned)) * 100)
+    : null;
+  const closingCarryOver = Number(latest?.carried ?? latest?.carryOver ?? 0);
+  const previousClosingCarryOver = Number(previousLatest?.carried ?? previousLatest?.carryOver ?? 0);
+  return {
+    recordedDays: recorded.length,
+    averageObservedSeconds: recorded.length
+      ? Math.round(recorded.reduce((sum, day) => sum + Number(day.observedSeconds ?? 0), 0) / recorded.length)
+      : 0,
+    commitmentRate,
+    commitmentRateDelta: commitmentRate !== null && previousCommitmentRate !== null ? commitmentRate - previousCommitmentRate : null,
+    closingCarryOver,
+    carryOverDelta: closingCarryOver - previousClosingCarryOver,
+    closingOverdue: Number(latest?.overdue ?? 0),
+    blockers: Number(data.updateKinds?.blocked ?? data.days.reduce((sum, day) => sum + Number(day.updatesByKind?.blocked ?? 0), 0)),
+  };
 }
 
 export interface HeatmapCell {
