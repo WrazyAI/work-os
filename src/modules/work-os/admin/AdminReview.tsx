@@ -263,10 +263,22 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusPill>
-          <Button variant="secondary" size="sm" disabled={review.isPending} onClick={() => review.mutate("rejected")}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={review.isPending || report.status !== "pending_review"}
+            title={report.status === "pending_review" ? undefined : "Only reports awaiting review can be decided"}
+            onClick={() => review.mutate("rejected")}
+          >
             <X size={12} aria-hidden /> Request changes
           </Button>
-          <Button variant="primary" size="sm" disabled={review.isPending} onClick={() => review.mutate("approved")}>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={review.isPending || report.status !== "pending_review"}
+            title={report.status === "pending_review" ? undefined : "Only reports awaiting review can be decided"}
+            onClick={() => review.mutate("approved")}
+          >
             <Check size={12} aria-hidden /> Approve
           </Button>
         </div>

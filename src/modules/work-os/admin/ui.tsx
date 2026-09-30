@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -282,6 +283,20 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   footer?: ReactNode;
   width?: number;
 }) {
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      previous?.focus?.();
+    };
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
@@ -296,6 +311,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
             {subtitle ? <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">{subtitle}</p> : null}
           </div>
           <button
+            ref={closeRef}
             type="button"
             aria-label="Close"
             onClick={onClose}

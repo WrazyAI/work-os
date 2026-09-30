@@ -46,7 +46,8 @@ export async function GET(req: Request) {
       from: sp.get("from"),
       to: sp.get("to"),
     };
-    const limitParam = Number(sp.get("limit"));
+    const rawLimit = sp.get("limit");
+    const limitParam = rawLimit == null || rawLimit === "" ? Number.NaN : Number(rawLimit);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(300, Math.floor(limitParam))) : 100;
 
     const listQuery = withReportFilters(

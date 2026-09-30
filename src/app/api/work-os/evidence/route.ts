@@ -40,7 +40,8 @@ export async function GET(req: Request) {
     }
     if (sp.get("source")) query = query.eq("source", sp.get("source"));
     if (correction) query = query.eq("event.correction_status", correction);
-    const limitParam = Number(sp.get("limit"));
+    const rawLimit = sp.get("limit");
+    const limitParam = rawLimit == null || rawLimit === "" ? Number.NaN : Number(rawLimit);
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(500, Math.floor(limitParam))) : 200;
     const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
     if (error) throw new Error(`load Work OS evidence: ${error.message}`);

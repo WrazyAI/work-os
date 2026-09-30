@@ -199,9 +199,13 @@ export default function AdminInsightsPage() {
 
           <AdminCard>
             <SectionHeading icon={ListChecks} title="Backlog" detail="Open work recorded across the workspace." />
-            <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">
-              <strong className="font-semibold text-[var(--text-primary)]">{data.overdueOpen}</strong> open task{data.overdueOpen === 1 ? "" : "s"} past their due date.
-            </p>
+            {data.overdueOpen == null ? (
+              <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">Overdue work is not scoped to this view.</p>
+            ) : (
+              <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">
+                <strong className="font-semibold text-[var(--text-primary)]">{data.overdueOpen}</strong> open task{data.overdueOpen === 1 ? "" : "s"} past their due date.
+              </p>
+            )}
             <Link href="/work-os/admin/tasks" className="mt-3 inline-flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>
               Open Tasks <ArrowRight size={12} aria-hidden />
             </Link>

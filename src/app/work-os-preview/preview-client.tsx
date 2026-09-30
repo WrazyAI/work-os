@@ -16,7 +16,6 @@ import EmployeeSettings from "@/modules/work-os/employee/EmployeeSettings";
 import { CheckInComposer } from "@/modules/work-os/CheckInComposer";
 import { VOICE_FAILURE_COPY, type VoiceInput, type VoiceState } from "@/modules/work-os/useVoiceInput";
 import AdminPreview from "./admin-preview";
-import AdminPreview from "./admin-preview";
 
 const TODAY = "2026-09-11";
 

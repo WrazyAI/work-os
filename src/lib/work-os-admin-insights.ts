@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
+import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
 type Json = Record<string, any>;
@@ -152,14 +153,21 @@ export function buildAdminInsightNotes(input: {
   return { summary, wins, attention, nextFocus };
 }
 
-export async function getAdminInsights(access: WorkOsAccess, range: AdminInsightRange, options: { through?: string | null; now?: Date; personId?: string | null } = {}) {
+export async function getAdminInsights(access: WorkOsAccess, range: AdminInsightRange, options: { through?: string | null; now?: Date; personId?: string | null; allowedPersonIds?: string[] | null } = {}) {
   const now = options.now ?? new Date();
   const personFilter = options.personId && /^[0-9a-f-]{36}$/i.test(options.personId) ? options.personId : null;
+  const allowedSet = options.allowedPersonIds == null ? null : new Set(options.allowedPersonIds);
   const current = adminInsightWindow(range, options.through ?? null, now);
   const previous = previousAdminInsightWindow(range, options.through ?? null, now);
   const windowFrom = previous.from < current.from ? previous.from : current.from;
   const db = createAdminClient();
   const organizationId = access.organizationId;
+  // Overdue pressure follows the same people scope as every other row set:
+  // a specific person, the allowed team scope, or the whole organization.
+  const scopedPersonIds = personFilter ? [personFilter] : allowedSet ? [...allowedSet] : null;
+  const overdueBase = () => db.from("work_tasks").select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId).eq("completed", false).not("status", "in", "(archived,deleted)")
+    .not("due_date", "is", null).lt("due_date", current.through);
 
   const [peopleResult, eventsResult, checkInsResult, reportsResult, evidenceResult, sessionsResult, plansResult, overdueResult] = await Promise.all([
     db.from("work_people")
@@ -189,9 +197,15 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
       .select("id,person_id,disposition,completion_state,item_kind,task_id,plan:work_daily_plans!inner(shift_date)")
       .eq("organization_id", organizationId)
       .gte("plan.shift_date", windowFrom).lte("plan.shift_date", current.through),
-    db.from("work_tasks").select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId).eq("completed", false).not("status", "in", "(archived,deleted)")
-      .not("due_date", "is", null).lt("due_date", current.through),
+    scopedPersonIds && scopedPersonIds.length === 0
+      ? Promise.resolve({ count: 0, error: null })
+      : personFilter
+        ? overdueBase().contains("assignee_person_ids", [personFilter])
+        : allowedSet
+          // The query shim cannot express array overlap, so a team-scoped view
+          // reports no overdue count instead of an organization-wide one.
+          ? Promise.resolve({ count: null, error: null })
+          : overdueBase(),
   ]);
   for (const [label, result] of [
     ["people", peopleResult], ["events", eventsResult], ["check-ins", checkInsResult], ["reports", reportsResult],
@@ -200,7 +214,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     if (result.error) throw new Error(`load admin insights ${label}: ${result.error.message}`);
   }
 
-  const people = (peopleResult.data ?? []) as Json[];
+  const people = ((peopleResult.data ?? []) as Json[]).filter((person) => !allowedSet || allowedSet.has(String(person.id)));
   const events = (eventsResult.data ?? []) as Json[];
   const checkIns = (checkInsResult.data ?? []) as Json[];
   const reports = (reportsResult.data ?? []) as Json[];
@@ -208,7 +222,12 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   const sessions = (sessionsResult.data ?? []) as Json[];
 
   const personIds = new Set(people.map((person) => String(person.id)));
-  const matchesPerson = (row: Json) => !personFilter || String(row.person_id) === personFilter;
+  const matchesPerson = (row: Json) => {
+    const personId = String(row.person_id ?? "");
+    if (personFilter && personId !== personFilter) return false;
+    if (allowedSet && !allowedSet.has(personId)) return false;
+    return true;
+  };
   const inRange = (value: unknown, from: string, through: string) => {
     const date = dateOnly(value);
     return !!date && date >= from && date <= through;
@@ -225,10 +244,19 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   const currentSessions = sessions.filter((row) => inRange(row.shift_date, current.from, current.through) && matchesPerson(row));
   const previousSessions = sessions.filter((row) => inRange(row.shift_date, previous.from, previous.through) && matchesPerson(row));
 
-  // Plan commitment uses selected plan items for plans inside the window
-  // (filtered by the embedded plan date above); disposition and completion
-  // state are the reliable fields for the commitment rate.
-  const planItems = ((plansResult.data ?? []) as Json[]).filter((item) => personIds.has(String(item.person_id)));
+  // Plan commitment uses selected plan items for plans inside the current
+  // window and the allowed people scope; disposition and completion state are
+  // the reliable fields for the commitment rate.
+  const planDate = (item: Json) => {
+    const plan = Array.isArray(item.plan) ? item.plan[0] : item.plan;
+    return dateOnly(plan?.shift_date);
+  };
+  const planItems = ((plansResult.data ?? []) as Json[])
+    .filter((item) => personIds.has(String(item.person_id)) && matchesPerson(item))
+    .filter((item) => {
+      const date = planDate(item);
+      return !!date && date >= current.from && date <= current.through;
+    });
 
   const countBy = <T>(rows: T[], key: (row: T) => string | null) => {
     const map = new Map<string, number>();
@@ -389,7 +417,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     ),
   }));
 
-  const outstandingDays = await countOutstandingDays(organizationId, now);
+  const outstandingDays = await countOutstandingDays(organizationId, now, { personId: personFilter, allowedSet });
 
   return {
     range,
@@ -401,7 +429,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     series,
     updateKinds: [...updateKindCounts.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
     topApps: [...topApps.entries()].map(([name, minutes]) => ({ name, minutes: Math.round(minutes) })).sort((left, right) => right.minutes - left.minutes).slice(0, 6),
-    overdueOpen: overdueResult.count ?? 0,
+    overdueOpen: overdueResult.count,
     notes: buildAdminInsightNotes({
       rangeLabel: `${current.from} to ${current.through}`,
       totals,
@@ -413,29 +441,47 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   };
 }
 
-async function countOutstandingDays(organizationId: string, now: Date) {
-  const db = createAdminClient();
+async function countOutstandingDays(organizationId: string, now: Date, scope: { personId: string | null; allowedSet: Set<string> | null }) {
   const through = addDaysIso(todayIso(now), -1);
   const from = addDaysIso(through, -6);
-  const [sessions, reports] = await Promise.all([
-    db.from("work_sessions").select("person_id,shift_date")
-      .eq("organization_id", organizationId).gte("shift_date", from).lte("shift_date", through),
-    db.from("work_reports").select("person_id,report_date,status,submitted_at")
-      .eq("organization_id", organizationId).gte("report_date", from).lte("report_date", through),
-  ]);
+  const scopedIds = scope.personId ? [scope.personId] : scope.allowedSet ? [...scope.allowedSet] : null;
+  if (scopedIds && !scopedIds.length) return 0;
+  const db = createAdminClient();
+  let sessionsQuery = db.from("work_sessions").select("person_id,shift_date")
+    .eq("organization_id", organizationId).gte("shift_date", from).lte("shift_date", through);
+  let reportsQuery = db.from("work_reports").select("person_id,report_date,status,submitted_at")
+    .eq("organization_id", organizationId).gte("report_date", from).lte("report_date", through);
+  if (scopedIds) {
+    sessionsQuery = sessionsQuery.in("person_id", scopedIds);
+    reportsQuery = reportsQuery.in("person_id", scopedIds);
+  }
+  const [sessions, reports] = await Promise.all([sessionsQuery, reportsQuery]);
   if (sessions.error) throw new Error(`load outstanding sessions: ${sessions.error.message}`);
   if (reports.error) throw new Error(`load outstanding reports: ${reports.error.message}`);
-  const submitted = new Set(
-    ((reports.data ?? []) as Json[])
-      .filter((row) => Boolean(row.submitted_at) || ["pending_review", "approved"].includes(String(row.status)))
-      .map((row) => `${row.person_id}:${row.report_date}`),
-  );
-  const days = new Set(
-    ((sessions.data ?? []) as Json[])
-      .map((row) => `${row.person_id}:${row.shift_date}`)
-      .filter((key) => !submitted.has(key)),
-  );
-  return days.size;
+  const reportByKey = new Map<string, Json>();
+  for (const report of (reports.data ?? []) as Json[]) {
+    reportByKey.set(`${report.person_id}:${report.report_date}`, report);
+  }
+  // The canonical employee rule keeps a day visible until a submitted report
+  // clears it (drafts and rejected reports stay outstanding).
+  const byPerson = new Map<string, OutstandingEodCandidate[]>();
+  for (const session of (sessions.data ?? []) as Json[]) {
+    const personId = String(session.person_id);
+    const report = reportByKey.get(`${personId}:${session.shift_date}`) ?? null;
+    const list = byPerson.get(personId) ?? [];
+    list.push({
+      date: String(session.shift_date),
+      hasSession: true,
+      observedMinutes: 0,
+      hasPlan: false,
+      completedTasks: 0,
+      report: report ? { id: String(report.id), status: String(report.status), submitted: Boolean(report.submitted_at) } : null,
+    });
+    byPerson.set(personId, list);
+  }
+  let total = 0;
+  for (const candidates of byPerson.values()) total += classifyOutstandingEodDays(candidates).length;
+  return total;
 }
 
 export type AdminInsights = Awaited<ReturnType<typeof getAdminInsights>>;

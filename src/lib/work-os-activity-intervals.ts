@@ -955,7 +955,7 @@ async function loadIntervalEvidence(intervalIds: string[]): Promise<Map<string, 
  * summaries and retention state, never raw image bytes or storage paths. */
 export async function listAdminActivityIntervals(
   access: WorkOsAccess,
-  options: { from?: string | null; to?: string | null; personId?: string | null; limit?: number } = {},
+  options: { from?: string | null; to?: string | null; personId?: string | null; personIds?: string[] | null; limit?: number } = {},
 ): Promise<Array<ActivityIntervalView & { personId: string; personName: string | null }>> {
   const to = options.to && /^\d{4}-\d{2}-\d{2}$/.test(options.to) ? options.to : localDateForTimezone(new Date(), "UTC");
   const from = options.from && /^\d{4}-\d{2}-\d{2}$/.test(options.from) ? options.from : to;
@@ -964,7 +964,14 @@ export async function listAdminActivityIntervals(
     .eq("organization_id", access.organizationId)
     .gte("local_date", from).lte("local_date", to)
     .order("window_end", { ascending: false }).limit(limit);
-  if (options.personId) query = query.eq("person_id", options.personId);
+  if (options.personId) {
+    query = query.eq("person_id", options.personId);
+  } else if (options.personIds) {
+    // A manager scope with no accessible people returns nothing; a null scope
+    // (admin) stays unrestricted.
+    if (!options.personIds.length) return [];
+    query = query.in("person_id", options.personIds);
+  }
   const rows = await query;
   if (rows.error) throw new Error(`list admin activity intervals: ${rows.error.message}`);
   const intervals = (rows.data ?? []) as ActivityIntervalRecord[];

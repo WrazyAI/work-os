@@ -263,7 +263,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     if (!personId) continue;
     const existing = reportByPerson.get(personId);
     // Prefer the furthest-along status when several reports exist for a day.
-    const rank = (status: string) => (["approved", "pending_review", "rejected", "draft"].indexOf(status) + 1);
+    const rank = (status: string) => (["draft", "rejected", "pending_review", "approved"].indexOf(status) + 1);
     if (!existing || rank(String(row.status)) > rank(String(existing.status))) reportByPerson.set(personId, row);
   }
   const updatesByPerson = new Map<string, Json[]>();

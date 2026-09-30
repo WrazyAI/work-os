@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ADMIN_INSIGHT_RANGES, getAdminInsights, type AdminInsightRange } from "@/lib/work-os-admin-insights";
-import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
+import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,14 @@ export async function GET(req: Request) {
       : "7d";
     const through = params.get("through");
     const personId = params.get("personId");
-    return NextResponse.json(await getAdminInsights(auth.access, range, { through, personId }));
+    if (personId) {
+      const denied = await requireWorkOsPersonAccess(auth.access, personId);
+      if (denied) return denied;
+    }
+    // Managers only ever see the people their teams cover; admins receive the
+    // whole organization (null).
+    const allowedPersonIds = await accessibleWorkOsPersonIds(auth.access);
+    return NextResponse.json(await getAdminInsights(auth.access, range, { through, personId, allowedPersonIds }));
   } catch (error) {
     return jsonError(error);
   }
