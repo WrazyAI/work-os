@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.76
+
 - Insights now lead with outcomes, commitment reliability, closing backlog, and source health, with exact daily data tucked into a breakdown.
 
 ## 0.3.75
