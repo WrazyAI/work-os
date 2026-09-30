@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X } from "lucide-react";
 import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
@@ -48,7 +48,7 @@ function annotatedNodes(text: string, target: string, annotations: PlanAnnotatio
     : segment.text);
 }
 
-function PlanningDocumentText({
+export function PlanningDocumentText({
   className,
   target,
   value,
@@ -72,9 +72,27 @@ function PlanningDocumentText({
   onChange: (value: string) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (editing && ref.current && ref.current.textContent !== value) ref.current.textContent = value;
+  // While the field is editable the DOM owns its text. React rendering the
+  // value as a child on every keystroke re-set the text node and dropped the
+  // caret back to the start of the sentence; the effect now only fills
+  // external changes, and it never fights a focused field.
+  useDocumentLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !editing) return;
+    if (document.activeElement === element) return;
+    if (element.textContent !== value) element.textContent = value;
   }, [editing, value]);
+  /** Park the caret after the last character; used after truncating an
+   * oversized insertion so the browser's own post-input fix-up cannot snap it
+   * back to the start. */
+  const placeCaretAtEnd = (element: HTMLElement) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  };
   return <div
     ref={ref}
     className={className}
@@ -85,17 +103,61 @@ function PlanningDocumentText({
     aria-label={label}
     aria-multiline={editing || undefined}
     spellCheck={editing}
+    onBeforeInput={(event) => {
+      const data = (event.nativeEvent as InputEvent).data;
+      const element = event.currentTarget;
+      if (!editing || typeof data !== "string" || !data) return;
+      const current = element.textContent ?? "";
+      const selection = window.getSelection();
+      const selected = selection && selection.rangeCount && selection.anchorNode && element.contains(selection.anchorNode)
+        ? selection.toString().length
+        : 0;
+      if (current.length - selected + data.length <= maxLength) return;
+      // Insert the truncated remainder ourselves: preventing the default keeps
+      // the browser from reasserting the original insertion's caret afterwards.
+      event.preventDefault();
+      const range = selection && selection.rangeCount && selection.anchorNode && element.contains(selection.anchorNode)
+        ? selection.getRangeAt(0)
+        : null;
+      const remaining = Math.max(0, maxLength - (current.length - selected));
+      if (range) {
+        range.deleteContents();
+        if (remaining > 0) {
+          const text = document.createTextNode(data.slice(0, remaining));
+          range.insertNode(text);
+          range.setStartAfter(text);
+          range.collapse(true);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      } else {
+        element.textContent = current.slice(0, maxLength);
+        placeCaretAtEnd(element);
+      }
+      onDocumentInput?.();
+      onChange(element.textContent ?? "");
+    }}
     onInput={(event) => {
-      const next = event.currentTarget.textContent ?? "";
+      const element = event.currentTarget;
+      const next = element.textContent ?? "";
       if (next.length > maxLength) {
-        event.currentTarget.textContent = value;
+        // Fallback for paths without beforeinput data (composition): truncate
+        // and restore the caret after the browser finishes its own fix-up.
+        element.textContent = next.slice(0, maxLength);
+        placeCaretAtEnd(element);
+        requestAnimationFrame(() => placeCaretAtEnd(element));
+        onDocumentInput?.();
+        onChange(element.textContent ?? "");
         return;
       }
       onDocumentInput?.();
       onChange(next);
     }}
-  >{editing ? value : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
+  >{editing ? null : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
 }
+
+/** Layout-timed before paint on the client; a plain effect in SSR tests. */
+const useDocumentLayoutEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 export function PlanningSession({
   open,

@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.75
+
+- Editing a planned task or its "done when" lines no longer jumps your cursor back to the start of the sentence.
+
 ## 0.3.74
 
 - Profile settings now use the same calmer hierarchy as the main Settings page, with cleaner sections, flatter schedule controls, and a more focused save area.
