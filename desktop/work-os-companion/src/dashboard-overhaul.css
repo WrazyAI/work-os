@@ -437,9 +437,14 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .active-command-panel > .dashboard-panel-footer { margin: 24px -25px 0; }
 .active-summary-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(290px, 0.88fr); gap: 16px; }
 .active-focus-panel, .active-summary-panel { min-width: 0; padding: 22px 23px 0; }
+/* The focus card ends on the workday flow, so the flow owns the card's floor:
+   it keeps a minimum gap under the focus note, then settles on the bottom with
+   the same clearance the off-shift flow panel gets, aligned with the summary
+   card's action row instead of sitting on the bottom border. */
+.active-focus-panel { display: flex; flex-direction: column; padding-bottom: 20px; }
 .active-summary-panel { display: flex; flex-direction: column; }
 .active-focus-panel > p { margin: 17px 0 0; color: var(--dash-muted); font-size: 11px; }
-.active-focus-panel .dashboard-flow-visual { margin-top: 22px; }
+.active-focus-panel .dashboard-flow-visual { margin-top: auto; padding-top: 22px; }
 .active-summary-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 25px 0 20px; }
 .active-summary-facts span { display: grid; gap: 3px; min-width: 0; }
 .active-summary-facts strong { font-size: 22px; letter-spacing: -0.06em; }

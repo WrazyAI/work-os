@@ -24,7 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.79
+
 - Ctrl + M now records in the window you are actually using — the app when it's in front, the floating companion otherwise — instead of both, and it never pulls the app forward over what you were doing.
+- The Today's Focus card now gives its progress bar and legend proper room, even when your focus statement wraps to several lines.
 
 ## 0.3.78
 

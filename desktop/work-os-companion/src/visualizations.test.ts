@@ -13,6 +13,7 @@ const chatPreview = readText(resolve(root, "src/ChatPreview.tsx"));
 const taskSurfaces = readText(resolve(root, "src/taskSurfaces.tsx"));
 const styles = readText(resolve(root, "src/styles.css"));
 const workspaceStyles = readText(resolve(root, "src/workspace-redesign.css"));
+const dashboardStyles = readText(resolve(root, "src/dashboard-overhaul.css"));
 const insightStyles = readText(resolve(root, "src/plan-insights.css"));
 const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
 const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
@@ -482,5 +483,12 @@ describe("operational visualizations", () => {
     expect(synthesisCard).toContain("showing the exact fact record instead");
     expect(synthesisCard).toContain("Every figure is checked against the record");
     expect(synthesisCard).not.toContain("Selects only from the verified facts below");
+  });
+
+  it("keeps the active focus card's flow off the card floor", () => {
+    // A long focus statement used to push the workday flow legend onto the
+    // card's bottom border; the flow now owns the card's floor with clearance.
+    expect(dashboardStyles).toContain(".active-focus-panel { display: flex; flex-direction: column; padding-bottom: 20px; }");
+    expect(dashboardStyles).toContain(".active-focus-panel .dashboard-flow-visual { margin-top: auto; padding-top: 22px; }");
   });
 });
