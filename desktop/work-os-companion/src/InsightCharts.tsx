@@ -135,7 +135,7 @@ export function TrendChart({ points, rangeLabel }: { points: InsightSeriesPoint[
               <i key={`dot-${point.index}`} className="trend-dot" aria-hidden="true" style={{ left: `${position(point.index)}%`, bottom: `${Math.min(100, point.percent)}%` }} />
             ))) : null}
             {activePoint ? (
-              <div className="chart-tooltip" style={{ left: `${position(active!)}%` }} aria-hidden="true">
+              <div className={`chart-tooltip${active !== null && active <= 1 ? " edge-start" : active !== null && active >= points.length - 2 ? " edge-end" : ""}`} style={{ left: `${position(active!)}%` }} aria-hidden="true">
                 <strong>{formatWorkOsDate(activePoint.date)}</strong>
                 <span><i className="swatch observed" /> {minutesLabel(activePoint.observedMinutes)} observed</span>
                 <span><i className="swatch completion" /> {activePoint.completionPercent === null ? "No planned commitments" : `${activePoint.completionPercent}% of commitments completed`}</span>
@@ -260,6 +260,79 @@ export function FlowDonut({ slices, ariaLabel }: { slices: FlowSlice[]; ariaLabe
   );
 }
 
+export function ActivityDonut({ items, total, ariaLabel }: {
+  items: Array<{ name: string; minutes: number }>;
+  total: number;
+  ariaLabel: string;
+}) {
+  const [activeName, setActiveName] = useState<string | null>(null);
+  const positive = items.filter((item) => item.minutes > 0);
+  const listedTotal = positive.reduce((sum, item) => sum + item.minutes, 0);
+  const chartTotal = Math.max(total, listedTotal);
+  const residual = Math.max(0, chartTotal - listedTotal);
+  const slices = residual > 0 ? [...positive, { name: "Other apps/sites", minutes: residual }] : positive;
+  if (chartTotal <= 0 || !slices.length) return <p className="insight-empty-note">No tracked app activity in this range.</p>;
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const gap = slices.length > 1 ? 3 : 0;
+  let offset = 0;
+  const segments = slices.map((slice, index) => {
+    const fraction = slice.minutes / chartTotal;
+    const dash = Math.max(0.5, fraction * circumference - gap);
+    const segment = { slice, index, dash, offset: offset * circumference + gap / 2 };
+    offset += fraction;
+    return segment;
+  });
+  const active = activeName ? slices.find((slice) => slice.name === activeName) ?? null : null;
+  return (
+    <div className="activity-donut">
+      <div className="activity-donut-figure">
+        <svg viewBox="0 0 132 132" role="img" aria-label={ariaLabel}>
+          <circle className="activity-donut-track" cx="66" cy="66" r={radius} />
+          <g transform="rotate(-90 66 66)">
+            {segments.map(({ slice, index, dash, offset: dashOffset }) => (
+              <circle
+                key={slice.name}
+                className={`activity-donut-slice activity-tone-${index % 6}${activeName !== null && activeName !== slice.name ? " dimmed" : ""}`}
+                cx="66" cy="66" r={radius}
+                strokeDasharray={`${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}`}
+                strokeDashoffset={-dashOffset}
+                tabIndex={0}
+                aria-label={`${slice.name}: ${minutesLabel(slice.minutes)}, ${sharePercent(slice.minutes, chartTotal)}% of tracked time`}
+                onMouseEnter={() => setActiveName(slice.name)}
+                onMouseLeave={() => setActiveName(null)}
+                onFocus={() => setActiveName(slice.name)}
+                onBlur={() => setActiveName(null)}
+              />
+            ))}
+          </g>
+        </svg>
+        <div className="activity-donut-center" aria-hidden="true">
+          <strong>{active ? minutesLabel(active.minutes) : minutesLabel(chartTotal)}</strong>
+          <small>{active ? `${sharePercent(active.minutes, chartTotal)}% · ${active.name}` : "tracked"}</small>
+        </div>
+      </div>
+      <ul className="activity-donut-legend">
+        {slices.map((slice, index) => (
+          <li key={slice.name} className={activeName === slice.name ? "active" : undefined}>
+            <button
+              type="button"
+              onMouseEnter={() => setActiveName(slice.name)}
+              onMouseLeave={() => setActiveName(null)}
+              onFocus={() => setActiveName(slice.name)}
+              onBlur={() => setActiveName(null)}
+            >
+              <i className={`activity-tone-${index % 6}`} aria-hidden="true" />
+              <span>{slice.name}</span>
+              <b>{minutesLabel(slice.minutes)}<small>{sharePercent(slice.minutes, chartTotal)}%</small></b>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function BarBreakdown({ rows, ariaLabel, total, emptyNote }: {
   rows: Array<{ key: string; label: string; value: number; detail?: string; attention?: boolean }>;
   ariaLabel: string;
@@ -313,21 +386,66 @@ export function OnTimeBar({ onTime, late, percent }: { onTime: number; late: num
 }
 
 export function DailyRhythmStrip({ points, rangeLabel }: { points: InsightSeriesPoint[]; rangeLabel: string }) {
+  const [active, setActive] = useState<number | null>(null);
   const maxOutcomes = Math.max(1, ...points.map((point) => point.outcomes));
+  const segments = trendLineSegments(points);
+  const slots = Math.max(1, points.length);
+  const position = (index: number) => ((index + 0.5) / slots) * 100;
+  const activePoint = active === null ? null : points[active];
   return (
-    <div className="daily-rhythm-strip" role="list" aria-label={`Daily outcomes and commitment completion for ${rangeLabel}`}>
-      {points.map((point) => (
-        <div className="daily-rhythm-day" role="listitem" key={point.date}>
-          <span className="daily-rhythm-label">{point.label}</span>
-          <span className="daily-rhythm-plot" aria-hidden="true">
-            <i className="daily-rhythm-outcomes" style={{ height: `${point.outcomes > 0 ? Math.max(18, (point.outcomes / maxOutcomes) * 100) : 0}%` }} />
-            {point.completionPercent !== null ? <b style={{ bottom: `${Math.min(100, point.completionPercent)}%` }} /> : null}
-          </span>
-          <strong>{point.outcomes}</strong>
-          <small>{point.completionPercent === null ? "No plan" : `${point.completionPercent}% plan`}</small>
-          <span className="sr-only">{formatWorkOsDate(point.date)}: {point.outcomes} completed outcome{point.outcomes === 1 ? "" : "s"}; {point.completionPercent === null ? "no planned commitments" : `${point.completionPercent}% of planned commitments completed`}.</span>
+    <div className="daily-rhythm-strip" style={{ ["--daily-rhythm-slots" as string]: Math.max(1, points.length) } as React.CSSProperties}>
+      <div className="daily-rhythm-labels" aria-hidden="true">
+        {points.map((point) => <span key={point.date}>{point.label}</span>)}
+      </div>
+      <div className="daily-rhythm-plot" onMouseLeave={() => setActive(null)}>
+        <div className="daily-rhythm-grid" aria-hidden="true"><i /><i /><i /></div>
+        <svg className="daily-rhythm-line-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {segments.map((segment, index) => segment.points.length > 1 ? (
+            <path
+              key={index}
+              className="daily-rhythm-line"
+              d={segment.points.map((point, order) => `${order ? "L" : "M"}${position(point.index).toFixed(2)} ${(100 - point.percent).toFixed(2)}`).join(" ")}
+            />
+          ) : null)}
+        </svg>
+        <div className="daily-rhythm-days" role="list" aria-label={`Daily outcomes and commitment completion for ${rangeLabel}`}>
+          {points.map((point, index) => {
+            const label = `${formatWorkOsDate(point.date)}: ${point.outcomes} completed outcome${point.outcomes === 1 ? "" : "s"}; ${point.completionPercent === null ? "no planned commitments" : `${point.completionPercent}% of planned commitments completed`}; ${minutesLabel(point.observedMinutes)} observed.`;
+            return (
+              <div className="daily-rhythm-day" role="listitem" key={point.date}>
+                <button
+                  type="button"
+                  className={`daily-rhythm-hit${active === index ? " active" : ""}`}
+                  aria-label={label}
+                  onMouseEnter={() => setActive(index)}
+                  onFocus={() => setActive(index)}
+                  onBlur={() => setActive(null)}
+                >
+                  <i
+                    className={`daily-rhythm-outcomes${point.outcomes > 0 ? "" : " empty"}`}
+                    style={point.outcomes > 0 ? { height: `${Math.max(10, (point.outcomes / maxOutcomes) * 100)}%` } : undefined}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            );
+          })}
         </div>
-      ))}
+        {segments.flatMap((segment) => segment.points.map((point) => (
+          <i key={`weekly-dot-${point.index}`} className="daily-rhythm-dot" aria-hidden="true" style={{ left: `${position(point.index)}%`, bottom: `${Math.min(100, point.percent)}%` }} />
+        )))}
+        {activePoint ? (
+          <div className={`chart-tooltip daily-rhythm-tooltip${active !== null && active <= 1 ? " edge-start" : active !== null && active >= points.length - 2 ? " edge-end" : ""}`} style={{ left: `${position(active!)}%` }} aria-hidden="true">
+            <strong>{formatWorkOsDate(activePoint.date)}</strong>
+            <span><i className="swatch observed" /> {activePoint.outcomes} outcome{activePoint.outcomes === 1 ? "" : "s"}</span>
+            <span><i className="swatch completion" /> {activePoint.completionPercent === null ? "No planned commitments" : `${activePoint.completionPercent}% of commitments completed`}</span>
+            <span>{minutesLabel(activePoint.observedMinutes)} observed · {activePoint.updates} update{activePoint.updates === 1 ? "" : "s"}</span>
+          </div>
+        ) : null}
+      </div>
+      <div className="daily-rhythm-values" aria-hidden="true">
+        {points.map((point) => <span key={point.date}><strong>{point.outcomes}</strong><small>{point.completionPercent === null ? "No plan" : `${point.completionPercent}% plan`}</small></span>)}
+      </div>
       <div className="daily-rhythm-legend" aria-hidden="true">
         <span><i /> Outcomes</span>
         <span><b /> Plan completion</span>

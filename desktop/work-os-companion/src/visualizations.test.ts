@@ -433,7 +433,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("DeltaBadge");
     expect(app).toContain("UpdateKindChart");
     expect(app).toContain("ConsistencyChips");
-    expect(app).toContain("BarBreakdown");
+    expect(insightCharts).toContain("BarBreakdown");
+    expect(app).toContain("ActivityDonut");
     expect(app).toContain("TrackedBars");
     expect(app).toContain("ScrollFadeRegion");
     expect(insightCharts).toContain('role="img"');
@@ -442,6 +443,8 @@ describe("operational visualizations", () => {
     expect(app).toContain("Undated work is never classified either way");
     expect(insightChartStyles).toContain("prefers-reduced-motion");
     expect(insightChartStyles).toContain(".trend-chart-table");
+    expect(insightChartStyles).toContain(".activity-donut");
+    expect(insightChartStyles).toContain(".daily-rhythm-line");
     expect(insightChartStyles).toContain(".heatmap-cell.bucket-4");
     expect(insightMath).toContain('completed: "Outcomes completed"');
     expect(insightMath).toContain('label: "Blockers"');
@@ -452,6 +455,11 @@ describe("operational visualizations", () => {
     expect(insightChartStyles).toMatch(/\.heatmap-scroll \{[\s\S]*overflow-y: clip/);
     expect(insightChartStyles).toContain(".scroll-fade-region");
     expect(insightChartStyles).toContain(".insight-activity-inline");
+    expect(insightChartStyles).toContain(".activity-donut");
+    expect(insightChartStyles).toContain(".insight-table-wrap td::before");
+    expect(insightChartStyles).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(insightChartStyles).not.toContain("grid-template-columns: repeat(7, minmax(76px, 1fr));");
+    expect(sidebarStyles).toMatch(/@media \(max-width: 560px\) \{[\s\S]*?\.workspace,[\s\S]*?display: grid;[\s\S]*?grid-template-columns: var\(--sidebar-collapsed-width\) minmax\(0, 1fr\)/);
     expect(insightChartStyles).toContain(".scroll-fade-strip.top");
     expect(insightCharts).toContain("useScrollEdges");
     expect(insightCharts).toContain("trendLineSegments");

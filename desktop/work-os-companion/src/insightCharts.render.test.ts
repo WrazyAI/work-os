@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { BarBreakdown, DailyRhythmStrip, FlowDonut, HeatmapGrid, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
+import { ActivityDonut, BarBreakdown, DailyRhythmStrip, FlowDonut, HeatmapGrid, TrackedBars, TrendChart, UpdateKindChart } from "./InsightCharts";
 import { flowBreakdown, heatmapCells, insightSeries, updateKindBreakdown } from "./insights";
 import type { InsightDay } from "./types";
 
@@ -48,6 +48,20 @@ describe("insight chart rendering", () => {
     expect(filled).toContain("needs attention");
   });
 
+  it("renders an interactive app distribution donut with a truthful residual slice", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityDonut, {
+      items: [{ name: "VS Code", minutes: 90 }, { name: "Chrome", minutes: 30 }],
+      total: 150,
+      ariaLabel: "Tracked app distribution",
+    }));
+    expect(markup).toContain("activity-donut");
+    expect(markup).toContain("VS Code");
+    expect(markup).toContain("Chrome");
+    expect(markup).toContain("Other apps/sites");
+    expect(markup).toContain("60%");
+    expect(markup).toContain('tabindex="0"');
+  });
+
   it("keeps the heatmap flat and scrollable only sideways", () => {
     const markup = renderToStaticMarkup(createElement(HeatmapGrid, {
       cells: heatmapCells([day({ date: "2026-08-17", tasksCompleted: 2 }), day({ date: "2026-08-24", tasksCompleted: 5 })]),
@@ -69,9 +83,24 @@ describe("insight chart rendering", () => {
       rangeLabel: "these 7 days",
     }));
     expect(markup).toContain("daily-rhythm-strip");
+    expect(markup).toContain("daily-rhythm-plot");
+    expect(markup).toContain("daily-rhythm-hit");
     expect(markup).toContain("75% plan");
     expect(markup).toContain("No plan");
     expect(markup).toContain("August 17: 2 completed outcomes");
+  });
+
+  it("connects consecutive weekly commitment points with one shared line", () => {
+    const markup = renderToStaticMarkup(createElement(DailyRhythmStrip, {
+      points: insightSeries([
+        day({ date: "2026-08-17", planned: 4, plannedCompleted: 3 }),
+        day({ date: "2026-08-18", planned: 5, plannedCompleted: 4 }),
+        day({ date: "2026-08-19", planned: 3, plannedCompleted: 3 }),
+      ]),
+      rangeLabel: "these 7 days",
+    }));
+    expect((markup.match(/class="daily-rhythm-line"/g) ?? []).length).toBe(1);
+    expect((markup.match(/daily-rhythm-dot/g) ?? []).length).toBe(3);
   });
 
   it("scales the trend axis to round ticks and breaks the line at unrecorded days", () => {

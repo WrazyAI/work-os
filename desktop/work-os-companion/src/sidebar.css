@@ -564,6 +564,7 @@
 @media (max-width: 560px) {
   .workspace,
   .workspace:has(> .sidebar-nav[data-sidebar-collapsed="false"]) {
+    display: grid;
     grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
   }
 

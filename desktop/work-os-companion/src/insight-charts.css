@@ -1100,6 +1100,578 @@
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
+
+/* --- Insights visual polish --------------------------------------------- */
+/* The seven-day view shares one plot so commitment points read as a real
+   series instead of seven unrelated dots. Exact values remain keyboard
+   reachable through each day hit target. */
+.daily-rhythm-strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 18px;
+  padding-bottom: 28px;
+  overflow: visible;
+}
+
+.daily-rhythm-labels,
+.daily-rhythm-values {
+  display: grid;
+  grid-template-columns: repeat(var(--daily-rhythm-slots, 7), minmax(0, 1fr));
+  gap: 4px;
+}
+
+.daily-rhythm-labels > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-rhythm-plot {
+  position: relative;
+  display: block;
+  min-height: 138px;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  isolation: isolate;
+}
+
+.daily-rhythm-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.daily-rhythm-grid i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(217, 222, 213, 0.74), rgba(217, 222, 213, 0.28));
+}
+
+.daily-rhythm-grid i:nth-child(1) { bottom: 25%; }
+.daily-rhythm-grid i:nth-child(2) { bottom: 50%; }
+.daily-rhythm-grid i:nth-child(3) { bottom: 75%; }
+
+.daily-rhythm-line-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.daily-rhythm-line {
+  fill: none;
+  stroke: #82bd39;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 3px rgba(94, 157, 39, 0.12));
+  animation: line-in 360ms var(--ease-product) both;
+}
+
+.daily-rhythm-days {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--daily-rhythm-slots, 7), minmax(0, 1fr));
+  gap: 4px;
+}
+
+.daily-rhythm-day {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.daily-rhythm-hit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px 8px 2px 2px;
+  background: transparent;
+  padding: 0;
+  cursor: default;
+  transition: background 150ms var(--ease-product);
+}
+
+.daily-rhythm-hit:hover,
+.daily-rhythm-hit:focus-visible,
+.daily-rhythm-hit.active {
+  background: linear-gradient(180deg, transparent 8%, rgba(23, 25, 20, 0.035));
+  outline: none;
+}
+
+.daily-rhythm-hit:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(94, 157, 39, 0.34);
+}
+
+.daily-rhythm-outcomes {
+  position: static;
+  width: min(32px, 50%);
+  min-height: 0;
+  transform: none;
+  border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, #31362e, var(--ink));
+  box-shadow: 0 8px 18px rgba(18, 27, 17, 0.08);
+  transform-origin: bottom;
+  animation: bar-grow 360ms var(--ease-product) both;
+  transition: box-shadow 150ms var(--ease-product), opacity 150ms var(--ease-product);
+}
+
+.daily-rhythm-hit:hover .daily-rhythm-outcomes,
+.daily-rhythm-hit:focus-visible .daily-rhythm-outcomes,
+.daily-rhythm-hit.active .daily-rhythm-outcomes {
+  box-shadow: 0 9px 24px rgba(18, 27, 17, 0.16), 0 0 0 2px rgba(130, 189, 57, 0.18);
+}
+
+.daily-rhythm-outcomes.empty {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(23, 25, 20, 0.1);
+  box-shadow: none;
+  animation: none;
+}
+
+.daily-rhythm-dot {
+  position: absolute;
+  z-index: 3;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-bottom: -4.5px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  background: #82bd39;
+  box-shadow: 0 0 0 1px rgba(94, 157, 39, 0.28);
+  pointer-events: none;
+}
+
+.daily-rhythm-tooltip {
+  top: 10px;
+}
+
+.chart-tooltip.edge-start {
+  transform: translateX(0);
+}
+
+.chart-tooltip.edge-end {
+  transform: translateX(-100%);
+}
+
+.daily-rhythm-values > span {
+  display: grid;
+  gap: 1px;
+  text-align: center;
+  min-width: 0;
+}
+
+.daily-rhythm-values strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-rhythm-values small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-rhythm-legend {
+  bottom: 0;
+}
+
+/* Worktivity app/site distribution keeps activity context separate from
+   outcomes while giving the range a compact, interactive composition. */
+.activity-donut {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.activity-donut-figure {
+  position: relative;
+  width: 148px;
+  height: 148px;
+}
+
+.activity-donut-figure svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.activity-donut-track {
+  fill: none;
+  stroke: rgba(23, 25, 20, 0.065);
+  stroke-width: 18;
+}
+
+.activity-donut-slice {
+  fill: none;
+  stroke-width: 18;
+  stroke-linecap: butt;
+  cursor: default;
+  outline: none;
+  transition: opacity 150ms var(--ease-product), filter 150ms var(--ease-product);
+  animation: slice-in 420ms var(--ease-product) both;
+}
+
+.activity-donut-slice:focus-visible {
+  filter: drop-shadow(0 0 3px rgba(94, 157, 39, 0.5));
+}
+
+.activity-donut-slice.dimmed {
+  opacity: 0.24;
+}
+
+.activity-tone-0 { stroke: var(--ink); background: var(--ink); }
+.activity-tone-1 { stroke: #82bd39; background: #82bd39; }
+.activity-tone-2 { stroke: #668aa0; background: #668aa0; }
+.activity-tone-3 { stroke: #c8845a; background: #c8845a; }
+.activity-tone-4 { stroke: #9a8fbd; background: #9a8fbd; }
+.activity-tone-5 { stroke: #a9ada2; background: #a9ada2; }
+
+.activity-donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 0 28px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.activity-donut-center strong {
+  font: 650 20px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-donut-center small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.activity-donut-legend {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-donut-legend li {
+  min-width: 0;
+}
+
+.activity-donut-legend button {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  transition: background 150ms var(--ease-product), color 150ms var(--ease-product);
+}
+
+.activity-donut-legend button:hover,
+.activity-donut-legend button:focus-visible,
+.activity-donut-legend li.active button {
+  background: rgba(23, 25, 20, 0.045);
+  color: var(--ink);
+  outline: none;
+}
+
+.activity-donut-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.activity-donut-legend span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-donut-legend b {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activity-donut-legend b small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.activity-distribution {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+}
+
+.activity-distribution .activity-provenance {
+  margin: 0;
+}
+
+/* Make the analytical panels collapse deliberately instead of forcing wide
+   fixed geometry into compact companion windows. */
+@media (max-width: 900px) {
+  .trend-split {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    padding-top: 14px;
+    padding-left: 0;
+  }
+
+  .trend-summary-title,
+  .trend-legend {
+    grid-column: 1 / -1;
+  }
+
+  .trend-summary dl {
+    display: contents;
+  }
+
+  .trend-summary dl > div {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .insight-primary-chart,
+  .insight-rhythm,
+  .insight-evidence-context,
+  .insight-updates {
+    padding: 18px 16px;
+  }
+
+  .daily-rhythm-strip {
+    display: grid;
+    overflow: visible;
+    grid-template-columns: 1fr;
+    min-width: 0;
+    padding-bottom: 30px;
+  }
+
+  .daily-rhythm-labels,
+  .daily-rhythm-days,
+  .daily-rhythm-values {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .daily-rhythm-plot {
+    min-height: 122px;
+  }
+
+  .daily-rhythm-outcomes {
+    width: min(25px, 60%);
+  }
+
+  .daily-rhythm-legend {
+    left: 0;
+    right: auto;
+  }
+
+  .activity-donut {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .activity-donut-figure {
+    width: 132px;
+    height: 132px;
+  }
+
+  .insight-detail-body {
+    padding: 14px 12px;
+  }
+
+  .insight-table-wrap .scroll-fade-region {
+    max-height: none !important;
+    overflow: visible;
+  }
+
+  .insight-table-wrap .scroll-fade-strip {
+    display: none;
+  }
+
+  .insight-table-wrap table,
+  .insight-table-wrap tbody,
+  .insight-table-wrap tr,
+  .insight-table-wrap th,
+  .insight-table-wrap td {
+    display: block;
+    width: 100%;
+  }
+
+  .insight-table-wrap table {
+    border-collapse: separate;
+  }
+
+  .insight-table-wrap thead {
+    display: none;
+  }
+
+  .insight-table-wrap tbody {
+    display: grid;
+  }
+
+  .insight-table-wrap tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 16px;
+    border-top: 1px solid var(--line);
+    padding: 14px 0;
+  }
+
+  .insight-table-wrap tr:first-child {
+    border-top: 0;
+  }
+
+  .insight-table-wrap th[scope="row"] {
+    grid-column: 1 / -1;
+    border: 0;
+    padding: 0 0 5px;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .insight-table-wrap td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    border: 0;
+    padding: 2px 0;
+    text-align: right;
+    min-width: 0;
+  }
+
+  .insight-table-wrap td::before {
+    content: attr(data-label);
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-align: left;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .insight-drilldown-flat .drilldown-list button {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 10px 0;
+  }
+
+  .insight-drilldown-flat .drilldown-list button span {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .insight-drilldown-flat .drilldown-list button strong {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .insight-drilldown-flat .drilldown-list button svg {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 560px) {
+  .trend-plot {
+    grid-template-columns: 36px minmax(0, 1fr) 32px;
+    grid-template-rows: 176px 18px;
+    column-gap: 6px;
+  }
+
+  .trend-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-tooltip {
+    min-width: min(190px, calc(100vw - 72px));
+    max-width: min(236px, calc(100vw - 48px));
+  }
+
+  .daily-rhythm-labels > span,
+  .daily-rhythm-values small {
+    font-size: 9px;
+  }
+
+  .daily-rhythm-plot {
+    min-height: 112px;
+  }
+
+  .activity-donut {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .activity-donut-legend {
+    width: 100%;
+  }
+
+  .activity-donut-legend button {
+    min-height: 40px;
+  }
+
+  .insight-table-wrap tr {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   .trend-bar,
   .tracked-bar,
@@ -1454,18 +2026,18 @@
 .daily-rhythm-strip {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
   margin-top: 18px;
   padding-bottom: 30px;
+  overflow: visible;
 }
 
 .daily-rhythm-day {
-  display: grid;
-  grid-template-rows: auto 116px auto auto;
-  gap: 5px;
+  position: relative;
+  display: block;
   min-width: 0;
-  text-align: center;
 }
 
 .daily-rhythm-label {
@@ -1476,21 +2048,22 @@
 .daily-rhythm-plot {
   position: relative;
   display: block;
-  min-height: 116px;
+  min-height: 138px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(to top, transparent 24%, rgba(217, 222, 213, 0.48) 25%, transparent 26%, transparent 49%, rgba(217, 222, 213, 0.48) 50%, transparent 51%, transparent 74%, rgba(217, 222, 213, 0.48) 75%, transparent 76%);
+  background: none;
+  isolation: isolate;
 }
 
 .daily-rhythm-outcomes {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: min(28px, 44%);
+  position: static;
+  left: auto;
+  bottom: auto;
+  width: min(32px, 50%);
   min-height: 0;
-  transform: translateX(-50%);
-  border-radius: 7px 7px 2px 2px;
-  background: var(--ink);
-  transition: height 300ms var(--ease-product);
+  transform: none;
+  border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, #31362e, var(--ink));
+  transition: box-shadow 150ms var(--ease-product), opacity 150ms var(--ease-product);
 }
 
 .daily-rhythm-plot > b {
@@ -1778,9 +2351,15 @@
   }
 
   .daily-rhythm-strip {
-    overflow-x: auto;
-    grid-template-columns: repeat(7, minmax(76px, 1fr));
+    overflow: visible;
+    grid-template-columns: minmax(0, 1fr);
     padding-bottom: 34px;
+  }
+
+  .daily-rhythm-labels,
+  .daily-rhythm-days,
+  .daily-rhythm-values {
+    grid-template-columns: repeat(var(--daily-rhythm-slots, 7), minmax(0, 1fr));
   }
 
   .insight-source-grid {
