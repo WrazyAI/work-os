@@ -377,6 +377,7 @@ export default function App() {
     && visibleDay?.access?.capabilities?.voice_input === true;
   const voice = useVoiceInput({
     enabled: voiceAvailable,
+    surface: "dock",
     onTranscript: (text) => {
       setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
       setProgressPanel("update");

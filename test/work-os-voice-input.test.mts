@@ -328,7 +328,7 @@ test("the companion registers a real hold-to-talk shortcut with a per-window ACL
   assert.match(rust, /work-os:\/\/voice\/stop/);
   /* The press owns the route, so a release can never land on the other window. */
   assert.match(rust, /struct VoiceHotkeyRoute/);
-  assert.match(rust, /current\.take\(\)\)\s*\n?\s*\.unwrap_or\("main"\)/);
+  assert.match(rust, /route\.0\.lock\(\)\.ok\(\)\.and_then\(\|mut current\| current\.take\(\)\)/);
   assert.match(read("desktop/work-os-companion/src-tauri/Cargo.toml"), /tauri-plugin-global-shortcut = "~2\.3\.2"/);
   assert.match(read("desktop/work-os-companion/src-tauri/permissions/allow-voice-commands.toml"), /set_voice_hotkey/);
   assert.match(read("desktop/work-os-companion/src-tauri/capabilities/default.json"), /allow-voice-commands/);
@@ -405,4 +405,57 @@ test("the companion refreshes the capability from the server on every day load",
   /* The fixture stands in for a deployment that can transcribe. */
   const fixture = read("desktop/work-os-companion/src/avatarFixture.ts");
   assert.match(fixture, /voiceAvailable: true,/);
+});
+
+test("hold-to-talk is routed by focus, so only the window in use records", () => {
+  const rust = read("desktop/work-os-companion/src-tauri/src/lib.rs");
+
+  /* Focus, not visibility: the floating companion is visible almost always, so
+     a visibility test would hand it every hold and steal focus from the window
+     the employee was typing in. */
+  assert.match(rust, /let main_focused = app\s*\n?\s*\.get_webview_window\("main"\)/);
+  assert.match(rust, /if main_focused \{\s*\n\s*"main"\s*\n\s*\} else \{\s*\n\s*"avatar"\s*\n\s*\}/);
+  const routing = rust.slice(rust.indexOf("fn voice_target"), rust.indexOf("fn focus_voice_target"));
+  assert.doesNotMatch(routing, /is_visible/, "the routing rule must not depend on visibility");
+
+  /* The non-target window is never raised: focusing the target only shows the
+     floating companion, and the main window is left exactly as it was. */
+  assert.match(rust, /fn focus_voice_target[\s\S]{0,400}?if target == "avatar" \{\s*\n\s*show_avatar\(app\.clone\(\)\);\s*\n\s*\}/);
+  assert.doesNotMatch(rust, /fn focus_voice_target[\s\S]{0,400}?show_main/);
+
+  /* A hold owns the capture: the other window gives up whatever it was doing
+     before the target starts, so two recorders can never be live at once. */
+  assert.match(rust, /let other = if target == "avatar" \{ "main" \} else \{ "avatar" \};/);
+  assert.match(rust, /app\.emit_to\(other, "work-os:\/\/voice\/cancel", \(\)\)/);
+  const press = rust.slice(rust.indexOf("ShortcutState::Pressed"), rust.indexOf("ShortcutState::Released"));
+  assert.ok(
+    press.indexOf('emit_to(other, "work-os://voice/cancel"') < press.indexOf('emit_to(target, "work-os://voice/start"'),
+    "the other window must be told to stop before the target starts",
+  );
+
+  /* A release with no recorded press stops both, so a capture cannot outlive
+     the hold that opened it. */
+  assert.match(rust, /None => \{\s*\n\s*let _ = app\.emit_to\("main", "work-os:\/\/voice\/stop", \(\)\);\s*\n\s*let _ = app\.emit_to\("avatar", "work-os:\/\/voice\/stop", \(\)\);/);
+
+  /* Routing is recorded in the debugger, so a report of a duplicate capture
+     can be checked against what the host actually did. */
+  assert.match(rust, /diagnostics::host_event\(\s*\n\s*app,\s*\n\s*"voice\.hotkey",/);
+  assert.match(rust, /Hold-to-talk start routed to the \{target\} window/);
+});
+
+test("a capture cannot be started twice in one window", () => {
+  const companion = read("desktop/work-os-companion/src/chat/voiceInput.ts");
+  for (const source of [companion, read("src/modules/work-os/useVoiceInput.ts")]) {
+    /* The guard is a ref set synchronously before anything is awaited: two
+       start requests in one tick would both read the same stale render state. */
+    assert.match(source, /const startingRef = useRef\(false\);/);
+    assert.match(source, /if \(startingRef\.current \|\| state !== "idle"\) return;\s*\n\s*startingRef\.current = true;/);
+    /* Every path that abandons a start releases it, or the microphone could
+       never be opened again. */
+    assert.ok(source.split("startingRef.current = false").length >= 7, "every failure path must release the guard");
+  }
+  /* The capture names the surface it came from, for the debugger. */
+  assert.match(companion, /diagnostics\.info\("voice\.capture", "Voice capture started", \{ surface, source \}\)/);
+  assert.match(read("desktop/work-os-companion/src/App.tsx"), /surface: "dock",/);
+  assert.match(read("desktop/work-os-companion/src/AvatarApp.tsx"), /surface: "floating",/);
 });

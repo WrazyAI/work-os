@@ -372,20 +372,33 @@ fn voice_shortcut() -> tauri_plugin_global_shortcut::Shortcut {
     Shortcut::new(Some(Modifiers::CONTROL), Code::KeyM)
 }
 
-/// The window the employee is actually looking at: the floating companion when
-/// it is on screen (collapsed-to-orb still counts), otherwise the main window.
+/// The window the employee is actually looking at owns the capture.
+///
+/// Focus, not visibility: the floating companion is on screen almost always
+/// (collapsed-to-orb still counts as visible), so a visibility test hands it
+/// every hold — including the ones made while the employee is working in the
+/// app — and steals focus from the window they were typing in. Only the
+/// focused window is chosen; when the app is in the background the hold goes
+/// to the small floating companion instead.
 fn voice_target(app: &tauri::AppHandle) -> &'static str {
-    match app.get_webview_window("avatar") {
-        Some(window) if window.is_visible().unwrap_or(false) => "avatar",
-        _ => "main",
+    let main_focused = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_focused().ok())
+        .unwrap_or(false);
+    if main_focused {
+        "main"
+    } else {
+        "avatar"
     }
 }
 
+/// Brings the capture surface forward without disturbing the other one. The
+/// floating companion is shown and focused; the main window is deliberately
+/// left alone — it already holds focus when it is the target, and raising it
+/// on a background press is exactly the interruption this routing avoids.
 fn focus_voice_target(app: &tauri::AppHandle, target: &str) {
     if target == "avatar" {
         show_avatar(app.clone());
-    } else {
-        show_main(app);
     }
 }
 
@@ -526,17 +539,35 @@ pub fn run() {
                             if let Ok(mut current) = route.0.lock() {
                                 *current = Some(target);
                             }
+                            /* One capture at a time: the hold owns it, so the
+                               other window gives up whatever it was doing
+                               before this one starts. A press can therefore
+                               never leave two recorders live. */
+                            let other = if target == "avatar" { "main" } else { "avatar" };
+                            let _ = app.emit_to(other, "work-os://voice/cancel", ());
                             focus_voice_target(app, target);
+                            diagnostics::host_event(
+                                app,
+                                "voice.hotkey",
+                                &format!("Hold-to-talk start routed to the {target} window"),
+                                diagnostics::DiagnosticLevel::Info,
+                            );
                             let _ = app.emit_to(target, "work-os://voice/start", ());
                         }
                         ShortcutState::Released => {
-                            let target = route
-                                .0
-                                .lock()
-                                .ok()
-                                .and_then(|mut current| current.take())
-                                .unwrap_or("main");
-                            let _ = app.emit_to(target, "work-os://voice/stop", ());
+                            let target = route.0.lock().ok().and_then(|mut current| current.take());
+                            match target {
+                                Some(target) => {
+                                    let _ = app.emit_to(target, "work-os://voice/stop", ());
+                                }
+                                /* No press was recorded to bind this release
+                                   to, so stop both: a capture must never
+                                   outlive the hold that opened it. */
+                                None => {
+                                    let _ = app.emit_to("main", "work-os://voice/stop", ());
+                                    let _ = app.emit_to("avatar", "work-os://voice/stop", ());
+                                }
+                            }
                         }
                     }
                 })

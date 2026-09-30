@@ -204,6 +204,7 @@ export default function AvatarApp(): React.ReactElement {
      nothing is ever sent by the recorder itself. */
   const voice = useVoiceInput({
     enabled: facts.voiceAvailable,
+    surface: "floating",
     onTranscript: (text) => {
       setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
       setAvatarTab("chat");

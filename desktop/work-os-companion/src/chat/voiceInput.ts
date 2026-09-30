@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "../api";
+import { diagnostics } from "../diagnostics";
 
 /**
  * Work OS voice input (record → transcribe → review).
@@ -99,12 +100,15 @@ function classifyStartFailure(error: unknown): VoiceFailure {
 export function useVoiceInput(options: {
   /** Insert the transcript. The caller owns the draft and the send authority. */
   onTranscript: (text: string) => void;
+  /** Which surface owns this recorder (`dock`, `floating`, `web-check-in`): only
+   * used to name the capture in diagnostics. */
+  surface?: string;
   /** Called when a recording begins so the owning surface can open or focus. */
   onRecordingStart?: () => void;
   enabled?: boolean;
   language?: string;
 }): VoiceInput {
-  const { onTranscript, onRecordingStart, enabled = true, language = "en" } = options;
+  const { onTranscript, onRecordingStart, enabled = true, language = "en", surface = "companion" } = options;
   const [state, setState] = useState<VoiceState>("idle");
   const [level, setLevel] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -126,6 +130,9 @@ export function useVoiceInput(options: {
   /* A stopped MediaRecorder reports "inactive" before `onstop` lands, so a
      second stop without this guard would upload the same clip twice. */
   const finishingRef = useRef(false);
+  /* Set synchronously by `start`, before the microphone is awaited, so two
+     start requests in one tick cannot both open a recorder. */
+  const startingRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -188,6 +195,7 @@ export function useVoiceInput(options: {
     const chunks = chunksRef.current;
     chunksRef.current = [];
     releaseMedia();
+    startingRef.current = false;
     if (cancelled || durationMs < VOICE_MIN_RECORDING_MS) {
       setElapsedMs(0);
       setState("idle");
@@ -203,14 +211,20 @@ export function useVoiceInput(options: {
     void upload(blob, mime || blob.type);
   }, [releaseMedia, upload]);
 
-  const start = useCallback((_source: "button" | "hotkey" = "button") => {
+  const start = useCallback((source: "button" | "hotkey" = "button") => {
     if (!enabled) return;
-    if (state !== "idle") return;
+    /* Ref, not the `state` closure: two start requests in the same tick (a
+       duplicated shortcut event, or a hold landing while the microphone is
+       still opening) would both read the same stale render and open two
+       recorders. This one is set synchronously before any await. */
+    if (startingRef.current || state !== "idle") return;
+    startingRef.current = true;
     setError(null);
     setReceipt(false);
     setElapsedMs(0);
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      startingRef.current = false;
       setSupported(false);
       setError(VOICE_FAILURE_COPY.unsupported);
       return;
@@ -219,8 +233,11 @@ export function useVoiceInput(options: {
     cancelledRef.current = false;
     stopRequestedRef.current = false;
     finishingRef.current = false;
-    setState("requesting");
+    /* One line per real capture, naming the surface: the debugger then shows
+       exactly which window opened a microphone and how it was asked to. */
+    diagnostics.info("voice.capture", "Voice capture started", { surface, source });
     onRecordingStart?.();
+    setState("requesting");
 
     void (async () => {
       let stream: MediaStream;
@@ -230,12 +247,14 @@ export function useVoiceInput(options: {
         });
       } catch (failure) {
         if (!mountedRef.current) return;
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY[classifyStartFailure(failure)]);
         return;
       }
       if (cancelledRef.current || !mountedRef.current) {
         stream.getTracks().forEach((track) => track.stop());
+        startingRef.current = false;
         setState("idle");
         return;
       }
@@ -247,6 +266,7 @@ export function useVoiceInput(options: {
         recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       } catch (failure) {
         releaseMedia();
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
         return;
@@ -260,6 +280,7 @@ export function useVoiceInput(options: {
       recorder.onstop = () => finish(cancelledRef.current);
       recorder.onerror = () => {
         releaseMedia();
+        startingRef.current = false;
         if (!mountedRef.current) return;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
@@ -269,6 +290,7 @@ export function useVoiceInput(options: {
         recorder.start(250);
       } catch (failure) {
         releaseMedia();
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
         return;
@@ -338,6 +360,7 @@ export function useVoiceInput(options: {
     } else {
       releaseMedia();
       finishingRef.current = true;
+      startingRef.current = false;
       setState("idle");
     }
   }, [finish, releaseMedia]);

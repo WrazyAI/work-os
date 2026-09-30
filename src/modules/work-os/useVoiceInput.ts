@@ -115,6 +115,9 @@ export function useVoiceInput(options: {
   /* A stopped MediaRecorder reports "inactive" before `onstop` lands, so a
      second stop without this guard would upload the same clip twice. */
   const finishingRef = useRef(false);
+  /* Set synchronously by `start`, before the microphone is awaited, so two
+     start requests in one tick cannot both open a recorder. */
+  const startingRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -181,6 +184,7 @@ export function useVoiceInput(options: {
     const chunks = chunksRef.current;
     chunksRef.current = [];
     releaseMedia();
+    startingRef.current = false;
     if (cancelled || durationMs < VOICE_MIN_RECORDING_MS) {
       setElapsedMs(0);
       setState("idle");
@@ -198,12 +202,17 @@ export function useVoiceInput(options: {
 
   const start = useCallback(() => {
     if (!enabled) return;
-    if (state !== "idle") return;
+    /* Ref, not the `state` closure: two start requests in the same tick (a
+       duplicated shortcut, or a hold landing while the microphone is still
+       opening) would both read the same stale render and open two recorders. */
+    if (startingRef.current || state !== "idle") return;
+    startingRef.current = true;
     setError(null);
     setReceipt(false);
     setElapsedMs(0);
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      startingRef.current = false;
       setSupported(false);
       setError(VOICE_FAILURE_COPY.unsupported);
       return;
@@ -222,12 +231,14 @@ export function useVoiceInput(options: {
         });
       } catch (failure) {
         if (!mountedRef.current) return;
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY[classifyStartFailure(failure)]);
         return;
       }
       if (cancelledRef.current || !mountedRef.current) {
         stream.getTracks().forEach((track) => track.stop());
+        startingRef.current = false;
         setState("idle");
         return;
       }
@@ -239,6 +250,7 @@ export function useVoiceInput(options: {
         recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       } catch {
         releaseMedia();
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
         return;
@@ -252,6 +264,7 @@ export function useVoiceInput(options: {
       recorder.onstop = () => finish(cancelledRef.current);
       recorder.onerror = () => {
         releaseMedia();
+        startingRef.current = false;
         if (!mountedRef.current) return;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
@@ -261,6 +274,7 @@ export function useVoiceInput(options: {
         recorder.start(250);
       } catch {
         releaseMedia();
+        startingRef.current = false;
         setState("idle");
         setError(VOICE_FAILURE_COPY.start);
         return;
@@ -328,6 +342,7 @@ export function useVoiceInput(options: {
     } else {
       releaseMedia();
       finishingRef.current = true;
+      startingRef.current = false;
       setState("idle");
     }
   }, [finish, releaseMedia]);
