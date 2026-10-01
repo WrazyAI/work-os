@@ -472,6 +472,8 @@ test("github admin integration routes stay admin-scoped and token-safe", async (
   assert.match(repos, /githubWebhookSecret/);
   assert.match(repos, /withRepoConfigLock/);
   assert.match(repos, /loadGithubConnectionById/);
+  assert.match(repos, /findGithubRepoHook/);
+  assert.match(repos, /alignGithubRepoHook/);
   const integration = await source("src/lib/integrations/github.ts");
   assert.match(integration, /GITHUB_WEBHOOK_PATH/);
   assert.match(integration, /WORK_OS_GITHUB_ADMIN_TOKEN/);

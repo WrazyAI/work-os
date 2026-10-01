@@ -98,6 +98,34 @@ export async function createGithubRepoHook(input: { org: string; repo: string; s
   return { hookId: String(hook.id), url: hook.config?.url ?? input.url };
 }
 
+/** Finds a repository webhook that already points at the Work OS receiver, so
+ * connecting a repository that was wired up manually (or before the app knew
+ * about it) adopts the existing hook instead of creating a duplicate. */
+export async function findGithubRepoHook(input: { org: string; repo: string; url: string }): Promise<{ hookId: string } | null> {
+  const hooks = await githubApi<Array<{ id: number; config?: { url?: string } }>>(
+    `/repos/${encodeURIComponent(input.org)}/${encodeURIComponent(input.repo)}/hooks?per_page=100`,
+  );
+  const match = hooks.find((hook) => String(hook.config?.url ?? "").trim() === input.url);
+  return match ? { hookId: String(match.id) } : null;
+}
+
+/** Aligns an adopted hook with the deployment's secret and event list so its
+ * deliveries verify and match the events Work OS ingests. */
+export async function alignGithubRepoHook(input: { org: string; repo: string; hookId: string; secret: string; url: string }): Promise<{ hookId: string }> {
+  const hook = await githubApi<{ id: number }>(
+    `/repos/${encodeURIComponent(input.org)}/${encodeURIComponent(input.repo)}/hooks/${encodeURIComponent(input.hookId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        active: true,
+        events: [...GITHUB_WEBHOOK_EVENTS],
+        config: { url: input.url, content_type: "json", secret: input.secret, insecure_ssl: "0" },
+      }),
+    },
+  );
+  return { hookId: String(hook.id) };
+}
+
 export async function deleteGithubRepoHook(input: { org: string; repo: string; hookId: string }): Promise<void> {
   await githubApi<void>(
     `/repos/${encodeURIComponent(input.org)}/${encodeURIComponent(input.repo)}/hooks/${encodeURIComponent(input.hookId)}`,

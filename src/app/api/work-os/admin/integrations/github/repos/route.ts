@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  alignGithubRepoHook,
   createGithubRepoHook,
   deleteGithubRepoHook,
+  findGithubRepoHook,
   githubAdminTokenConfigured,
   githubWebhookSecret,
   githubWebhookUrl,
@@ -151,12 +153,15 @@ export async function POST(req: Request) {
     if (existingRepos.some((entry) => entry.full_name.toLowerCase() === repo.toLowerCase())) {
       return NextResponse.json({ error: "That repository already has a Work OS webhook.", connectedRepos: existingRepos }, { status: 409 });
     }
-    const result = await createGithubRepoHook({
-      org: organization,
-      repo: name,
-      secret,
-      url: githubWebhookUrl(req.url, req.headers),
-    });
+    const webhookUrl = githubWebhookUrl(req.url, req.headers);
+    // Adopt a hook that already points at this receiver (created manually or
+    // before the app knew the repository) and align it with this deployment's
+    // secret and event list instead of creating a duplicate.
+    const existingHook = await findGithubRepoHook({ org: organization, repo: name, url: webhookUrl });
+    const adopted = Boolean(existingHook);
+    const result = existingHook
+      ? await alignGithubRepoHook({ org: organization, repo: name, hookId: existingHook.hookId, secret, url: webhookUrl })
+      : await createGithubRepoHook({ org: organization, repo: name, secret, url: webhookUrl });
     let data: Record<string, unknown>;
     try {
       data = await mergeConnectedRepos({
@@ -169,11 +174,14 @@ export async function POST(req: Request) {
       });
     } catch (mergeError) {
       // Never leave a hook behind when its connection record could not be
-      // updated; a retry must start clean.
-      try {
-        await deleteGithubRepoHook({ org: organization, repo: name, hookId: result.hookId });
-      } catch {
-        // Best effort: the admin can remove a stray hook in GitHub.
+      // updated; a retry must start clean. An adopted hook existed before this
+      // action, so it is left in place.
+      if (!adopted) {
+        try {
+          await deleteGithubRepoHook({ org: organization, repo: name, hookId: result.hookId });
+        } catch {
+          // Best effort: the admin can remove a stray hook in GitHub.
+        }
       }
       throw mergeError;
     }
@@ -181,12 +189,12 @@ export async function POST(req: Request) {
     await db.from("work_audit_log").insert({
       organization_id: auth.access.organizationId,
       actor_user_id: auth.access.ctx.user.id,
-      action: "github.repo_hook_created",
+      action: adopted ? "github.repo_hook_adopted" : "github.repo_hook_created",
       target_type: "provider_connection",
       target_id: connection.id,
       metadata: { repo, hookId: result.hookId },
     });
-    return NextResponse.json({ connection: data, connectedRepos: readRepos(data.config) }, { status: 201 });
+    return NextResponse.json({ connection: data, connectedRepos: readRepos(data.config), adopted }, { status: 201 });
   } catch (error) {
     if (error instanceof GithubIntegrationError) return NextResponse.json({ error: error.message }, { status: error.status });
     return jsonError(error);
