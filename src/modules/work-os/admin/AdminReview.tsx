@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
+import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
 import {
@@ -337,7 +338,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
           <ul className="grid gap-2">
             {evidence.data.evidence.map((item) => {
               const event = item.event ?? null;
-              const screenshot = event?.screenshot ?? null;
+              const screenshot = embeddedRow<Record<string, any>>(event?.screenshot);
               return (
                 <li key={item.id} className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Cable, Camera, Check, Eye, GitBranch, Link2, ShieldCheck } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
+import { embeddedRow } from "@/lib/work-os-embed-shape";
 import {
   adminFetch,
   adminKeys,
@@ -312,7 +313,7 @@ export default function AdminEvidencePage() {
                   <ul>
                     {rows.map((row) => {
                       const event = row.event ?? null;
-                      const screenshot = event?.screenshot ?? null;
+                      const screenshot = embeddedRow<AnyRow>(event?.screenshot);
                       const metadata = (event?.metadata ?? {}) as AnyRow;
                       return (
                         <li key={row.id}>
@@ -447,7 +448,7 @@ export default function AdminEvidencePage() {
             ) : null}
 
             {(() => {
-              const screenshot = selected.event?.screenshot ?? null;
+              const screenshot = embeddedRow<AnyRow>(selected.event?.screenshot);
               if (!screenshot || screenshot.deleted_at) return null;
               const reviewable = selected.event?.correction_status === "disputed" || selected.event?.metadata?.needsReview === true;
               return (

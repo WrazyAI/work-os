@@ -39,6 +39,54 @@ async function loadGithubConnection(organizationId: string) {
   return data as Record<string, unknown> | null;
 }
 
+async function loadGithubConnectionById(organizationId: string, connectionId: string) {
+  const { data, error } = await createAdminClient()
+    .from("work_provider_connections")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("id", connectionId)
+    .maybeSingle();
+  if (error) throw new Error(`load GitHub connection: ${error.message}`);
+  return data as Record<string, unknown> | null;
+}
+
+/** Serializes repository-configuration merges inside this process so two
+ * concurrent admin actions cannot lose each other's changes. The web app runs
+ * as a single Next.js process and no other process writes provider-connection
+ * config, so a process-local queue is the write barrier. */
+let repoConfigLock: Promise<unknown> = Promise.resolve();
+
+function withRepoConfigLock<T>(task: () => Promise<T>): Promise<T> {
+  const run = repoConfigLock.then(task, task);
+  repoConfigLock = run.catch(() => undefined);
+  return run;
+}
+
+/** Re-reads the same connection by id, verifies it is still active on the same
+ * workspace, applies the repository mutation, and saves the merged config. */
+async function mergeConnectedRepos(input: {
+  organizationId: string;
+  connection: Record<string, unknown>;
+  mutate: (repos: GithubConnectionRepo[]) => GithubConnectionRepo[];
+}): Promise<Record<string, unknown>> {
+  return withRepoConfigLock(async () => {
+    const fresh = await loadGithubConnectionById(input.organizationId, String(input.connection.id));
+    if (!fresh || fresh.active === false || String(fresh.external_workspace_id) !== String(input.connection.external_workspace_id)) {
+      throw new GithubIntegrationError("The GitHub connection changed while saving; refresh the page and retry.", 409);
+    }
+    const repos = input.mutate(readRepos(fresh.config));
+    const { data, error } = await createAdminClient()
+      .from("work_provider_connections")
+      .update({ config: { ...(fresh.config as Record<string, unknown> ?? {}), repos }, updated_at: new Date().toISOString() })
+      .eq("id", fresh.id)
+      .eq("organization_id", input.organizationId)
+      .select("*")
+      .single();
+    if (error) throw new Error(`save GitHub repository configuration: ${error.message}`);
+    return data as Record<string, unknown>;
+  });
+}
+
 /** Repository management for the GitHub evidence integration. The
  * organization comes from the active GitHub provider connection; the token
  * (WORK_OS_GITHUB_ADMIN_TOKEN) is optional and the UI degrades to manual
@@ -109,19 +157,27 @@ export async function POST(req: Request) {
       secret,
       url: githubWebhookUrl(req.url, req.headers),
     });
-    // Re-read immediately before merging so a concurrent save is not
-    // overwritten by this update.
-    const fresh = (await loadGithubConnection(auth.access.organizationId)) ?? connection;
-    const repos = readRepos(fresh.config).filter((entry) => entry.full_name.toLowerCase() !== repo.toLowerCase());
-    repos.push({ full_name: repo, hook_id: result.hookId, created_at: new Date().toISOString() });
+    let data: Record<string, unknown>;
+    try {
+      data = await mergeConnectedRepos({
+        organizationId: auth.access.organizationId,
+        connection,
+        mutate: (repos) => [
+          ...repos.filter((entry) => entry.full_name.toLowerCase() !== repo.toLowerCase()),
+          { full_name: repo, hook_id: result.hookId, created_at: new Date().toISOString() },
+        ],
+      });
+    } catch (mergeError) {
+      // Never leave a hook behind when its connection record could not be
+      // updated; a retry must start clean.
+      try {
+        await deleteGithubRepoHook({ org: organization, repo: name, hookId: result.hookId });
+      } catch {
+        // Best effort: the admin can remove a stray hook in GitHub.
+      }
+      throw mergeError;
+    }
     const db = createAdminClient();
-    const { data, error } = await db.from("work_provider_connections")
-      .update({ config: { ...(fresh.config as Record<string, unknown> ?? {}), repos }, updated_at: new Date().toISOString() })
-      .eq("id", connection.id)
-      .eq("organization_id", auth.access.organizationId)
-      .select("*")
-      .single();
-    if (error) throw new Error(`save GitHub repository hook: ${error.message}`);
     await db.from("work_audit_log").insert({
       organization_id: auth.access.organizationId,
       actor_user_id: auth.access.ctx.user.id,
@@ -157,18 +213,12 @@ export async function DELETE(req: Request) {
         if (!(error instanceof GithubIntegrationError) || error.status !== 404) throw error;
       }
     }
-    // Re-read immediately before merging so a concurrent save is not
-    // overwritten by this update.
-    const fresh = (await loadGithubConnection(auth.access.organizationId)) ?? connection;
-    const mergedRepos = readRepos(fresh.config).filter((item) => item.full_name.toLowerCase() !== repo.toLowerCase());
+    const data = await mergeConnectedRepos({
+      organizationId: auth.access.organizationId,
+      connection,
+      mutate: (current) => current.filter((item) => item.full_name.toLowerCase() !== repo.toLowerCase()),
+    });
     const db = createAdminClient();
-    const { data, error } = await db.from("work_provider_connections")
-      .update({ config: { ...(fresh.config as Record<string, unknown> ?? {}), repos: mergedRepos }, updated_at: new Date().toISOString() })
-      .eq("id", connection.id)
-      .eq("organization_id", auth.access.organizationId)
-      .select("*")
-      .single();
-    if (error) throw new Error(`remove GitHub repository hook: ${error.message}`);
     await db.from("work_audit_log").insert({
       organization_id: auth.access.organizationId,
       actor_user_id: auth.access.ctx.user.id,

@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       title: label(type),
       summary: `${label(type)}${objectId ? ` for CRM record ${objectId}` : ""}.`,
       occurredAt: new Date(occurredAt).toISOString(),
-      metadata: { type, objectId, locationId: payload.locationId, companyId: payload.companyId },
+      metadata: { type, objectId, locationId: payload.locationId, companyId: payload.companyId, actor: { id: actorId ? String(actorId) : null, login: null } },
       raw: payload,
     });
     return NextResponse.json({ accepted: true, attributed: result.attributed });
