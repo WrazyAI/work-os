@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.84
+
+- The plan's done-when list now shows a bullet on every line, and the Loom section's remove action is a trash icon.
+
 ## 0.3.83
 
 - The companion stops asking what you are working on once you have recorded work for the day, and its planning bubble no longer repeats the question.

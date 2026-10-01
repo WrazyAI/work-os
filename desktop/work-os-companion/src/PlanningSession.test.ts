@@ -38,6 +38,31 @@ describe("PlanningSession footer gating", () => {
     const readOnly = renderToStaticMarkup(createElement(PlanningDocumentText, { ...base, editing: false }));
     expect(readOnly).toContain("Improve Work OS ease of use");
   });
+
+  it("bullets every row of a read-only list and keeps annotations on their line", () => {
+    const value = "Review the flows\nDocument the changes\nShip the fix";
+    const annotations = [{ id: "a1", target: "criteria:ease", start: 17, end: 37, quote: "Document the changes", comment: "Tighten this" }];
+    const list = renderToStaticMarkup(createElement(PlanningDocumentText, {
+      className: "planning-document-criteria", target: "criteria:ease", value, annotations, editing: false,
+      label: "Commitment 1 success criteria", maxLength: 1500, lines: true, onChange: () => undefined,
+    }));
+    // Every criterion is its own row, so the CSS bullet applies to each one.
+    expect(list.match(/class="planning-document-line"/g)?.length).toBe(3);
+    // The rendered DOM text keeps the newline separators: selection offsets
+    // must match the stored newline-joined value.
+    expect(list.replace(/<[^>]*>/g, "")).toBe(value);
+    const [, first, second, third] = list.split('class="planning-document-line"');
+    expect(first).not.toContain("<mark");
+    expect(second).toContain("<mark");
+    expect(second).toContain("Document the changes");
+    expect(third).not.toContain("<mark");
+
+    const single = renderToStaticMarkup(createElement(PlanningDocumentText, {
+      className: "planning-document-criteria", target: "criteria:ease", value, annotations: [], editing: false,
+      label: "Commitment 1 success criteria", maxLength: 1500, onChange: () => undefined,
+    }));
+    expect(single).not.toContain("planning-document-line");
+  });
 });
 
 describe("PlanningSession two-view flow", () => {

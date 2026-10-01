@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Pencil, Sparkles, Trash2, Video, X } from "lucide-react";
 import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
@@ -55,6 +55,27 @@ function annotatedNodes(text: string, target: string, annotations: PlanAnnotatio
     : segment.text);
 }
 
+/** Read-only multi-line text renders one hanging-indent row per line so every
+ * row carries its own bullet. Annotation ranges are document-relative, so each
+ * row rebases the ranges that fall inside it, and a hidden newline separator
+ * stays between rows so text selections measure the same newline-joined
+ * offsets as the stored value. */
+function annotatedLineNodes(text: string, target: string, annotations: PlanAnnotation[], keyPrefix: string, onOpen?: (ids: string[], element: Element) => void): ReactNode[] {
+  const lines = text.split("\n");
+  let offset = 0;
+  return lines.map((line, index) => {
+    const start = offset;
+    offset += line.length + 1;
+    const lineAnnotations = annotations
+      .filter((annotation) => annotation.target === target && annotation.end > start && annotation.start <= start + line.length)
+      .map((annotation) => ({ ...annotation, start: Math.max(0, annotation.start - start), end: Math.min(line.length, annotation.end - start) }));
+    return <Fragment key={`${keyPrefix}-line-${index}`}>
+      {index > 0 && <span className="planning-document-break" aria-hidden="true">{"\n"}</span>}
+      <span className="planning-document-line">{annotatedNodes(line, target, lineAnnotations, `${keyPrefix}-${index}`, onOpen)}</span>
+    </Fragment>;
+  });
+}
+
 export function PlanningDocumentText({
   className,
   target,
@@ -66,6 +87,7 @@ export function PlanningDocumentText({
   onOpenAnnotation,
   onDocumentInput,
   onChange,
+  lines = false,
 }: {
   className: string;
   target: string;
@@ -77,6 +99,8 @@ export function PlanningDocumentText({
   onOpenAnnotation?: (ids: string[], element: Element) => void;
   onDocumentInput?: () => void;
   onChange: (value: string) => void;
+  /** Render each row of a multi-line value as its own bulletted line (read-only). */
+  lines?: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   // While the field is editable the DOM owns its text. React rendering the
@@ -160,7 +184,7 @@ export function PlanningDocumentText({
       onDocumentInput?.();
       onChange(next);
     }}
-  >{editing ? null : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
+  >{editing ? null : lines ? annotatedLineNodes(value, target, annotations, target, onOpenAnnotation) : annotatedNodes(value, target, annotations, target, onOpenAnnotation)}</div>;
 }
 
 /** Layout-timed before paint on the client; a plain effect in SSR tests. */
@@ -554,7 +578,7 @@ export function PlanningSession({
         {loomEnabled && <div className="planning-loom">
           <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={toggleLoom} disabled={working}>
             <span className="planning-loom-toggle-label"><Video size={15} /><span><strong>{loomOpen ? "Loom source attached" : "Plan from a Loom recording"}</strong><small>{loomOpen ? "Recording details and transcript" : "Use the recording instead of writing a brief"}</small></span></span>
-            <span className="planning-loom-toggle-action">{loomOpen ? "Remove" : "Add"}</span>
+            <span className="planning-loom-toggle-action">{loomOpen ? <><Trash2 size={13} aria-hidden="true" /><span className="sr-only">Remove the Loom source</span></> : "Add"}</span>
           </button>
           {loomOpen ? <div className="planning-loom-panel">
             <div className="planning-loom-heading"><div><strong>Recording link</strong></div><span className="planning-loom-badge">Optional</span></div>
@@ -621,7 +645,7 @@ export function PlanningSession({
                 <PlanningDocumentText className="planning-document-objective" target={targetObjective} value={fields.objective} annotations={annotations} editing={editable} label={`Commitment ${index + 1} objective`} maxLength={1000} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { objective: value })} />
                 {(editable || fields.successCriteria.length > 0) && <>
                   <small>Done when</small>
-                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
+                  <PlanningDocumentText className="planning-document-criteria" target={targetCriteria} value={fields.successCriteria.join("\n")} annotations={annotations} editing={editable} label={`Commitment ${index + 1} success criteria, one per line`} maxLength={1500} lines onOpenAnnotation={openAnnotationCard} onDocumentInput={clearTransientAnnotator} onChange={(value) => updateEdit(commitment.clientId, { title: commitment.title, objective: commitment.objective, successCriteria: commitment.successCriteria }, { successCriteria: parseCriteriaLines(value) })} />
                 </>}
               </div>
             </article>;

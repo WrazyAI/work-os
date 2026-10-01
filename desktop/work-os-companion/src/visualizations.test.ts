@@ -285,6 +285,9 @@ describe("operational visualizations", () => {
     expect(planningSession).toContain("Review commitments");
     expect(planningSession).toContain('className="planning-back"');
     expect(planningSession).toContain("Review draft");
+    expect(planningSession).toContain("Remove the Loom source");
+    expect(planningSession).toContain('className="planning-document-line"');
+    expect(workspaceStyles).toContain(".planning-document-line::before");
     expect(workspaceStyles).toContain(".planning-review:focus");
     expect(planningSession).toContain("Your daily commitments are confirmed.");
     expect(planningSession).toContain("queued locally");
