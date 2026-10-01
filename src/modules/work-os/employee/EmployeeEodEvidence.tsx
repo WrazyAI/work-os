@@ -22,13 +22,6 @@ function confidenceLabel(value: number) {
  */
 export default function EmployeeEodEvidence({ date, timezone, enabled }: { date: string; timezone?: string; enabled: boolean }) {
   const queryClient = useQueryClient();
-  const gallery = useQuery<EodScreenshotGallery>({
-    queryKey: ["work-os", "eod-screenshots", date],
-    enabled: enabled && !!date,
-    staleTime: 60_000,
-    refetchInterval: (result) => ((result.state.data?.pending ?? 0) > 0 ? 5_000 : false),
-    queryFn: () => fetchJson(`/api/work-os/me/eod/screenshots?date=${encodeURIComponent(date)}`),
-  });
   const prepare = useMutation({
     mutationFn: () => fetchJson("/api/work-os/me/eod/screenshots/prepare", {
       method: "POST",
@@ -36,6 +29,16 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
       body: JSON.stringify({ date, max_frames: 6 }),
     }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["work-os", "eod-screenshots", date] }),
+  });
+  const gallery = useQuery<EodScreenshotGallery>({
+    queryKey: ["work-os", "eod-screenshots", date],
+    enabled: enabled && !!date,
+    staleTime: 60_000,
+    // Poll only while an on-demand preparation is actually running; once it
+    // settles the query is invalidated, so frames that keep failing stay
+    // `pending` without an endless poll (companion parity).
+    refetchInterval: () => (prepare.isPending ? 5_000 : false),
+    queryFn: () => fetchJson(`/api/work-os/me/eod/screenshots?date=${encodeURIComponent(date)}`),
   });
 
   if (!enabled) return null;

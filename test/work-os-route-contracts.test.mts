@@ -382,12 +382,19 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(dayHook, /eod\/outstanding\?days=14/);
   assert.match(review, /\/api\/work-os\/me\/day\?date=\$\{encodeURIComponent\(selectedDate\)\}/);
   assert.match(review, /const eodDay = historical \? selectedDay\.data/);
-  assert.match(review, /body: JSON\.stringify\(\{ date: eodDay\.shiftDate \}\)/);
+  assert.match(review, /body: JSON\.stringify\(\{ date \}\)/);
   assert.match(review, /employee-eod-panel/);
   assert.match(review, /employee-eod-editor/);
   assert.match(review, /Draft EOD for \$\{calendarDateLabel\(selectedDate\)\}/);
   assert.match(review, /outstandingRowMeta/);
   assert.match(review, /Outstanding EODs/);
+  // The assistant draft is the default on both surfaces: the web creates the
+  // standard record, asks the assistant, and refines without touching the
+  // bottleneck answer.
+  assert.match(review, /\/api\/work-os\/me\/eod\/ai-draft/);
+  assert.match(review, /stripBottleneckSection\(reportMarkdown\)/);
+  assert.match(review, /prepareOneScreenshotRound\(date\)/);
+  assert.match(review, /Redraft with assistant/);
 });
 
 test("proposal application is lease-fenced and reports explicit outcomes", async () => {

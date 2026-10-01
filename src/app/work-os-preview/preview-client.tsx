@@ -110,7 +110,7 @@ const rejectedFixture = (date: string) => ({
 const todayFixture = () => ({
   ...historyFixture(TODAY, "Ship the outstanding EOD flow."),
   readOnly: false,
-  prompt: { kind: "plan", nextPromptAt: `${TODAY}T17:30:00.000Z`, required: false, reason: "Start the day by building your plan." },
+  prompt: { kind: "follow_up", nextPromptAt: `${TODAY}T12:00:00.000Z`, required: false, reason: "Review the last hour before your update." },
   report: { id: "report-today", status: "draft", markdown: "## Summary\nOutlined the review flow and drafted the employee workspace routes." },
   plan: {
     id: "plan-today",
@@ -217,6 +217,13 @@ const screenshotGalleryFixture = {
   ],
 };
 
+const aiDraftFixture = {
+  markdown: "## Summary\nClosed the settlement reconciliation and cleared the intake queue.\n\n## Completed\n- Reconciled the September settlements\n- Pulled the provider export\n\n## Carried\n- Update the intake checklist\n\n## Bottleneck\nAwaiting the ops lead's sign-off.",
+  model: "preview",
+  screenshots: { processed: 3, excluded: 1, failed: 0, pending: 2, hours: [] },
+  screenshotSyncUnavailable: false,
+};
+
 const interpretationFixture = {
   interpretation: {
     rawIntent: "Ship the outstanding EOD flow.",
@@ -284,14 +291,18 @@ function installFetchStub() {
   if (typeof window === "undefined" || (window as unknown as { __workOsPreviewStub?: boolean }).__workOsPreviewStub) return;
   (window as unknown as { __workOsPreviewStub?: boolean }).__workOsPreviewStub = true;
   const respond = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
+  const calls: string[] = [];
+  (window as unknown as { __workOsPreviewCalls?: string[] }).__workOsPreviewCalls = calls;
   const passthroughFetch = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    calls.push(`${(init?.method ?? "GET").toUpperCase()} ${url}`);
     // Static art the confirmation player fetches (animation + wasm) must reach
     // the server, not the fixture stub.
     if (/\.(?:lottie|wasm)(?:\?|$)/.test(url)) return passthroughFetch(input, init);
     if (url.includes("/api/work-os/me/onboarding")) return respond(onboardingFixture);
     if (url.includes("/api/work-os/me/eod/outstanding")) return respond(outstandingFixture);
+    if (url.includes("/api/work-os/me/eod/ai-draft")) return respond(aiDraftFixture);
     if (url.includes("/api/work-os/me/eod/screenshots/prepare")) return respond({ date: TODAY, analyzed: 2, failed: 0, pending: 1, total: 6, sampled: 2, unavailable: false });
     if (url.includes("/api/work-os/me/eod/screenshots")) return respond(screenshotGalleryFixture);
     if (url.includes("/api/work-os/me/memory/")) return respond({});
@@ -307,6 +318,7 @@ function installFetchStub() {
     if (url.includes("/api/work-os/me/tasks?view=day")) return respond({ tasks: dayTasks, workspace: workspace(TODAY, "Ship the outstanding EOD flow."), cursor: { next: null } });
     if (url.includes("/api/work-os/me/tasks?view=open")) return respond({ tasks: dayTasks.filter((task) => !task.completed), counts: { total: 2, open: 2, completed: 0 } });
     if (url.includes("/api/work-os/me/tasks?view=history")) return respond({ tasks: [dayTasks[2]], nextOffset: null });
+    if (url.includes("/api/work-os/me/insights/synthesize")) return respond({ synthesis: "The range closed six outcomes and carried three items forward.\n\nPlan reliability stayed steady, and the intake queue moved on three of the recorded days.", mode: "ai" });
     if (url.includes("/api/work-os/me/insights")) return respond(insightsFixture);
     if (url.includes("/api/work-os/attendance/observe")) return respond({ changed: false });
     return respond({});

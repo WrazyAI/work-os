@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, FileSearch, Pencil } from "lucide-react";
 import { fetchJson, formatTime, requestId, type ActivityInterval, type ActivityIntervalsResponse } from "./model";
+import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "./recaps";
 import { Panel, PanelHeader, PrimaryButton, QuietButton, SecondaryButton, Skeleton, StatusPill } from "./ui";
 
 const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
@@ -12,6 +13,10 @@ const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
   amended: "Updated by you",
 };
 
+/** One ensure per prompt slot per app session (the server call is idempotent
+ * per slot; this keeps a navigation-heavy session from repeating it). */
+const ensuredRecapSlots = new Set<string>();
+
 /**
  * The employee's Activity Interval Review stream (companion parity).
  *
@@ -19,8 +24,23 @@ const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
  * claims productivity or completion. "Looks right" confirms the recap;
  * "Add or correct" hands the correction to the employee's own words. Neither
  * action creates a check-in or advances the prompt cadence.
+ *
+ * When a progress prompt is due, the recap is ensured for that exact prompt
+ * slot before the stream settles — the same interval-first check-in the
+ * companion performs for its notification.
  */
-export default function EmployeeActivityRecaps({ date, timezone }: { date: string; timezone?: string }) {
+export default function EmployeeActivityRecaps({
+  date,
+  timezone,
+  prompt,
+}: {
+  date: string;
+  timezone?: string;
+  prompt?: { kind: string | null; nextPromptAt: string | null } | null;
+}) {
+  const queryClient = useQueryClient();
+  const [preparingRecap, setPreparingRecap] = useState(false);
+  const [promptTick, setPromptTick] = useState(0);
   const query = useQuery<ActivityIntervalsResponse>({
     queryKey: ["work-os", "activity-intervals", date],
     enabled: !!date,
@@ -29,8 +49,47 @@ export default function EmployeeActivityRecaps({ date, timezone }: { date: strin
     staleTime: 60_000,
   });
 
+  const ensure = useMutation({
+    mutationFn: (slot: string) => fetchJson("/api/work-os/me/activity-intervals/ensure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_due_at: slot.slice(slot.indexOf(":") + 1) }),
+    }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["work-os", "activity-intervals", date] }),
+  });
+
+  /* A future progress prompt becomes due while the page stays open: tick at the
+     due moment so the ensure below runs then, like the companion's schedule. */
+  useEffect(() => {
+    const dueInMs = recapPromptDueInMs(prompt, Date.now());
+    if (dueInMs === null) return;
+    const timer = setTimeout(() => setPromptTick((value) => value + 1), Math.min(dueInMs + 500, 2_147_000_000));
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt?.kind, prompt?.nextPromptAt, promptTick]);
+
+  useEffect(() => {
+    if (!prompt || !date) return;
+    const slot = recapEnsureSlot(prompt, Date.now());
+    if (!slot || ensuredRecapSlots.has(slot)) return;
+    const intervals = query.data?.intervals ?? [];
+    if (hasRecapForSlot(intervals, slot)) {
+      ensuredRecapSlots.add(slot);
+      return;
+    }
+    ensuredRecapSlots.add(slot);
+    setPreparingRecap(true);
+    ensure.mutate(slot, {
+      // A failed ensure releases the slot so a later check can retry it.
+      onError: () => { ensuredRecapSlots.delete(slot); },
+      onSettled: () => setPreparingRecap(false),
+    });
+    // The ref guard owns repetition; query/mutation objects are not inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt?.kind, prompt?.nextPromptAt, date, query.data, promptTick]);
+
   const intervals = query.data?.intervals ?? [];
-  if (!intervals.length) return null;
+  if (!intervals.length && !preparingRecap) return null;
 
   return (
     <Panel>
@@ -40,11 +99,19 @@ export default function EmployeeActivityRecaps({ date, timezone }: { date: strin
         meta="Grounded recaps of the intervals Worktivity observed. Evidence-bounded context only — never a productivity measure."
         actions={<QuietButton onClick={() => void query.refetch()} disabled={query.isFetching}>{query.isFetching ? "Refreshing…" : "Refresh"}</QuietButton>}
       />
-      <ul>
-        {intervals.map((interval) => (
-          <RecapCard key={interval.id} interval={interval} timezone={timezone} onDecided={() => void query.refetch()} />
-        ))}
-      </ul>
+      {preparingRecap && !intervals.length ? (
+        <div className="grid gap-2 px-5 py-4" aria-busy="true" role="status">
+          <span className="text-[12px] font-semibold text-[var(--text-secondary)]">Preparing your activity recap…</span>
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-full" />
+        </div>
+      ) : (
+        <ul>
+          {intervals.map((interval) => (
+            <RecapCard key={interval.id} interval={interval} timezone={timezone} onDecided={() => void query.refetch()} />
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }

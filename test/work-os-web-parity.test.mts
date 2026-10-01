@@ -5,6 +5,9 @@ import { test } from "node:test";
 import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
 import { applyCommitmentEdits, buildPlanItemsFromInterpretation, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
 import { consistencyChips, flowBreakdown, insightRangeSummary, insightSeries, periodDeltas } from "../src/modules/work-os/employee/insights";
+import { assistantDraftFallbackNotice, assistantDraftNotice, stripBottleneckSection } from "../src/modules/work-os/employee/eod";
+import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "../src/modules/work-os/employee/recaps";
+import { normalizeCheckInKind } from "../src/lib/work-os-checkins";
 
 test("shift pulse subtracts recorded breaks from elapsed time", () => {
   const pulse = shiftPulse(
@@ -149,4 +152,43 @@ test("consistency chips fall back to the days when the range has no stats", () =
   const withStats = consistencyChips({ dayCount: 3, daysWithGoal: 3, daysWithUpdate: 2, daysWithCompletion: 3, bestDay: { date: "2026-09-28", tasksCompleted: 3 }, currentStreak: 3, commitmentRate: 67 }, days);
   assert.ok(withStats.some((chip) => chip.key === "streak" && chip.value === "3d"));
   assert.ok(withStats.some((chip) => chip.key === "commitments" && chip.value === "67%"));
+});
+
+test("progress prompts store as the catch_up check-in kind", () => {
+  assert.equal(normalizeCheckInKind("follow_up"), "catch_up");
+  assert.equal(normalizeCheckInKind("hourly_fallback"), "catch_up");
+  assert.equal(normalizeCheckInKind("optional"), "optional");
+  assert.equal(normalizeCheckInKind("eod"), "eod");
+  assert.equal(normalizeCheckInKind(undefined), null);
+  assert.equal(normalizeCheckInKind("not_a_kind"), null);
+});
+
+test("a due progress prompt ensures its recap exactly once", () => {
+  const now = Date.parse("2026-09-30T11:30:00.000Z");
+  const due = { kind: "hourly_fallback", nextPromptAt: "2026-09-30T11:00:00.000Z" };
+  assert.equal(recapEnsureSlot(due, now), "hourly_fallback:2026-09-30T11:00:00.000Z");
+  assert.equal(recapEnsureSlot({ kind: "plan", nextPromptAt: due.nextPromptAt }, now), null);
+  assert.equal(recapEnsureSlot({ kind: "hourly_fallback", nextPromptAt: "2026-09-30T12:00:00.000Z" }, now), null);
+  assert.equal(recapEnsureSlot(null, now), null);
+  const slot = recapEnsureSlot(due, now)!;
+  assert.equal(hasRecapForSlot([{ windowStart: "2026-09-30T10:00:00.000Z", windowEnd: "2026-09-30T11:00:00.000Z", generationStatus: "ready" }], slot), true);
+  assert.equal(hasRecapForSlot([{ windowStart: "2026-09-30T09:00:00.000Z", windowEnd: "2026-09-30T10:00:00.000Z", generationStatus: "ready" }], slot), false);
+  assert.equal(hasRecapForSlot([{ windowStart: "2026-09-30T10:00:00.000Z", windowEnd: "2026-09-30T11:00:00.000Z", generationStatus: "failed" }], slot), false);
+  // A not-yet-due prompt schedules its check for the due moment.
+  assert.equal(recapPromptDueInMs({ kind: "follow_up", nextPromptAt: "2026-09-30T12:00:00.000Z" }, now), 30 * 60_000);
+  assert.equal(recapPromptDueInMs(due, now), null);
+  assert.equal(recapPromptDueInMs({ kind: "plan", nextPromptAt: "2026-09-30T12:00:00.000Z" }, now), null);
+});
+
+test("EOD refinement strips only the bottleneck section", () => {
+  const markdown = "## Summary\nShipped the fix.\n\n## Bottleneck\nAwaiting access.\n";
+  assert.equal(stripBottleneckSection(markdown), "## Summary\nShipped the fix.");
+  assert.equal(stripBottleneckSection("## Summary\nNo bottleneck section."), "## Summary\nNo bottleneck section.");
+});
+
+test("assistant draft notices name what grounded the draft", () => {
+  assert.match(assistantDraftNotice({ markdown: "x", model: "m", screenshots: { processed: 3, excluded: 0, failed: 0, pending: 0, hours: [] } }), /3 analyzed screenshots grounded it/);
+  assert.match(assistantDraftNotice({ markdown: "x", model: "m", screenshotSyncUnavailable: true }), /Screenshot context was unavailable/);
+  assert.match(assistantDraftFallbackNotice(false, "assistant down"), /standard draft/);
+  assert.equal(assistantDraftFallbackNotice(true, "gated"), "gated");
 });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CalendarRange, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CalendarRange, RefreshCw, Sparkles, Target, TrendingUp } from "lucide-react";
 import { useEmployeeDay } from "./useEmployeeDay";
 import { fetchJson, calendarDateLabel, formatDateTimeShort, longDateLabel, type EmployeeInsightsResponse } from "./model";
 import {
@@ -56,6 +56,7 @@ export default function EmployeeInsights() {
   const [range, setRange] = useState<Range>("7d");
   const [through, setThrough] = useState("");
   const [showStats, setShowStats] = useState(false);
+  const [synthesis, setSynthesis] = useState<{ status: "loading" } | { status: "ready"; text: string; mode?: "ai" | "evidence" } | { status: "failed" } | null>(null);
 
   useEffect(() => {
     if (day.data?.shiftDate) setThrough((current) => current || day.data!.shiftDate);
@@ -66,6 +67,28 @@ export default function EmployeeInsights() {
     queryFn: () => fetchJson(`/api/work-os/me/insights?range=${range}&through=${encodeURIComponent(through)}`),
     enabled: !!through,
     staleTime: 60_000,
+  });
+
+  // The synthesis is range-scoped: a narrative from another range must not sit
+  // next to different numbers, and a response that arrives after the selection
+  // moves on is dropped.
+  const activeSynthesisScopeRef = useRef("");
+  activeSynthesisScopeRef.current = `${range}:${through}`;
+  useEffect(() => { setSynthesis(null); }, [range, through]);
+  const synthesize = useMutation({
+    mutationFn: (variables: { range: string; through: string }) => fetchJson<{ synthesis: string; mode?: "ai" | "evidence" }>("/api/work-os/me/insights/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ range: variables.range, through: variables.through }),
+    }),
+    onSuccess: (result, variables) => {
+      if (`${variables.range}:${variables.through}` !== activeSynthesisScopeRef.current) return;
+      setSynthesis(result.synthesis ? { status: "ready", text: String(result.synthesis), mode: result.mode } : { status: "failed" });
+    },
+    onError: (_error, variables) => {
+      if (`${variables.range}:${variables.through}` !== activeSynthesisScopeRef.current) return;
+      setSynthesis({ status: "failed" });
+    },
   });
 
   const data = insights.data;
@@ -242,6 +265,33 @@ export default function EmployeeInsights() {
               </div>
             </Panel>
           ) : null}
+
+          <Panel>
+            <PanelHeader
+              icon={<Sparkles size={16} />}
+              title="AI synthesis"
+              meta={synthesis?.status === "ready" ? "A grounded read of this range." : "A short grounded read generated from the verified range facts."}
+              actions={
+                <SecondaryButton disabled={!data || synthesize.isPending} onClick={() => synthesize.mutate({ range, through: insights.data?.through ?? through })}>
+                  {synthesize.isPending ? "Synthesizing…" : synthesis?.status === "ready" ? "Re-synthesize" : "Synthesize with AI"}
+                </SecondaryButton>
+              }
+            />
+            <div className="px-5 py-4">
+              {synthesis?.status === "ready" ? (
+                <>
+                  <p className="whitespace-pre-line text-[14px] leading-6 text-[var(--text-primary)]">{synthesis.text}</p>
+                  {synthesis.mode === "evidence" ? (
+                    <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">The assistant&apos;s draft could not be verified — showing the exact fact record instead.</p>
+                  ) : null}
+                </>
+              ) : synthesis?.status === "failed" ? (
+                <p className="text-[12px] leading-5 text-[var(--text-secondary)]">The assistant is unavailable — the verified range facts and exact daily values remain available below.</p>
+              ) : (
+                <p className="text-[12px] leading-5 text-[var(--text-secondary)]">Adds short grounded paragraphs from the verified range facts. Every figure is checked against the record, and no productivity score is generated.</p>
+              )}
+            </div>
+          </Panel>
 
           <Panel>
             <PanelHeader

@@ -449,7 +449,7 @@ export default function EmployeeToday() {
             </div>
           </Panel>
 
-          <EmployeeActivityRecaps date={day.data?.shiftDate ?? ""} timezone={day.data?.shift?.timezone} />
+          <EmployeeActivityRecaps date={day.data?.shiftDate ?? ""} timezone={day.data?.shift?.timezone} prompt={day.data?.prompt} />
 
           <Panel>
             <PanelHeader

@@ -252,10 +252,21 @@ export interface EodScreenshotGallery {
 
 /* ── Shared helpers ─────────────────────────────────────────────────────── */
 
+/** A response error that preserves the HTTP status, so callers can handle
+ * gated flows (409) differently from a plain failure. */
+export class HttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error || `Request failed: ${response.status}`);
+  if (!response.ok) throw new HttpError(body?.error || `Request failed: ${response.status}`, response.status);
   return body as T;
 }
 

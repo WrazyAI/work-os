@@ -139,6 +139,14 @@ async function parseCheckIn(input: string, tasks: Json[], commitments: CheckInCo
   return { model: CHECK_IN_MODEL, proposals };
 }
 
+/** Maps the prompt engine's finer slot names onto the stored check-in kinds.
+ * Progress prompts (`follow_up`, `hourly_fallback`) are the in-shift
+ * "catch_up" check-in; the quiet `optional` prompt keeps its own kind. */
+export function normalizeCheckInKind(kind: string | null | undefined): "plan" | "catch_up" | "optional" | "eod" | null {
+  if (kind === "follow_up" || kind === "hourly_fallback") return "catch_up";
+  return kind === "plan" || kind === "catch_up" || kind === "optional" || kind === "eod" ? kind : null;
+}
+
 export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   const personId = access.personId as string;
   const input = text(body.input_text) ?? "";
@@ -156,8 +164,10 @@ export async function createWorkOsCheckIn(access: WorkOsAccess, body: Json) {
   const { rules, exceptions, timezone } = await loadShiftData(access, personId, now);
   const shift = resolveShiftWindow(rules, exceptions, now);
   const shiftDate = shift?.shiftDate ?? localDateForTimezone(now, timezone);
-  const kind = text(body.kind) ?? (shift && now.getTime() >= new Date(shift.endsAt).getTime() - 15 * 60_000 ? "eod" : "plan");
-  if (!["plan", "catch_up", "optional", "eod"].includes(kind)) throw new Error("invalid check-in kind");
+  const requestedKind = text(body.kind);
+  const normalizedKind = normalizeCheckInKind(requestedKind);
+  if (requestedKind && !normalizedKind) throw new Error("invalid check-in kind");
+  const kind = normalizedKind ?? (shift && now.getTime() >= new Date(shift.endsAt).getTime() - 15 * 60_000 ? "eod" : "plan");
   const source = ["web", "desktop", "agent"].includes(text(body.source) ?? "") ? text(body.source) : "web";
   const ownerId = await organizationOwnerId(access.organizationId);
   const clientRequestId = text(body.client_request_id);
