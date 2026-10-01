@@ -73,6 +73,46 @@ export const UPDATE_CHECK_CADENCE_COPY = (() => {
   return minutes === 1 ? "every minute" : `every ${minutes} minutes`;
 })();
 
+/** Every status the shared update flow can be in, mirrored here so the
+ * background-check gate stays a pure, unit-testable decision. */
+export type UpdateFlowStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "failed"
+  | "installing";
+
+/** Whether a silent background check may start from the current flow status.
+ * A downloaded installer is safe to re-check: the catalog query does not
+ * touch it, and a newer release can replace it. Downloading and installing
+ * own native resources and must finish first; `checking` already has a check
+ * in flight. */
+export function canRunBackgroundUpdateCheck(status: UpdateFlowStatus): boolean {
+  return status === "idle" || status === "available" || status === "failed" || status === "downloaded";
+}
+
+/** Statuses that hold a pending update entry the user can still act on. */
+export type PendingUpdateStatus = "available" | "downloaded" | "failed";
+
+/** What a fresh catalog result means for an update entry already pending.
+ * - `re-raise`: the same version is already downloaded; keep its installer
+ *   and raise the install prompt again, so a dismissed prompt returns.
+ * - `keep`: the same version is already offered or failed; keep that state
+ *   (including its retry affordance) and release the redundant check result.
+ * - `replace`: the catalog offers a different, newer release; release the
+ *   stale pending entry and surface the new one. */
+export type PendingUpdateResolution = "re-raise" | "keep" | "replace";
+
+export function resolvePendingUpdate(
+  pending: { status: PendingUpdateStatus; version: string },
+  candidateVersion: string,
+): PendingUpdateResolution {
+  if (pending.version !== candidateVersion) return "replace";
+  return pending.status === "downloaded" ? "re-raise" : "keep";
+}
+
 /** Human-facing release naming convention: the patch segment renders with
  * two digits (0.3.1 displays as 0.3.01). SemVer itself forbids leading
  * zeros, so canonical versions stay unpadded wherever tools compare them;

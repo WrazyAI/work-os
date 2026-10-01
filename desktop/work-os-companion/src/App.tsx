@@ -9,7 +9,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
+import { UPDATE_AVAILABLE_KEY, UPDATE_CHECK_CADENCE_COPY, UPDATE_CHECK_INTERVAL_MS, applyDownloadEvent, canRunBackgroundUpdateCheck, displayUpdateVersion, INITIAL_UPDATE_DOWNLOAD_PROGRESS, queryAvailableUpdate, resolvePendingUpdate, shouldAutoCheckUpdate, updateAvailableCopy, updateDownloadedCopy, updateDownloadFailedCopy, updateProgressDetails, updateRowCopy, type UpdateDownloadProgress, type UpdateRowCopyInput } from "./updater";
 import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnnounceUpdate, updateInstalledCopy, WHATS_NEW_ANNOUNCE_KEY, writeAnnouncedVersion } from "./whatsNew";
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
@@ -921,13 +921,14 @@ export default function App() {
 
   // The companion is a long-lived tray app, so releases dropped mid-session
   // would otherwise go unnoticed until a restart. Re-check silently on the
-  // shared cadence; the flow gate skips while a download or install is live.
+  // shared cadence; a downloaded-but-uninstalled update still allows checks
+  // (a newer release replaces it), while a live download or install blocks.
   useEffect(() => { updateFlowRef.current = updateFlow; }, [updateFlow]);
   useEffect(() => {
     if (!isTauri() || !session || !autoCheckUpdates) return;
     const timer = window.setInterval(() => {
       const flow = updateFlowRef.current;
-      if (flow.status !== "idle" && flow.status !== "available" && flow.status !== "failed") return;
+      if (!canRunBackgroundUpdateCheck(flow.status)) return;
       void checkForUpdates({ silent: true });
     }, UPDATE_CHECK_INTERVAL_MS);
     return () => window.clearInterval(timer);
@@ -1462,11 +1463,25 @@ export default function App() {
   }
 
   /** Closes the plugin's native download resource when a pending entry is
-   * replaced, so superseded installers cannot pin memory. */
+   * replaced, so superseded installers cannot pin memory. Downloaded entries
+   * hold the same native resource as available/failed ones. */
   function discardUpdateEntry(flow: UpdateFlow) {
-    if (flow.status === "available" || flow.status === "failed") {
+    if (flow.status === "available" || flow.status === "failed" || flow.status === "downloaded") {
       void flow.update.close().catch(() => undefined);
     }
+  }
+
+  /** Raises the persistent install prompt for a downloaded update. Reusing the
+   * stable key replaces a visible prompt and re-raises one the user dismissed
+   * with "Later". */
+  function raiseDownloadedUpdateNotification(version: string) {
+    const copy = updateDownloadedCopy(version);
+    notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
+      actions: [
+        { label: "Update now", kind: "primary", onClick: () => void installDownloadedUpdate() },
+        { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
+      ],
+    });
   }
 
   async function beginUpdateDownload() {
@@ -1505,13 +1520,7 @@ export default function App() {
       return;
     }
     setUpdateFlow({ status: "downloaded", update });
-    const copy = updateDownloadedCopy(update.version);
-    notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
-      actions: [
-        { label: "Update now", kind: "primary", onClick: () => void installDownloadedUpdate() },
-        { label: "Later", kind: "quiet", onClick: () => notifications.clearPersistent(UPDATE_AVAILABLE_KEY) },
-      ],
-    });
+    raiseDownloadedUpdateNotification(update.version);
   }
 
   async function installDownloadedUpdate() {
@@ -1559,7 +1568,7 @@ export default function App() {
   async function checkForUpdates({ silent = false }: { silent?: boolean } = {}) {
     if (updateCheckInFlightRef.current) return;
     const previous = updateFlowRef.current;
-    if (previous.status === "downloading" || previous.status === "downloaded" || previous.status === "installing") return;
+    if (!canRunBackgroundUpdateCheck(previous.status)) return;
     updateCheckInFlightRef.current = true;
     setUpdateFlow({ status: "checking" });
     try {
@@ -1577,19 +1586,26 @@ export default function App() {
       }
       if (result.status === "current") {
         // A pending entry may be stale (for example a pulled release).
-        if (previous.status === "available" || previous.status === "failed") discardUpdateEntry(previous);
+        if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") discardUpdateEntry(previous);
         setUpdateFlow({ status: "idle" });
         if (!silent) notifications.success("You already have the latest internal build.", "Work OS is up to date");
         return;
       }
-      if ((previous.status === "available" || previous.status === "failed") && previous.update.version === result.update.version) {
-        // Same version already surfaced: keep its state (and failure/retry
-        // affordance) and release the redundant check result.
-        void result.update.close().catch(() => undefined);
-        setUpdateFlow(previous);
-        return;
+      if (previous.status === "available" || previous.status === "failed" || previous.status === "downloaded") {
+        const resolution = resolvePendingUpdate({ status: previous.status, version: previous.update.version }, result.update.version);
+        if (resolution !== "replace") {
+          // Same version already pending: keep its state and release the
+          // redundant check result. A downloaded update re-raises the install
+          // prompt, so a "Later" dismissal comes back on the next check.
+          void result.update.close().catch(() => undefined);
+          setUpdateFlow(previous);
+          if (resolution === "re-raise") raiseDownloadedUpdateNotification(previous.update.version);
+          return;
+        }
+        // A newer release supersedes the pending entry; release its native
+        // resource before surfacing the replacement.
+        discardUpdateEntry(previous);
       }
-      if (previous.status === "available" || previous.status === "failed") discardUpdateEntry(previous);
       setUpdateFlow({ status: "available", update: result.update, headers: result.headers });
       const copy = updateAvailableCopy(result.update.version);
       notifications.persistent(UPDATE_AVAILABLE_KEY, copy.message, copy.title, "info", {
@@ -1598,7 +1614,10 @@ export default function App() {
     } catch (value) {
       const message = errorMessage(value, "The update catalog could not be checked.");
       diagnostics.warn("updater.check_failed", message);
-      setUpdateFlow(previous.status === "available" || previous.status === "failed" ? previous : { status: "idle" });
+      // A failed check must never drop a pending entry: a downloaded update
+      // stays installable and an available/failed entry keeps its retry.
+      const keepPrevious = previous.status === "available" || previous.status === "failed" || previous.status === "downloaded";
+      setUpdateFlow(keepPrevious ? previous : { status: "idle" });
       if (!silent) showError(message, message, "Update failed");
     } finally {
       updateCheckInFlightRef.current = false;

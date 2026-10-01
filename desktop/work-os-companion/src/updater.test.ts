@@ -5,9 +5,11 @@ import {
   UPDATE_CHECK_CADENCE_COPY,
   UPDATE_CHECK_INTERVAL_MS,
   applyDownloadEvent,
+  canRunBackgroundUpdateCheck,
   displayUpdateVersion,
   formatMegabytes,
   isManagedUpdateChannel,
+  resolvePendingUpdate,
   shouldAutoCheckUpdate,
   updateAuthHeaders,
   updateAvailableCopy,
@@ -103,6 +105,44 @@ describe("background check cadence", () => {
   it("checks every twenty minutes and derives the settings copy", () => {
     expect(UPDATE_CHECK_INTERVAL_MS).toBe(20 * 60 * 1000);
     expect(UPDATE_CHECK_CADENCE_COPY).toBe("every 20 minutes");
+  });
+});
+
+describe("canRunBackgroundUpdateCheck", () => {
+  it("keeps checking after a download the user has not installed", () => {
+    expect(canRunBackgroundUpdateCheck("downloaded")).toBe(true);
+  });
+
+  it("allows the quiet states", () => {
+    expect(canRunBackgroundUpdateCheck("idle")).toBe(true);
+    expect(canRunBackgroundUpdateCheck("available")).toBe(true);
+    expect(canRunBackgroundUpdateCheck("failed")).toBe(true);
+  });
+
+  it("blocks while a download or install owns the native resource", () => {
+    expect(canRunBackgroundUpdateCheck("downloading")).toBe(false);
+    expect(canRunBackgroundUpdateCheck("installing")).toBe(false);
+  });
+
+  it("does not start a second check while one is in flight", () => {
+    expect(canRunBackgroundUpdateCheck("checking")).toBe(false);
+  });
+});
+
+describe("resolvePendingUpdate", () => {
+  it("re-raises the install prompt when the catalog repeats a downloaded version", () => {
+    expect(resolvePendingUpdate({ status: "downloaded", version: "0.3.10" }, "0.3.10")).toBe("re-raise");
+  });
+
+  it("keeps an available or failed entry on the same version", () => {
+    expect(resolvePendingUpdate({ status: "available", version: "0.3.10" }, "0.3.10")).toBe("keep");
+    expect(resolvePendingUpdate({ status: "failed", version: "0.3.10" }, "0.3.10")).toBe("keep");
+  });
+
+  it("replaces any pending entry when a newer version arrives", () => {
+    expect(resolvePendingUpdate({ status: "downloaded", version: "0.3.10" }, "0.3.11")).toBe("replace");
+    expect(resolvePendingUpdate({ status: "available", version: "0.3.10" }, "0.3.11")).toBe("replace");
+    expect(resolvePendingUpdate({ status: "failed", version: "0.3.10" }, "0.3.11")).toBe("replace");
   });
 });
 
