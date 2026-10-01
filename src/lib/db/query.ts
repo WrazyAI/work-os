@@ -614,9 +614,14 @@ async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[
 
     const parentPk = await primaryKeyColumn(parentTable);
     const parentIds = [...new Set(out.map((row) => row[parentPk]).filter((value) => value !== null && value !== undefined))];
+    // The foreign key must be fetched alongside the requested columns so rows
+    // can be grouped back onto their parents; it is stripped from the result
+    // below when the caller did not ask for it.
+    const relationSelected = selected === "*" ? "*" : [...new Set([...selected, rel.fkColumn])];
+    const relationSql = relationSelected === "*" ? "*" : relationSelected.map(ident).join(", ");
     const grouped = new Map<unknown, Record<string, unknown>[]>();
     if (parentIds.length) {
-      const res = await getPool().query(`SELECT ${selectedSql} FROM public.${ident(e.table)} WHERE ${ident(rel.fkColumn)} = ANY($1)`, [parentIds]);
+      const res = await getPool().query(`SELECT ${relationSql} FROM public.${ident(e.table)} WHERE ${ident(rel.fkColumn)} = ANY($1)`, [parentIds]);
       for (const child of res.rows as Record<string, unknown>[]) {
         const key = child[rel.fkColumn];
         const list = grouped.get(key) ?? [];
@@ -630,7 +635,7 @@ async function resolveEmbeds(parentTable: string, rows: Record<string, unknown>[
       const children = grouped.get(row[parentPk]) ?? [];
       row[e.alias] = children.map((child) => {
         const resolvedChild = resolvedByPk.get(child[pk]) ?? child;
-        return selected === "*" || requested === "*" ? resolvedChild : stripInternalColumns(resolvedChild, selected, requested);
+        return relationSelected === "*" || requested === "*" ? resolvedChild : stripInternalColumns(resolvedChild, relationSelected, requested);
       });
     }
   }
