@@ -78,6 +78,14 @@ export function checkInIntervalMs(value = process.env.WORK_OS_CHECK_IN_INTERVAL_
   return (valid ? minutes : DEFAULT_CHECK_IN_INTERVAL_MINUTES) * 60_000;
 }
 
+/** True when a deployment set the check-in cadence to anything other than the
+ * hourly default (used to scale testing-time daily caps). */
+export function checkInCadenceOverridden(value = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): boolean {
+  const minutes = Number(value);
+  const valid = Number.isInteger(minutes) && minutes >= MIN_CHECK_IN_INTERVAL_MINUTES && minutes <= MAX_CHECK_IN_INTERVAL_MINUTES;
+  return valid && minutes !== DEFAULT_CHECK_IN_INTERVAL_MINUTES;
+}
+
 /** The first progress prompt follows clock-in (or plan confirmation) by this
  * many minutes. Deployment-configurable for testing phases, bounded so a bad
  * value cannot silence or storm the workday. */

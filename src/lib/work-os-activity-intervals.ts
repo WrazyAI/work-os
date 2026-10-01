@@ -15,6 +15,7 @@ import {
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
+import { checkInCadenceOverridden } from "@/modules/work-os/workday";
 
 type Json = Record<string, unknown>;
 
@@ -44,15 +45,19 @@ export type ActivityIntervalConfig = {
 };
 
 /** Bounded, deployment-overridable configuration. Invalid values fall back so a
- * bad environment value can never create an unbounded model or vision spend. */
+ * bad environment value can never create an unbounded model or vision spend.
+ * A non-hourly check-in cadence override triples the daily recap cap (up to 72)
+ * so short testing cadences are not silently capped at the base maximum. */
 export function activityIntervalConfig(env: NodeJS.ProcessEnv = process.env): ActivityIntervalConfig {
   const enabled = !["0", "false", "off"].includes(String(env.WORK_OS_ACTIVITY_INTERVALS_ENABLED ?? "1").trim().toLowerCase());
+  const baseMaxPerDay = clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY, 10, 1, 24);
+  const maxPerDay = checkInCadenceOverridden(env.WORK_OS_CHECK_IN_INTERVAL_MINUTES) ? baseMaxPerDay * 3 : baseMaxPerDay;
   return {
     enabled,
     maxMinutes: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_MINUTES, 120, 30, 240),
     maxFrames: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES, 12, 1, 24),
     maxRawFrames: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES, 5, 0, 12),
-    maxPerDay: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY, 10, 1, 24),
+    maxPerDay,
     model: MODEL,
     promptVersion: ACTIVITY_INTERVAL_PROMPT_VERSION,
   };

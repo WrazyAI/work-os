@@ -202,6 +202,21 @@ test("interval configuration is bounded and can be disabled", () => {
   assert.equal(bounded.maxPerDay, 10);
 });
 
+test("a non-hourly cadence override triples the daily recap cap", () => {
+  // No override keeps the base cap exactly as configured.
+  assert.equal(activityIntervalConfig({ WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "60" } as NodeJS.ProcessEnv).maxPerDay, 10);
+  // Any valid non-hourly override triples the base cap, up to 72.
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10" } as NodeJS.ProcessEnv).maxPerDay, 30);
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "10", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 72);
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "12" } as NodeJS.ProcessEnv).maxPerDay, 36);
+  // An out-of-range base falls back to the default 10 before tripling.
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "5", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "30" } as NodeJS.ProcessEnv).maxPerDay, 30);
+  // Invalid overrides fall back to the hourly default and do not scale the cap.
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "4", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
+  assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "241", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
+});
+
 test("evidence entries keep raw flags only for the representative subset", () => {
   const entries: IntervalEvidenceEntry[] = selectIntervalEvidence([
     candidate("a", "2026-09-28T15:00:00.000Z", "VS Code", true),

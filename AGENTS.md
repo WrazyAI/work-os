@@ -56,7 +56,10 @@ override it for a deployment; invalid values fall back to sixty minutes. The
 first progress check-in lands `WORK_OS_FIRST_FOLLOW_UP_MINUTES` (default 75,
 range 5–240) after plan confirmation or clock-in, and once a progress check-in
 is due an unconfirmed plan no longer blocks the cadence — the agenda review
-stays visible as the companion's inline banner.
+stays visible as the companion's inline banner. A valid non-hourly cadence
+override also triples the daily activity-recap cap
+(`WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY`, base 1–24) up to 72, so short testing
+cadences are not silently capped at the base maximum.
 
 Activity Interval Reviews build the evidence-backed recap for each due check-in
 from Worktivity frames. Their bounds are `WORK_OS_ACTIVITY_INTERVALS_ENABLED`

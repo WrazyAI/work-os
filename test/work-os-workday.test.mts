@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -71,6 +71,17 @@ test("check-in cadence defaults to an hourly fallback and accepts bounded config
   assert.equal(checkInIntervalMs("4"), 60 * 60_000);
   assert.equal(checkInIntervalMs("0"), 60 * 60_000);
   assert.equal(checkInIntervalMs("241"), 60 * 60_000);
+});
+
+test("only a valid non-hourly cadence counts as an override", () => {
+  assert.equal(checkInCadenceOverridden(undefined), false);
+  assert.equal(checkInCadenceOverridden("60"), false);
+  assert.equal(checkInCadenceOverridden("10"), true);
+  assert.equal(checkInCadenceOverridden("5"), true);
+  assert.equal(checkInCadenceOverridden("120"), true);
+  assert.equal(checkInCadenceOverridden("4"), false);
+  assert.equal(checkInCadenceOverridden("241"), false);
+  assert.equal(checkInCadenceOverridden("nope"), false);
 });
 
 test("the first follow-up interval is deployment-configurable and bounded", () => {
