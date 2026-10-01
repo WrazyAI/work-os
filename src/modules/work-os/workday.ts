@@ -152,10 +152,12 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
       ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }
       : { kind: null, nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: latestResponseAt !== null ? "Your next check-in follows your recorded progress." : "Waiting for the next configured check-in." };
   }
-  // An unconfirmed plan keeps its required planning prompt, but only while no
-  // progress prompt is due: once the check-in cadence arrives, the recap
-  // check-in wins and the agenda review stays as the companion's inline banner.
-  if (!context.hasConfirmedPlan) {
+  // An unconfirmed plan keeps its required planning prompt only until the
+  // employee has engaged with the day. Once they record a substantive update
+  // or a check-in has been delivered, the workday is underway: the agenda
+  // review stays as the companion's inline banner instead of a prompt that
+  // keeps returning between check-ins.
+  if (!context.hasConfirmedPlan && !planningPromptAnswered(context)) {
     const progressDue = progress.kind !== null && progress.nextPromptAt !== null && now >= Date.parse(progress.nextPromptAt);
     if (!progressDue) {
       return {
@@ -167,6 +169,16 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
     }
   }
   return progress;
+}
+
+/** Whether the employee has already answered the planning question by working
+ * the day: an applied substantive update since clock-in, or a progress
+ * check-in that has already been delivered. */
+export function planningPromptAnswered(context: PromptContext): boolean {
+  if (context.lastPromptKind === "follow_up" || context.lastPromptKind === "hourly_fallback") return true;
+  const clockedInAt = context.session?.clockedInAt ? Date.parse(context.session.clockedInAt) : Number.NaN;
+  const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : Number.NaN;
+  return Number.isFinite(clockedInAt) && Number.isFinite(lastSubstantiveAt) && lastSubstantiveAt >= clockedInAt;
 }
 
 /** Hard bound on the items one daily plan may hold and one save may submit.

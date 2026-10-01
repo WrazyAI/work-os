@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.83
+
+- The companion stops asking what you are working on once you have recorded work for the day, and its planning bubble no longer repeats the question.
+
 ## 0.3.82
 
 - Ctrl + M now starts recording even if you press it while the previous note is still being transcribed, instead of appearing to do nothing.

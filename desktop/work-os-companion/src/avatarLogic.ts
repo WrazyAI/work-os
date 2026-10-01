@@ -141,7 +141,7 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
       kind: "agenda",
       heading: "What are you working on today?",
       body: [focusContext, "Set today's focus. This does not affect attendance."].filter(Boolean).join(" "),
-      compact: "What are you working on today?",
+      compact: "Set today's focus.",
       action: null,
     };
   }

@@ -125,6 +125,8 @@ describe("avatar prompt", () => {
     const prompt = avatarPrompt({ ...base, promptKind: "plan" }, NOW);
     expect(prompt.heading).toBe("What are you working on today?");
     expect(prompt.body).toContain("This does not affect attendance.");
+    // The compact bubble line is a call to action, never a repeat of the question.
+    expect(prompt.compact).toBe("Set today's focus.");
   });
   it("keeps paused and off-shift states explicit instead of asking for work", () => {
     expect(avatarPrompt({ ...base, sessionState: "paused" }, NOW).heading).toBe("Shift paused");
