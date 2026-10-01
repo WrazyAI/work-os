@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.85
+
+- Update prompts keep coming even after a download you haven't installed yet.
+
 ## 0.3.84
 
 - The plan's done-when list now shows a bullet on every line, and the Loom section's remove action is a trash icon.
