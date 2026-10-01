@@ -1119,7 +1119,10 @@ the employee's own provider username — with one `Map & backfill` action that
 verifies the account and attributes its earlier events. A repository drawer
 lists the organization's repositories with their webhook state; without a
 repository-management token it shows the manual setup instead. Provider tokens
-and webhook secrets never reach the client.
+and webhook secrets never reach the client. Ingested GitHub events are default
+branch pushes, pull-request open/close, submitted reviews, completed workflow
+runs, deployment status changes, and issue open/close; every event carries its
+repository and actor so a row can always name where it came from.
 
 ## 17. Implementation checklist
 
