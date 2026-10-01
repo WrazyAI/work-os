@@ -27,6 +27,12 @@ function readRepos(config: unknown): GithubConnectionRepo[] {
   return Array.isArray(value.repos) ? (value.repos as GithubConnectionRepo[]) : [];
 }
 
+/** True when the organization webhook covers every repository, including new
+ * ones; per-repository hooks would then duplicate deliveries. */
+function orgWebhookEnabled(config: unknown): boolean {
+  return ((config ?? {}) as Record<string, unknown>).org_webhook === true;
+}
+
 async function loadGithubConnection(organizationId: string) {
   const { data, error } = await createAdminClient()
     .from("work_provider_connections")
@@ -122,6 +128,7 @@ export async function GET(req: Request) {
       configuration: {
         repositoryManagementReady: manageable,
         webhookReceiverReady: Boolean(githubWebhookSecret()),
+        orgWebhook: orgWebhookEnabled(connection.config),
         reason: !githubAdminTokenConfigured()
           ? "No GitHub repository-management token is configured for this deployment."
           : /^[0-9]+$/.test(organization)
@@ -142,6 +149,12 @@ export async function POST(req: Request) {
     if (!secret) return NextResponse.json({ error: "GitHub webhook secret is not configured for this deployment" }, { status: 503 });
     const connection = await loadGithubConnection(auth.access.organizationId);
     if (!connection) return NextResponse.json({ error: "Connect the GitHub workspace in Settings before adding repositories." }, { status: 409 });
+    if (orgWebhookEnabled(connection.config)) {
+      return NextResponse.json(
+        { error: "The organization webhook already covers every repository, including new ones; a per-repository hook would duplicate deliveries." },
+        { status: 409 },
+      );
+    }
     const organization = String(connection.external_workspace_id);
     const body = await req.json().catch(() => ({}));
     const repo = typeof body?.repo === "string" ? body.repo.trim() : "";

@@ -474,6 +474,7 @@ test("github admin integration routes stay admin-scoped and token-safe", async (
   assert.match(repos, /loadGithubConnectionById/);
   assert.match(repos, /findGithubRepoHook/);
   assert.match(repos, /alignGithubRepoHook/);
+  assert.match(repos, /orgWebhookEnabled/);
   const integration = await source("src/lib/integrations/github.ts");
   assert.match(integration, /GITHUB_WEBHOOK_PATH/);
   assert.match(integration, /WORK_OS_GITHUB_ADMIN_TOKEN/);
@@ -489,4 +490,6 @@ test("the evidence page blurs future integrations and surfaces github state", as
   const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
   assert.match(settings, /GHL — coming soon/);
   assert.match(settings, /comingSoon/);
+  assert.match(evidence, /Organization webhook active/);
+  assert.match(evidence, /Covered by organization/);
 });

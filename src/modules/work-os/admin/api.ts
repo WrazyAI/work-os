@@ -107,7 +107,7 @@ export interface GithubIntegrationReposResponse {
   repos: Array<{ full_name: string; private: boolean; default_branch: string; pushed_at: string | null }>;
   connectedRepos: Array<{ full_name: string; hook_id: string | null; created_at: string }>;
   webhookUrl: string;
-  configuration: { repositoryManagementReady: boolean; webhookReceiverReady: boolean; reason?: string | null };
+  configuration: { repositoryManagementReady: boolean; webhookReceiverReady: boolean; orgWebhook?: boolean; reason?: string | null };
 }
 
 export interface PersonDetailResponse {

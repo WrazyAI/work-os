@@ -518,6 +518,7 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   const connected = new Set((repos.data?.connectedRepos ?? []).map((entry) => entry.full_name.toLowerCase()));
   const refreshState = connect.isPending || disconnect.isPending;
+  const orgWebhook = repos.data?.configuration.orgWebhook === true;
 
   return (
     <Drawer
@@ -542,7 +543,13 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             </div>
           ) : null}
 
-          {!repos.data?.configuration.repositoryManagementReady ? (
+          {orgWebhook ? (
+            <Notice tone="ok">
+              Organization webhook active — every repository, including new ones, is covered automatically. No per-repository setup is needed.
+            </Notice>
+          ) : null}
+
+          {!orgWebhook && !repos.data?.configuration.repositoryManagementReady ? (
             <Notice tone="warn">
               {repos.data?.configuration.reason ?? "Repository management is not configured for this deployment."}
               {" "}Create webhooks manually in GitHub with this URL, content type <span className="font-mono">application/json</span>, the deployment&apos;s <span className="font-mono">WORK_OS_GITHUB_WEBHOOK_SECRET</span>, and the events push, pull_request, pull_request_review, workflow_run, deployment_status, and issues.
@@ -569,6 +576,8 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                         <StatusPill tone="ok">Webhook active</StatusPill>
                         <Button size="sm" variant="ghost" disabled={refreshState} onClick={() => disconnect.mutate(repo.full_name)}>Remove</Button>
                       </span>
+                    ) : orgWebhook ? (
+                      <StatusPill tone="neutral">Covered by organization</StatusPill>
                     ) : (
                       <Button size="sm" variant="secondary" disabled={refreshState} onClick={() => connect.mutate(repo.full_name)}>Connect</Button>
                     )}
