@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { attributeProviderActor } from "@/lib/work-os-evidence";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -86,6 +87,28 @@ export async function PUT(req: Request) {
       if (error) throw new Error(`save source account: ${error.message}`);
       savedAccounts.push(data);
     }
+    // A newly verified, mapped account attributes earlier unattributed events
+    // for the same actor so setup order never loses evidence.
+    let attributed = 0;
+    const backfillErrors: string[] = [];
+    for (const account of savedAccounts) {
+      if (!account.person_id || account.verified !== true) continue;
+      const alias = typeof (account.metadata as Record<string, unknown> | null)?.login === "string"
+        ? String((account.metadata as Record<string, unknown>).login)
+        : null;
+      try {
+        const result = await attributeProviderActor({
+          organizationId: auth.access.organizationId,
+          provider,
+          actorId: String(account.external_account_id),
+          actorLogin: alias,
+          personId: String(account.person_id),
+        });
+        attributed += result.attributed;
+      } catch (backfillError) {
+        backfillErrors.push(backfillError instanceof Error ? backfillError.message : "attribution backfill failed");
+      }
+    }
     const { error: auditError } = await supabase.from("work_audit_log").insert({
       organization_id: auth.access.organizationId,
       actor_user_id: auth.access.ctx.user.id,
@@ -95,7 +118,7 @@ export async function PUT(req: Request) {
       metadata: { provider, externalWorkspaceId, accountCount: savedAccounts.length },
     });
     if (auditError) throw new Error(`audit provider connection: ${auditError.message}`);
-    return NextResponse.json({ connection, accounts: savedAccounts });
+    return NextResponse.json({ connection, accounts: savedAccounts, attributed, ...(backfillErrors.length ? { backfillErrors } : {}) });
   } catch (error) {
     return jsonError(error);
   }

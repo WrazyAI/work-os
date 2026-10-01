@@ -443,3 +443,43 @@ test("admin queries stay within the Postgres shim's filter capabilities", async 
   assert.match(evidence, /correctionEventIds/);
   assert.doesNotMatch(evidence, /event\.correction_status/);
 });
+
+test("github evidence ingestion stays bounded and attributable", async () => {
+  const webhooks = await source("src/lib/work-os-provider-webhooks.ts");
+  assert.match(webhooks, /repository\.default_branch/);
+  assert.match(webhooks, /action !== "submitted"/);
+  assert.match(webhooks, /action !== "completed"/);
+  const route = await source("src/app/api/work-os/integrations/github/webhook/route.ts");
+  assert.match(route, /externalActorAliases/);
+  assert.match(route, /actor: \{ id: actorId, login: actorLogin \}/);
+  const evidence = await source("src/lib/work-os-evidence.ts");
+  assert.match(evidence, /export async function attributeProviderActor/);
+  assert.match(evidence, /metadata->>actor_id/);
+  assert.match(evidence, /externalActorAliases/);
+  const connections = await source("src/app/api/work-os/integrations/connections/route.ts");
+  assert.match(connections, /attributeProviderActor/);
+});
+
+test("github admin integration routes stay admin-scoped and token-safe", async () => {
+  const actors = await source("src/app/api/work-os/admin/integrations/github/actors/route.ts");
+  assert.match(actors, /requireWorkOsAdmin/);
+  assert.match(actors, /organizationId/);
+  const repos = await source("src/app/api/work-os/admin/integrations/github/repos/route.ts");
+  assert.match(repos, /requireWorkOsAdmin/);
+  assert.match(repos, /githubWebhookSecret/);
+  const integration = await source("src/lib/integrations/github.ts");
+  assert.match(integration, /GITHUB_WEBHOOK_PATH/);
+  assert.match(integration, /WORK_OS_GITHUB_ADMIN_TOKEN/);
+  assert.doesNotMatch(integration, /console\.log/);
+});
+
+test("the evidence page blurs future integrations and surfaces github state", async () => {
+  const evidence = await source("src/modules/work-os/admin/AdminEvidence.tsx");
+  assert.match(evidence, /Coming soon/);
+  assert.match(evidence, /Unmapped GitHub accounts/);
+  assert.match(evidence, /Map &amp; backfill/);
+  assert.match(evidence, /Manage repositories/);
+  const settings = await source("src/modules/work-os/admin/AdminSettings.tsx");
+  assert.match(settings, /GHL — coming soon/);
+  assert.match(settings, /comingSoon/);
+});

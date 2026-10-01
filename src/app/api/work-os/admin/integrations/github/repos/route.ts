@@ -1,0 +1,175 @@
+import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  createGithubRepoHook,
+  deleteGithubRepoHook,
+  githubAdminTokenConfigured,
+  githubWebhookSecret,
+  githubWebhookUrl,
+  GithubIntegrationError,
+  listGithubOrgRepos,
+} from "@/lib/integrations/github";
+import { jsonError, requireWorkOsAdmin } from "@/lib/work-os-api";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+interface GithubConnectionRepo {
+  full_name: string;
+  hook_id: string | null;
+  created_at: string;
+}
+
+function readRepos(config: unknown): GithubConnectionRepo[] {
+  const value = (config ?? {}) as Record<string, unknown>;
+  return Array.isArray(value.repos) ? (value.repos as GithubConnectionRepo[]) : [];
+}
+
+async function loadGithubConnection(organizationId: string) {
+  const { data, error } = await createAdminClient()
+    .from("work_provider_connections")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("provider", "github")
+    .eq("active", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`load GitHub connection: ${error.message}`);
+  return data as Record<string, unknown> | null;
+}
+
+/** Repository management for the GitHub evidence integration. The
+ * organization comes from the active GitHub provider connection; the token
+ * (WORK_OS_GITHUB_ADMIN_TOKEN) is optional and the UI degrades to manual
+ * instructions without it. */
+export async function GET(req: Request) {
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  if ("response" in auth) return auth.response;
+  try {
+    const connection = await loadGithubConnection(auth.access.organizationId);
+    const organization = connection ? String(connection.external_workspace_id) : null;
+    const connectedRepos = readRepos(connection?.config);
+    const webhookUrl = githubWebhookUrl(req.url, req.headers);
+    if (!connection || !organization) {
+      return NextResponse.json({
+        connection: null,
+        organization: null,
+        repos: [],
+        connectedRepos,
+        webhookUrl,
+        configuration: { repositoryManagementReady: githubAdminTokenConfigured(), webhookReceiverReady: Boolean(githubWebhookSecret()) },
+      });
+    }
+    const manageable = githubAdminTokenConfigured() && !/^[0-9]+$/.test(organization);
+    const repos = manageable ? await listGithubOrgRepos(organization) : [];
+    return NextResponse.json({
+      connection: { id: connection.id, workspace: organization },
+      organization,
+      repos,
+      connectedRepos,
+      webhookUrl,
+      configuration: {
+        repositoryManagementReady: manageable,
+        webhookReceiverReady: Boolean(githubWebhookSecret()),
+        reason: !githubAdminTokenConfigured()
+          ? "No GitHub repository-management token is configured for this deployment."
+          : /^[0-9]+$/.test(organization)
+            ? "The GitHub connection uses a numeric workspace id; connect with the organization login to manage repositories."
+            : null,
+      },
+    });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function POST(req: Request) {
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  if ("response" in auth) return auth.response;
+  try {
+    const secret = githubWebhookSecret();
+    if (!secret) return NextResponse.json({ error: "GitHub webhook secret is not configured for this deployment" }, { status: 503 });
+    const connection = await loadGithubConnection(auth.access.organizationId);
+    if (!connection) return NextResponse.json({ error: "Connect the GitHub workspace in Settings before adding repositories." }, { status: 409 });
+    const organization = String(connection.external_workspace_id);
+    const body = await req.json().catch(() => ({}));
+    const repo = typeof body?.repo === "string" ? body.repo.trim() : "";
+    if (!repo || !repo.toLowerCase().startsWith(`${organization.toLowerCase()}/`)) {
+      return NextResponse.json({ error: `Repository must belong to the connected workspace (${organization}).` }, { status: 400 });
+    }
+    const name = repo.slice(organization.length + 1);
+    const result = await createGithubRepoHook({
+      org: organization,
+      repo: name,
+      secret,
+      url: githubWebhookUrl(req.url, req.headers),
+    });
+    const repos = readRepos(connection.config).filter((entry) => entry.full_name.toLowerCase() !== repo.toLowerCase());
+    repos.push({ full_name: repo, hook_id: result.hookId, created_at: new Date().toISOString() });
+    const db = createAdminClient();
+    const { data, error } = await db.from("work_provider_connections")
+      .update({ config: { ...(connection.config as Record<string, unknown> ?? {}), repos }, updated_at: new Date().toISOString() })
+      .eq("id", connection.id)
+      .eq("organization_id", auth.access.organizationId)
+      .select("*")
+      .single();
+    if (error) throw new Error(`save GitHub repository hook: ${error.message}`);
+    await db.from("work_audit_log").insert({
+      organization_id: auth.access.organizationId,
+      actor_user_id: auth.access.ctx.user.id,
+      action: "github.repo_hook_created",
+      target_type: "provider_connection",
+      target_id: connection.id,
+      metadata: { repo, hookId: result.hookId },
+    });
+    return NextResponse.json({ connection: data, connectedRepos: readRepos(data.config) }, { status: 201 });
+  } catch (error) {
+    if (error instanceof GithubIntegrationError) return NextResponse.json({ error: error.message }, { status: error.status });
+    return jsonError(error);
+  }
+}
+
+export async function DELETE(req: Request) {
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  if ("response" in auth) return auth.response;
+  try {
+    const repo = new URL(req.url).searchParams.get("repo")?.trim() ?? "";
+    if (!repo) return NextResponse.json({ error: "repo is required" }, { status: 400 });
+    const connection = await loadGithubConnection(auth.access.organizationId);
+    if (!connection) return NextResponse.json({ error: "GitHub is not connected." }, { status: 409 });
+    const organization = String(connection.external_workspace_id);
+    const repos = readRepos(connection.config);
+    const entry = repos.find((item) => item.full_name.toLowerCase() === repo.toLowerCase());
+    if (!entry) return NextResponse.json({ error: "That repository is not connected through Work OS." }, { status: 404 });
+    if (entry.hook_id) {
+      try {
+        await deleteGithubRepoHook({ org: organization, repo: repo.slice(organization.length + 1), hookId: entry.hook_id });
+      } catch (error) {
+        // A hook already removed on GitHub still gets removed from Work OS.
+        if (!(error instanceof GithubIntegrationError) || error.status !== 404) throw error;
+      }
+    }
+    const nextRepos = repos.filter((item) => item.full_name.toLowerCase() !== repo.toLowerCase());
+    const db = createAdminClient();
+    const { data, error } = await db.from("work_provider_connections")
+      .update({ config: { ...(connection.config as Record<string, unknown> ?? {}), repos: nextRepos }, updated_at: new Date().toISOString() })
+      .eq("id", connection.id)
+      .eq("organization_id", auth.access.organizationId)
+      .select("*")
+      .single();
+    if (error) throw new Error(`remove GitHub repository hook: ${error.message}`);
+    await db.from("work_audit_log").insert({
+      organization_id: auth.access.organizationId,
+      actor_user_id: auth.access.ctx.user.id,
+      action: "github.repo_hook_removed",
+      target_type: "provider_connection",
+      target_id: connection.id,
+      metadata: { repo, hookId: entry.hook_id },
+    });
+    return NextResponse.json({ connection: data, connectedRepos: readRepos(data.config) });
+  } catch (error) {
+    if (error instanceof GithubIntegrationError) return NextResponse.json({ error: error.message }, { status: error.status });
+    return jsonError(error);
+  }
+}

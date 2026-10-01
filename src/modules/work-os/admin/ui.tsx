@@ -227,7 +227,7 @@ export function SelectField({ label, value, onChange, options, placeholder, aria
   label?: string;
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
@@ -243,7 +243,7 @@ export function SelectField({ label, value, onChange, options, placeholder, aria
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
         {placeholder ? <option value="">{placeholder}</option> : null}
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
       </select>
     </label>
   );

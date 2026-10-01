@@ -202,7 +202,7 @@ function reportsFixture(state: PreviewState) {
 function evidenceFixture(state: PreviewState) {
   const empty = state === "empty";
   const rows = empty ? [] : [
-    { id: "e-1", person_id: "p-ada", task_id: null, evidence_date: TODAY, source: "github", title: "Pull request #482 merged", summary: "Harden payout retries — 6 files changed.", url: null, metrics: {}, created_at: `${TODAY}T12:20:00.000Z`, person: { id: "p-ada", display_name: "Ada Okafor" }, task: { id: "t-1", title: "Harden payout retries" }, event: { correction_status: "original", evidence_class: "output_evidence", metadata: {}, screenshot: null } },
+    { id: "e-1", person_id: "p-ada", task_id: null, evidence_date: TODAY, source: "github", title: "Pull request #482 merged", summary: "Harden payout retries — 6 files changed.", url: null, metrics: {}, created_at: `${TODAY}T12:20:00.000Z`, person: { id: "p-ada", display_name: "Ada Okafor" }, task: { id: "t-1", title: "Harden payout retries" }, event: { correction_status: "original", evidence_class: "output_evidence", metadata: { repository: "WrazyAI/work-os", event: "pull_request", actor: { id: "288747123", login: "david-z-9900" } }, screenshot: null } },
     { id: "e-2", person_id: "p-luis", task_id: null, evidence_date: TODAY, source: "worktivity", title: "Activity context 13:00–14:00", summary: "Chrome, Slack, and the reconciliation sheet.", url: null, metrics: { totalMinutes: 58, topApps: [{ name: "Chrome", minutes: 41 }] }, created_at: `${TODAY}T14:00:00.000Z`, person: { id: "p-luis", display_name: "Luis Moreno" }, task: null, event: { correction_status: "disputed", evidence_class: "activity_observation", metadata: { needsReview: true }, screenshot: { id: "s-1", processing_status: "processed", summary: "Reconciliation sheet with the vendor table.", confidence: 0.82, storage_path: "screenshots/x", deleted_at: null } } },
     { id: "e-3", person_id: "p-ada", task_id: null, evidence_date: "2026-09-29", source: "loom", title: "Settlement walkthrough", summary: "Recorded walkthrough of the settlement close.", url: "https://www.loom.com/share/example", metrics: {}, created_at: "2026-09-29T15:00:00.000Z", person: { id: "p-ada", display_name: "Ada Okafor" }, task: null, event: { correction_status: "original", evidence_class: "output_evidence", metadata: {}, screenshot: null } },
   ];
@@ -269,8 +269,55 @@ function organizationFixture(state: PreviewState) {
 
 function connectionsFixture() {
   return {
-    connections: [{ id: "c-1", provider: "github", external_workspace_id: "wrazyai", active: true }],
-    accounts: [{ id: "sa-1", provider: "github", external_account_id: "ada-dev", person: { id: "p-ada", display_name: "Ada Okafor" }, verified: true }],
+    connections: [{ id: "c-1", provider: "github", external_workspace_id: "WrazyAI", active: true, config: { repos: [{ full_name: "WrazyAI/work-os", hook_id: "h-1", created_at: NOW }] } }],
+    accounts: [{ id: "sa-1", provider: "github", external_account_id: "david-z-9900", person: { id: "p-ada", display_name: "Ada Okafor" }, verified: true, metadata: { login: "david-z-9900" } }],
+  };
+}
+
+function githubActorsFixture(state: PreviewState) {
+  const empty = state === "empty";
+  return {
+    actors: empty ? [] : [
+      {
+        key: "login:david-z-9900",
+        id: "288747123",
+        login: "david-z-9900",
+        events: 6,
+        firstSeen: `${TODAY}T08:40:00.000Z`,
+        lastSeen: `${TODAY}T14:12:00.000Z`,
+        titles: ["Pushed 3 commits to main", "Pull request merged: Add evidence band", "Pull request review approved: Ship it"],
+        suggestion: { personId: "p-ada", displayName: "Ada Okafor", githubUsername: "david-z-9900" },
+      },
+      {
+        key: "login:unknown-dev",
+        id: null,
+        login: "unknown-dev",
+        events: 2,
+        firstSeen: `${TODAY}T10:02:00.000Z`,
+        lastSeen: `${TODAY}T11:30:00.000Z`,
+        titles: ["Workflow success: CI", "Issue opened: Flaky payout test"],
+        suggestion: null,
+      },
+    ],
+    people: PEOPLE.map((person) => ({ id: person.id, displayName: person.name, githubUsername: person.id === "p-ada" ? "david-z-9900" : null })),
+    totals: { unattributedEvents: empty ? 0 : 8, lastEventAt: empty ? null : `${TODAY}T14:12:00.000Z` },
+    configuration: { webhookReceiverReady: true, repositoryManagementReady: true },
+  };
+}
+
+function githubReposFixture(state: PreviewState) {
+  const empty = state === "empty";
+  return {
+    connection: empty ? null : { id: "c-1", workspace: "WrazyAI" },
+    organization: empty ? null : "WrazyAI",
+    repos: empty ? [] : [
+      { full_name: "WrazyAI/work-os", private: true, default_branch: "main", pushed_at: NOW },
+      { full_name: "WrazyAI/agent-os", private: true, default_branch: "main", pushed_at: NOW },
+      { full_name: "WrazyAI/launchloom", private: true, default_branch: "main", pushed_at: null },
+    ],
+    connectedRepos: empty ? [] : [{ full_name: "WrazyAI/work-os", hook_id: "h-1", created_at: NOW }],
+    webhookUrl: "https://app.wrazyos.com/api/work-os/integrations/github/webhook",
+    configuration: { repositoryManagementReady: !empty, webhookReceiverReady: true, reason: empty ? "No GitHub repository-management token is configured for this deployment." : null },
   };
 }
 
@@ -307,6 +354,8 @@ function installAdminFetchStub(state: PreviewState) {
     if (url.includes("/api/work-os/admin/overview")) return json(overviewFixture(state));
     if (url.includes("/api/work-os/admin/insights")) return json(insightsFixture(state));
     if (url.includes("/api/work-os/admin/activity-intervals")) return json(intervalsFixture(state));
+    if (url.includes("/api/work-os/admin/integrations/github/actors")) return json(githubActorsFixture(state));
+    if (url.includes("/api/work-os/admin/integrations/github/repos")) return json(githubReposFixture(state));
     if (url.includes("/api/work-os/admin/people/")) return json(personDetailFixture());
     if (url.includes("/api/work-os/reports")) return json(reportsFixture(state));
     if (url.includes("/api/work-os/evidence")) return json(evidenceFixture(state));

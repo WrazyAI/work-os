@@ -28,6 +28,11 @@ export async function POST(req: Request) {
   }
   const observation = githubObservation(event, payload);
   if (!observation || !delivery) return NextResponse.json({ accepted: true, evidence: false });
+  // The actor is the subject of the evidence (commit author, PR author, or the
+  // acting sender). The login alias lets an admin map an account by username
+  // instead of the numeric GitHub id.
+  const actorId = observation.actor?.id ?? (payload.sender?.id != null ? String(payload.sender.id) : null);
+  const actorLogin = observation.actor?.login ?? (typeof payload.sender?.login === "string" ? payload.sender.login : null);
   try {
     const result = await ingestProviderEvidence({
       provider: "github",
@@ -38,14 +43,20 @@ export async function POST(req: Request) {
         payload.repository?.owner?.login,
       ].filter(Boolean).map(String),
       externalEventId: delivery,
-      externalActorId: payload.sender?.id ? String(payload.sender.id) : null,
+      externalActorId: actorId,
+      externalActorAliases: actorLogin ? [actorLogin] : [],
       evidenceClass: "output_evidence",
       title: observation.title,
       summary: observation.summary,
       artifactUrl: observation.artifactUrl ?? null,
       occurredAt: observation.occurredAt || new Date().toISOString(),
       explicitTaskProviderId: linkedNiftyTask(payload),
-      metadata: { event, action: payload.action, repository: payload.repository?.full_name },
+      metadata: {
+        event,
+        action: payload.action,
+        repository: payload.repository?.full_name,
+        actor: { id: actorId, login: actorLogin },
+      },
       raw: payload,
     });
     return NextResponse.json({ accepted: true, attributed: result.attributed });

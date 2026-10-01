@@ -20,6 +20,8 @@ export const adminKeys = {
   reports: (filters: Record<string, string>) => ["work-os", "admin", "reports", filters] as const,
   evidence: (filters: Record<string, string>) => ["work-os", "admin", "evidence", filters] as const,
   person: (personId: string) => ["work-os", "admin", "person", personId] as const,
+  githubActors: () => ["work-os", "admin", "github", "actors"] as const,
+  githubRepos: () => ["work-os", "admin", "github", "repos"] as const,
   people: () => ["work-os", "people"] as const,
   projects: () => ["work-os", "projects"] as const,
   tasks: (filters: Record<string, string>) => ["work-os", "tasks", filters] as const,
@@ -79,6 +81,33 @@ export interface EvidenceRow {
       deleted_at: string | null;
     } | null;
   } | null;
+}
+
+export interface GithubIntegrationActor {
+  key: string;
+  id: string | null;
+  login: string | null;
+  events: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  titles: string[];
+  suggestion: { personId: string; displayName: string; githubUsername: string } | null;
+}
+
+export interface GithubIntegrationActorsResponse {
+  actors: GithubIntegrationActor[];
+  people: Array<{ id: string; displayName: string; githubUsername: string | null }>;
+  totals: { unattributedEvents: number; lastEventAt: string | null };
+  configuration: { webhookReceiverReady: boolean; repositoryManagementReady: boolean };
+}
+
+export interface GithubIntegrationReposResponse {
+  connection: { id: string; workspace: string } | null;
+  organization: string | null;
+  repos: Array<{ full_name: string; private: boolean; default_branch: string; pushed_at: string | null }>;
+  connectedRepos: Array<{ full_name: string; hook_id: string | null; created_at: string }>;
+  webhookUrl: string;
+  configuration: { repositoryManagementReady: boolean; webhookReceiverReady: boolean; reason?: string | null };
 }
 
 export interface PersonDetailResponse {

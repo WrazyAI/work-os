@@ -1108,6 +1108,19 @@ task records, provider evidence, and review state remain visually distinct.
 Empty, loading, and degraded states follow §9's state matrix: skeletons reserve
 geometry, empty states name the next action, and errors stay local.
 
+### 16.4 Evidence integrations
+
+Provider integrations surface as one band at the top of the Evidence page: a
+live provider card (connection state, workspace, mapped accounts, last event,
+and the repository-management action) beside future providers rendered blurred
+with a `Coming soon` pill and no controls. Unmapped provider accounts appear as
+a queue — account, event count, last activity, a person selector seeded from
+the employee's own provider username — with one `Map & backfill` action that
+verifies the account and attributes its earlier events. A repository drawer
+lists the organization's repositories with their webhook state; without a
+repository-management token it shows the manual setup instead. Provider tokens
+and webhook secrets never reach the client.
+
 ## 17. Implementation checklist
 
 Before editing:

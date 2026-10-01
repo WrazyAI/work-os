@@ -8,6 +8,9 @@ export interface ProviderEvidenceInput {
   externalWorkspaceIds: string[];
   externalEventId: string;
   externalActorId?: string | null;
+  /** Alternate account identifiers for the actor (for example a GitHub login
+   * when the primary id is numeric). Matched case-insensitively. */
+  externalActorAliases?: string[];
   evidenceClass: "activity_observation" | "output_evidence" | "work_claim";
   title: string;
   summary?: string;
@@ -38,6 +41,80 @@ export async function resolveProviderConnection(provider: string, externalWorksp
   return data;
 }
 
+/** Resolves the provider account for an actor by numeric id first, then by
+ * case-insensitive alias (a GitHub login), and returns the attribution
+ * decision the shared policy produces for that account. */
+async function resolveActorAttribution(organizationId: string, provider: string, externalActorId: string | null, aliases: string[]) {
+  const exactId = externalActorId && externalActorId.trim() ? externalActorId.trim() : null;
+  const candidates = [exactId, ...aliases.map((alias) => alias.trim()).filter((alias) => alias && alias !== exactId)];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const query = db()
+      .from("work_source_accounts")
+      .select("person_id, verified, metadata")
+      .eq("organization_id", organizationId)
+      .eq("provider", provider);
+    const { data: account, error: accountError } = await (candidate === exactId
+      ? query.eq("external_account_id", candidate).maybeSingle()
+      : query.ilike("external_account_id", candidate).maybeSingle());
+    if (accountError) throw new Error(`resolve ${provider} actor: ${accountError.message}`);
+    if (account) {
+      return resolveProviderAttribution({
+        personId: account.person_id as string | null,
+        verified: account.verified as boolean | null,
+        metadata: account.metadata as Record<string, unknown> | null,
+      });
+    }
+  }
+  return resolveProviderAttribution(null);
+}
+
+async function organizationOwnerId(organizationId: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("work_organizations")
+    .select("legacy_owner_id, created_by")
+    .eq("id", organizationId)
+    .single();
+  if (error) throw new Error(`load evidence organization: ${error.message}`);
+  return ((data.legacy_owner_id || data.created_by) as string | null) ?? null;
+}
+
+function mirrorRow(input: {
+  ownerId: string | null;
+  organizationId: string;
+  personId: string;
+  provider: string;
+  eventId: string;
+  taskId: string | null;
+  title: string;
+  summary: string;
+  artifactUrl: string | null;
+  evidenceClass: string;
+  attributionMethod: string;
+  attributionConfidence: number;
+  occurredAt: string;
+}): Json {
+  return {
+    user_id: input.ownerId,
+    organization_id: input.organizationId,
+    person_id: input.personId,
+    task_id: input.taskId,
+    evidence_event_id: input.eventId,
+    evidence_date: input.occurredAt.slice(0, 10),
+    source: input.provider,
+    title: input.title,
+    summary: input.summary,
+    url: input.artifactUrl,
+    metrics: {
+      evidenceClass: input.evidenceClass,
+      attributionMethod: input.attributionMethod,
+      attributionConfidence: input.attributionConfidence,
+    },
+    raw: { evidenceEventId: input.eventId },
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export async function ingestProviderEvidence(input: ProviderEvidenceInput) {
   const connection = await resolveProviderConnection(input.provider, input.externalWorkspaceIds);
   const organizationId = connection.organization_id as string;
@@ -49,22 +126,12 @@ export async function ingestProviderEvidence(input: ProviderEvidenceInput) {
       throw new Error(`${input.provider} evidence is not enabled for this organization`);
     }
   }
-  let attribution = resolveProviderAttribution(null);
-  if (input.externalActorId) {
-    const { data: account, error: accountError } = await db()
-      .from("work_source_accounts")
-      .select("person_id, verified, metadata")
-      .eq("organization_id", organizationId)
-      .eq("provider", input.provider)
-      .eq("external_account_id", input.externalActorId)
-      .maybeSingle();
-    if (accountError) throw new Error(`resolve ${input.provider} actor: ${accountError.message}`);
-    attribution = resolveProviderAttribution(account ? {
-      personId: account.person_id as string | null,
-      verified: account.verified as boolean | null,
-      metadata: account.metadata as Record<string, unknown> | null,
-    } : null);
-  }
+  const attribution = await resolveActorAttribution(
+    organizationId,
+    input.provider,
+    input.externalActorId ?? null,
+    input.externalActorAliases ?? [],
+  );
   let personId = attribution.personId;
   if (personId) {
     const { data: person, error: personError } = await db()
@@ -114,34 +181,88 @@ export async function ingestProviderEvidence(input: ProviderEvidenceInput) {
   if (eventError) throw new Error(`ingest ${input.provider} evidence: ${eventError.message}`);
 
   if (personId) {
-    const { data: organization, error: organizationError } = await db()
-      .from("work_organizations")
-      .select("legacy_owner_id, created_by")
-      .eq("id", organizationId)
-      .single();
-    if (organizationError) throw new Error(`load evidence organization: ${organizationError.message}`);
-    const ownerId = organization.legacy_owner_id || organization.created_by;
-    const { error: mirrorError } = await db().from("work_evidence").upsert({
-      user_id: ownerId,
-      organization_id: organizationId,
-      person_id: personId,
-      task_id: taskId,
-      evidence_event_id: event.id,
-      evidence_date: input.occurredAt.slice(0, 10),
-      source: input.provider,
+    const ownerId = await organizationOwnerId(organizationId);
+    const { error: mirrorError } = await db().from("work_evidence").upsert(mirrorRow({
+      ownerId,
+      organizationId,
+      personId,
+      provider: input.provider,
+      eventId: String(event.id),
+      taskId,
       title: input.title,
       summary: input.summary ?? "",
-      url: input.artifactUrl ?? null,
-      metrics: {
-        evidenceClass: input.evidenceClass,
-        attributionMethod: attribution.method,
-        attributionConfidence: attribution.confidence,
-      },
-      raw: { evidenceEventId: event.id },
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "evidence_event_id" });
+      artifactUrl: input.artifactUrl ?? null,
+      evidenceClass: input.evidenceClass,
+      attributionMethod: attribution.method,
+      attributionConfidence: attribution.confidence,
+      occurredAt: input.occurredAt,
+    }), { onConflict: "evidence_event_id" });
     if (mirrorError) throw new Error(`mirror ${input.provider} evidence: ${mirrorError.message}`);
   }
 
   return { event, attributed: !!personId, connectionId: connection.id };
+}
+
+/** Attributes previously ingested but unattributed events for one provider
+ * actor to a person, then mirrors them into evidence. Called when an admin
+ * maps and verifies an account so setup-order never loses early evidence. */
+export async function attributeProviderActor(input: {
+  organizationId: string;
+  provider: string;
+  actorId?: string | null;
+  actorLogin?: string | null;
+  personId: string;
+}): Promise<{ attributed: number }> {
+  const queries: Array<Promise<{ data: unknown[] | null; error: { message: string } | null }>> = [];
+  const base = () => db()
+    .from("work_evidence_events")
+    .select("*")
+    .eq("organization_id", input.organizationId)
+    .eq("provider", input.provider)
+    .is("person_id", null)
+    .limit(500);
+  const actorId = input.actorId?.trim();
+  const actorLogin = input.actorLogin?.trim();
+  if (actorId) queries.push(base().eq("metadata->>actor_id", actorId) as never);
+  if (actorLogin) queries.push(base().eq("metadata->>actor_login", actorLogin) as never);
+  if (!queries.length) return { attributed: 0 };
+  const results = await Promise.all(queries);
+  const byId = new Map<string, Json>();
+  for (const result of results) {
+    if (result.error) throw new Error(`load unattributed ${input.provider} evidence: ${result.error.message}`);
+    for (const row of (result.data ?? []) as Json[]) byId.set(String(row.id), row);
+  }
+  const events = [...byId.values()];
+  if (!events.length) return { attributed: 0 };
+
+  const { error: updateError } = await db()
+    .from("work_evidence_events")
+    .update({
+      person_id: input.personId,
+      attribution_method: "verified_provider_account",
+      attribution_confidence: 1,
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", events.map((row) => String(row.id)));
+  if (updateError) throw new Error(`attribute ${input.provider} evidence: ${updateError.message}`);
+
+  const ownerId = await organizationOwnerId(input.organizationId);
+  const rows = events.map((row) => mirrorRow({
+    ownerId,
+    organizationId: input.organizationId,
+    personId: input.personId,
+    provider: input.provider,
+    eventId: String(row.id),
+    taskId: row.task_id ? String(row.task_id) : null,
+    title: String(row.title ?? ""),
+    summary: String(row.summary ?? ""),
+    artifactUrl: row.artifact_url ? String(row.artifact_url) : null,
+    evidenceClass: String(row.evidence_class ?? "output_evidence"),
+    attributionMethod: "verified_provider_account",
+    attributionConfidence: 1,
+    occurredAt: new Date(String(row.occurred_at ?? new Date().toISOString())).toISOString(),
+  }));
+  const { error: mirrorError } = await db().from("work_evidence").upsert(rows, { onConflict: "evidence_event_id" });
+  if (mirrorError) throw new Error(`mirror attributed ${input.provider} evidence: ${mirrorError.message}`);
+  return { attributed: rows.length };
 }

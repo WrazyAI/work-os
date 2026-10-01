@@ -21,14 +21,14 @@ import {
 
 type AnyRow = Record<string, any>;
 
-const FEATURES: Array<[string, string, string]> = [
-  ["employee_companion", "Employee companion", "Check-ins, plans, and the employee workday record."],
-  ["desktop_companion", "Windows companion", "The installed desktop app with Worktivity attendance control."],
-  ["screenshot_summaries", "Screenshot summaries", "Sampled, encrypted activity context with 30-day retention."],
-  ["github_evidence", "GitHub evidence", "Attributed commits and pull requests as output evidence."],
-  ["ghl_evidence", "GHL evidence", "Attributed CRM events as output evidence."],
-  ["voice_input", "Voice input", "Record-to-transcribe updates in the composers."],
-  ["seo_mission_control", "SEO Mission Control", "The SEO operations surface for this workspace."],
+const FEATURES: Array<{ key: string; label: string; detail: string; comingSoon?: boolean }> = [
+  { key: "employee_companion", label: "Employee companion", detail: "Check-ins, plans, and the employee workday record." },
+  { key: "desktop_companion", label: "Windows companion", detail: "The installed desktop app with Worktivity attendance control." },
+  { key: "screenshot_summaries", label: "Screenshot summaries", detail: "Sampled, encrypted activity context with 30-day retention." },
+  { key: "github_evidence", label: "GitHub evidence", detail: "Attributed commits and pull requests as output evidence." },
+  { key: "ghl_evidence", label: "GHL evidence", detail: "Attributed CRM events as output evidence.", comingSoon: true },
+  { key: "voice_input", label: "Voice input", detail: "Record-to-transcribe updates in the composers." },
+  { key: "seo_mission_control", label: "SEO Mission Control", detail: "The SEO operations surface for this workspace." },
 ];
 
 const SEMANTIC_FIELDS = [
@@ -164,20 +164,29 @@ export default function AdminSettingsPage() {
       <AdminCard>
         <SectionHeading icon={Settings} title="Workspace features" detail="Pilot features enabled for the whole organization. Members can override the companion flags individually." />
         <ul className="grid gap-2 md:grid-cols-2">
-          {FEATURES.map(([key, label, detail]) => (
-            <li key={key}>
-              <label className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl border px-3.5 py-2 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                <span>
-                  <span className="block font-semibold text-[var(--text-primary)]">{label}</span>
-                  <span className="block text-[11px] text-[var(--text-tertiary)]">{detail}</span>
+          {FEATURES.map((feature) => (
+            <li key={feature.key}>
+              <label
+                className={`flex min-h-[44px] items-center justify-between gap-3 rounded-xl border px-3.5 py-2 text-[12.5px] ${feature.comingSoon ? "cursor-not-allowed" : ""}`}
+                style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}
+                aria-disabled={feature.comingSoon ? "true" : undefined}
+              >
+                <span className={feature.comingSoon ? "blur-[2px] opacity-60 select-none" : ""} aria-hidden={feature.comingSoon ? "true" : undefined}>
+                  <span className="block font-semibold text-[var(--text-primary)]">{feature.label}</span>
+                  <span className="block text-[11px] text-[var(--text-tertiary)]">{feature.detail}</span>
                 </span>
-                <input
-                  type="checkbox"
-                  checked={organizationFlags[key] === true}
-                  disabled={features.isPending}
-                  onChange={(event) => features.mutate({ [key]: event.target.checked })}
-                />
+                {feature.comingSoon ? (
+                  <StatusPill tone="neutral">Coming soon</StatusPill>
+                ) : (
+                  <input
+                    type="checkbox"
+                    checked={organizationFlags[feature.key] === true}
+                    disabled={features.isPending}
+                    onChange={(event) => features.mutate({ [feature.key]: event.target.checked })}
+                  />
+                )}
               </label>
+              {feature.comingSoon ? <span className="sr-only">{feature.label} is coming soon and cannot be enabled yet.</span> : null}
             </li>
           ))}
         </ul>
@@ -319,7 +328,7 @@ export default function AdminSettingsPage() {
             onChange={setConnectorProvider}
             options={[
               { value: "github", label: "GitHub" },
-              { value: "ghl", label: "GHL" },
+              { value: "ghl", label: "GHL — coming soon", disabled: true },
               { value: "worktivity", label: "Worktivity" },
             ]}
             ariaLabel="Provider"
@@ -333,7 +342,12 @@ export default function AdminSettingsPage() {
             onClick={() => saveConnection.mutate({
               provider: connectorProvider,
               external_workspace_id: connectorWorkspaceId.trim(),
-              accounts: connectorAccountId.trim() ? [{ external_account_id: connectorAccountId.trim(), person_id: connectorPersonId || null, verified: !!connectorPersonId }] : [],
+              accounts: connectorAccountId.trim() ? [{
+                external_account_id: connectorAccountId.trim(),
+                person_id: connectorPersonId || null,
+                verified: !!connectorPersonId,
+                metadata: { login: connectorAccountId.trim() },
+              }] : [],
             }, {
               onSuccess: () => { setConnectorWorkspaceId(""); setConnectorAccountId(""); setConnectorPersonId(""); },
             })}
@@ -341,6 +355,11 @@ export default function AdminSettingsPage() {
             Save connection
           </Button>
         </div>
+        {connectorProvider === "github" ? (
+          <p className="mt-2 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
+            Workspace: the GitHub organization login (for example <span className="font-mono">WrazyAI</span>) or its numeric id. Account: the GitHub username or numeric user id — a verified account attributes that person&apos;s commits, pull requests, reviews, and workflow runs.
+          </p>
+        ) : null}
         <ul className="mt-4 grid gap-2">
           {(connections.data?.connections ?? []).map((connection) => (
             <li key={String(connection.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12px]" style={{ borderColor: "var(--border-subtle)" }}>
