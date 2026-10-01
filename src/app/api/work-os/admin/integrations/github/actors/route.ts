@@ -16,7 +16,7 @@ export async function GET(req: Request) {
   try {
     const db = createAdminClient();
     const organizationId = auth.access.organizationId;
-    const [events, people] = await Promise.all([
+    const [events, people, latest] = await Promise.all([
       db.from("work_evidence_events")
         .select("id,title,person_id,occurred_at,metadata,raw")
         .eq("organization_id", organizationId)
@@ -28,9 +28,17 @@ export async function GET(req: Request) {
         .select("id,display_name,github_username")
         .eq("organization_id", organizationId)
         .eq("active", true),
+      db.from("work_evidence_events")
+        .select("occurred_at")
+        .eq("organization_id", organizationId)
+        .eq("provider", "github")
+        .order("occurred_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
     if (events.error) throw new Error(`load unattributed GitHub evidence: ${events.error.message}`);
     if (people.error) throw new Error(`load evidence people: ${people.error.message}`);
+    if (latest.error) throw new Error(`load latest GitHub evidence: ${latest.error.message}`);
     const rows = (events.data ?? []) as Array<Record<string, unknown>>;
     const actors = groupEvidenceActors(rows).map((actor) => ({
       ...actor,
@@ -45,7 +53,7 @@ export async function GET(req: Request) {
       })),
       totals: {
         unattributedEvents: rows.length,
-        lastEventAt: rows.length ? rows[0]?.occurred_at ?? null : null,
+        lastEventAt: latest.data?.occurred_at ? String(latest.data.occurred_at) : null,
       },
       configuration: {
         webhookReceiverReady: Boolean(githubWebhookSecret()),
