@@ -99,17 +99,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Repository must belong to the connected workspace (${organization}).` }, { status: 400 });
     }
     const name = repo.slice(organization.length + 1);
+    const existingRepos = readRepos(connection.config);
+    if (existingRepos.some((entry) => entry.full_name.toLowerCase() === repo.toLowerCase())) {
+      return NextResponse.json({ error: "That repository already has a Work OS webhook.", connectedRepos: existingRepos }, { status: 409 });
+    }
     const result = await createGithubRepoHook({
       org: organization,
       repo: name,
       secret,
       url: githubWebhookUrl(req.url, req.headers),
     });
-    const repos = readRepos(connection.config).filter((entry) => entry.full_name.toLowerCase() !== repo.toLowerCase());
+    // Re-read immediately before merging so a concurrent save is not
+    // overwritten by this update.
+    const fresh = (await loadGithubConnection(auth.access.organizationId)) ?? connection;
+    const repos = readRepos(fresh.config).filter((entry) => entry.full_name.toLowerCase() !== repo.toLowerCase());
     repos.push({ full_name: repo, hook_id: result.hookId, created_at: new Date().toISOString() });
     const db = createAdminClient();
     const { data, error } = await db.from("work_provider_connections")
-      .update({ config: { ...(connection.config as Record<string, unknown> ?? {}), repos }, updated_at: new Date().toISOString() })
+      .update({ config: { ...(fresh.config as Record<string, unknown> ?? {}), repos }, updated_at: new Date().toISOString() })
       .eq("id", connection.id)
       .eq("organization_id", auth.access.organizationId)
       .select("*")
@@ -150,10 +157,13 @@ export async function DELETE(req: Request) {
         if (!(error instanceof GithubIntegrationError) || error.status !== 404) throw error;
       }
     }
-    const nextRepos = repos.filter((item) => item.full_name.toLowerCase() !== repo.toLowerCase());
+    // Re-read immediately before merging so a concurrent save is not
+    // overwritten by this update.
+    const fresh = (await loadGithubConnection(auth.access.organizationId)) ?? connection;
+    const mergedRepos = readRepos(fresh.config).filter((item) => item.full_name.toLowerCase() !== repo.toLowerCase());
     const db = createAdminClient();
     const { data, error } = await db.from("work_provider_connections")
-      .update({ config: { ...(connection.config as Record<string, unknown> ?? {}), repos: nextRepos }, updated_at: new Date().toISOString() })
+      .update({ config: { ...(fresh.config as Record<string, unknown> ?? {}), repos: mergedRepos }, updated_at: new Date().toISOString() })
       .eq("id", connection.id)
       .eq("organization_id", auth.access.organizationId)
       .select("*")

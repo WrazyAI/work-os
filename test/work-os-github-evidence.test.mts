@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { githubObservation } from "../src/lib/work-os-provider-webhooks";
 import { groupEvidenceActors, suggestPersonForActor } from "../src/lib/work-os-evidence-actors";
+import { escapeLikePattern } from "../src/lib/work-os-evidence";
 
 const REPOSITORY = { full_name: "WrazyAI/work-os", default_branch: "main", owner: { id: 289751878, login: "WrazyAI" } };
 const SENDER = { id: 129889183, login: "zahemen9900" };
@@ -144,4 +145,11 @@ test("a person's github username suggests the mapping", () => {
   assert.deepEqual(suggestPersonForActor({ id: "1", login: "David-Z-9900" }, people), { personId: "p1", displayName: "David Z", githubUsername: "david-z-9900" });
   assert.equal(suggestPersonForActor({ id: "1", login: "nobody" }, people), null);
   assert.equal(suggestPersonForActor({ id: "1", login: null }, people), null);
+});
+
+test("LIKE wildcards in a login are escaped so matching stays literal", () => {
+  assert.equal(escapeLikePattern("david-z-9900"), "david-z-9900");
+  assert.equal(escapeLikePattern("dev_1"), "dev\\_1");
+  assert.equal(escapeLikePattern("100%real"), "100\\%real");
+  assert.equal(escapeLikePattern("back\\slash"), "back\\\\slash");
 });

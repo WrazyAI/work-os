@@ -454,7 +454,10 @@ test("github evidence ingestion stays bounded and attributable", async () => {
   assert.match(route, /actor: \{ id: actorId, login: actorLogin \}/);
   const evidence = await source("src/lib/work-os-evidence.ts");
   assert.match(evidence, /export async function attributeProviderActor/);
-  assert.match(evidence, /metadata->>actor_id/);
+  assert.match(evidence, /metadata->actor->>id/);
+  assert.match(evidence, /metadata->actor->>login/);
+  assert.match(evidence, /metadata->>login/);
+  assert.match(evidence, /escapeLikePattern/);
   assert.match(evidence, /externalActorAliases/);
   const connections = await source("src/app/api/work-os/integrations/connections/route.ts");
   assert.match(connections, /attributeProviderActor/);

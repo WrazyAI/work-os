@@ -41,23 +41,40 @@ export async function resolveProviderConnection(provider: string, externalWorksp
   return data;
 }
 
+/** Escapes LIKE/ILIKE wildcards so a login like `dev_1` is matched literally. */
+export function escapeLikePattern(value: string) {
+  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+}
+
 /** Resolves the provider account for an actor by numeric id first, then by
- * case-insensitive alias (a GitHub login), and returns the attribution
- * decision the shared policy produces for that account. */
+ * case-insensitive alias (a GitHub login) against the account id or the stored
+ * `metadata.login`, and returns the attribution decision the shared policy
+ * produces for that account. */
 async function resolveActorAttribution(organizationId: string, provider: string, externalActorId: string | null, aliases: string[]) {
   const exactId = externalActorId && externalActorId.trim() ? externalActorId.trim() : null;
   const candidates = [exactId, ...aliases.map((alias) => alias.trim()).filter((alias) => alias && alias !== exactId)];
+  const accountQuery = () => db()
+    .from("work_source_accounts")
+    .select("person_id, verified, metadata")
+    .eq("organization_id", organizationId)
+    .eq("provider", provider);
   for (const candidate of candidates) {
     if (!candidate) continue;
-    const query = db()
-      .from("work_source_accounts")
-      .select("person_id, verified, metadata")
-      .eq("organization_id", organizationId)
-      .eq("provider", provider);
-    const { data: account, error: accountError } = await (candidate === exactId
-      ? query.eq("external_account_id", candidate).maybeSingle()
-      : query.ilike("external_account_id", candidate).maybeSingle());
-    if (accountError) throw new Error(`resolve ${provider} actor: ${accountError.message}`);
+    let account: { person_id: unknown; verified: unknown; metadata: unknown } | null = null;
+    if (candidate === exactId) {
+      const { data, error } = await accountQuery().eq("external_account_id", candidate).maybeSingle();
+      if (error) throw new Error(`resolve ${provider} actor: ${error.message}`);
+      account = data;
+    } else {
+      const escaped = escapeLikePattern(candidate);
+      const [byAccountId, byMetadataLogin] = await Promise.all([
+        accountQuery().ilike("external_account_id", escaped).maybeSingle(),
+        accountQuery().ilike("metadata->>login", escaped).maybeSingle(),
+      ]);
+      if (byAccountId.error) throw new Error(`resolve ${provider} actor: ${byAccountId.error.message}`);
+      if (byMetadataLogin.error) throw new Error(`resolve ${provider} actor: ${byMetadataLogin.error.message}`);
+      account = byAccountId.data ?? byMetadataLogin.data ?? null;
+    }
     if (account) {
       return resolveProviderAttribution({
         personId: account.person_id as string | null,
@@ -223,8 +240,8 @@ export async function attributeProviderActor(input: {
     .limit(500);
   const actorId = input.actorId?.trim();
   const actorLogin = input.actorLogin?.trim();
-  if (actorId) queries.push(base().eq("metadata->>actor_id", actorId) as never);
-  if (actorLogin) queries.push(base().eq("metadata->>actor_login", actorLogin) as never);
+  if (actorId) queries.push(base().eq("metadata->actor->>id", actorId) as never);
+  if (actorLogin) queries.push(base().ilike("metadata->actor->>login", escapeLikePattern(actorLogin)) as never);
   if (!queries.length) return { attributed: 0 };
   const results = await Promise.all(queries);
   const byId = new Map<string, Json>();
