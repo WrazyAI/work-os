@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.91
+
+- Approved recaps now link their suggested next steps into Review, where you can approve or skip each proposal before anything changes.
+
 ## 0.3.90
 
 - The companion window now drags from the whole header, not just the tab strip.
