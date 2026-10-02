@@ -202,6 +202,15 @@ export function hasOpenShiftSession(facts: CompanionDayFacts): boolean {
   return !facts.eodSubmitted && Boolean(facts.clockedInAt) && !facts.clockedOutAt;
 }
 
+/** The companion's panel header drags the window from its chrome — the shift
+ * status and empty header space included. Controls inside it keep their own
+ * clicks and never start a drag. */
+export function isHeaderDragStart(button: number, target: EventTarget | null): boolean {
+  if (button !== 0) return false;
+  if (!target || typeof (target as Element).closest !== "function") return false;
+  return !(target as Element).closest("button, a, input, textarea, select, [role='tablist']");
+}
+
 /** Which send action the avatar composer owns right now. A recap edit wins over
  * the agenda prompt because the employee explicitly chose to correct the recap;
  * otherwise the plan prompt keeps the composer, as before. */

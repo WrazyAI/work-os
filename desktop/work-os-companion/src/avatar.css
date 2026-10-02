@@ -779,7 +779,7 @@ html[data-mascot-size="small"] .avatar-compact { --avatar-bubble-anchor: 128px; 
 }
 .avatar-day-time {
   right: 50%;
-  bottom: 5px;
+  top: 225px;
   min-width: 76px;
   padding: 4px 8px;
   text-align: center;

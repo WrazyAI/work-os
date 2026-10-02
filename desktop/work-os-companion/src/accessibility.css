@@ -41,6 +41,12 @@ html[data-mascot-size="small"] .avatar-compact .avatar-prompt-bubble ~ .avatar-h
   top: 97px;
 }
 
+/* The elapsed label sits just under the mascot's feet, so it follows the art:
+   Small scales the figure toward its center and the label rises with it. */
+html[data-mascot-size="small"] .avatar-compact .avatar-day-time {
+  top: 199px;
+}
+
 /* Dev fixture (?preview-settings) samples. Real surfaces get their sizes from
    the app stylesheets; these only exist so the rendered result is visible. */
 .settings-preview-grid {

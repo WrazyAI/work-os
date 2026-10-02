@@ -39,7 +39,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -521,7 +521,8 @@ export default function AvatarApp(): React.ReactElement {
      and the address is checked before acting, so a broadcast cannot start a
      capture here that was meant for the in-app dock. */
   useEffect(() => {
-    const label = getCurrentWindow().label;
+    // Browser dev has no Tauri internals; the voice bridge is inert there.
+    const label = isTauri() ? getCurrentWindow().label : "web";
     const unlisteners: Array<() => void> = [];
     void listen<{ target?: string }>("work-os://voice/start", (event) => {
       if (!isVoiceEventFor(event.payload, label)) return;
@@ -1435,7 +1436,11 @@ export default function AvatarApp(): React.ReactElement {
         )}
         {expanded && (
           <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-           <header className="avatar-head"><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong>Connect Work OS</strong><small>to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button></div></div></header>
+                  <header className="avatar-head" onMouseDown={(event) => {
+                    if (!isHeaderDragStart(event.button, event.target)) return;
+                    if (!isTauri()) return;
+                    void getCurrentWindow().startDragging().catch(() => undefined);
+                  }}><div className="avatar-head-row"><div className="avatar-drag-zone" data-tauri-drag-region><div className="avatar-title"><span className="avatar-head-mark avatar-mascot-mark" aria-hidden="true"><MascotMark live pose={MASCOT.idlePose} /></span><div className="avatar-head-copy"><strong>Connect Work OS</strong><small>to begin</small></div></div></div><div className="avatar-head-actions"><button className="avatar-icon" onClick={() => void toggleExpanded(false)} aria-label="Collapse companion" title="Collapse companion"><X size={15} aria-hidden="true" /></button></div></div></header>
               <div className="conversation-scroll-region"><div className="avatar-chat"><div className="chat-entry system"><p>Open the Work OS main window and connect this device — this companion will come alive on its own once you're in.</p></div></div></div>
           </ConversationSurface>
         )}
@@ -1475,7 +1480,11 @@ export default function AvatarApp(): React.ReactElement {
       )}
       {expanded && (
         <ConversationSurface surface="floating" ariaLabel={`${MASCOT.name} companion`} className="avatar-panel">
-          <header className="avatar-head">
+          <header className="avatar-head" onMouseDown={(event) => {
+            if (!isHeaderDragStart(event.button, event.target)) return;
+            if (!isTauri()) return;
+            void getCurrentWindow().startDragging().catch(() => undefined);
+          }}>
             <div className="avatar-head-row">
               <div className="avatar-drag-zone" data-tauri-drag-region>
                 <div className="avatar-title">

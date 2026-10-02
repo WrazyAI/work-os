@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -384,5 +384,18 @@ describe("check-in banner timing", () => {
     expect(waiting.body).toContain("next check-in");
     expect(waiting.compact).toContain("Next check-in");
     expect(avatarPrompt(scheduled, NOW + 31 * 60_000).kind).toBe("check_in");
+  });
+});
+
+describe("header window drag", () => {
+  const target = (closestResult: unknown) => ({ closest: () => closestResult }) as unknown as EventTarget;
+  it("starts on the header chrome and never on its controls", () => {
+    // The shift status and empty header chrome drag the window…
+    expect(isHeaderDragStart(0, target(null))).toBe(true);
+    // …while buttons, tabs, and fields keep their own clicks.
+    expect(isHeaderDragStart(0, target({}))).toBe(false);
+    // Only the primary button drags, and a missing target never does.
+    expect(isHeaderDragStart(2, target(null))).toBe(false);
+    expect(isHeaderDragStart(0, null)).toBe(false);
   });
 });

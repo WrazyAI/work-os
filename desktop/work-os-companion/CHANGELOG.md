@@ -24,6 +24,25 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.90
+
+- The companion window now drags from the whole header, not just the tab strip.
+- The elapsed-time label sits just under the mascot and follows the mascot size setting.
+
+## 0.3.89
+
+- Late-start reasons, missed clock-out corrections, and task changes saved offline now say they are waiting to sync.
+- Confirming your plan from the floating companion no longer overwrites a plan you changed in the app.
+- Signing out clears the companion's reminder and snooze state so the next person on this device starts fresh.
+
+## 0.3.88
+
+- An EOD submitted while offline now says it will sync instead of claiming it is already with your manager.
+- A day whose report is already submitted no longer invites another draft from the EOD list.
+
+## 0.3.87
+
+- Submitting your plan or EOD now closes with a checked confirmation animation instead of a receipt line.
 ## 0.3.86
 
 - Activity recaps now show what GitHub recorded for the interval — commits, pull requests, CI runs, and deployments — tagged by what you did vs. your work.

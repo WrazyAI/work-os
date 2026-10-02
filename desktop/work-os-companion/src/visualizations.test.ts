@@ -179,6 +179,9 @@ describe("operational visualizations", () => {
 
   it("keeps the floating companion inside its 400 by 620 window", () => {
     expect(avatarApp).toContain("const AVATAR_EXPANDED = { width: 400, height: 620 };");
+    // The whole panel header drags the window; controls keep their clicks.
+    expect(avatarApp).toContain("isHeaderDragStart");
+    expect(avatarApp).toContain("startDragging");
     expect(chatPreview).toContain('style={{ width: "min(400px, 100%)", height: 620 }}');
   });
 
