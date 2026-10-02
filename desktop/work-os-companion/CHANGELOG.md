@@ -30,7 +30,7 @@ they change what the employee sees or does.
 
 ## 0.3.86
 
-- Your activity recap now shows what GitHub recorded for the interval — commits pushed, pull requests, reviews, CI runs, and deployments — tagged by what you did and what your work triggered.
+- Your activity recap now shows the interval's GitHub activity — commits, pull requests, reviews, CI runs, and deployments — tagged by what you did.
 
 ## 0.3.85
 
