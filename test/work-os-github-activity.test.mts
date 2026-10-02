@@ -55,6 +55,9 @@ test("performed pushes are kept only for the employee's own accounts", () => {
   // Numeric id matching works when the login is absent from the row.
   const byId = classifyGithubEvent(row({ event: "push", actor_id: "129889183", push_size: 1 }), identities, new Set());
   assert.equal(byId?.description, "Pushed 1 commit to WrazyAI/work-os");
+  // Payloads without a size field still classify truthfully (no "0 commits").
+  const noSize = classifyGithubEvent(row({ event: "push", actor_login: "david-z-9900", push_size: null }), identities, new Set());
+  assert.equal(noSize?.description, "Pushed to WrazyAI/work-os");
 });
 
 test("pull request events split performed work from consequences on the employee's PRs", () => {
@@ -118,6 +121,12 @@ test("the tally counts kinds, relations, and pushed commits", () => {
   assert.equal(counts.performed.push, 2);
   assert.equal(counts.commitsPushed, 6);
   assert.equal(counts.triggered.workflow_run, 0);
+  const noCommits = classifyGithubEvent(row({ event: "push", actor_login: "david-z-9900", push_size: null }), identities, new Set());
+  const noCommitTally = tallyGithubActivity([noCommits!]);
+  assert.equal(noCommitTally.commitsPushed, 0);
+  const block = formatGithubActivityBlock({ items: [noCommits!], counts: noCommitTally, scanned: 1, capped: false, identities: { logins: [], ids: [] } });
+  assert.match(block, /Performed by this employee: 1 push\./);
+  assert.doesNotMatch(block, /0 commits/);
 });
 
 test("highlights put performed authored work ahead of consequences", () => {

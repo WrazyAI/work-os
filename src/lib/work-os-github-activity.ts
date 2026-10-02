@@ -177,12 +177,12 @@ export function classifyGithubEvent(
   const base = { at, repository, actor };
   if (event === "push") {
     if (!performed) return null;
-    const commits = Number(row.push_size) || 0;
+    const commits = Math.max(0, Math.floor(Number(row.push_size) || 0));
     return {
       ...base,
       kind: "push",
       relation: "performed",
-      description: `Pushed ${countLabel(commits, "commit")} to ${repository ?? "the repository"}`,
+      description: commits > 0 ? `Pushed ${countLabel(commits, "commit")} to ${repository ?? "the repository"}` : `Pushed to ${repository ?? "the repository"}`,
       url: clean(row.artifact_url, 400) || null,
     };
   }
@@ -332,7 +332,9 @@ export function pickGithubHighlights(items: GithubActivityItem[], limit = GITHUB
 function tallyLine(counts: GithubActivityCounts): string | null {
   const parts: string[] = [];
   const performed = counts.performed;
-  if (performed.push) parts.push(`${countLabel(performed.push, "push", "pushes")} (${countLabel(counts.commitsPushed, "commit")})`);
+  if (performed.push) parts.push(counts.commitsPushed > 0
+    ? `${countLabel(performed.push, "push", "pushes")} (${countLabel(counts.commitsPushed, "commit")})`
+    : countLabel(performed.push, "push", "pushes"));
   if (performed.pull_request) parts.push(countLabel(performed.pull_request, "pull request"));
   if (performed.review) parts.push(countLabel(performed.review, "review"));
   if (performed.issue) parts.push(countLabel(performed.issue, "issue"));
@@ -412,7 +414,7 @@ export async function listGithubActivity(input: {
             raw->'review'->>'state' as review_state,
             raw->'review'->>'html_url' as review_url,
             raw->>'after' as push_after,
-            raw->'size' as push_size,
+            coalesce((raw->>'size')::int, jsonb_array_length(coalesce(raw->'commits', '[]'::jsonb))) as push_size,
             coalesce((select jsonb_agg(commit->>'id') from jsonb_array_elements(coalesce(raw->'commits', '[]'::jsonb)) commit), '[]'::jsonb) as push_commit_ids
        from work_evidence_events
       where organization_id = $1
