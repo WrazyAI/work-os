@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.92
+
+- Confirming a recap that opened the companion on its own returns the chat to the mascot moments later.
+- The celebration after you confirm a recap lasts twice as long.
+
 ## 0.3.91
 
 - Approved recaps now link their suggested next steps into Review, where you can approve or skip each proposal before anything changes.

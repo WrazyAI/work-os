@@ -211,6 +211,15 @@ export function isHeaderDragStart(button: number, target: EventTarget | null): b
   return !(target as Element).closest("button, a, input, textarea, select, [role='tablist']");
 }
 
+/** A recap alert (toast click or the collapsed recap bubble) can open the chat
+ * for its confirmation. The panel returns to the orb only when the alert — not
+ * the employee — opened it, and only after the celebration beat. */
+export const RECAP_AUTO_COLLAPSE_MS = 500;
+
+export function recapAutoCollapseMs(action: "confirm" | "amend", alertOpened: boolean): number | null {
+  return action === "confirm" && alertOpened ? RECAP_AUTO_COLLAPSE_MS : null;
+}
+
 /** Which send action the avatar composer owns right now. A recap edit wins over
  * the agenda prompt because the employee explicitly chose to correct the recap;
  * otherwise the plan prompt keeps the composer, as before. */

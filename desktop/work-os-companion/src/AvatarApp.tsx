@@ -39,7 +39,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, recapAutoCollapseMs, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -257,14 +257,26 @@ export default function AvatarApp(): React.ReactElement {
   // The agenda auto-expand key last acted on, so a deliberate collapse is never
   // fought by a re-render. Reset when the agenda stops being due.
   const autoExpandedAgenda = useRef<string | null>(null);
+  // A recap alert (a toast click or the collapsed recap bubble) can open the
+  // chat for its confirmation. When the alert — not the employee — opened it,
+  // the panel returns to the orb after a short celebration beat.
+  const recapAlertOpened = useRef(false);
+  const recapAutoCollapse = useRef<number | null>(null);
+  const expandedRef = useRef(expanded);
+  const activityPromptRef = useRef(activityPrompt);
 
   useEffect(() => { dayRef.current = facts; }, [facts]);
   useEffect(() => { chatRef.current = chat; }, [chat]);
+  useEffect(() => { expandedRef.current = expanded; }, [expanded]);
+  useEffect(() => { activityPromptRef.current = activityPrompt; }, [activityPrompt]);
 
   // ── Toast activation (Windows): expand the composer when clicked ──
   useEffect(() => {
     const unlisten = listen("avatar://expand", () => {
       setMissed(false);
+      // Clicking the alert is not a deliberate open: remember it so a recap
+      // confirmation can hand the panel back to the orb.
+      if (!expandedRef.current && activityPromptRef.current) recapAlertOpened.current = true;
       void toggleExpanded(true);
     });
     return () => { unlisten.then((fn) => fn()).catch(() => { /* noop */ }); };
@@ -736,8 +748,19 @@ export default function AvatarApp(): React.ReactElement {
     }
   }, [now, facts.promptRequired, missed]);
 
+  // Cancel a scheduled return-to-orb: a deliberate interaction keeps the chat
+  // open and forgets the alert-open state.
+  const clearRecapAutoCollapse = useCallback((): void => {
+    recapAlertOpened.current = false;
+    if (recapAutoCollapse.current !== null) {
+      window.clearTimeout(recapAutoCollapse.current);
+      recapAutoCollapse.current = null;
+    }
+  }, []);
+
   // ── Expanded/collapsed window sizing ──
   const toggleExpanded = useCallback(async (open: boolean): Promise<void> => {
+    if (!open) clearRecapAutoCollapse();
     setExpanded(open);
     const size = open ? AVATAR_EXPANDED : AVATAR_COLLAPSED;
     // Resize first, on its own: a monitor/position failure must never leave the
@@ -758,7 +781,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       await win.setPosition(new LogicalPosition(x, y));
     } catch { /* sizing is cosmetic */ }
-  }, [win]);
+  }, [clearRecapAutoCollapse, win]);
 
   const openEodReview = useCallback(async (): Promise<void> => {
     void emit("work-os://avatar-open-eod");
@@ -794,6 +817,18 @@ export default function AvatarApp(): React.ReactElement {
         : entry));
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
       void loadDay();
+      // A confirmation from an alert-opened chat hands the celebration back to
+      // the orb; the employee never has to close the panel themselves.
+      const collapseMs = recapAutoCollapseMs(action, recapAlertOpened.current);
+      if (collapseMs !== null) {
+        recapAlertOpened.current = false;
+        recapAutoCollapse.current = window.setTimeout(() => {
+          recapAutoCollapse.current = null;
+          void toggleExpanded(false);
+        }, collapseMs);
+      } else {
+        clearRecapAutoCollapse();
+      }
     } catch (value) {
       setChat((current) => [...current, {
         id: `activity-decision-error-${Date.now()}`, role: "system",
@@ -802,7 +837,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setDecidingIntervalId(null);
     }
-  }, [facts.shiftDate, loadDay]);
+  }, [clearRecapAutoCollapse, facts.shiftDate, loadDay, toggleExpanded]);
 
   // Edit on the recap bubble hands editing to the composer: the employee writes
   // the correction there, and sending it records the recap note.
@@ -814,6 +849,9 @@ export default function AvatarApp(): React.ReactElement {
   // View more on the recap bubble: open the chat on the latest item. The recap
   // turn stays in the thread until it is decided.
   const openRecapInChat = useCallback((): void => {
+    // The alert bubble, not the employee, opened the chat: a confirmation
+    // returns it to the orb.
+    recapAlertOpened.current = true;
     setAvatarTab("chat");
     setScrollToLatest((signal) => signal + 1);
     void toggleExpanded(true);
@@ -1330,7 +1368,9 @@ export default function AvatarApp(): React.ReactElement {
     if (readyReceiptRef.current === lastEntry.id) return;
     readyReceiptRef.current = lastEntry.id;
     setReadyPulse(true);
-    const timer = window.setTimeout(() => setReadyPulse(false), 1_450);
+    // The confirmed-outcome celebration runs 2x the original beat, then the
+    // pose settles back to work or the queued attention state.
+    const timer = window.setTimeout(() => setReadyPulse(false), 2_900);
     return () => window.clearTimeout(timer);
   }, [lastEntry?.id, lastEntry?.receipt]);
   // A recorded receipt is the one transient celebration: show it while the
@@ -1452,7 +1492,7 @@ export default function AvatarApp(): React.ReactElement {
     <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
       {!expanded && (
         <div className="avatar-compact">
-        {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
+        {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
         {bubble === "recap" && pendingRecap && (
           <div className="avatar-prompt-bubble avatar-recap-bubble">
             <strong>{pendingRecap.headline ?? "Your activity recap is ready"}</strong>
@@ -1460,11 +1500,11 @@ export default function AvatarApp(): React.ReactElement {
             <button type="button" className="avatar-bubble-more" onClick={openRecapInChat}>View more</button>
           </div>
         )}
-        {bubble === "prompt" && <button className="avatar-prompt-bubble" onClick={() => void toggleExpanded(true)}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
+        {bubble === "prompt" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"
-          onClick={() => void toggleExpanded(true)}
+          onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}
           title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >

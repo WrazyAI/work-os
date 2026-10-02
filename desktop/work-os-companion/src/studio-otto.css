@@ -158,16 +158,16 @@
 /* Confirmed outcomes get a compact whole-body hop. It plays once, never as an
  * ambient celebration loop. */
 .studio-otto[data-pose="celebrate"] .studio-rig {
-  animation: studio-celebrate-rig 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-rig 520ms steps(5, end) 4 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-head {
-  animation: studio-celebrate-head 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-head 520ms steps(5, end) 4 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-left {
-  animation: studio-celebrate-left 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-left 520ms steps(5, end) 4 both;
 }
 .studio-otto[data-pose="celebrate"] .studio-arm-right {
-  animation: studio-celebrate-right 520ms steps(5, end) 2 both;
+  animation: studio-celebrate-right 520ms steps(5, end) 4 both;
 }
 
 /* Failure/blocker: a visible shake and settle, again bounded to one gesture. */

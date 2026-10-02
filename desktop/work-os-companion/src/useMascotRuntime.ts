@@ -8,7 +8,9 @@ import { publishMascotRuntime } from "./mascotRuntimeStore";
 
 const emit = (event: string, payload?: unknown) => emitEvent(event, payload).catch(() => undefined);
 const LEASE_MS = 20_000;
-const READY_MS = 1_800;
+// The confirmed-outcome celebration beat: doubled from 1.8s so the gesture
+// finishes before the pose settles back to work.
+const READY_MS = 3_600;
 export function mascotFactsFromDay(day: DayData | null, connected: boolean): MascotPlatformFacts {
   return { connected, sessionState: day?.session?.state, attendanceState: day?.attendance?.state ?? null, lateReasonRequired: lateReasonRequired(day?.session), promptRequired: day?.prompt?.required,
     promptKind: day?.prompt?.kind, niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null };

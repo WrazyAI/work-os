@@ -193,4 +193,17 @@ describe("floating companion integration", () => {
     expect(main).toContain("proposeSelectedTaskCompletions");
     expect(main).toContain("TaskSelectionCard");
   });
+
+  it("celebrates a confirmed outcome twice as long and returns alert-opened recaps to the orb", () => {
+    const studioStyles = readFileSync(resolve(root, "src/studio-otto.css"), "utf8");
+    expect(studioStyles).toContain("studio-celebrate-rig 520ms steps(5, end) 4 both");
+    expect(studioStyles).toContain("studio-celebrate-head 520ms steps(5, end) 4 both");
+    expect(studioStyles).toContain("studio-celebrate-left 520ms steps(5, end) 4 both");
+    expect(studioStyles).toContain("studio-celebrate-right 520ms steps(5, end) 4 both");
+    const runtime = readFileSync(resolve(root, "src/useMascotRuntime.ts"), "utf8");
+    expect(runtime).toContain("const READY_MS = 3_600;");
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    expect(avatar).toContain("setReadyPulse(false), 2_900");
+    expect(avatar).toContain("recapAutoCollapseMs");
+  });
 });
