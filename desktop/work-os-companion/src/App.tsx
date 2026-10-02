@@ -253,6 +253,8 @@ export default function App() {
   const eodPrepareAbortRef = useRef<AbortController | null>(null);
   const [eodSubmitted, setEodSubmitted] = useState(false);
   const [eodLanding, setEodLanding] = useState(false);
+  /** A queued submission has not reached the server yet. */
+  const [eodQueued, setEodQueued] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
   const [eodListOpen, setEodListOpen] = useState(false);
@@ -760,7 +762,7 @@ export default function App() {
     eodPrepareCancelRef.current = true;
     eodPrepareAbandonRef.current = true;
     eodPrepareAbortRef.current?.abort();
-    setEodDraft(null); setEodSubmitted(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null);
+    setEodDraft(null); setEodSubmitted(false); setEodQueued(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null);
   }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
@@ -1274,7 +1276,10 @@ export default function App() {
       return;
     }
     void act("report.submit", async () => {
-      await sendOrQueue(`/api/work-os/reports/${encodeURIComponent(reportId)}/submit`, "PATCH", { markdown, submission_idempotency_key: idempotencyKey });
+      const result = await sendOrQueue(`/api/work-os/reports/${encodeURIComponent(reportId)}/submit`, "PATCH", { markdown, submission_idempotency_key: idempotencyKey }) as { queued?: boolean } | null;
+      // A queued write has not reached the server: the confirmation says so
+      // instead of claiming the report is already with the manager.
+      setEodQueued(Boolean(result?.queued));
       finish();
     });
   }
@@ -3216,7 +3221,7 @@ export default function App() {
                       <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={() => { setEodSubmitted(false); setEodDate(null); setEodLanding(true); }}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
                       <CheckedMoment />
                       <strong>EOD submitted</strong>
-                      <p>{eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p>
+                      <p>{eodQueued ? "Queued on this device — your report will be sent when the connection returns." : eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p>
                     </section>
                     : eodLanding || !reviewDay?.report ? <section className="panel eod-start">
                         <header className="eod-start-head">
@@ -3240,7 +3245,9 @@ export default function App() {
                         </section> : null}
                         <div className="eod-start-actions">
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
-                          <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button>
+                          {reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
+                            ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
+                            : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button>}
                         </div>
                       </section>
                       : null}

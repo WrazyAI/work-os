@@ -64,3 +64,4 @@
 .eod-submitted .checked-moment { width: 176px; height: 176px; }
 .eod-submitted .eod-submitted-head { display: flex; align-items: center; gap: 10px; justify-self: stretch; margin-bottom: 4px; }
 .eod-submitted { display: grid; justify-items: center; }
+.eod-start-status { color: var(--muted); font-size: 11.5px; }

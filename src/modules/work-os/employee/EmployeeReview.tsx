@@ -66,6 +66,9 @@ export default function EmployeeReview() {
   /** The EOD page keeps the moment after a submission: the confirmation stays
    * until the employee returns to the EOD list. */
   const [eodConfirmation, setEodConfirmation] = useState(false);
+  // The confirmation names the day that was submitted; changing the day must
+  // never leave it looking like that report was just filed.
+  useEffect(() => { setEodConfirmation(false); }, [selectedDate]);
 
   useEffect(() => {
     if (day.data?.shiftDate) setSelectedDate((current) => current || day.data!.shiftDate);

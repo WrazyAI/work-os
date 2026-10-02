@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.88
+
+- An EOD submitted while offline now says it will sync instead of claiming it is already with your manager.
+- A day whose report is already submitted no longer invites another draft from the EOD list.
+
 ## 0.3.87
 
 - Submitting your plan or EOD now closes with a checked confirmation animation instead of a receipt line.

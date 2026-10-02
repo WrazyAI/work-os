@@ -59,7 +59,6 @@ export default function EmployeeToday() {
   const [goalLoomNote, setGoalLoomNote] = useState<string | null>(null);
   const [planBuilderOpen, setPlanBuilderOpen] = useState(false);
   const [planSeed, setPlanSeed] = useState<string | undefined>(undefined);
-  const [planReceipt, setPlanReceipt] = useState<string | null>(null);
 
   const outstanding = useOutstandingEods();
   const onboarding = useQuery<AnyRow>({
@@ -258,15 +257,6 @@ export default function EmployeeToday() {
           <span className="flex flex-wrap items-center justify-between gap-3">
             <span>Finish your Work OS setup — profile, working hours, and required consent.</span>
             <Link href="/work-os/settings" className="font-semibold underline underline-offset-2" style={{ color: "var(--text-primary)" }}>Open Settings</Link>
-          </span>
-        </Notice>
-      ) : null}
-
-      {planReceipt ? (
-        <Notice tone="info" className="mb-5">
-          <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>{planReceipt}</span>
-            <button type="button" className="font-semibold" onClick={() => setPlanReceipt(null)}>Dismiss</button>
           </span>
         </Notice>
       ) : null}
@@ -595,10 +585,10 @@ export default function EmployeeToday() {
           day={day.data}
           seed={planSeed}
           onClose={() => setPlanBuilderOpen(false)}
-          onSaved={(message) => {
-            // The builder keeps the moment: it shows the checked confirmation
-            // and closes itself when the employee dismisses it.
-            setPlanReceipt(message);
+          onSaved={() => {
+            // The builder owns the moment: it shows the checked confirmation
+            // and closes itself when the employee dismisses it, so no second
+            // receipt banner competes with the dialog.
             void refresh();
           }}
         />
