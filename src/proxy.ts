@@ -101,6 +101,6 @@ export const config = {
   // uploads at proxyClientMaxBodySize (10MB). That route does its own fast
   // getSession() auth check instead. (Add other large-upload routes here too.)
   matcher: [
-    "/((?!_next/static|_next/image|api/downloads|api/files/[^/]+/upload|favicon.ico|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|api/downloads|api/files/[^/]+/upload|favicon.ico|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|lottie|wasm)$).*)",
   ],
 };

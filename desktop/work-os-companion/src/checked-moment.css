@@ -1,0 +1,66 @@
+/* The checked confirmation animation and its modal. */
+.checked-moment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 148px;
+  height: 148px;
+}
+
+.checked-moment.is-pending { opacity: 0; }
+.checked-moment .checked-moment-canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.checked-confirmation {
+  display: grid;
+  justify-items: center;
+  width: min(calc(100% - 32px), 380px);
+  gap: 2px;
+  padding: 26px 26px 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface-raised);
+  box-shadow: 0 24px 70px rgba(18, 27, 17, 0.22), 0 2px 8px rgba(18, 27, 17, 0.08);
+  text-align: center;
+  animation: modalRise 0.22s ease both;
+}
+
+.checked-confirmation h2 {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.checked-confirmation p {
+  max-width: 290px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.checked-confirmation .checked-confirmation-actions { margin-top: 18px; }
+.checked-confirmation .checked-confirmation-actions button {
+  min-height: 38px;
+  padding: 0 26px;
+  border: 1px solid #a6e852;
+  border-radius: 10px;
+  background: var(--signal);
+  color: #141611;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(143, 203, 64, 0.22);
+}
+
+.checked-confirmation .checked-confirmation-actions button:hover { background: #b4f76c; }
+.checked-confirmation .checked-confirmation-actions button:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+
+/* The EOD page keeps the animation inline, so it stays until the employee
+   returns to the list. */
+.eod-submitted .checked-moment { width: 176px; height: 176px; }
+.eod-submitted .eod-submitted-head { display: flex; align-items: center; gap: 10px; justify-self: stretch; margin-bottom: 4px; }
+.eod-submitted { display: grid; justify-items: center; }

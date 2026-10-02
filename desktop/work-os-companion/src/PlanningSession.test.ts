@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { PlanningDocumentText, PlanningSession, planningPrimaryAction } from "./PlanningSession";
+import { PlanningConfirmation, PlanningDocumentText, PlanningSession, planningPrimaryAction } from "./PlanningSession";
 
 const props = {
   open: true,
@@ -66,6 +66,24 @@ describe("PlanningSession footer gating", () => {
 });
 
 describe("PlanningSession two-view flow", () => {
+  it("confirms a submitted plan once, with OK and no close control", () => {
+    const markup = renderToStaticMarkup(createElement(PlanningConfirmation, {
+      title: "Plan confirmed",
+      body: "Your daily commitments are on the record.",
+      onClose: () => undefined,
+    }));
+    // The plan workspace is gone: the confirmation replaces it.
+    expect(markup).not.toContain("planning-session");
+    expect(markup).toContain("planning-confirmation-title");
+    expect(markup).toContain("Plan confirmed");
+    expect(markup).toContain("Your daily commitments are on the record.");
+    expect(markup).toContain(">OK<");
+    // The checked animation owns the moment, not a spinner or a second action.
+    expect(markup).toContain("checked-moment");
+    expect(markup).not.toContain("Continue working");
+    expect(markup).not.toContain('aria-label="Close planning session"');
+  });
+
   it("offers one primary action per view", () => {
     expect(planningPrimaryAction("compose", false, false)).toBe("build");
     expect(planningPrimaryAction("compose", true, false)).toBe("review");

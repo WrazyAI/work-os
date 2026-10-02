@@ -167,7 +167,10 @@ describe("operational visualizations", () => {
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
     expect(app).toContain("mascot-hero");
     expect(app).toContain("mascot-connect");
-    expect(app).toContain("mascot-celebrate");
+    // The EOD confirmation keeps the page and plays the checked animation.
+    expect(app).toContain("CheckedMoment");
+    expect(app).toContain("All EODs");
+    expect(app).not.toContain("mascot-celebrate");
     expect(app).not.toContain("CompanionPet");
     expect(workspaceStyles).toContain(".kpi-strip");
     expect(workspaceStyles).toContain(".kpi-card em.kpi-attention");
@@ -289,7 +292,8 @@ describe("operational visualizations", () => {
     expect(planningSession).toContain('className="planning-document-line"');
     expect(workspaceStyles).toContain(".planning-document-line::before");
     expect(workspaceStyles).toContain(".planning-review:focus");
-    expect(planningSession).toContain("Your daily commitments are confirmed.");
+    expect(planningSession).toContain("Your daily commitments are on the record.");
+    expect(planningSession).toContain("planning-confirmation-title");
     expect(planningSession).toContain("queued locally");
     expect(planningSession).toContain("Your plan was not saved.");
     expect(planningSession).toContain("planning-clarification-");

@@ -284,8 +284,12 @@ function installFetchStub() {
   if (typeof window === "undefined" || (window as unknown as { __workOsPreviewStub?: boolean }).__workOsPreviewStub) return;
   (window as unknown as { __workOsPreviewStub?: boolean }).__workOsPreviewStub = true;
   const respond = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
-  window.fetch = (input: RequestInfo | URL) => {
+  const passthroughFetch = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    // Static art the confirmation player fetches (animation + wasm) must reach
+    // the server, not the fixture stub.
+    if (/\.(?:lottie|wasm)(?:\?|$)/.test(url)) return passthroughFetch(input, init);
     if (url.includes("/api/work-os/me/onboarding")) return respond(onboardingFixture);
     if (url.includes("/api/work-os/me/eod/outstanding")) return respond(outstandingFixture);
     if (url.includes("/api/work-os/me/eod/screenshots/prepare")) return respond({ date: TODAY, analyzed: 2, failed: 0, pending: 1, total: 6, sampled: 2, unavailable: false });

@@ -4,6 +4,7 @@ import type { DailyPlan } from "./types";
 import { AnnotationPopover, SelectionAnnotator, rectFromElement, type SelectionRect } from "./SelectionAnnotator";
 import { FadeArc, Wave } from "./LoadingUi";
 import { formatWorkOsDate } from "./dateFormat";
+import { CheckedMoment } from "./CheckedMoment";
 import { useModalScrollLock } from "./modalScrollLock";
 import {
   annotationsForTarget,
@@ -190,6 +191,27 @@ export function PlanningDocumentText({
 /** Layout-timed before paint on the client; a plain effect in SSR tests. */
 const useDocumentLayoutEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
+/** The confirmation that replaces the plan workspace the instant the write
+ * lands: the checked animation plays once and holds its last frame. It closes
+ * on OK, Escape, or a press outside the card — never on its own. */
+export function PlanningConfirmation({ title, body, onClose }: { title: string; body: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return <div className="task-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="checked-confirmation" role="dialog" aria-modal="true" aria-labelledby="planning-confirmation-title">
+      <CheckedMoment />
+      <h2 id="planning-confirmation-title">{title}</h2>
+      <p>{body}</p>
+      <div className="checked-confirmation-actions">
+        <button type="button" autoFocus onClick={onClose}>OK</button>
+      </div>
+    </section>
+  </div>;
+}
+
 export function PlanningSession({
   open,
   plan,
@@ -287,6 +309,16 @@ export function PlanningSession({
   }, [open, plan?.id]);
 
   if (!open) return null;
+
+  // A submitted plan is done being edited: the plan workspace closes and hands
+  // the moment to the checked confirmation.
+  if (state === "confirmed" || state === "saved") {
+    return <PlanningConfirmation
+      title={state === "confirmed" ? "Plan confirmed" : "Plan saved"}
+      body={state === "confirmed" ? "Your daily commitments are on the record." : "Your plan is saved. Confirm it when your shift starts."}
+      onClose={onClose}
+    />;
+  }
   const hasDraft = interpretation !== null;
   const working = busy || state === "saving" || state === "interpreting" || state === "refining";
   const loomReady = Boolean(loomUrl.trim() && loomReadback?.usableForDay !== false && loomReadback);
@@ -574,7 +606,7 @@ export function PlanningSession({
           <label htmlFor="planning-intent">What should today's plan focus on?</label>
           <span>{loomEnabled ? "Optional when you use a Loom" : "Start with a clear outcome"}</span>
         </div>
-        <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining" || state === "confirmed" || state === "saved"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder={loomEnabled ? "Add a direction, or build directly from your Loom below." : "Fix the failing integration test, then get the migration ready for review."} />
+        <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder={loomEnabled ? "Add a direction, or build directly from your Loom below." : "Fix the failing integration test, then get the migration ready for review."} />
         {loomEnabled && <div className="planning-loom">
           <button type="button" className={`planning-loom-toggle${loomOpen ? " active" : ""}`} aria-expanded={loomOpen} onClick={toggleLoom} disabled={working}>
             <span className="planning-loom-toggle-label"><Video size={15} /><span><strong>{loomOpen ? "Loom source attached" : "Plan from a Loom recording"}</strong><small>{loomOpen ? "Recording details and transcript" : "Use the recording instead of writing a brief"}</small></span></span>
@@ -609,8 +641,8 @@ export function PlanningSession({
           <div className="planning-review-head">
             <small>Review commitments</small>
             <div className="planning-review-actions">
-              <button type="button" className={`planning-icon-button${feedbackMode ? " is-active" : ""}`} aria-pressed={feedbackMode} aria-label={feedbackMode ? "Finish feedback and edits" : "Give feedback or edit the draft"} title={feedbackMode ? "Finish feedback and edits" : "Give feedback or edit the draft"} onClick={toggleFeedback} disabled={working || state === "confirmed"}>{feedbackMode ? <Check size={15} /> : <Pencil size={15} />}</button>
-              <button type="button" className={`planning-icon-button${deleteArmed ? " is-armed" : ""}`} aria-label={deleteArmed ? "Confirm deletion of this draft" : "Delete this draft and start over"} title={deleteArmed ? "Click again to delete this draft" : "Delete this draft and start over"} onClick={() => { if (deleteArmed) discardDraft(); else setDeleteArmed(true); }} disabled={working || state === "confirmed"}>{deleteArmed ? <Check size={15} /> : <Trash2 size={15} />}</button>
+              <button type="button" className={`planning-icon-button${feedbackMode ? " is-active" : ""}`} aria-pressed={feedbackMode} aria-label={feedbackMode ? "Finish feedback and edits" : "Give feedback or edit the draft"} title={feedbackMode ? "Finish feedback and edits" : "Give feedback or edit the draft"} onClick={toggleFeedback} disabled={working}>{feedbackMode ? <Check size={15} /> : <Pencil size={15} />}</button>
+              <button type="button" className={`planning-icon-button${deleteArmed ? " is-armed" : ""}`} aria-label={deleteArmed ? "Confirm deletion of this draft" : "Delete this draft and start over"} title={deleteArmed ? "Click again to delete this draft" : "Delete this draft and start over"} onClick={() => { if (deleteArmed) discardDraft(); else setDeleteArmed(true); }} disabled={working}>{deleteArmed ? <Check size={15} /> : <Trash2 size={15} />}</button>
             </div>
           </div>
           {deleteArmed && <p className="planning-notice planning-delete-notice" role="status"><Trash2 size={15} /><span>Delete this draft and start over? Click the trash button again to confirm.</span></p>}
@@ -650,18 +682,16 @@ export function PlanningSession({
               </div>
             </article>;
           })}
-          {interpretation.clarifications.length > 0 && <div className="planning-clarifications"><strong>{interpretation.clarifications.length === 1 ? "One thing to clarify" : `${interpretation.clarifications.length} things to clarify`}</strong>{interpretation.clarifications.map((question) => <label key={question.id} htmlFor={`planning-clarification-${question.id}`}><span>{question.question}</span><textarea id={`planning-clarification-${question.id}`} maxLength={1000} value={clarificationAnswers[question.id] ?? ""} disabled={busy || state === "saving" || state === "refining" || state === "confirmed"} onChange={(event) => setClarificationAnswers((current) => ({ ...current, [question.id]: event.target.value }))} /></label>)}</div>}
+          {interpretation.clarifications.length > 0 && <div className="planning-clarifications"><strong>{interpretation.clarifications.length === 1 ? "One thing to clarify" : `${interpretation.clarifications.length} things to clarify`}</strong>{interpretation.clarifications.map((question) => <label key={question.id} htmlFor={`planning-clarification-${question.id}`}><span>{question.question}</span><textarea id={`planning-clarification-${question.id}`} maxLength={1000} value={clarificationAnswers[question.id] ?? ""} disabled={busy || state === "saving" || state === "refining"} onChange={(event) => setClarificationAnswers((current) => ({ ...current, [question.id]: event.target.value }))} /></label>)}</div>}
         </section>}
         </>}
         {state === "ai_unavailable" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error} {hasDraft ? "Your current draft is kept." : active ? "Try building again — confirming needs an AI-built plan while on shift." : "You can still save your own planning note."}</span></div>}
         {state === "offline_fallback" && <div className="planning-notice"><AlertTriangle size={16} /><span>{interpretation ? "Your structured plan is queued locally. It is not confirmed until sync succeeds." : "Your raw planning note is queued locally."}</span></div>}
         {state === "conflict" && <div className="planning-notice"><AlertTriangle size={16} /><span>Your workspace has a newer confirmed plan, and it is showing now. Close this and reopen the focus editor to change it.</span></div>}
         {state === "save_error" && <div className="planning-notice"><AlertTriangle size={16} /><span>{error || "Your plan was not saved. Check the connection or correct the plan and try again."}</span></div>}
-        {state === "saved" && <div className="planning-confirmed"><CheckCircle2 size={17} /><span>Your plan is saved. Confirm it when your shift starts.</span></div>}
-        {state === "confirmed" && <div className="planning-confirmed"><CheckCircle2 size={17} /><span>Your daily commitments are confirmed.</span></div>}
       </div>
       <footer>
-        {state !== "confirmed" && state !== "saved" && <>
+        <>
           {confirmBlockedReason && planningInput && !(hasDraft && view === "compose") && <small className="planning-footer-hint">{confirmBlockedReason}</small>}
           <button className="secondary" onClick={onClose} disabled={busy || state === "saving"}>Close</button>
           {annotations.length > 0 && <span className="planning-annotation-pill">{annotations.length} Annotation{annotations.length === 1 ? "" : "s"}<button type="button" aria-label="Clear all annotations" title="Clear all annotations" onClick={() => { setAnnotations([]); setPendingSelection(null); setPendingComment(""); }}><X size={12} /></button></span>}
@@ -672,8 +702,7 @@ export function PlanningSession({
             if (primary === "review") return <button className="primary" onClick={() => setView("review")} disabled={working}>Review draft</button>;
             return <button className="primary" onClick={() => void save()} disabled={confirmDisabled}>{active ? "Confirm my day" : "Save plan"}</button>;
           })()}
-        </>}
-        {(state === "confirmed" || state === "saved") && <button className="primary" onClick={onClose}>Continue working</button>}
+        </>
       </footer>
     </section>
   </div>;

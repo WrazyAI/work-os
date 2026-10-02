@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeft,
   Check,
   ClipboardList,
   FileCheck2,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import EmployeeEodEvidence from "./EmployeeEodEvidence";
+import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
 import {
@@ -23,6 +25,7 @@ import {
   Panel,
   PanelHeader,
   PrimaryButton,
+  QuietButton,
   SecondaryButton,
   Skeleton,
   StatusPill,
@@ -60,6 +63,9 @@ export default function EmployeeReview() {
   const outstanding = useOutstandingEods();
   const [selectedDate, setSelectedDate] = useState("");
   const [reportMarkdown, setReportMarkdown] = useState("");
+  /** The EOD page keeps the moment after a submission: the confirmation stays
+   * until the employee returns to the EOD list. */
+  const [eodConfirmation, setEodConfirmation] = useState(false);
 
   useEffect(() => {
     if (day.data?.shiftDate) setSelectedDate((current) => current || day.data!.shiftDate);
@@ -100,7 +106,7 @@ export default function EmployeeReview() {
         body: JSON.stringify({ markdown: reportMarkdown }),
       });
     },
-    onSuccess: () => void refresh(),
+    onSuccess: () => { setEodConfirmation(true); void refresh(); },
   });
 
   const review = useMutation({
@@ -140,6 +146,22 @@ export default function EmployeeReview() {
   const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";
 
   const eodPanel = (() => {
+    if (eodConfirmation) {
+      return (
+        <div className="grid gap-2" role="status">
+          <div className="flex items-center">
+            <QuietButton onClick={() => setEodConfirmation(false)} className="!px-2" aria-label="Back to all EODs"><ArrowLeft size={14} /> All EODs</QuietButton>
+          </div>
+          <div className="grid justify-items-center gap-1 pb-2 pt-1 text-center">
+            <CheckedMoment className="!h-[176px] !w-[176px]" />
+            <strong className="text-[14px] font-semibold text-[var(--text-primary)]">EOD submitted</strong>
+            <p className="max-w-[340px] text-[12px] leading-5 text-[var(--text-tertiary)]">
+              {historical ? `Your report for ${calendarDateLabel(selectedDate)} is with your manager.` : "Your report is with your manager. You are done for today."}
+            </p>
+          </div>
+        </div>
+      );
+    }
     if (historical && selectedDay.isLoading && !selectedDay.data) {
       return (
         <div className="grid gap-3 px-5 py-5" aria-busy="true">

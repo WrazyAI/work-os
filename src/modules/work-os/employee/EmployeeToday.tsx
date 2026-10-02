@@ -596,7 +596,8 @@ export default function EmployeeToday() {
           seed={planSeed}
           onClose={() => setPlanBuilderOpen(false)}
           onSaved={(message) => {
-            setPlanBuilderOpen(false);
+            // The builder keeps the moment: it shows the checked confirmation
+            // and closes itself when the employee dismisses it.
             setPlanReceipt(message);
             void refresh();
           }}

@@ -54,6 +54,7 @@ import wordmark from "./assets/work-os-mark.png";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
+import { CheckedMoment } from "./CheckedMoment";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { ActivityIntervalStream } from "./ActivityIntervalList";
@@ -251,6 +252,7 @@ export default function App() {
   const eodPrepareAbandonRef = useRef(false);
   const eodPrepareAbortRef = useRef<AbortController | null>(null);
   const [eodSubmitted, setEodSubmitted] = useState(false);
+  const [eodLanding, setEodLanding] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
   const [eodListOpen, setEodListOpen] = useState(false);
@@ -3062,7 +3064,7 @@ export default function App() {
         open={eodListOpen}
         onToggle={() => { const next = !eodListOpen; setEodListOpen(next); if (next) void outstandingQuery.refetch(); }}
         onClose={() => setEodListOpen(false)}
-        onSelect={(day: OutstandingEodDay) => { setEodListOpen(false); setEodDate(day.date); setView("review"); }}
+        onSelect={(day: OutstandingEodDay) => { setEodListOpen(false); setEodLanding(false); setEodDate(day.date); setView("review"); }}
         onRetry={() => void outstandingQuery.refetch()}
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
@@ -3185,7 +3187,7 @@ export default function App() {
                 onDraftAnyway={draftEodAnyway}
               />
                 : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <EodLoadingState title="Drafting your EOD…" detail={`Checking ${eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.`} />
-                : reviewDay?.report && !eodSubmitted && (!eodRedrafting || eodDraft) ? <EodComposer
+                : reviewDay?.report && !eodSubmitted && !eodLanding && (!eodRedrafting || eodDraft) ? <EodComposer
                     reportId={String(reviewDay.report.id ?? "unknown")}
                     initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
                     source={eodDraft?.source ?? "deterministic"}
@@ -3210,8 +3212,13 @@ export default function App() {
                     onRefine={(markdown, feedback, annotations) => refineEod(reviewDay, markdown, feedback, annotations)}
                     onSubmit={(markdown, idempotencyKey) => submitEod(reviewDay, markdown, idempotencyKey)}
                   />
-                  : eodSubmitted ? <section className="panel eod-submitted" role="status"><MascotPet agent="ready" workday="active" className="mascot-celebrate" artClassName="mascot-celebrate-art" /><strong>EOD submitted</strong><p>{eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p></section>
-                    : !reviewDay?.report ? <section className="panel eod-start">
+                  : eodSubmitted ? <section className="panel eod-submitted" role="status">
+                      <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={() => { setEodSubmitted(false); setEodDate(null); setEodLanding(true); }}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
+                      <CheckedMoment />
+                      <strong>EOD submitted</strong>
+                      <p>{eodDate ? `Your report for ${formatWorkOsDate(eodDate)} is with your manager.` : "Your report is with your manager. You are done for today."}</p>
+                    </section>
+                    : eodLanding || !reviewDay?.report ? <section className="panel eod-start">
                         <header className="eod-start-head">
                           <FileCheck2 size={20} />
                           <div>
@@ -3223,7 +3230,7 @@ export default function App() {
                           <header><strong>Earlier days</strong><small>{outstandingDays.length} still need an EOD</small></header>
                           <ul>{outstandingDays.slice(0, 5).map((day) => {
                             const status = OUTSTANDING_STATUS_META[day.status];
-                            return <li key={day.date}><button type="button" onClick={() => setEodDate(day.date)}>
+                            return <li key={day.date}><button type="button" onClick={() => { setEodLanding(false); setEodDate(day.date); }}>
                               <span className="eod-start-earlier-main"><strong>{formatWorkOsDate(day.date)}</strong><small>{outstandingRowMeta(day) || "Recorded workday"}</small></span>
                               <span className={`eod-pill ${status.className}`}>{status.label}</span>
                               <ChevronRight size={14} />
@@ -3233,7 +3240,7 @@ export default function App() {
                         </section> : null}
                         <div className="eod-start-actions">
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
-                          <button className="primary" disabled={busy || eodRedrafting} onClick={() => void createEodDraft(reviewDay)}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button>
+                          <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Create EOD draft"}</button>
                         </div>
                       </section>
                       : null}

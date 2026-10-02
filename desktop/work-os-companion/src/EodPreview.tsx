@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { EodComposer, EodLoadingState } from "./taskSurfaces";
-import { Otto } from "./Otto";
+import { CheckedMoment } from "./CheckedMoment";
 import type { EodScreenshotGallery } from "./types";
 
 const draft = "## Summary\nCompleted the release checks and documented the results for review.\n\n## Completed\n- Verify the EOD refinement flow\n\n## Carried forward\n- Nothing pending";
@@ -133,6 +134,11 @@ export default function EodPreview() {
     />
   </main></section></div>;
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
-    {submitted ? <section className="panel eod-submitted" role="status"><Otto pose="celebrate" className="otto-celebrate" /><strong>EOD submitted</strong><p>Your report is with your manager. You are done for today.</p></section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck={draftBottleneckPreview ? null : "A pending approval delayed the final handoff."} allTasksCompleted={allTasksCompleted} redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
+    {submitted ? <section className="panel eod-submitted" role="status">
+      <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={() => setSubmitted(false)}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
+      <CheckedMoment />
+      <strong>EOD submitted</strong>
+      <p>Your report is with your manager. You are done for today.</p>
+    </section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck={draftBottleneckPreview ? null : "A pending approval delayed the final handoff."} allTasksCompleted={allTasksCompleted} redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
   </main></section></div>;
 }

@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.87
+
+- Submitting your plan or EOD now closes with a checked confirmation animation instead of a receipt line.
+
 ## 0.3.86
 
 - Your activity recap now shows what GitHub recorded for the interval — commits pushed, pull requests, reviews, CI runs, and deployments — tagged by what you did and what your work triggered.

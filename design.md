@@ -772,6 +772,27 @@ reference implementation.
   until…") are omitted; the input, the readback card, and the review document
   state the contract through their own structure.
 
+### 8.10 Submission confirmations: plan and EOD
+
+A submitted plan or EOD ends with one honest confirmation, never a receipt line
+that scrolls away:
+
+- The start-of-day plan replaces its workspace the instant the write lands: the
+  plan modal closes and a compact confirmation dialog takes the moment, holding
+  the checked animation on its completed frame, one line of outcome copy, and a
+  single `OK`. There is no close glyph, no second action, and no auto-dismiss;
+  `OK`, Escape, or a press outside the card dismisses it.
+- The EOD keeps the page. The submitted state embeds the same animation where
+  the report was, with the outcome copy and `All EODs` at the top-left returning
+  to the EOD list; it stays until the employee leaves it.
+- The animation plays exactly once and parks on the completed check. The source
+  art fades its check out over the final frames, so the completed state is the
+  held frame — never the faded tail. Under reduced motion the completed frame
+  renders statically, and the art stays decorative (`aria-hidden`); the heading
+  and copy carry the meaning.
+- Player and renderer stay local: the bundled wasm and the `.lottie` asset ship
+  with each app, and static assets are never auth-gated into a redirect.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:

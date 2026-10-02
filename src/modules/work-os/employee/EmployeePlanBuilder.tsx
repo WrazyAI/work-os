@@ -10,6 +10,7 @@ import {
   type PlanningInterpretation,
 } from "./planning";
 import { fetchJson, requestId, type AnyRow, type EmployeeDayResponse } from "./model";
+import { CheckedMoment } from "./CheckedMoment";
 import { Field, Notice, PrimaryButton, QuietButton, SecondaryButton, StatusPill, inputClass, inputStyle } from "./ui";
 
 type DraftEdits = Record<string, { title: string; objective: string; criteria: string }>;
@@ -45,6 +46,7 @@ export default function EmployeePlanBuilder({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [refineInput, setRefineInput] = useState("");
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ title: string; body: string } | null>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
 
@@ -135,7 +137,11 @@ export default function EmployeePlanBuilder({
       });
     },
     onSuccess: (_saved, confirm) => {
-      onSaved(confirm && active
+      const confirmed = confirm && active;
+      setConfirmation(confirmed
+        ? { title: "Plan confirmed", body: "Your daily commitments are on the record." }
+        : { title: "Plan saved", body: "Your plan is saved. Confirm it once you're clocked in to create the tasks." });
+      onSaved(confirmed
         ? "Plan confirmed — today's tasks are in your workspace."
         : "Plan saved as a draft. Confirm it once you're clocked in to create the tasks.");
     },
@@ -145,6 +151,29 @@ export default function EmployeePlanBuilder({
   const error = interpret.error || refine.error || save.error;
 
   if (!open) return null;
+
+  // The submission lands, the plan workspace closes, and the checked
+  // confirmation takes the moment: OK, Escape, or a press outside dismiss it —
+  // never on its own.
+  if (confirmation) {
+    return (
+      <div className="fixed inset-0 z-50 grid place-items-center p-4" role="presentation">
+        <button type="button" aria-label="Close confirmation" onClick={onClose} className="absolute inset-0 cursor-default bg-black/40" tabIndex={-1} />
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="plan-confirmation-title"
+          className="relative grid justify-items-center gap-2 rounded-2xl border px-7 py-6 text-center shadow-2xl"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)", width: "min(100%, 380px)" }}
+        >
+          <CheckedMoment />
+          <h2 id="plan-confirmation-title" className="text-[16px] font-semibold text-[var(--text-primary)]">{confirmation.title}</h2>
+          <p className="max-w-[290px] text-[12px] leading-5 text-[var(--text-tertiary)]">{confirmation.body}</p>
+          <PrimaryButton autoFocus onClick={onClose} className="mt-2 !px-6">OK</PrimaryButton>
+        </section>
+      </div>
+    );
+  }
 
   const hasLoom = loomOpen && !!loomUrl.trim();
   const canBuild = !!(input.trim() || hasLoom) && !busy;
