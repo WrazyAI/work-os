@@ -15,7 +15,7 @@ import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, Fingerprint, Gauge, Inbox, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, MoveRight, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
-import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
+import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
@@ -1278,9 +1278,12 @@ export default function App() {
     void act("report.submit", async () => {
       const result = await sendOrQueue(`/api/work-os/reports/${encodeURIComponent(reportId)}/submit`, "PATCH", { markdown, submission_idempotency_key: idempotencyKey }) as { queued?: boolean } | null;
       // A queued write has not reached the server: the confirmation says so
-      // instead of claiming the report is already with the manager.
-      setEodQueued(Boolean(result?.queued));
+      // instead of claiming the report is already with the manager, and the
+      // action's queued handling keeps the notification honest too.
+      const queued = Boolean(result?.queued);
+      setEodQueued(queued);
       finish();
+      if (queued) return { queued: true } as const;
     });
   }
 
@@ -1361,6 +1364,15 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /** One honest voice for "saved here, not delivered": queue counts plus a
+   * waiting-to-sync notice. Never used for delivered work. */
+  async function announceQueued() {
+    const queue = await secureState.queue();
+    setQueueCount(queue.length);
+    setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length);
+    notifications.info("Saved on this device — it will sync automatically when the connection is back.", "Waiting to sync");
+  }
+
   async function act(label: string, action: () => Promise<unknown>) {
     setBusy(true); setError("");
     diagnostics.info("ui.action.requested", label, { activeView: view });
@@ -1372,6 +1384,12 @@ export default function App() {
     }
     if (debugRef.current.enabled && !debugScenario.liveWrites) throw new Error("Scenario mode is active. Reset the debugger scenario before submitting real changes.");
       const result = await action();
+      if (isQueuedResult(result)) {
+        // Saved on this device, not delivered. Never claim success for it.
+        diagnostics.info("ui.action.queued", label, { activeView: view });
+        await announceQueued();
+        return;
+      }
       if (isWorktivityControlResult(result)) {
         if (result.status === "confirmation_required") {
           if (result.requirement === "late" || result.requirement === "exception") {
@@ -2567,7 +2585,11 @@ export default function App() {
 
   /** Records the late-start reason on the active session (design.md §8). */
   async function saveLateReason(reason: string) {
-    await sendOrQueue("/api/work-os/me/workday", "PATCH", { action: "late_reason", reason });
+    const result = await sendOrQueue("/api/work-os/me/workday", "PATCH", { action: "late_reason", reason });
+    if (isQueuedResult(result)) {
+      await announceQueued();
+      return;
+    }
     await refresh({ dayOnly: true, details: true });
     notifications.success("Your late-start reason was recorded.", "Reason saved");
   }

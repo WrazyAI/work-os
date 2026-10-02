@@ -186,7 +186,7 @@ export default function AvatarApp(): React.ReactElement {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, attendanceState: null, clockedInAt: null,
     clockedOutAt: null, pausedSeconds: 0, lastSubstantiveUpdateAt: null, employeeUpdates: 0, completedTasks: 0, openTasks: 0, eodSubmitted: false, personId: null, planIntent: null,
-    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planItems: [], lateReasonRequired: false,
+    timezone: null, displayName: null, niftySyncing: false, niftySyncError: null, taskOptions: [], planStatus: null, planRevision: null, planItems: [], lateReasonRequired: false,
   });
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
@@ -436,6 +436,7 @@ export default function AvatarApp(): React.ReactElement {
           }))
           .slice(0, 200) : [],
         planStatus: typeof day?.plan?.status === "string" ? day.plan.status : null,
+        planRevision: typeof day?.plan?.revision === "number" ? day.plan.revision : null,
         planItems: Array.isArray(day?.plan?.items) ? day.plan.items
           .filter((item: unknown): item is Record<string, unknown> => !!item && typeof item === "object" && typeof (item as Record<string, unknown>).id === "string")
           .map((item: Record<string, unknown>) => ({
@@ -1107,6 +1108,7 @@ export default function AvatarApp(): React.ReactElement {
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({
             shift_date: facts.shiftDate,
+            ...(typeof facts.planRevision === "number" ? { revision: facts.planRevision } : {}),
             confirm: true,
             build_id: interpretation.buildId,
             freeform_intent: goal,

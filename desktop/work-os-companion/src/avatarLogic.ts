@@ -22,6 +22,9 @@ export interface CompanionDayFacts {
   pausedAt?: string | null;
   timezone?: string | null;
   planIntent?: string | null;
+  /** The plan revision the companion last saw, so confirming from the floating
+   * window can detect a plan that changed elsewhere instead of overwriting it. */
+  planRevision?: number | null;
   lastSubstantiveUpdateAt?: string | null;
   employeeUpdates?: number;
   completedTasks?: number;

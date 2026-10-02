@@ -137,6 +137,14 @@ export const secureState = {
     const scopes = (await get<string[]>(CHAT_SCOPE_KEYS)) ?? [];
     for (const key of scopes) await remove(key);
     await remove(CHAT_SCOPE_KEYS);
+    // Device-local notification state is not account-scoped by nature, so a
+    // sign-out must clear it or the next person on this device inherits a
+    // suppressed nudge or a snooze they never set.
+    if (typeof localStorage !== "undefined") {
+      for (const key of ["work-os.avatar.position.v1", "work-os.avatar.notified.v1", "work-os.avatar.snooze.v1"]) {
+        localStorage.removeItem(key);
+      }
+    }
   },
   queue: async () => isTauri() ? (await get<OfflineAction[]>("offline-queue")) ?? [] : [],
   saveQueue: (queue: OfflineAction[]) => isTauri() ? set("offline-queue", queue) : Promise.resolve(),

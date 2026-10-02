@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.89
+
+- Late-start reasons, missed clock-out corrections, and task changes saved offline now say they are waiting to sync.
+- Confirming your plan from the floating companion no longer overwrites a plan you changed in the app.
+- Signing out clears the companion's reminder and snooze state so the next person on this device starts fresh.
+
 ## 0.3.88
 
 - An EOD submitted while offline now says it will sync instead of claiming it is already with your manager.

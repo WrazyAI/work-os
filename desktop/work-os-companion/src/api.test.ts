@@ -23,7 +23,7 @@ vi.mock("./diagnostics", () => ({
   diagnostics: { withSpan: vi.fn(async (_category: string, action: () => Promise<unknown>) => action()), warn: vi.fn() },
 }));
 
-import { apiRequest, flushQueue, readyInterpretations, sendOrQueue, updateTaskCompletion } from "./api";
+import { apiRequest, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, updateTaskCompletion } from "./api";
 
 describe("offline action replay", () => {
   beforeEach(() => {
@@ -202,5 +202,16 @@ describe("offline action replay", () => {
 
     expect(await flushQueue()).toEqual({ sent: 0, remaining: 1, needsAttention: 1 });
     expect(mockState.queue[0]).toMatchObject({ status: "needs_attention", failureKind: "retry_exhausted", attempts: 6 });
+  });
+});
+
+describe("queued result contract", () => {
+  it("only treats an explicit queued flag as saved-not-delivered", () => {
+    expect(isQueuedResult({ queued: true })).toBe(true);
+    expect(isQueuedResult({ queued: false })).toBe(false);
+    expect(isQueuedResult({ ok: true })).toBe(false);
+    expect(isQueuedResult(undefined)).toBe(false);
+    expect(isQueuedResult(null)).toBe(false);
+    expect(isQueuedResult("queued")).toBe(false);
   });
 });

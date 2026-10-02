@@ -162,6 +162,12 @@ type TaskCompletionResponse = {
   reconciled?: boolean;
 };
 
+/** True when a queue-aware mutation was saved on this device for retry instead
+ * of reaching the server. Callers must never report it as delivered. */
+export function isQueuedResult(value: unknown): value is { queued: true } {
+  return !!value && typeof value === "object" && (value as { queued?: unknown }).queued === true;
+}
+
 /**
  * Applies an idempotent task completion state and reconciles an ambiguous
  * response against Nifty-backed task detail before surfacing a failure.
