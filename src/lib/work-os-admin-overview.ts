@@ -82,6 +82,17 @@ export interface AdminOverview {
   people: AdminOverviewPerson[];
   recentActivity: AdminOverviewActivity[];
   attention: AdminOverviewAttention[];
+  /** Fourteen-day daily counts for the overview trend chart. */
+  series: Array<{ date: string; completed: number; updates: number; evidence: number }>;
+  /** When each source last delivered data, so "is it syncing?" is answerable
+   * without reading the database. */
+  freshness: {
+    niftySyncedAt: string | null;
+    worktivityObservedAt: string | null;
+    githubLastEventAt: string | null;
+    lastPlanAt: string | null;
+    lastReportSubmittedAt: string | null;
+  };
   readiness: Awaited<ReturnType<typeof loadWorkOsReadinessReport>> | null;
 }
 
@@ -164,6 +175,20 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     completedEventsResult,
     openTasksResult,
     overdueTasksResult,
+    checkInsTodayCountResult,
+    substantiveCheckInsTodayCountResult,
+    evidenceTodayCountResult,
+    evidenceActivityTodayCountResult,
+    completedEventsTodayCountResult,
+    pendingReportsCountResult,
+    seriesEventsResult,
+    seriesCheckInsResult,
+    seriesEvidenceResult,
+    freshnessNiftyResult,
+    freshnessAttendanceResult,
+    freshnessGithubResult,
+    freshnessPlanResult,
+    freshnessReportResult,
     windowSessionsResult,
     windowPlansResult,
     windowReportsResult,
@@ -206,6 +231,48 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     db.from("work_tasks").select("id", { count: "exact", head: true })
       .eq("organization_id", organizationId).eq("completed", false).not("status", "in", "(archived,deleted)")
       .not("due_date", "is", null).lt("due_date", date),
+    // Exact counts for the "Today at a glance" tiles. The row lists above are
+    // capped for per-person detail, so counting from them under-reports busy
+    // days; these head-only counts are always the true totals.
+    db.from("work_check_ins").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("shift_date", date),
+    db.from("work_check_ins").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("shift_date", date).eq("substantive", true),
+    db.from("work_evidence").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("evidence_date", date),
+    db.from("work_evidence").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("evidence_date", date).eq("source", "worktivity"),
+    db.from("work_task_day_events").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("local_date", date).eq("event_type", "completed"),
+    db.from("work_reports").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("status", "pending_review"),
+    // Fourteen-day series for the trend chart (date columns only, bucketed in
+    // memory so the shape stays cheap on the wire).
+    db.from("work_task_day_events").select("local_date")
+      .eq("organization_id", organizationId).eq("event_type", "completed")
+      .gte("local_date", addDaysIso(date, -13)).lte("local_date", date).limit(2000),
+    db.from("work_check_ins").select("shift_date")
+      .eq("organization_id", organizationId)
+      .gte("shift_date", addDaysIso(date, -13)).lte("shift_date", date).limit(2000),
+    db.from("work_evidence").select("evidence_date")
+      .eq("organization_id", organizationId)
+      .gte("evidence_date", addDaysIso(date, -13)).lte("evidence_date", date).limit(2000),
+    // Source freshness: when each stream last delivered anything.
+    db.from("work_projects").select("synced_at")
+      .eq("organization_id", organizationId).not("synced_at", "is", null)
+      .order("synced_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("work_attendance_observations").select("observed_at")
+      .eq("organization_id", organizationId)
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("work_evidence_events").select("occurred_at")
+      .eq("organization_id", organizationId).eq("provider", "github")
+      .order("occurred_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("work_daily_plans").select("updated_at")
+      .eq("organization_id", organizationId)
+      .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("work_reports").select("submitted_at")
+      .eq("organization_id", organizationId).not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("work_sessions")
       .select("person_id,shift_date,clocked_in_at,clocked_out_at,paused_seconds,correction_status")
       .eq("organization_id", organizationId).gte("shift_date", outstandingFrom).lte("shift_date", outstandingThrough),
@@ -227,6 +294,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["check-ins", checkInsResult], ["activity intervals", intervalsResult], ["evidence", evidenceResult],
     ["reports", reportsTodayResult], ["pending reports", pendingReportsResult], ["completed events", completedEventsResult],
     ["open tasks", openTasksResult], ["overdue tasks", overdueTasksResult], ["outstanding sessions", windowSessionsResult],
+    ["check-in counts", checkInsTodayCountResult], ["substantive check-in counts", substantiveCheckInsTodayCountResult],
+    ["evidence counts", evidenceTodayCountResult], ["activity evidence counts", evidenceActivityTodayCountResult],
+    ["completed event counts", completedEventsTodayCountResult], ["pending report counts", pendingReportsCountResult],
+    ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult], ["series evidence", seriesEvidenceResult],
+    ["nifty freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
+    ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
     ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult], ["outstanding events", windowEventsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
@@ -466,17 +539,17 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     paused: personRows.filter((person) => person.attendance.state === "paused").length,
     offShift: personRows.filter((person) => person.attendance.state === "off_shift").length,
     unknown: personRows.filter((person) => person.attendance.state === "unknown").length,
-    updatesToday: checkIns.length,
-    substantiveUpdatesToday: checkIns.filter((row) => row.substantive === true).length,
-    tasksCompletedToday: completedEvents.length,
+    updatesToday: checkInsTodayCountResult.count ?? checkIns.length,
+    substantiveUpdatesToday: substantiveCheckInsTodayCountResult.count ?? checkIns.filter((row) => row.substantive === true).length,
+    tasksCompletedToday: completedEventsTodayCountResult.count ?? completedEvents.length,
     tasksOpen: openTasksResult.count ?? 0,
     tasksOverdue: overdueTasksResult.count ?? 0,
-    evidenceToday: evidence.length,
-    evidenceActivityToday: evidence.filter((row) => String(row.source) === "worktivity").length,
-    evidenceOutputToday: evidence.filter((row) => String(row.source) !== "worktivity").length,
+    evidenceToday: evidenceTodayCountResult.count ?? evidence.length,
+    evidenceActivityToday: evidenceActivityTodayCountResult.count ?? evidence.filter((row) => String(row.source) === "worktivity").length,
+    evidenceOutputToday: (evidenceTodayCountResult.count ?? evidence.length) - (evidenceActivityTodayCountResult.count ?? evidence.filter((row) => String(row.source) === "worktivity").length),
     reportsDraftedToday: reportsToday.filter((row) => String(row.status) === "draft").length,
     reportsSubmittedToday: reportsToday.filter((row) => ["pending_review", "approved"].includes(String(row.status))).length,
-    reportsPendingReview: pendingReports.length,
+    reportsPendingReview: pendingReportsCountResult.count ?? pendingReports.length,
     pendingReviewOldestAt: isoOrNull(pendingReports[0]?.submitted_at ?? pendingReports[0]?.report_date),
     eodOutstandingPeople: outstandingByPerson.size,
     eodOutstandingDays,
@@ -484,6 +557,29 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
       const event = Array.isArray(row.event) ? row.event[0] : row.event;
       return String(event?.correction_status ?? "") === "disputed";
     }).length,
+  };
+
+  const seriesDates = Array.from({ length: 14 }, (_, index) => addDaysIso(date, index - 13));
+  const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, evidence: 0 }]));
+  for (const row of (seriesEventsResult.data ?? []) as Json[]) {
+    const bucket = seriesBuckets.get(String(row.local_date ?? "").slice(0, 10));
+    if (bucket) bucket.completed += 1;
+  }
+  for (const row of (seriesCheckInsResult.data ?? []) as Json[]) {
+    const bucket = seriesBuckets.get(String(row.shift_date ?? "").slice(0, 10));
+    if (bucket) bucket.updates += 1;
+  }
+  for (const row of (seriesEvidenceResult.data ?? []) as Json[]) {
+    const bucket = seriesBuckets.get(String(row.evidence_date ?? "").slice(0, 10));
+    if (bucket) bucket.evidence += 1;
+  }
+  const series = seriesDates.map((day) => seriesBuckets.get(day)!);
+  const freshness = {
+    niftySyncedAt: isoOrNull(freshnessNiftyResult.data?.synced_at),
+    worktivityObservedAt: isoOrNull(freshnessAttendanceResult.data?.observed_at),
+    githubLastEventAt: isoOrNull(freshnessGithubResult.data?.occurred_at),
+    lastPlanAt: isoOrNull(freshnessPlanResult.data?.updated_at),
+    lastReportSubmittedAt: isoOrNull(freshnessReportResult.data?.submitted_at),
   };
 
   const attention: AdminOverviewAttention[] = [];
@@ -535,5 +631,5 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     });
   }
 
-  return { date, generatedAt: now.toISOString(), counts, people: personRows, recentActivity: recentActivity.slice(0, 24), attention, readiness };
+  return { date, generatedAt: now.toISOString(), counts, people: personRows, recentActivity: recentActivity.slice(0, 24), attention, series, freshness, readiness };
 }

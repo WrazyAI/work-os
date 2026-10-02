@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowRight, Gauge, ListChecks, Users } from "lucide-react";
 import { adminFetch, adminKeys, type AdminInsights, type AdminInsightRange } from "./api";
+import { CHART_COLORS, TrendBars } from "./charts";
 import {
   AdminCard,
   Avatar,
   Drawer,
   EmptyState,
   Metric,
-  MiniBars,
   Notice,
   SectionHeading,
   SegmentedControl,
@@ -138,6 +138,7 @@ export default function AdminInsightsPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Outcomes completed" value={totals.outcomesCompleted} detail={comparison(totals.outcomesCompleted, data.previous.outcomesCompleted, "")} tone="signal" />
         <Metric label="Commitment rate" value={commitment == null ? "—" : `${commitment}%`} detail={totals.planned ? `${totals.plannedCompleted} of ${totals.planned} planned` : "No confirmed plans"} />
+        <Metric label="Active people" value={totals.activePeople} detail={`of ${data.people.length} in scope`} />
         <Metric label="Updates" value={totals.updates} detail={`${totals.substantiveUpdates} substantive`} />
         <Metric label="EOD submitted" value={totals.eodSubmitted} detail={`${totals.eodApproved} approved`} />
         <Metric label="Tracked context" value={totals.trackedMinutes >= 60 ? formatDuration(totals.trackedMinutes * 60) : `${totals.trackedMinutes}m`} detail={comparison(totals.trackedMinutes, data.previous.trackedMinutes, "m")} tone="observed" />
@@ -149,20 +150,22 @@ export default function AdminInsightsPage() {
           <SectionHeading
             icon={Gauge}
             title="Daily record"
-            detail={`Completed outcomes (lime) and updates (blue) per day, ${data.from} to ${data.through}.`}
+            detail={`Completed outcomes, updates, and EOD submissions per day, ${data.from} to ${data.through}.`}
           />
-          <MiniBars
-            ariaLabel={`Daily completed outcomes and updates from ${data.from} to ${data.through}`}
-            points={data.series.map((point) => ({
+          <TrendBars
+            ariaLabel={`Daily completed outcomes, updates, and EOD submissions from ${data.from} to ${data.through}`}
+            data={data.series.map((point) => ({
               label: point.date.slice(5).replace("-", "/"),
-              value: point.outcomesCompleted,
-              secondary: point.updates,
+              outcomesCompleted: point.outcomesCompleted,
+              updates: point.updates,
+              eodSubmitted: point.eodSubmitted,
             }))}
+            series={[
+              { key: "outcomesCompleted", label: "Completed outcomes", color: CHART_COLORS.accent },
+              { key: "updates", label: "Updates", color: CHART_COLORS.observed },
+              { key: "eodSubmitted", label: "EOD submitted", color: CHART_COLORS.neutral },
+            ]}
           />
-          <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-[var(--text-tertiary)]">
-            <span className="inline-flex items-center gap-1.5"><span aria-hidden className="size-2 rounded-full" style={{ background: "var(--accent)" }} /> Completed outcomes</span>
-            <span className="inline-flex items-center gap-1.5"><span aria-hidden className="size-2 rounded-full" style={{ background: "var(--status-observed)" }} /> Updates</span>
-          </div>
           {data.updateKinds.length ? (
             <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Update mix</p>

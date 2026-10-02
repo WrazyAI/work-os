@@ -39,6 +39,8 @@ function overviewFixture(state: PreviewState) {
       people: [],
       recentActivity: [],
       attention: [],
+      series: overviewSeries(0),
+      freshness: { niftySyncedAt: null, worktivityObservedAt: null, githubLastEventAt: null, lastPlanAt: null, lastReportSubmittedAt: null },
       readiness: { status: "ready", ready: true, issues: [], checks: { people: { active: 0 }, tasks: { open: 0 }, organization: { activeTeams: 0, activeSchedules: 0 } } },
     };
   }
@@ -95,7 +97,29 @@ function overviewFixture(state: PreviewState) {
       ],
       checks: { people: { active: 4 }, tasks: { open: 41 }, organization: { activeTeams: 2, activeSchedules: 3 } },
     },
+    series: overviewSeries(1),
+    freshness: {
+      niftySyncedAt: `${TODAY}T15:40:00.000Z`,
+      worktivityObservedAt: `${TODAY}T15:58:00.000Z`,
+      githubLastEventAt: `${TODAY}T14:12:00.000Z`,
+      lastPlanAt: `${TODAY}T09:20:00.000Z`,
+      lastReportSubmittedAt: `${TODAY}T13:05:00.000Z`,
+    },
   };
+}
+
+/** Deterministic fourteen-day activity series for the overview trend. */
+function overviewSeries(scale: number) {
+  return Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(`${TODAY}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - (13 - index));
+    return {
+      date: date.toISOString().slice(0, 10),
+      completed: scale === 0 ? 0 : 2 + (index % 5),
+      updates: scale === 0 ? 0 : 1 + (index % 3),
+      evidence: scale === 0 ? 0 : 4 + (index % 6),
+    };
+  });
 }
 
 function insightsFixture(state: PreviewState) {

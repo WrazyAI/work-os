@@ -258,12 +258,16 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     : { data: [], error: null };
   if (planItemsResult.error) throw new Error(`load admin insights plans: ${planItemsResult.error.message}`);
   const planDateById = new Map(planRows.map((row) => [String(row.id), dateOnly(row.shift_date)]));
-  const planItems = ((planItemsResult.data ?? []) as Json[])
-    .filter((item) => personIds.has(String(item.person_id)) && matchesPerson(item))
-    .filter((item) => {
-      const date = planDateById.get(String(item.plan_id));
-      return !!date && date >= current.from && date <= current.through;
-    });
+  const scopedPlanItems = ((planItemsResult.data ?? []) as Json[])
+    .filter((item) => personIds.has(String(item.person_id)) && matchesPerson(item));
+  const itemsInWindow = (window: { from: string; through: string }) => scopedPlanItems.filter((item) => {
+    const date = planDateById.get(String(item.plan_id));
+    return !!date && date >= window.from && date <= window.through;
+  });
+  const planItems = itemsInWindow(current);
+  // The previous window uses the same rows so its planned/commitment figures
+  // are real comparisons instead of hard-coded zeros.
+  const previousPlanItems = itemsInWindow(previous);
 
   const countBy = <T>(rows: T[], key: (row: T) => string | null) => {
     const map = new Map<string, number>();
@@ -328,6 +332,8 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
 
   const selectedItems = planItems.filter((item) => String(item.disposition) === "selected");
   const completedItems = selectedItems.filter((item) => String(item.completion_state) === "completed");
+  const previousSelectedItems = previousPlanItems.filter((item) => String(item.disposition) === "selected");
+  const previousCompletedItems = previousSelectedItems.filter((item) => String(item.completion_state) === "completed");
   const plannedByPerson = countBy(selectedItems, (row) => (row.person_id ? String(row.person_id) : null));
   const plannedCompletedByPerson = countBy(completedItems, (row) => (row.person_id ? String(row.person_id) : null));
 
@@ -390,6 +396,19 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     sessionsNeedingCorrection: currentSessions.filter((row) => String(row.correction_status) === "needs_correction").length,
     activePeople: peopleRows.filter((row) => row.outcomesCompleted > 0 || row.updates > 0 || row.trackedMinutes > 0 || row.eodSubmitted > 0).length,
   };
+  // Previous-window activity per person, matching the current definition
+  // (a completed outcome, a recorded update, tracked minutes, or a submitted EOD).
+  const previousActivePeople = new Set<string>();
+  for (const row of previousEvents) if (row.person_id) previousActivePeople.add(String(row.person_id));
+  for (const row of previousUpdates) if (row.person_id) previousActivePeople.add(String(row.person_id));
+  for (const row of previousEvidence) {
+    if (!row.person_id) continue;
+    if (Number(((row.metrics ?? {}) as Json).totalMinutes ?? 0) > 0) previousActivePeople.add(String(row.person_id));
+  }
+  for (const row of previousReports) {
+    if (row.person_id && ["pending_review", "approved"].includes(String(row.status))) previousActivePeople.add(String(row.person_id));
+  }
+
   const previousTotals: AdminInsightTotals = {
     outcomesCompleted: previousEvents.length,
     outcomesLate: previousTiming.late,
@@ -398,13 +417,13 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     eodSubmitted: previousReports.filter((row) => ["pending_review", "approved"].includes(String(row.status))).length,
     eodApproved: previousReports.filter((row) => String(row.status) === "approved").length,
     eodRejected: previousReports.filter((row) => String(row.status) === "rejected").length,
-    planned: 0,
-    plannedCompleted: 0,
+    planned: previousSelectedItems.length,
+    plannedCompleted: previousCompletedItems.length,
     trackedMinutes: Math.round(trackedMinutesPrevious),
     evidenceOutput: previousEvidence.filter((row) => String(row.source) !== "worktivity").length,
     evidenceActivity: previousEvidence.filter((row) => String(row.source) === "worktivity").length,
     sessionsNeedingCorrection: previousCorrections,
-    activePeople: 0,
+    activePeople: previousActivePeople.size,
   };
 
   const updateKindCounts = new Map<string, number>();

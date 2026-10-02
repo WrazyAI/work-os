@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys, type AdminOverview } from "./api";
+import { CHART_COLORS, TrendBars } from "./charts";
 import {
   AdminCard,
   Avatar,
@@ -78,6 +79,7 @@ export default function AdminOverviewPage() {
   }
 
   const data = overview.data;
+  const generatedAt = Date.parse(data.generatedAt);
   const people = [...data.people].sort((left, right) => {
     const rank = (person: AdminOverview["people"][number]) => (person.attendance.state === "active" ? 0 : person.attendance.state === "paused" ? 1 : person.attendance.state === "off_shift" ? 2 : 3);
     return rank(left) - rank(right) || left.displayName.localeCompare(right.displayName);
@@ -87,6 +89,37 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="grid gap-5">
+      {/* Activity — lead with the visual, then the attention list and tables */}
+      <AdminCard>
+        <SectionHeading
+          icon={Activity}
+          title="Activity"
+          detail="Completed outcomes, recorded updates, and evidence over the last 14 days."
+          action={<span className="text-[11px] text-[var(--text-tertiary)]">Updated {relativeTime(data.generatedAt)}</span>}
+        />
+        <TrendBars
+          ariaLabel="Daily completed outcomes, recorded updates, and evidence for the last 14 days"
+          data={data.series.map((point) => ({
+            label: new Date(`${point.date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            completed: point.completed,
+            updates: point.updates,
+            evidence: point.evidence,
+          }))}
+          series={[
+            { key: "completed", label: "Completed", color: CHART_COLORS.accent },
+            { key: "updates", label: "Updates", color: CHART_COLORS.observed },
+            { key: "evidence", label: "Evidence", color: CHART_COLORS.neutral },
+          ]}
+        />
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <FreshnessChip label="Nifty" at={data.freshness.niftySyncedAt} now={generatedAt} freshWithinMs={60 * 60_000} />
+          <FreshnessChip label="Worktivity" at={data.freshness.worktivityObservedAt} now={generatedAt} freshWithinMs={15 * 60_000} />
+          <FreshnessChip label="GitHub" at={data.freshness.githubLastEventAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} />
+          <FreshnessChip label="Plans" at={data.freshness.lastPlanAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} />
+          <FreshnessChip label="EOD" at={data.freshness.lastReportSubmittedAt} now={generatedAt} freshWithinMs={48 * 60 * 60_000} />
+        </div>
+      </AdminCard>
+
       {/* Needs attention */}
       <AdminCard padded={false}>
         <div className="border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
@@ -304,5 +337,25 @@ export default function AdminOverviewPage() {
         Overview for {formatWorkOsDate(data.date)}. Generated {relativeTime(data.generatedAt)}.
       </p>
     </div>
+  );
+}
+
+/** Per-source freshness: green inside its expected window, amber within three
+ * times that window, neutral once it has clearly gone quiet. Ages are measured
+ * against the payload's generation time so a render is deterministic. */
+function FreshnessChip({ label, at, now, freshWithinMs }: { label: string; at: string | null; now: number; freshWithinMs: number }) {
+  const parsed = at ? Date.parse(at) : Number.NaN;
+  const age = Number.isFinite(parsed) ? now - parsed : Number.POSITIVE_INFINITY;
+  const tone = !Number.isFinite(age) ? "none" : age <= freshWithinMs ? "fresh" : age <= freshWithinMs * 3 ? "stale" : "cold";
+  const color = tone === "fresh" ? "var(--status-ok)" : tone === "stale" ? "var(--status-warn)" : "var(--text-tertiary)";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] text-[var(--text-secondary)]"
+      style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}
+      title={at ? `Last data ${new Date(at).toLocaleString()}` : "No data recorded yet"}
+    >
+      <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
+      {label} · {Number.isFinite(parsed) ? relativeTime(at, new Date(now)) : "no data yet"}
+    </span>
   );
 }
