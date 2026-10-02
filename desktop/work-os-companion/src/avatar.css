@@ -777,11 +777,16 @@ html[data-mascot-size="small"] .avatar-compact { --avatar-bubble-anchor: 128px; 
   width: 118px;
   height: 133px;
 }
-.avatar-day-time {
-  right: 50%;
+.avatar-compact .avatar-day-time {
   top: 225px;
+  bottom: auto;
   min-width: 76px;
   padding: 4px 8px;
+  border: 1px solid rgba(83, 100, 81, 0.7);
+  border-radius: 999px;
+  background: rgba(251, 252, 248, 0.96);
+  color: #344333;
+  box-shadow: 0 3px 9px rgba(13, 18, 12, 0.13);
   text-align: center;
   font-size: 10px;
 }
