@@ -3936,7 +3936,7 @@ function proposalFields(proposal: Record<string, any>) {
     .map(([key, value]) => ({ label: sentence(key), value: String(value) }));
 }
 
-function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: Array<Record<string, any>>; busy: boolean; onReject: (id: string) => void; onApprove: (id: string) => void }) {
+export function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: Array<Record<string, any>>; busy: boolean; onReject: (id: string) => void; onApprove: (id: string) => void }) {
   const pending = proposals.filter((proposal) => proposal.status === "pending").length;
   return <section className="page review-page" aria-label="Proposals awaiting review">
     <div className="review-heading"><PageIntro eyebrow="Human in the loop" title="Review before anything changes." body="See exactly what you said, what Work OS interpreted, and what would be written back. Nothing reaches Nifty without your decision." /><div className="review-count"><strong>{pending}</strong><span>awaiting<br />your review</span></div></div>
