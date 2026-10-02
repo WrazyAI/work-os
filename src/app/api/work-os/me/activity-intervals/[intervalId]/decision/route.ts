@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { activityIntervalCardView, decideActivityInterval, type ActivityIntervalDecision } from "@/lib/work-os-activity-intervals";
+import { ensureRecapNextStepsForInterval } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -7,7 +8,11 @@ export const dynamic = "force-dynamic";
 
 /** Employee decision on their own recap: Looks right (confirm) or add/correct
  * context (amend). The original AI inference is always preserved and nothing
- * is written to work_check_ins. */
+ * is written to work_check_ins.
+ *
+ * An approved recap queues one next-step generation pass; it runs after the
+ * response is flushed so the decision stays fast, and the ensure route's
+ * stale-pass drain retries it if this attempt never finishes. */
 export async function POST(req: Request, { params }: { params: Promise<{ intervalId: string }> }) {
   try {
     const auth = await requireWorkOsAccess({
@@ -25,6 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ interva
       action,
       feedback: typeof body.feedback === "string" ? body.feedback : undefined,
     });
+    after(() => ensureRecapNextStepsForInterval(auth.access, intervalId).catch(() => undefined));
     return NextResponse.json({ interval: activityIntervalCardView(interval) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error);

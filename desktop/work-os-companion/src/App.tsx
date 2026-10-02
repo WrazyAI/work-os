@@ -514,6 +514,25 @@ export default function App() {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.taskBacklog() });
     void queryClient.invalidateQueries({ queryKey: ["work-os", "insights"] });
   }, [queryClient]);
+  /** Approve or skip a pending proposal from the Review queue — recap-sourced
+   * next steps and any other proposals awaiting a decision — then refresh the
+   * surfaces that show them. */
+  const decideDayProposal = useCallback(async (proposalId: string, decision: "accept" | "reject") => {
+    setBusy(true);
+    try {
+      await apiRequest(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, {
+        method: "PATCH",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ decision }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      invalidateDayData();
+    } catch (value) {
+      showError(value, "That proposal could not be updated. Refresh and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [invalidateDayData, showError]);
   /** Refresh outstanding EOD state after actions that may change review readiness. */
   const invalidateOutstandingEods = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
@@ -3198,6 +3217,14 @@ export default function App() {
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} workspaceHistory={workspaceTaskHistory} completedHistory={completedTaskHistory} historyOrder={syncBypass ? "local" : "server"} historyError={!viewingHistorical && (taskView === "all" ? workspaceHistoryQuery.isError : taskView === "completed" ? completedHistoryQuery.isError : false)} historyHasData={Boolean(activeTaskHistoryQuery.data)} onRetryHistory={() => void activeTaskHistoryQuery.refetch()} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
+        {!eodDate && visibleDay?.proposals?.length ? (
+          <ReviewWorkspace
+            proposals={visibleDay.proposals}
+            busy={busy}
+            onReject={(id) => void decideDayProposal(id, "reject")}
+            onApprove={(id) => void decideDayProposal(id, "accept")}
+          />
+        ) : null}
         {eodDate && !eodSubmitted && <div className="eod-day-context"><button type="button" onClick={() => setEodDate(null)}><ArrowLeft size={14} /> Back to today</button><span>EOD for {formatWorkOsDate(eodDate)}.</span></div>}
         {eodDate && reportDayQuery.isLoading ? <EodLoadingState title="Loading that day…" detail={`Fetching the recorded work for ${formatWorkOsDate(eodDate)}.`} />
           : eodDate && reportDayQuery.error ? <section className="panel"><Empty title="That day could not be loaded" body="The day's recorded work is unavailable right now. Check your connection and try again." /><div className="today-actions"><button onClick={() => void reportDayQuery.refetch()}>Try again</button></div></section>
@@ -3911,7 +3938,7 @@ function proposalFields(proposal: Record<string, any>) {
 
 function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: Array<Record<string, any>>; busy: boolean; onReject: (id: string) => void; onApprove: (id: string) => void }) {
   const pending = proposals.filter((proposal) => proposal.status === "pending").length;
-  return <main className="page review-page">
+  return <section className="page review-page" aria-label="Proposals awaiting review">
     <div className="review-heading"><PageIntro eyebrow="Human in the loop" title="Review before anything changes." body="See exactly what you said, what Work OS interpreted, and what would be written back. Nothing reaches Nifty without your decision." /><div className="review-count"><strong>{pending}</strong><span>awaiting<br />your review</span></div></div>
     <section className="review-control" aria-label="Review control flow">
       <div className="review-control-copy"><ShieldCheck size={20} /><div><strong>You are the write barrier.</strong><small>Proposals remain drafts until you approve them.</small></div></div>
@@ -3932,7 +3959,7 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
         <footer><small><ShieldCheck size={13} /> {actionable ? "No provider change has been made." : "This proposal already has a recorded decision."}</small><div><button disabled={busy || !actionable} onClick={() => onReject(String(proposal.id))}>Reject</button><button className="primary" disabled={busy || !actionable} onClick={() => onApprove(String(proposal.id))}><Check size={15} /> Approve change</button></div></footer>
       </article>;
     })}</section> : <section className="review-empty"><div><Check size={24} /></div><span>Review queue</span><h3>Everything is clear.</h3><p>No proposed changes are waiting. New interpretations will appear here before any write-back.</p></section>}
-  </main>;
+  </section>;
 }
 
 /** Render the employee Tasks workspace with shared day history and sorted paginated views. */

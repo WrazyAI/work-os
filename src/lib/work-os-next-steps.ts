@@ -378,12 +378,16 @@ export async function ensureRecapNextStepsForInterval(access: WorkOsAccess, inte
     return { status: "skipped", created: 0 };
   }
   // Claim: pending -> generating, so a concurrent pass (or a retried sync)
-  // cannot double-generate for the same revision.
+  // cannot double-generate for the same revision. A stale `generating` claim
+  // (crashed process) is recoverable after five minutes; a fresh one is not.
+  const staleClaim = new Date(Date.now() - 5 * 60_000).toISOString();
   const claimed = await db().from("work_activity_intervals").update({
     next_steps_status: "generating",
     next_steps_error: null,
     updated_at: new Date().toISOString(),
-  }).eq("id", intervalId).eq("next_steps_status", "pending").select("id").maybeSingle();
+  }).eq("id", intervalId)
+    .or(`next_steps_status.eq.pending,and(next_steps_status.eq.generating,updated_at.lte.${staleClaim})`)
+    .select("id").maybeSingle();
   if (claimed.error) throw new Error(`claim next steps: ${claimed.error.message}`);
   if (!claimed.data) {
     const current = await db().from("work_activity_intervals").select("next_steps_status").eq("id", intervalId).maybeSingle();
@@ -479,9 +483,8 @@ export async function ensureRecapNextSteps(access: WorkOsAccess, limit = 1): Pro
   if (error) throw new Error(`load pending next steps: ${error.message}`);
   let processed = 0;
   for (const row of (rows ?? []) as Array<{ id: string }>) {
-    const outcome = await ensureRecapNextStepsForInterval(access, row.id);
-    if (outcome.status !== "skipped" || outcome.created || outcome.error) processed += 1;
-    else processed += 1;
+    await ensureRecapNextStepsForInterval(access, row.id);
+    processed += 1;
   }
   return processed;
 }

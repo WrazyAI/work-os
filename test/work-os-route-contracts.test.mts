@@ -94,7 +94,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(nextStepsModule, /idempotency_key/, "next-step filing is idempotent per recap revision");
   assert.match(nextStepsModule, /suppressedSuggestionKeys/, "a skipped or rejected suggestion is remembered");
   assert.match(nextStepsModule, /review_status/, "only approved recaps generate next steps");
+  assert.match(nextStepsModule, /and\(next_steps_status.eq.generating,updated_at.lte/, "a stale generation claim is recoverable without double-generating");
   assert.match(activityEngine, /next_steps_status: "pending"/, "a recap decision queues the next-step pass");
+  assert.match(activityDecision, /after\(/, "next-step generation is scheduled after the decision response");
+  assert.match(activityDecision, /ensureRecapNextStepsForInterval/, "the decision kicks its own recap's generation");
+  assert.match(activityEnsure, /after\(/, "the ensure route drains stale next-step passes after the response");
   assert.match(activityEnsure, /ensureRecapNextSteps/, "the ensure route drains stale next-step passes");
   assert.match(activityEngine, /loadNextStepsCounts/, "the stream exposes the pending next-step count");
   const screenshotsService = await source("src/lib/work-os-screenshots.ts");
