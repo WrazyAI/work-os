@@ -911,6 +911,8 @@ export type ActivityIntervalView = {
   evidenceExpired: boolean;
   evidenceCount: number;
   evidence: ActivityIntervalEvidenceView[];
+  /** Recap-sourced suggestions still awaiting a decision. */
+  nextSteps?: number;
 };
 
 /** The Postgres shim returns timestamptz columns as Date objects, but every
@@ -988,7 +990,7 @@ export function activityIntervalCardView(row: ActivityIntervalRecord) {
   };
 }
 
-function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvidenceView[]): ActivityIntervalView {
+function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvidenceView[], nextSteps = 0): ActivityIntervalView {
   const windowStart = isoInstant(row.window_start) ?? "";
   const windowEnd = isoInstant(row.window_end) ?? "";
   return {
@@ -1009,7 +1011,24 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
     evidenceExpired: Boolean(row.evidence_expired_at) || evidence.some((entry) => !entry.retained),
     evidenceCount: evidence.filter((entry) => entry.usedInModel).length,
     evidence,
+    nextSteps,
   };
+}
+
+/** Counts suggestions still awaiting a decision for each recap, so an approved
+ * recap can link into the Review queue. */
+async function loadNextStepsCounts(intervalIds: string[]): Promise<Map<string, number>> {
+  if (!intervalIds.length) return new Map();
+  const rows = await db().from("work_task_proposals").select("source_interval_id")
+    .in("source_interval_id", intervalIds)
+    .in("status", ["pending", "needs_review", "failed", "stale"]);
+  if (rows.error) throw new Error(`load next-step counts: ${rows.error.message}`);
+  const counts = new Map<string, number>();
+  for (const row of (rows.data ?? []) as Array<{ source_interval_id: string | null }>) {
+    if (!row.source_interval_id) continue;
+    counts.set(String(row.source_interval_id), (counts.get(String(row.source_interval_id)) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /** Employee's recent activity stream, newest interval first. Raw image bytes
@@ -1033,7 +1052,8 @@ export async function listActivityIntervals(
   const intervals = (rows.data ?? []) as ActivityIntervalRecord[];
   if (!intervals.length) return { date, intervals: [] };
   const evidenceByInterval = await loadIntervalEvidence(intervals.map((row) => String(row.id)));
-  return { date, intervals: intervals.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])) };
+  const nextStepsCounts = await loadNextStepsCounts(intervals.map((row) => String(row.id)));
+  return { date, intervals: intervals.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [], nextStepsCounts.get(String(row.id)) ?? 0)) };
 }
 
 /** Loads the evidence disclosure rows (and raw-image retention state) for a set
@@ -1213,6 +1233,7 @@ export async function decideActivityInterval(
       review_status: "confirmed",
       final_detail: row.ai_detail,
       reviewed_at: new Date().toISOString(),
+      next_steps_status: "pending",
       updated_at: new Date().toISOString(),
     }).eq("id", intervalId).select("*").single();
     if (updateError) throw new Error(`confirm activity interval: ${updateError.message}`);
@@ -1227,6 +1248,7 @@ export async function decideActivityInterval(
     employee_feedback: feedback,
     final_detail: finalDetail,
     reviewed_at: new Date().toISOString(),
+    next_steps_status: "pending",
     updated_at: new Date().toISOString(),
   }).eq("id", intervalId).select("*").single();
   if (updateError) throw new Error(`amend activity interval: ${updateError.message}`);

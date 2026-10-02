@@ -418,6 +418,8 @@ export interface ActivityInterval {
   /** Provider-recorded GitHub activity attributed to the employee (performed
    * by their accounts) or triggered by their work (CI, deployments, reviews). */
   recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
+  /** Recap-sourced suggestions still awaiting a decision in the Review queue. */
+  nextSteps?: number | null;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;
@@ -437,7 +439,7 @@ export interface ActivityIntervalsData {
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
   "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
-  | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
+  | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt" | "nextSteps"
 >;
 
 export interface ActivityIntervalEnsureResult {

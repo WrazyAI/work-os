@@ -3386,6 +3386,7 @@ export default function App() {
         onReviewHistoryOperations={approveHistoryOperations}
         onRetryHistoryOperation={retryHistoryOperation}
         onNavigateView={(page) => setView(page)}
+        onOpenReview={() => setView("review")}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
         onApplyGoal={applyGoal}
@@ -3683,7 +3684,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
   voice?: import("./chat/voiceInput").VoiceInput;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
+  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onOpenReview?: () => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
   onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void;
 }) {
   useEffect(() => {
@@ -3784,7 +3785,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
          <div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goalDraft} onChange={(event) => { setGoalDraft(event.target.value); setGoalFromSuggestion(false); }} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>
          <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
          {!cardGoal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button type="button" onClick={() => { setGoalDraft(goalSuggestion.text); setGoalFromSuggestion(true); }}>Use suggestion</button></div>}
-               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
+               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onOpenReview={() => onNavigateView?.("review")} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
   key={turn.id ?? index}
   turn={{
     ...turn,
@@ -3921,10 +3922,10 @@ function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { proposals: 
     {proposals.length ? <section className="proposal-list">{proposals.map((proposal, index) => {
       const fields = proposalFields(proposal);
       const actionable = proposal.status === "pending";
-      return <article className="proposal-card" key={proposal.id}>
-        <header><div className="proposal-index">{String(index + 1).padStart(2, "0")}</div><div><span>{sentence(String(proposal.operation || "workspace_change"))}</span><h3>{proposalTitle(proposal)}</h3></div><em>{sentence(String(proposal.status || "pending"))}</em></header>
+      return <article className="proposal-card" key={proposal.id} data-source={proposal.source_interval_id ? "recap" : undefined}>
+        <header><div className="proposal-index">{String(index + 1).padStart(2, "0")}</div><div><span>{proposal.source_interval_id ? "From your recap" : sentence(String(proposal.operation || "workspace_change"))}</span><h3>{proposalTitle(proposal)}</h3></div><em>{sentence(String(proposal.status || "pending"))}</em></header>
         <div className="proposal-compare">
-          <section><span>What you said</span><blockquote>{proposal.input_text || "The original statement was preserved with this proposal."}</blockquote></section>
+          <section><span>{proposal.source_interval_id ? "Why it's suggested" : "What you said"}</span><blockquote>{proposal.input_text || "The original statement was preserved with this proposal."}</blockquote></section>
           <MoveRight size={18} />
           <section><span>Proposed change</span><strong>{proposalTitle(proposal)}</strong>{fields.length > 0 && <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>}</section>
         </div>

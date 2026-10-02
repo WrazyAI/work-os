@@ -30,6 +30,14 @@ export {
   reviewWorkOsProposalBatch,
 } from "@/lib/work-os-proposal-batches";
 export {
+  ensureRecapNextSteps,
+  ensureRecapNextStepsForInterval,
+  listNextStepCandidates,
+  nextStepsMessages,
+  parseNextSteps,
+  suppressedSuggestionKeys,
+} from "@/lib/work-os-next-steps";
+export {
   draftWorkOsEod,
   submitWorkOsEod,
   reviewWorkOsEod,

@@ -87,6 +87,16 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(eodService, /listActivityIntervalActivityLines/);
   assert.match(eodService, /intervalProvenanceLabel/);
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /listActivityIntervalActivityLines/);
+  const nextStepsModule = await source("src/lib/work-os-next-steps.ts");
+  assert.match(nextStepsModule, /parseNextSteps/, "next-step parsing is exported and validated");
+  assert.match(nextStepsModule, /MAX_SUGGESTIONS/, "next-step suggestions are capped");
+  assert.match(nextStepsModule, /source_interval_id/, "next-step proposals carry recap provenance");
+  assert.match(nextStepsModule, /idempotency_key/, "next-step filing is idempotent per recap revision");
+  assert.match(nextStepsModule, /suppressedSuggestionKeys/, "a skipped or rejected suggestion is remembered");
+  assert.match(nextStepsModule, /review_status/, "only approved recaps generate next steps");
+  assert.match(activityEngine, /next_steps_status: "pending"/, "a recap decision queues the next-step pass");
+  assert.match(activityEnsure, /ensureRecapNextSteps/, "the ensure route drains stale next-step passes");
+  assert.match(activityEngine, /loadNextStepsCounts/, "the stream exposes the pending next-step count");
   const screenshotsService = await source("src/lib/work-os-screenshots.ts");
   assert.match(screenshotsService, /work_activity_interval_evidence/, "retention marks interval evidence expiry without deleting the recap");
   assert.match(screenshotsService, /export async function prepareScreenshotWindow/);

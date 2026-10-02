@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Github, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Github, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -84,6 +84,10 @@ interface ActivityIntervalCardProps {
    * of expanding an inline field. */
   leadIn?: string;
   onEdit?: () => void;
+  /** Count of pending recap-sourced next-step suggestions, shown on approved
+   * recaps as a link into the Review queue. */
+  nextSteps?: number | null;
+  onOpenNextSteps?: () => void;
 }
 
 /** One Activity Interval Review card: headline, evidence-bounded detail,
@@ -99,6 +103,8 @@ export function ActivityIntervalCard({
   resolveSrc,
   leadIn,
   onEdit,
+  nextSteps,
+  onOpenNextSteps,
 }: ActivityIntervalCardProps) {
   const [feedback, setFeedback] = useState("");
   const [amending, setAmending] = useState(false);
@@ -235,6 +241,12 @@ export function ActivityIntervalCard({
             <button type="button" className="chat-activity-quiet" disabled={deciding} onClick={() => setAmending(true)}>Add or correct</button>
           </div>
         )
+      ) : null}
+
+      {interval.reviewStatus !== "inferred" && nextSteps ? (
+        <button type="button" className="chat-activity-next-steps" onClick={onOpenNextSteps} disabled={!onOpenNextSteps}>
+          <ArrowRight size={12} aria-hidden="true" /> {nextSteps} suggested next step{nextSteps === 1 ? "" : "s"} → Review
+        </button>
       ) : null}
 
       {evidence.length > 0 ? (
