@@ -47,6 +47,11 @@ const fixtures: ActivityInterval[] = [
     ],
     workflow: ["implementation", "verification", "UI inspection"],
     uncertainties: ["whether the change was pushed", "whether the test run finished"],
+    recordedActivity: [
+      { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc123" },
+      { description: "Pull request #42 (Recorded in GitHub on the recap card) merged", relation: "performed", url: "https://github.com/WrazyAI/work-os/pull/42" },
+      { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    ],
     employeeFeedback: null,
     reviewedAt: null,
     evidenceExpired: false,

@@ -73,6 +73,33 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain(String(baseInterval.detail));
   });
 
+  it("renders provider-recorded GitHub activity with distinct relation labels", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...baseInterval,
+        recordedActivity: [
+          { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc123" },
+          { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+        ],
+      },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("Recorded in GitHub");
+    expect(markup).toContain("Pushed 3 commits to WrazyAI/work-os");
+    expect(markup).toContain("CI for your commit on main: Work OS CI");
+    expect(markup).toContain("chat-activity-github-tag is-performed");
+    expect(markup).toContain("chat-activity-github-tag is-triggered");
+    expect(markup).toContain(">You<");
+    expect(markup).toContain(">Your work<");
+    expect(markup).toContain('href="https://github.com/WrazyAI/work-os/compare/abc123"');
+    expect(markup).toContain('href="https://github.com/WrazyAI/work-os/actions/runs/1"');
+  });
+
+  it("omits the GitHub section when no recorded activity is present", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
+    expect(markup).not.toContain("Recorded in GitHub");
+  });
+
   it("renders the chat bubble with a lead-in and Looks good / Edit actions", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: baseInterval,

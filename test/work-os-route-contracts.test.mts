@@ -75,6 +75,14 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(activityEngine, /buildTodaySnapshot/, "interval recaps receive the live day snapshot");
   assert.match(activityEngine, /buildMemoryPromptBlock/, "interval recaps recall memory as context");
   assert.match(activityEngine, /memoryUsed/, "interval coverage records whether memory context was used");
+  assert.match(activityEngine, /github_evidence/, "interval recaps read GitHub activity only behind the feature flag");
+  assert.match(activityEngine, /listGithubActivity/, "interval recaps receive attributed GitHub activity");
+  assert.match(activityEngine, /formatGithubActivityBlock/, "interval recaps receive the GitHub prompt block");
+  assert.match(activityEngine, /githubUsed/, "interval coverage records whether GitHub context was used");
+  assert.match(activityEngine, /recorded_activity/, "the synthesis schema carries recorded GitHub activity");
+  assert.match(activityEngine, /githubRecordedActivityAllowlist/, "recorded activity is validated against the recorded list");
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /listGithubActivity/, "the EOD draft receives attributed GitHub activity");
+  assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /github_evidence/, "the EOD draft reads GitHub activity only behind the feature flag");
   assert.doesNotMatch(activityEngine, /recordWorkMemory/, "interval recaps consume memory without writing inferences back");
   assert.match(eodService, /listActivityIntervalActivityLines/);
   assert.match(eodService, /intervalProvenanceLabel/);

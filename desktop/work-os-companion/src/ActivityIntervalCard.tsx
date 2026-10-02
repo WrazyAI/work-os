@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Github, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -167,6 +167,26 @@ export function ActivityIntervalCard({
         </ul>
       ) : null}
       {interval.workflow && interval.workflow.length > 1 ? <p className="chat-activity-flow"><strong>Flow:</strong> {interval.workflow.join(" → ")}</p> : null}
+      {interval.recordedActivity?.length ? (
+        <div className="chat-activity-github">
+          <p className="chat-activity-github-head"><Github size={12} aria-hidden="true" /> Recorded in GitHub</p>
+          <ul>
+            {interval.recordedActivity.map((item, index) => (
+              <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
+                <span
+                  className={`chat-activity-github-tag is-${item.relation}`}
+                  title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
+                >
+                  {item.relation === "performed" ? "You" : "Your work"}
+                </span>
+                {item.url
+                  ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
+                  : <span>{item.description}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {interval.uncertainties?.length ? (
         <p className="chat-activity-uncertainty"><strong>Not established:</strong> {interval.uncertainties.join("; ")}</p>
       ) : null}

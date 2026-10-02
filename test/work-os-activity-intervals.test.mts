@@ -298,8 +298,8 @@ test("structured recap fields parse defensively and reach the card view", () => 
   assert.deepEqual(structured.activities, ["Editing the plan modal gate in VS Code."]);
   assert.deepEqual(structured.workflow, ["implementation", "verification"]);
   assert.deepEqual(structured.uncertainties, ["whether the change was pushed"]);
-  assert.deepEqual(intervalStructure({}), { activities: [], workflow: [], uncertainties: [] });
-  assert.deepEqual(intervalStructure({ structured_summary: "nonsense" }), { activities: [], workflow: [], uncertainties: [] });
+  assert.deepEqual(intervalStructure({}), { activities: [], workflow: [], uncertainties: [], recordedActivity: [] });
+  assert.deepEqual(intervalStructure({ structured_summary: "nonsense" }), { activities: [], workflow: [], uncertainties: [], recordedActivity: [] });
 
   const view = activityIntervalCardView({
     id: "i-1",
@@ -316,9 +316,96 @@ test("structured recap fields parse defensively and reach the card view", () => 
       activities: [{ description: "Checked the recap card." }],
       workflow: [{ phase: "review" }],
       uncertainties: ["whether the change shipped"],
+      recordedActivity: [
+        { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
+        { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+        { description: "", relation: "performed", url: null },
+        { description: "Bad relation", relation: "maybe", url: null },
+      ],
     },
   });
   assert.deepEqual(view.activities, ["Checked the recap card."]);
   assert.deepEqual(view.workflow, ["review"]);
   assert.deepEqual(view.uncertainties, ["whether the change shipped"]);
+  assert.deepEqual(view.recordedActivity, [
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+  ]);
+});
+
+test("interval messages carry recorded GitHub activity as its own labeled section", () => {
+  const base = {
+    windowLabel: "2–3 PM",
+    observations: [{
+      index: 1,
+      at: "2026-10-01T14:05:00.000Z",
+      app: "VS Code",
+      summary: "Edited files.",
+      workContext: null,
+      possibleTaskReference: null,
+      confidence: 0.8,
+    }],
+    images: [],
+    counts: {
+      providerFrames: 4,
+      processed: 3,
+      excludedPolicy: 0,
+      excludedSensitive: 0,
+      unavailable: 1,
+      pending: 0,
+    } as ScreenshotWindowPreparation["counts"],
+  };
+  const userText = (messages: ReturnType<typeof intervalSynthesisMessages>) =>
+    String((messages[1].content as Array<Record<string, unknown>>)[0].text ?? "");
+  const without = intervalSynthesisMessages(base);
+  assert.ok(!userText(without).includes("Recorded GitHub activity"));
+  const withGithub = intervalSynthesisMessages({
+    ...base,
+    githubBlock: "Performed by this employee: 1 push (3 commits).\n- [performed] Pushed 3 commits to WrazyAI/work-os",
+  });
+  assert.ok(userText(withGithub).includes("Recorded GitHub activity (provider facts, attributed to this employee — state only as recorded; never screenshot evidence and never task completion):"));
+  assert.ok(userText(withGithub).includes("Pushed 3 commits to WrazyAI/work-os"));
+  const system = String(withGithub[0].content);
+  assert.match(system, /Recorded GitHub activity is provider-recorded fact/);
+  assert.match(system, /Keep the two GitHub relationships distinct/);
+  assert.match(system, /not Nifty task completion/);
+});
+
+test("recorded activity is kept only when it matches the supplied GitHub list", () => {
+  const allowed = [
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed" as const, url: "https://github.com/WrazyAI/work-os/compare/abc" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered" as const, url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    { description: "Deployment success for WrazyAI/work-os", relation: "triggered" as const, url: null },
+  ];
+  const parsed = parseIntervalSynthesis({
+    headline: "Shipped the recap card section",
+    detail: "Recorded activity plus screenshot context.",
+    activities: [],
+    workflow: [],
+    uncertainties: [],
+    apps: [],
+    coverage: { first_observed_at: null, last_observed_at: null, analyzed_frames: 0, raw_frames_shown_to_model: 0 },
+    recorded_activity: [
+      { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc/" },
+      { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+      // Fabricated URL: dropped.
+      { description: "Merged a pull request that was never recorded", relation: "performed", url: "https://github.com/WrazyAI/work-os/pull/999" },
+      // Relation flip: dropped.
+      { description: "CI for your commit on main: Work OS CI", relation: "performed", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+      // URL-less entry matches by phrase.
+      { description: "Deployment success for WrazyAI/work-os", relation: "triggered", url: null },
+    ],
+  }, 0, allowed);
+  assert.deepEqual(parsed.recordedActivity, [
+    { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/abc" },
+    { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    { description: "Deployment success for WrazyAI/work-os", relation: "triggered", url: null },
+  ]);
+  // Without an allowlist nothing can be recorded.
+  const noList = parseIntervalSynthesis({
+    headline: "H", detail: "D", activities: [], workflow: [], uncertainties: [], apps: [],
+    coverage: { first_observed_at: null, last_observed_at: null, analyzed_frames: 0, raw_frames_shown_to_model: 0 },
+    recorded_activity: [{ description: "Anything", relation: "performed", url: null }],
+  }, 0);
+  assert.deepEqual(noList.recordedActivity, []);
 });

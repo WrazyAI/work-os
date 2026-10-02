@@ -140,7 +140,7 @@ export function renderEodSelection(selection: EodSelection, grounding: EodGround
       ? ["", "## Recorded Loom updates", ...media.map((text) => `- ${text}`), "Recordings are employee-authored artifacts; they do not by themselves prove task completion."]
       : []),
     ...(observed.length
-      ? ["", "## Observed activity context", ...observed.map((text) => `- ${text}`), "Activity context is descriptive and does not prove attendance, productivity, or task completion."]
+      ? ["", "## Observed activity context", ...observed.map((text) => `- ${text}`), "Activity context is descriptive; recorded GitHub activity is a provider fact and still does not prove attendance, productivity, or task completion."]
       : []),
     "", "## Daily commitment reconciliation", ...renderCommitmentReconciliation(grounding.commitments),
     "", "## Bottleneck", ...(blockers.length ? blockers.map((text) => `- ${text}`) : [BOTTLENECK_PLACEHOLDER]),
@@ -172,7 +172,7 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Recorded Loom updates (the employee's own recordings; artifacts, never proof of task completion):",
     fmt(facts.media, "none"),
     "",
-    "Observed activity context (neutral screenshot summaries; never proof of productivity, effort, or task completion):",
+    "Observed activity context (recorded screenshot summaries and attributed GitHub activity; state recorded GitHub facts exactly as recorded, keep 'performed' vs 'triggered' distinct, and never treat them as proof of productivity, effort, or task completion):",
     fmt(facts.observed, "none"),
     "",
     grounding.contextBlock ? `Additional context (live day state plus confirmed, historical, and same-day tentative memory — informational only; never selectable facts and never completion evidence):\n${grounding.contextBlock}` : "",

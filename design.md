@@ -857,6 +857,22 @@ to the interval's observations. A memory recall failure degrades silently to an
 evidence-only recap, and interval coverage records whether memory context was
 used.
 
+When the GitHub evidence integration is enabled and the employee has verified
+GitHub accounts, the synthesizer also receives a bounded recorded-activity
+block for the interval window. It separates two relationships: `performed`
+(the employee's own accounts pushed, opened pull requests, reviewed, or opened
+issues) and `triggered by their work` (CI runs linked to a commit they pushed
+in the same window, deployments they created, and reviews or closures on their
+pull requests). Recorded activity is provider fact, so the recap may state it
+exactly as recorded and leads with it when present — but a merged pull request,
+a passing workflow, or a deployment is never Nifty task completion, and
+triggered items are never described as the employee's own action. The card
+renders a `Recorded in GitHub` section with a per-item `You` / `Your work`
+tag and the artifact link; the model's structured `recorded_activity` output is
+kept only when it matches the recorded list, so it cannot fabricate an item. A
+GitHub read failure degrades silently to a Worktivity-only recap, and coverage
+records whether GitHub context was used.
+
 Review adds provenance without creating employee-authored truth:
 
 - `inferred` — the AI recap as generated; silence leaves it here, and it still

@@ -10,6 +10,9 @@ import { loadShiftData } from "@/lib/work-os-internal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildMemoryPromptBlock, memoryEnabled } from "@/lib/work-memory";
 import { buildTodaySnapshot } from "@/lib/work-memory-today";
+import { githubObservedLines, listGithubActivity } from "@/lib/work-os-github-activity";
+import { personTimezone } from "@/lib/work-os-screenshots";
+import { localDayBounds } from "@/modules/work-os/companion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,6 +108,24 @@ export async function POST(req: Request) {
     const intervalLines = await listActivityIntervalActivityLines(auth.access.organizationId, personId, date).catch(() => []);
     const coveredHours = new Set(intervalLines.flatMap((line) => line.hourStarts));
     const observedHours = screenshots.hours.filter((hour) => !coveredHours.has(hour.hourStart));
+    // Attributed GitHub activity is provider-recorded fact; it joins the
+    // observed context so the draft can quantify what actually shipped.
+    let githubLines: string[] = [];
+    if (auth.access.featureFlags.github_evidence === true) {
+      try {
+        const timezone = await personTimezone(auth.access.organizationId, personId);
+        const bounds = localDayBounds(date, timezone);
+        const activity = await listGithubActivity({
+          organizationId: auth.access.organizationId,
+          personId,
+          windowStart: bounds.startIso,
+          windowEnd: bounds.endIso,
+        });
+        githubLines = githubObservedLines(activity);
+      } catch {
+        githubLines = [];
+      }
+    }
     const groundingWithObserved = {
       ...grounding,
       observed: [
@@ -113,6 +134,7 @@ export async function POST(req: Request) {
           text: `${line.label} — ${intervalProvenanceLabel(line.provenance)}: ${line.detail}`,
           app: null,
         })),
+        ...githubLines.map((text) => ({ at: null, text, app: "GitHub" })),
         ...observedHours.map((hour) => ({ at: null, text: `${hour.label}: ${hour.summary}`, app: null })),
       ],
     };

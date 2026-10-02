@@ -69,6 +69,17 @@ from Worktivity frames. Their bounds are `WORK_OS_ACTIVITY_INTERVALS_ENABLED`
 `WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY` (10). AI inference never creates a
 `work_check_ins` row and never advances `last_substantive_update_at`.
 
+When `github_evidence` is enabled and the employee has verified GitHub
+accounts, interval recaps and EOD drafts also receive attributed GitHub
+activity. Keep the two relationships exact: `performed` is the employee's own
+account's work; `triggered` is a consequence of their work (CI runs linked by
+same-window pushed commits, deployments they created, reviews or closures on
+their pull requests) and must never be described as their own action. Recorded
+activity may be stated exactly as recorded but is never Nifty task completion,
+never attendance, and never a substitute for screenshot evidence. The model's
+structured `recorded_activity` output is validated against the recorded list so
+it cannot fabricate an item.
+
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
 
