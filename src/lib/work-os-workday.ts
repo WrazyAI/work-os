@@ -352,12 +352,20 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
           ? new Date(existing.clocked_in_at).toISOString()
           : null;
         const observedStart = providerStart ?? activityStart ?? existingStart ?? projection.observedAt;
+        // A second work interval on the same shift row is a fresh start: stamp
+        // it so the check-in cadence does not keep reading the earlier
+        // interval's update time as stale progress. A backfilled earlier start
+        // (provider correction) must not advance the stamp.
+        const previousStart = existingStart ? Date.parse(existingStart) : Number.NaN;
+        const nextStart = Date.parse(observedStart);
+        const restarted = Number.isFinite(nextStart) && (!Number.isFinite(previousStart) || nextStart > previousStart);
         const { data, error } = await db().from("work_sessions").update({
           source: "worktivity",
           clocked_in_at: observedStart,
           clocked_out_at: null,
           attendance_status: projection.status,
           attendance_observed_at: projection.observedAt,
+          ...(restarted ? { last_substantive_update_at: projection.observedAt } : {}),
           updated_at: projection.observedAt,
         }).eq("organization_id", access.organizationId).eq("id", existing.id).select("*").single();
         if (error) throw new Error(`adopt Worktivity work session: ${error.message}`);

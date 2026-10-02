@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, ShieldCheck, Users } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys, type AdminOverview, type PersonDetailResponse } from "./api";
+import { CHART_COLORS, PulseBars } from "./charts";
 import {
   AdminCard,
   Avatar,
@@ -77,6 +78,31 @@ export default function AdminPeoplePage() {
 
   return (
     <div className="grid gap-5">
+      {/* Roster pulse — lead with who is moving today, then the table */}
+      {(overview.data?.people ?? []).length ? (
+        <AdminCard>
+          <SectionHeading
+            icon={MessageSquareText}
+            title="Roster pulse"
+            detail="Today's recorded updates, completed outcomes, and evidence per teammate."
+          />
+          <PulseBars
+            ariaLabel="Today's recorded updates, completed outcomes, and evidence per teammate"
+            data={(overview.data?.people ?? []).map((person) => ({
+              label: person.displayName,
+              updates: person.updatesToday,
+              completed: person.tasksCompletedToday,
+              evidence: person.evidenceToday,
+            }))}
+            series={[
+              { key: "updates", label: "Updates", color: CHART_COLORS.observed },
+              { key: "completed", label: "Completed", color: CHART_COLORS.accent },
+              { key: "evidence", label: "Evidence", color: CHART_COLORS.neutral },
+            ]}
+          />
+        </AdminCard>
+      ) : null}
+
       <AdminCard padded={false}>
         <div className="px-5 py-4">
           <SectionHeading

@@ -76,7 +76,27 @@ export async function GET(req: Request) {
       counts[value] = result.count ?? 0;
       counts.total += result.count ?? 0;
     });
-    return NextResponse.json({ reports: listResult.data ?? [], counts });
+    // Fourteen-day submission cadence for the review page's lead visual.
+    const seriesFrom = new Date(Date.now() - 13 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const seriesQuery = withReportFilters(
+      db.from("work_reports").select("report_date,status,submitted_at")
+        .eq("organization_id", auth.access.organizationId),
+      { personIds, status: null, from: seriesFrom, to: null },
+    );
+    const seriesResult = await seriesQuery.limit(2000);
+    if (seriesResult.error) throw new Error(`load Work OS report cadence: ${seriesResult.error.message}`);
+    const seriesBuckets = new Map<string, { date: string; submitted: number; drafted: number }>();
+    for (let index = 0; index < 14; index += 1) {
+      const date = new Date(Date.now() - (13 - index) * 24 * 60 * 60_000).toISOString().slice(0, 10);
+      seriesBuckets.set(date, { date, submitted: 0, drafted: 0 });
+    }
+    for (const row of (seriesResult.data ?? []) as Array<Record<string, unknown>>) {
+      const bucket = seriesBuckets.get(String(row.report_date ?? "").slice(0, 10));
+      if (!bucket) continue;
+      if (["pending_review", "approved"].includes(String(row.status))) bucket.submitted += 1;
+      else if (String(row.status) === "draft") bucket.drafted += 1;
+    }
+    return NextResponse.json({ reports: listResult.data ?? [], counts, series: [...seriesBuckets.values()] });
   } catch (error) {
     return jsonError(error);
   }

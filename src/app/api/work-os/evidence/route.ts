@@ -56,6 +56,41 @@ export async function GET(req: Request) {
     const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(500, Math.floor(limitParam))) : 200;
     const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
     if (error) throw new Error(`load Work OS evidence: ${error.message}`);
+    // Optional summary for the Evidence page's lead visual: source mix and a
+    // daily volume series over the same filters, computed from date/source
+    // columns only so the payload stays small.
+    if (sp.get("summary") === "1") {
+      let summaryQuery = createAdminClient().from("work_evidence")
+        .select("source,evidence_date")
+        .eq("organization_id", auth.access.organizationId);
+      if (personIds) summaryQuery = summaryQuery.in("person_id", personIds);
+      if (date) {
+        summaryQuery = summaryQuery.eq("evidence_date", date);
+      } else {
+        const from = sp.get("from");
+        const to = sp.get("to");
+        if (from) summaryQuery = summaryQuery.gte("evidence_date", from);
+        if (to) summaryQuery = summaryQuery.lte("evidence_date", to);
+      }
+      if (sp.get("source")) summaryQuery = summaryQuery.eq("source", sp.get("source"));
+      const summaryResult = await summaryQuery.limit(2000);
+      if (summaryResult.error) throw new Error(`summarize Work OS evidence: ${summaryResult.error.message}`);
+      const sources = new Map<string, number>();
+      const days = new Map<string, number>();
+      for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
+        const source = String(row.source ?? "unknown");
+        sources.set(source, (sources.get(source) ?? 0) + 1);
+        const day = String(row.evidence_date ?? "").slice(0, 10);
+        if (day) days.set(day, (days.get(day) ?? 0) + 1);
+      }
+      return NextResponse.json({
+        evidence: data ?? [],
+        summary: {
+          sources: [...sources.entries()].map(([source, count]) => ({ source, count })).sort((left, right) => right.count - left.count),
+          days: [...days.entries()].map(([day, count]) => ({ date: day, count })).sort((left, right) => left.date.localeCompare(right.date)),
+        },
+      });
+    }
     return NextResponse.json({ evidence: data ?? [] });
   } catch (err) {
     return jsonError(err);

@@ -17,6 +17,7 @@ import {
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
+import { CHART_COLORS, TrendBars } from "./charts";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
 import {
   AdminCard,
@@ -116,6 +117,29 @@ export default function AdminReviewPage() {
 
   return (
     <div className="grid gap-5">
+      {/* Submission cadence — lead with the two-week picture, then the queue */}
+      {(reports.data?.series ?? []).length ? (
+        <AdminCard>
+          <SectionHeading
+            icon={FileCheck2}
+            title="Submission cadence"
+            detail="Reports submitted and drafts created per day over the last 14 days."
+          />
+          <TrendBars
+            ariaLabel="Reports submitted and drafts created per day over the last 14 days"
+            data={(reports.data?.series ?? []).map((point) => ({
+              label: point.date.slice(5).replace("-", "/"),
+              submitted: point.submitted,
+              drafted: point.drafted,
+            }))}
+            series={[
+              { key: "submitted", label: "Submitted", color: CHART_COLORS.accent },
+              { key: "drafted", label: "Drafts", color: CHART_COLORS.neutral },
+            ]}
+          />
+        </AdminCard>
+      ) : null}
+
       <AdminCard padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <SegmentedControl<StatusFilter>

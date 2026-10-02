@@ -14,6 +14,7 @@ import {
   type GithubIntegrationActorsResponse,
   type GithubIntegrationReposResponse,
 } from "./api";
+import { CHART_COLORS, MixDonut, SparkTrend } from "./charts";
 import {
   AdminCard,
   Button,
@@ -85,10 +86,13 @@ export default function AdminEvidencePage() {
   });
 
   const filters = { from, to, personId, source, disputed: disputedOnly ? "1" : "" };
-  const evidence = useQuery<{ evidence: EvidenceRow[] }>({
+  const evidence = useQuery<{
+    evidence: EvidenceRow[];
+    summary?: { sources: Array<{ source: string; count: number }>; days: Array<{ date: string; count: number }> };
+  }>({
     queryKey: adminKeys.evidence(filters),
     queryFn: () => {
-      const params = new URLSearchParams({ from, to, limit: "300" });
+      const params = new URLSearchParams({ from, to, limit: "300", summary: "1" });
       if (personId) params.set("personId", personId);
       if (source) params.set("source", source);
       if (disputedOnly) params.set("correction", "disputed");
@@ -166,8 +170,43 @@ export default function AdminEvidencePage() {
   const githubAccounts = (connections.data?.accounts ?? []).filter((row) => row.provider === "github");
   const actors = githubActors.data?.actors ?? [];
 
+  const evidenceSources = evidence.data?.summary?.sources ?? [];
+  const evidenceDays = evidence.data?.summary?.days ?? [];
+
   return (
     <div className="grid gap-5">
+      {/* Source mix and volume — lead with the shape of the record */}
+      {evidenceSources.length || evidenceDays.length ? (
+        <AdminCard>
+          <SectionHeading
+            icon={Camera}
+            title="Record shape"
+            detail={`Evidence in this range by source, ${from} to ${to}.`}
+          />
+          <div className="grid gap-5 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-center">
+            <MixDonut
+              ariaLabel="Evidence items in this range by source"
+              centerValue={String(evidenceSources.reduce((sum, entry) => sum + entry.count, 0))}
+              centerLabel="items"
+              data={evidenceSources.slice(0, 6).map((entry, index) => ({
+                key: entry.source,
+                label: entry.source === "worktivity" ? "Worktivity (activity)" : entry.source,
+                value: entry.count,
+                color: [CHART_COLORS.accent, CHART_COLORS.observed, CHART_COLORS.warn, CHART_COLORS.neutral, CHART_COLORS.error, "var(--border-hot)"][index] ?? CHART_COLORS.neutral,
+              }))}
+            />
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Volume per day</p>
+              <SparkTrend
+                ariaLabel="Evidence volume per day in this range"
+                color={CHART_COLORS.accent}
+                data={evidenceDays.map((entry) => ({ label: entry.date.slice(5), value: entry.count }))}
+              />
+            </div>
+          </div>
+        </AdminCard>
+      ) : null}
+
       {/* Integrations band */}
       <AdminCard>
         <SectionHeading

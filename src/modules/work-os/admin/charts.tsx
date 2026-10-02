@@ -149,3 +149,29 @@ export const CHART_COLORS = {
   error: "var(--status-error)",
   neutral: "var(--text-tertiary)",
 } as const;
+
+/** Horizontal per-person bars: one row per teammate, one bar per metric.
+ * Suits small teams where a grouped vertical chart would crowd names. */
+export function PulseBars({ data, series, ariaLabel }: {
+  data: Array<Record<string, string | number>>;
+  series: ChartSeries[];
+  ariaLabel: string;
+}) {
+  const reduced = useReducedMotion();
+  if (!data.length) return null;
+  return (
+    <div role="img" aria-label={ariaLabel} className="w-full" style={{ height: Math.max(120, data.length * 38) }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 0, left: 8 }} barCategoryGap="30%" barGap={2}>
+          <CartesianGrid horizontal={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
+          <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} />
+          <YAxis type="category" dataKey="label" width={92} tickLine={false} axisLine={false} tick={AXIS_TICK} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--accent-subtle)" }} isAnimationActive={false} />
+          {series.map((entry) => (
+            <Bar key={entry.key} dataKey={entry.key} name={entry.label} fill={entry.color} radius={[0, 3, 3, 0]} isAnimationActive={!reduced} maxBarSize={12} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}

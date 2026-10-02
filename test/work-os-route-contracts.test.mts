@@ -196,6 +196,9 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(attendance, /EmployeeId: employeeId/);
   assert.match(attendance, /normalizeWorktivityActivityLogs/);
   assert.match(attendance, /syncWorktivitySession/);
+  // A second work interval on the same shift row must re-stamp the
+  // substantive update so the check-in cadence does not read stale progress.
+  assert.match(await source("src/lib/work-os-workday.ts"), /restarted \? \{ last_substantive_update_at: projection\.observedAt \} : \{\}/);
   assert.match(attendance, /loadPersistedWorktivityAttendance/);
   assert.match(attendanceSync, /CRON_SECRET/);
   assert.match(attendanceSync, /syncDueWorktivityAttendance/);

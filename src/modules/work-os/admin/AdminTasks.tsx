@@ -5,12 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, ListChecks, Plus, Search } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys } from "./api";
+import { CHART_COLORS, MixDonut } from "./charts";
 import {
   AdminCard,
   Button,
   Drawer,
   EmptyState,
   Notice,
+  SectionHeading,
   SegmentedControl,
   SelectField,
   Skeleton,
@@ -66,7 +68,7 @@ export default function AdminTasksPage() {
     staleTime: 60_000,
   });
   const completedParam = filter === "open" ? "false" : filter === "completed" ? "true" : "";
-  const tasks = useQuery<{ tasks: AnyRow[]; nextOffset: number | null }>({
+  const tasks = useQuery<{ tasks: AnyRow[]; nextOffset: number | null; summary?: { open: number; overdue: number; completedWeek: number } }>({
     queryKey: adminKeys.tasks({ filter, personId, projectId }),
     queryFn: () => {
       const params = new URLSearchParams({ limit: "200" });
@@ -123,6 +125,27 @@ export default function AdminTasksPage() {
 
   return (
     <div className="grid gap-5">
+      {/* Workload split — the visual leads, then the filterable list */}
+      {tasks.data?.summary ? (
+        <AdminCard>
+          <SectionHeading
+            icon={ListChecks}
+            title="Workload"
+            detail={`${tasks.data.summary.open} open task${tasks.data.summary.open === 1 ? "" : "s"} in scope, exact counts across the workspace.`}
+          />
+          <MixDonut
+            ariaLabel="Open, overdue, and recently completed task counts"
+            centerValue={String(tasks.data.summary.open)}
+            centerLabel="open"
+            data={[
+              { key: "open", label: "Open (not overdue)", value: Math.max(0, tasks.data.summary.open - tasks.data.summary.overdue), color: CHART_COLORS.accent },
+              { key: "overdue", label: "Overdue", value: tasks.data.summary.overdue, color: CHART_COLORS.warn },
+              { key: "completedWeek", label: "Completed · last 7 days", value: tasks.data.summary.completedWeek, color: CHART_COLORS.observed },
+            ]}
+          />
+        </AdminCard>
+      ) : null}
+
       <AdminCard padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <SegmentedControl<TaskFilter>

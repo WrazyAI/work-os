@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getTaskByLocalOrProviderId, listPersonTasks, listTasks } from "@/lib/work-os";
 import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
 import { jsonError, requireWorkOsAdmin, workOsOrganizationOwnerId } from "@/lib/work-os-api";
@@ -28,7 +29,31 @@ export async function GET(req: Request) {
     const tasks = (personId
       ? await listPersonTasks(ownerId, personId, options)
       : await listTasks(ownerId, options)) ?? [];
-    return NextResponse.json({ tasks, nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null });
+    // Exact workload counts for the lead visual. Counting the capped row list
+    // would under-report a large backlog, so these are head-only counts, and a
+    // person filter scopes them the same way the list is scoped.
+    const db = createAdminClient();
+    const openTasks = () => {
+      const base = db.from("work_tasks").select("id", { count: "exact", head: true })
+        .eq("organization_id", auth.access.organizationId).eq("completed", false).not("status", "in", "(archived,deleted)");
+      return personId ? base.contains("assignee_person_ids", [personId]) : base;
+    };
+    const completedEvents = db.from("work_task_day_events").select("id", { count: "exact", head: true })
+      .eq("organization_id", auth.access.organizationId).eq("event_type", "completed")
+      .gte("local_date", new Date(Date.now() - 6 * 24 * 60 * 60_000).toISOString().slice(0, 10));
+    const [open, overdue, completedWeek] = await Promise.all([
+      openTasks(),
+      openTasks().not("due_date", "is", null).lt("due_date", new Date().toISOString().slice(0, 10)),
+      personId ? completedEvents.eq("person_id", personId) : completedEvents,
+    ]);
+    for (const result of [open, overdue, completedWeek]) {
+      if (result.error) throw new Error(`count tasks: ${result.error.message}`);
+    }
+    return NextResponse.json({
+      tasks,
+      nextOffset: tasks.length === Math.min(200, Math.max(1, Number(sp.get("limit") ?? 50) || 50)) ? Math.max(0, Number(sp.get("offset") ?? 0) || 0) + tasks.length : null,
+      summary: { open: open.count ?? 0, overdue: overdue.count ?? 0, completedWeek: completedWeek.count ?? 0 },
+    });
   } catch (err) {
     return jsonError(err);
   }

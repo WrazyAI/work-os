@@ -220,7 +220,12 @@ function reportsFixture(state: PreviewState) {
     { id: "r-2", person_id: "p-ada", report_date: "2026-09-29", status: "pending_review", title: "EOD Report: Ada Okafor — Sep 29, 2026", markdown: markdown.replace("Luis Moreno", "Ada Okafor"), submitted_markdown: null, metrics: { completed: 3, progressed: 2 }, manager_notes: null, submitted_at: "2026-09-29T17:05:00.000Z", reviewed_at: null, created_at: "2026-09-29T16:40:00.000Z", person: { id: "p-ada", display_name: "Ada Okafor", email: "ada@example.com" }, versions: [] },
     { id: "r-3", person_id: "p-mei", report_date: "2026-09-28", status: "approved", title: "EOD Report: Mei Tanaka — Sep 28, 2026", markdown, submitted_markdown: markdown, metrics: { completed: 1 }, manager_notes: "Clean report; keep the vendor thread linked.", submitted_at: "2026-09-28T16:30:00.000Z", reviewed_at: "2026-09-29T09:10:00.000Z", created_at: "2026-09-28T16:00:00.000Z", person: { id: "p-mei", display_name: "Mei Tanaka", email: "mei@example.com" }, versions: [] },
   ];
-  return { reports, counts: { draft: empty ? 0 : 1, pending_review: empty ? 0 : 2, approved: empty ? 0 : 1, rejected: empty ? 0 : 1, total: empty ? 0 : 5 } };
+  return { reports, counts: { draft: empty ? 0 : 1, pending_review: empty ? 0 : 2, approved: empty ? 0 : 1, rejected: empty ? 0 : 1, total: empty ? 0 : 5 },
+    series: Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(`${TODAY}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - (13 - index));
+      return { date: date.toISOString().slice(0, 10), submitted: empty ? 0 : [1, 0, 2, 1, 0, 1, 3, 0, 1, 1, 2, 0, 1, 1][index], drafted: empty ? 0 : [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0][index] };
+    }) };
 }
 
 function evidenceFixture(state: PreviewState) {
@@ -230,7 +235,14 @@ function evidenceFixture(state: PreviewState) {
     { id: "e-2", person_id: "p-luis", task_id: null, evidence_date: TODAY, source: "worktivity", title: "Activity context 13:00–14:00", summary: "Chrome, Slack, and the reconciliation sheet.", url: null, metrics: { totalMinutes: 58, topApps: [{ name: "Chrome", minutes: 41 }] }, created_at: `${TODAY}T14:00:00.000Z`, person: { id: "p-luis", display_name: "Luis Moreno" }, task: null, event: { correction_status: "disputed", evidence_class: "activity_observation", metadata: { needsReview: true }, screenshot: { id: "s-1", processing_status: "processed", summary: "Reconciliation sheet with the vendor table.", confidence: 0.82, storage_path: "screenshots/x", deleted_at: null } } },
     { id: "e-3", person_id: "p-ada", task_id: null, evidence_date: "2026-09-29", source: "loom", title: "Settlement walkthrough", summary: "Recorded walkthrough of the settlement close.", url: "https://www.loom.com/share/example", metrics: {}, created_at: "2026-09-29T15:00:00.000Z", person: { id: "p-ada", display_name: "Ada Okafor" }, task: null, event: { correction_status: "original", evidence_class: "output_evidence", metadata: {}, screenshot: null } },
   ];
-  return { evidence: rows };
+  return { evidence: rows, summary: empty ? { sources: [], days: [] } : {
+    sources: [{ source: "worktivity", count: 96 }, { source: "github", count: 31 }, { source: "loom", count: 6 }, { source: "manual", count: 3 }],
+    days: Array.from({ length: 14 }, (_, index) => {
+      const date = new Date(`${TODAY}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() - (13 - index));
+      return { date: date.toISOString().slice(0, 10), count: [4, 6, 3, 8, 5, 2, 7, 9, 4, 6, 3, 8, 5, 7][index] };
+    }),
+  } };
 }
 
 function intervalsFixture(state: PreviewState) {
@@ -275,7 +287,7 @@ function tasksFixture(state: PreviewState) {
     { id: "t-2", title: "Reconcile September invoices", description: "", completed: true, due_date: "2026-09-29", priority: "medium", project: { name: "Finance" }, assignees: [{ displayName: "Luis Moreno" }], provider: "nifty", synced_at: NOW, url: "https://nifty.pm/task/example" },
     { id: "t-3", title: "Refresh the onboarding screenshots", description: "", completed: false, due_date: null, priority: null, project: { name: "Design" }, assignees: [], provider: "nifty", synced_at: null, url: null },
   ];
-  return { tasks: rows, nextOffset: null };
+  return { tasks: rows, nextOffset: null, summary: empty ? { open: 0, overdue: 0, completedWeek: 0 } : { open: 41, overdue: 7, completedWeek: 12 } };
 }
 
 function organizationFixture(state: PreviewState) {
