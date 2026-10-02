@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
+import type { WorkOsAccess } from "@/lib/work-os-api";
 
 for (const path of [".env.local", ".env"]) {
   try {
@@ -34,13 +35,19 @@ const membership = (await pg.query("select id from work_org_members where organi
 if (!person || !membership) throw new Error("owner person/membership not found");
 
 const access = {
-  ctx: { user: { id: ownerId } },
+  // Callees below only read ctx.user.id; profile rides along for the
+  // WorkOsAccess type (this script runs as the organization owner).
+  ctx: {
+    user: { id: ownerId },
+    profile: { id: ownerId, email: null, displayName: null, avatarUrl: null, role: "owner" as const, createdAt: new Date().toISOString() },
+  },
   organizationId: String(org.id),
+  organizationOwnerId: ownerId,
   role: "admin" as const,
   personId: String(person.id),
   membershipId: String(membership.id),
   featureFlags: {},
-};
+} as WorkOsAccess;
 
 const createStarted = Date.now();
 const task = await createWorkOsEmployeeTask(access, {
