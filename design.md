@@ -902,6 +902,26 @@ Review adds provenance without creating employee-authored truth:
 - `amended` — the employee added or corrected context; the original AI text is
   preserved and a reviewed recap is frozen against later evidence.
 
+An approved recap (confirmed or amended) may also produce **next-step
+suggestions** through the existing proposal pipeline — a reviewed recap is the
+one recap state trusted to drive task actions. One bounded generation pass per
+recap revision considers the approved recap (headline, detail, activity
+bullets, recorded GitHub activity, uncertainties), the interval's evidence
+snapshots, and the employee's open tasks and subtasks, and proposes at most
+about four suggestions of exactly two kinds: `complete_task` for an open
+task/subtask the evidence shows as finished, and `create_task`/`add_subtask`
+for a concrete deliverable the evidence shows that is not tracked yet. Every
+suggestion must cite the recap activities it is based on; a proposed target
+must be a real open task/subtask from the list the model was given, so
+fabricated ids cannot file. Suggestions become ordinary proposals labeled
+`From your recap` in the Review queue, where the employee approves or skips
+each one — nothing is ever auto-applied, and a skipped suggestion is never
+re-proposed for the same task and operation. Generation never blocks the recap
+decision, never writes check-ins or cadence, and its outcome
+(`next_steps_status`) is recorded on the interval; an approved recap with
+pending suggestions carries a short `N suggested next steps → Review` link on
+the card.
+
 The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance
 chip (`Not reviewed`, `Confirmed`, `Updated by you`), a concise headline, the

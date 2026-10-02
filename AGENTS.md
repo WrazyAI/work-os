@@ -80,6 +80,17 @@ never attendance, and never a substitute for screenshot evidence. The model's
 structured `recorded_activity` output is validated against the recorded list so
 it cannot fabricate an item.
 
+Confirming or amending a recap queues one bounded next-step generation pass
+(`src/lib/work-os-next-steps.ts`) that proposes task actions through the
+existing proposal pipeline: `complete_task` for open tasks/subtasks the
+approved evidence shows as finished, and `create_task`/`add_subtask` for
+concrete untracked deliverables. Suggestions must cite the recap activities
+they are based on, targets must come from the exact open-task list the model
+saw, duplicates and previously skipped suggestions are suppressed, and nothing
+is ever auto-applied — the employee approves each proposal in the Review
+queue. Generation never blocks the recap decision and never writes check-ins
+or cadence.
+
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.
 
