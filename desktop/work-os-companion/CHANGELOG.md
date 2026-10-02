@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.86
+
+- Your activity recap now shows what GitHub recorded for the interval — commits pushed, pull requests, reviews, CI runs, and deployments — tagged by what you did and what your work triggered.
+
 ## 0.3.85
 
 - Update prompts keep coming even after a download you haven't installed yet.
