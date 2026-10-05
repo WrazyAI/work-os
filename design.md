@@ -933,7 +933,8 @@ conversation: it persists across reloads and renders in both the floating
 companion and the in-app chat, and a cross-window sync can never drop a card
 mid-decision (the local card wins when the incoming turn predates it). A turn
 whose card was lost to an older build re-attaches from the server on load —
-its entry id carries the interval — so pending suggestions are never stranded.
+its entry id carries the interval — and a recovered moment never collapses
+itself, so pending suggestions are never stranded.
 When every item is decided the card shows its result
 (`2 changes applied · 1 skipped`) and the panel settles back to the orb
 after a short beat. If nothing is actionable the card says so quietly. Ending

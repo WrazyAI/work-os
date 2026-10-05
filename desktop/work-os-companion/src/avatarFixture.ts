@@ -32,6 +32,7 @@ export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
 export const AVATAR_RECAP_FIXTURE = "recap";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
+export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -72,7 +73,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarRecapFixtureRequested(search: string): boolean {
@@ -85,6 +86,22 @@ export function avatarRecapFixtureRequested(search: string): boolean {
 export function avatarNextStepsFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NEXT_STEPS_FIXTURE;
+}
+
+/** DEV-only fixture for the recovery path: the conversation holds a moment
+ * whose card was lost to an older sync (lead text only), and the load-time
+ * recovery must re-attach it from the server. */
+export function avatarNextStepsRecoveryFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE;
+}
+
+export function avatarNextStepsRecoveryFixtureChat(): AvatarFixtureTurn[] {
+  return [...avatarRecapFixtureChat(), {
+    id: "next-steps-fixture-recap",
+    role: "assistant",
+    text: "Recap confirmed — while it's fresh, here's what could come next:",
+  }];
 }
 
 export function avatarNextStepsFixtureMoment(): RecapNextStepsMoment {

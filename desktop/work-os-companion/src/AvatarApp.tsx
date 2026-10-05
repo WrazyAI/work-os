@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -177,16 +177,17 @@ export default function AvatarApp(): React.ReactElement {
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
   const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
+  const avatarNextStepsRecoveryFixture = avatarNextStepsRecoveryFixtureRequested(window.location.search);
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarObservedFixture ? avatarObservedFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
-    : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureFacts()
+    : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarNextStepsRecoveryFixture) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, attendanceState: null, clockedInAt: null,
@@ -196,7 +197,9 @@ export default function AvatarApp(): React.ReactElement {
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [chat, setChat] = useState<ChatEntry[]>(() => (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+  const [chat, setChat] = useState<ChatEntry[]>(() => avatarNextStepsRecoveryFixture
+    ? avatarNextStepsRecoveryFixtureChat()
+    : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
@@ -833,7 +836,16 @@ export default function AvatarApp(): React.ReactElement {
   const startNextStepsMoment = useCallback(async (intervalId: string, label: string | null, existingEntryId?: string): Promise<void> => {
     const entryId = existingEntryId ?? `next-steps-${intervalId}`;
     if (existingEntryId) {
-      updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "drafting", error: null, items: [], states: {}, failures: {} }));
+      // A recovered entry has the lead text but no moment yet: attach it
+      // instead of updating a card that was never there.
+      setChat((current) => current.map((entry) => entry.id === entryId
+        ? {
+            ...entry,
+            nextSteps: entry.nextSteps
+              ? { ...entry.nextSteps, status: "drafting", error: null, items: [], states: {}, failures: {} }
+              : { intervalId, label, status: "drafting", items: [], states: {}, failures: {}, error: null },
+          }
+        : entry));
     } else {
       setChat((current) => current.some((entry) => entry.id === entryId) ? current : [...current, {
         id: entryId,
@@ -843,6 +855,14 @@ export default function AvatarApp(): React.ReactElement {
       }]);
     }
     void toggleExpanded(true);
+    if (avatarNextStepsFixture || avatarNextStepsRecoveryFixture) {
+      // DEV-only: the recovery fixture resolves its poll locally.
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      const fixture = avatarNextStepsFixtureMoment();
+      updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "ready", label: moment.label ?? fixture.label, items: fixture.items, states: {}, failures: {} }));
+      setScrollToLatest((signal) => signal + 1);
+      return;
+    }
     for (let attempt = 0; attempt < 20; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 900 : 1_500));
       let view: Awaited<ReturnType<typeof fetchRecapNextSteps>> | null = null;
@@ -858,28 +878,34 @@ export default function AvatarApp(): React.ReactElement {
           states[item.proposalId] = item.status === "applied" ? "applied" : item.status === "rejected" ? "skipped" : "pending";
         }
         updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "ready", label: view.label ?? moment.label, items: view.items, states }));
+        setScrollToLatest((signal) => signal + 1);
         return;
       }
       if (view.status === "failed") {
         updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "failed", error: "Next steps could not be drafted from this recap." }));
+        setScrollToLatest((signal) => signal + 1);
         return;
       }
       if (view.status === "skipped" || view.status === "none" || (view.status === "ready" && !view.items.length)) {
         updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
-        scheduleNextStepsSettle();
+        setScrollToLatest((signal) => signal + 1);
+        // A recovered moment never settles: the employee opened the companion
+        // to read it, not to have it collapse on its own.
+        if (!nextStepsSettled.current.has(intervalId)) scheduleNextStepsSettle();
         return;
       }
     }
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
-    scheduleNextStepsSettle();
-  }, [scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
+    setScrollToLatest((signal) => signal + 1);
+    if (!nextStepsSettled.current.has(intervalId)) scheduleNextStepsSettle();
+  }, [avatarNextStepsFixture, avatarNextStepsRecoveryFixture, scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
 
   // A moment whose card was lost to an older sync (or an older build) still has
   // its entry id — `next-steps-<intervalId>` — so its suggestions can be
   // re-attached from the server instead of leaving pending items stranded.
   useEffect(() => {
-    if (avatarFixture) return;
-    if (loadedChatConversation !== avatarConversationScope) return;
+    if (avatarFixture && !avatarNextStepsRecoveryFixture) return;
+    if (!avatarNextStepsRecoveryFixture && loadedChatConversation !== avatarConversationScope) return;
     if (nextStepsRecovered.current) return;
     nextStepsRecovered.current = true;
     const missing = chatRef.current.filter((entry) => entry.id.startsWith("next-steps-") && !entry.nextSteps);
@@ -891,7 +917,7 @@ export default function AvatarApp(): React.ReactElement {
       nextStepsSettled.current.add(intervalId);
       void startNextStepsMoment(intervalId, null, entry.id);
     }
-  }, [avatarConversationScope, avatarFixture, loadedChatConversation, startNextStepsMoment]);
+  }, [avatarConversationScope, avatarFixture, avatarNextStepsRecoveryFixture, loadedChatConversation, startNextStepsMoment]);
 
   /** One inline decision on a next-step suggestion, filed through the same
    * owner-scoped proposal endpoint as any other review card. */
@@ -899,7 +925,7 @@ export default function AvatarApp(): React.ReactElement {
     setNextStepsBusyId(entryId);
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
     try {
-      if (avatarNextStepsFixture) {
+      if (avatarNextStepsFixture || avatarNextStepsRecoveryFixture) {
         // DEV-only fixture: the decision is simulated so the card's states can
         // be exercised without a live session.
         await new Promise((resolve) => window.setTimeout(resolve, 250));
@@ -930,7 +956,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setNextStepsBusyId(null);
     }
-  }, [loadDay, updateNextStepsEntry]);
+  }, [avatarNextStepsFixture, avatarNextStepsRecoveryFixture, loadDay, updateNextStepsEntry]);
 
   // Which moments still have undecided items (for dismissal on close) and
   // which fully settled moments already scheduled their settle beat.
