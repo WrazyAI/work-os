@@ -18,13 +18,35 @@ export function worktivityClockInContext(input: Record<string, unknown>): Record
   return context;
 }
 
+/** Timestamptz columns can arrive as ISO strings or JS Dates depending on the
+ * data client; normalize both to epoch milliseconds. Anything else is invalid. */
+export function worktivityInstant(value: unknown): number {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : Number.NaN;
+  if (typeof value === "string") return Date.parse(value);
+  return Number.NaN;
+}
+
+/** ISO normal form of a stored or provider instant, or null when unusable. */
+export function worktivityIsoInstant(value: unknown): string | null {
+  const instant = worktivityInstant(value);
+  return Number.isFinite(instant) ? new Date(instant).toISOString() : null;
+}
+
+/** Whether an adopt is a fresh work interval (a later start) rather than the
+ * same interval or a backfilled provider correction. */
+export function worktivityRestarted(existingStart: string | null, observedStart: string): boolean {
+  const previousStart = existingStart ? Date.parse(existingStart) : Number.NaN;
+  const nextStart = Date.parse(observedStart);
+  return Number.isFinite(nextStart) && (!Number.isFinite(previousStart) || nextStart > previousStart);
+}
+
 /** Provider instants may use different ISO offsets while representing the
  * same moment. Invalid provider times cannot replace a stored clock-in. */
 export function worktivityClockInChanged(existingAt: unknown, providerAt: unknown): boolean {
   if (typeof providerAt !== "string") return false;
   const providerInstant = Date.parse(providerAt);
   if (!Number.isFinite(providerInstant)) return false;
-  const existingInstant = typeof existingAt === "string" ? Date.parse(existingAt) : Number.NaN;
+  const existingInstant = worktivityInstant(existingAt);
   return !Number.isFinite(existingInstant) || existingInstant !== providerInstant;
 }
 

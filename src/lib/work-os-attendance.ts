@@ -4,7 +4,7 @@ import { activeSession, clockIn, insertHistoricalWorktivitySession, syncWorktivi
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
 import { attendanceSignature, projectWorktivityAttendanceWithActivity, unknownAttendance, type AttendanceProjection } from "@/modules/work-os/attendance";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
-import { worktivityClockOutBoundary } from "@/modules/work-os/worktivity-control";
+import { worktivityClockOutBoundary, worktivityInstant } from "@/modules/work-os/worktivity-control";
 
 /** How long a provider read stays authoritative for interactive checks. The
  * companion and dashboard re-check at 30s while a clock transition is expected,
@@ -193,7 +193,7 @@ async function employeeAttendance(employeeId: string, timezone: string, observed
 }
 
 async function attachObservedAttendance(access: WorkOsAccess, session: Record<string, any> | null, projection: AttendanceProjection) {
-  if (!session || (session.attendance_status === projection.status && session.attendance_observed_at === projection.observedAt)) return session;
+  if (!session || (session.attendance_status === projection.status && worktivityInstant(session.attendance_observed_at) === worktivityInstant(projection.observedAt))) return session;
   const { data, error } = await db().from("work_sessions").update({
     attendance_status: projection.status,
     attendance_observed_at: projection.observedAt,

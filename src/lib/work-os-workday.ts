@@ -11,7 +11,7 @@ import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, fir
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
-import { worktivityClockInChanged, worktivityProjectionClockOutBoundary } from "@/modules/work-os/worktivity-control";
+import { worktivityClockInChanged, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted } from "@/modules/work-os/worktivity-control";
 
 type Json = Record<string, unknown>;
 const db = () => createAdminClient();
@@ -348,17 +348,13 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
         const activityStart = projection.activityObservedAt && Number.isFinite(Date.parse(projection.activityObservedAt))
           ? new Date(projection.activityObservedAt).toISOString()
           : null;
-        const existingStart = typeof existing.clocked_in_at === "string" && Number.isFinite(Date.parse(existing.clocked_in_at))
-          ? new Date(existing.clocked_in_at).toISOString()
-          : null;
+        const existingStart = worktivityIsoInstant(existing.clocked_in_at);
         const observedStart = providerStart ?? activityStart ?? existingStart ?? projection.observedAt;
         // A second work interval on the same shift row is a fresh start: stamp
         // it so the check-in cadence does not keep reading the earlier
         // interval's update time as stale progress. A backfilled earlier start
         // (provider correction) must not advance the stamp.
-        const previousStart = existingStart ? Date.parse(existingStart) : Number.NaN;
-        const nextStart = Date.parse(observedStart);
-        const restarted = Number.isFinite(nextStart) && (!Number.isFinite(previousStart) || nextStart > previousStart);
+        const restarted = worktivityRestarted(existingStart, observedStart);
         const { data, error } = await db().from("work_sessions").update({
           source: "worktivity",
           clocked_in_at: observedStart,
@@ -409,7 +405,7 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
   }
   if (projection.state === "off_shift" && existing) {
     const boundary = worktivityProjectionClockOutBoundary({
-      clockedInAt: String(existing.clocked_in_at ?? ""),
+      clockedInAt: worktivityIsoInstant(existing.clocked_in_at),
       clockedOutAt: projection.clockedOutAt,
       clockedOutAtInferred: projection.clockedOutAtInferred,
       observedAt: projection.observedAt,

@@ -662,10 +662,10 @@ export async function ensureActivityInterval(access: WorkOsAccess, input: { prom
     if (previous.error) throw new Error(`load previous activity interval: ${previous.error.message}`);
     const window = resolveActivityIntervalWindow({
       promptDueAt,
-      clockedInAt: session.clocked_in_at as string | null,
-      lastSubstantiveUpdateAt: session.last_substantive_update_at as string | null,
-      planConfirmedAt: workday.plan?.confirmed_at as string | null,
-      previousWindowEnd: (previous.data?.window_end as string | null) ?? null,
+      clockedInAt: isoInstant(session.clocked_in_at),
+      lastSubstantiveUpdateAt: isoInstant(session.last_substantive_update_at),
+      planConfirmedAt: isoInstant(workday.plan?.confirmed_at),
+      previousWindowEnd: isoInstant(previous.data?.window_end),
       dayStartIso: dayBounds.startIso,
       maxMinutes: config.maxMinutes,
     });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decideWorktivityAction, worktivityClockInChanged, worktivityClockInContext, worktivityClockOutBoundary, worktivityProjectionClockOutBoundary, worktivityConfirmationRequirement } from "../src/modules/work-os/worktivity-control";
+import { decideWorktivityAction, worktivityClockInChanged, worktivityClockInContext, worktivityClockOutBoundary, worktivityInstant, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted, worktivityConfirmationRequirement } from "../src/modules/work-os/worktivity-control";
 
 test("Worktivity provider state is the action gate and idempotency authority", () => {
   assert.deepEqual(decideWorktivityAction("clock_in", "off_shift"), { status: "ready" });
@@ -33,6 +33,31 @@ test("clock-in reconciliation compares instants and ignores invalid provider tim
   assert.equal(worktivityClockInChanged("2026-09-23T09:00:00.000Z", "2026-09-23T11:00:00+02:00"), false);
   assert.equal(worktivityClockInChanged("2026-09-23T09:00:00.000Z", "2026-09-23T09:01:00Z"), true);
   assert.equal(worktivityClockInChanged("2026-09-23T09:00:00.000Z", "invalid"), false);
+  // The data client returns timestamptz columns as Dates; an unchanged start
+  // must not read as a new provider clock-in.
+  assert.equal(worktivityClockInChanged(new Date("2026-09-23T09:00:00.000Z"), "2026-09-23T11:00:00+02:00"), false);
+  assert.equal(worktivityClockInChanged(new Date("2026-09-23T09:00:00.000Z"), "2026-09-23T09:01:00Z"), true);
+  assert.equal(worktivityClockInChanged(new Date("invalid"), "2026-09-23T09:01:00Z"), true);
+  assert.equal(worktivityClockInChanged(null, "2026-09-23T09:01:00Z"), true);
+});
+
+test("stored instants normalize across ISO strings and Date values", () => {
+  assert.equal(worktivityInstant("2026-09-23T11:00:00+02:00"), Date.parse("2026-09-23T09:00:00.000Z"));
+  assert.equal(worktivityInstant(new Date("2026-09-23T09:00:00.000Z")), Date.parse("2026-09-23T09:00:00.000Z"));
+  assert.equal(Number.isNaN(worktivityInstant("invalid")), true);
+  assert.equal(Number.isNaN(worktivityInstant(null)), true);
+  assert.equal(worktivityIsoInstant(new Date("2026-09-23T09:00:00.000Z")), "2026-09-23T09:00:00.000Z");
+  assert.equal(worktivityIsoInstant("2026-09-23T11:00:00+02:00"), "2026-09-23T09:00:00.000Z");
+  assert.equal(worktivityIsoInstant("invalid"), null);
+});
+
+test("only a later provider start is a fresh work interval", () => {
+  assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "2026-09-23T13:00:00.000Z"), true);
+  assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "2026-09-23T09:00:00.000Z"), false);
+  // A provider correction that backfills an earlier start must not re-stamp.
+  assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "2026-09-23T08:45:00.000Z"), false);
+  assert.equal(worktivityRestarted(null, "2026-09-23T09:00:00.000Z"), true);
+  assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "invalid"), false);
 });
 
 test("provider reconciliation keeps only explicit clock-in acknowledgements and reasons", () => {
