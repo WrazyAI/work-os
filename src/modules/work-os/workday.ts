@@ -182,13 +182,14 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
       fallbackAt = latestResponseAt + intervalMs;
     } else {
       // The persisted deadline was written at delivery under the then-current
-      // cadence. Keep it when it still reflects the resolved cadence (allowing
-      // for the delivery lag); otherwise rebase it so an in-place cadence edit
-      // takes effect without waiting for another delivery.
+      // cadence. Keep it when it still reflects the resolved cadence, allowing
+      // for the companion's delivery lag; a real cadence edit differs by tens
+      // of minutes, so it rebases and applies without another delivery.
       const persistedFallbackAt = context.nextFallbackAt ? Date.parse(context.nextFallbackAt) : Number.NaN;
       const cadenceAnchorAt = (lastPromptAt ?? firstAt) + intervalMs;
+      const lagToleranceMs = Math.max(60_000, Math.min(5 * 60_000, intervalMs / 2));
       const persistedMatchesCadence = lastPromptAt !== null && Number.isFinite(persistedFallbackAt)
-        && Math.abs(persistedFallbackAt - cadenceAnchorAt) <= 60_000;
+        && Math.abs(persistedFallbackAt - cadenceAnchorAt) <= lagToleranceMs;
       fallbackAt = persistedMatchesCadence ? persistedFallbackAt : cadenceAnchorAt;
     }
     if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");

@@ -176,6 +176,11 @@ test("a cadence edit rebases the persisted next check-in deadline", () => {
   const kept = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:15:30.000Z", checkInIntervalMinutes: 10, at: "2026-08-12T09:16:00.000Z" });
   assert.equal(kept.kind, "hourly_fallback");
   assert.equal(kept.nextPromptAt, "2026-08-12T09:15:30.000Z");
+  // A normal companion delivery lag (more than a minute) still preserves the
+  // drift-corrected deadline.
+  const lateDelivery = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:17:00.000Z", checkInIntervalMinutes: 10, at: "2026-08-12T09:17:30.000Z" });
+  assert.equal(lateDelivery.kind, "hourly_fallback");
+  assert.equal(lateDelivery.nextPromptAt, "2026-08-12T09:17:00.000Z");
   // A deadline persisted under a longer cadence rebases onto the shorter one.
   const shortened = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T10:05:00.000Z", checkInIntervalMinutes: 10, at: "2026-08-12T09:18:00.000Z" });
   assert.equal(shortened.kind, "hourly_fallback");
