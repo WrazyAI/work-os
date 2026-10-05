@@ -161,6 +161,8 @@ test("a resolved per-person cadence overrides the interval and first follow-up",
   assert.equal(firstFollowUpAt({ session, firstFollowUpAt: "2026-08-12T09:10:30.000Z", firstFollowUpMinutes: 10, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:10:30.000Z");
   // A stored anchor from an older cadence is rebased once the cadence changes.
   assert.equal(firstFollowUpAt({ session, firstFollowUpAt: "2026-08-12T09:10:00.000Z", firstFollowUpMinutes: 30, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:30:00.000Z");
+  // Even a one-minute cadence edit is detected and rebased.
+  assert.equal(firstFollowUpAt({ session, firstFollowUpAt: "2026-08-12T10:00:00.000Z", firstFollowUpMinutes: 61, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T10:01:00.000Z");
 });
 
 test("a cadence edit rebases the persisted next check-in deadline", () => {
@@ -189,6 +191,15 @@ test("a cadence edit rebases the persisted next check-in deadline", () => {
   const lengthened = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:15:00.000Z", checkInIntervalMinutes: 60, at: "2026-08-12T09:18:00.000Z" });
   assert.equal(lengthened.kind, null);
   assert.equal(lengthened.nextPromptAt, "2026-08-12T10:05:00.000Z");
+  // With the recorded interval, even a small cadence edit rebases instead of
+  // being mistaken for delivery lag.
+  const storedSmallEdit = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T10:05:00.000Z", storedCheckInIntervalMinutes: 60, checkInIntervalMinutes: 65, at: "2026-08-12T09:18:00.000Z" });
+  assert.equal(storedSmallEdit.kind, null);
+  assert.equal(storedSmallEdit.nextPromptAt, "2026-08-12T10:10:00.000Z");
+  // A recorded interval matching the resolved cadence preserves the deadline.
+  const storedMatch = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:20:00.000Z", storedCheckInIntervalMinutes: 10, checkInIntervalMinutes: 10, at: "2026-08-12T09:21:00.000Z" });
+  assert.equal(storedMatch.kind, "hourly_fallback");
+  assert.equal(storedMatch.nextPromptAt, "2026-08-12T09:20:00.000Z");
 });
 
 test("daily plan candidates deduplicate provider and local tasks", () => {

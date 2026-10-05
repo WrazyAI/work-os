@@ -141,6 +141,7 @@ async function recordPromptDelivery(access: WorkOsAccess, session: Record<string
     last_prompt_kind: prompt.kind,
     last_prompt_at: at.toISOString(),
     next_fallback_at: nextFallbackAt,
+    check_in_interval_minutes: cadence.checkInIntervalMinutes,
     updated_at: at.toISOString(),
   }).eq("organization_id", access.organizationId).eq("id", session.id as string).in("state", ["clocked_in", "active", "paused", "eod_due"]);
   query = session.last_prompt_at
@@ -264,6 +265,7 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     lastSubstantiveUpdateAt: session?.last_substantive_update_at as string | null, at: at.toISOString(),
     checkInIntervalMinutes: cadence.checkInIntervalMinutes,
     firstFollowUpMinutes: cadence.firstFollowUpMinutes,
+    storedCheckInIntervalMinutes: session?.check_in_interval_minutes as number | null,
   });
   return { session, plan, prompt: promptDecision, cadence };
 }

@@ -38,6 +38,8 @@ export interface PromptContext {
    * environment and then the built-in defaults. */
   checkInIntervalMinutes?: number | null;
   firstFollowUpMinutes?: number | null;
+  /** Cadence that produced the persisted nextFallbackAt deadline, when known. */
+  storedCheckInIntervalMinutes?: number | null;
   at: string;
 }
 
@@ -119,10 +121,10 @@ export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" |
   const resolvedAt = baselineAt + minutes * 60_000;
   if (context.firstFollowUpAt) {
     const storedAt = Date.parse(context.firstFollowUpAt);
-    // A stored anchor written under the resolved cadence is preserved (it
-    // carries sub-minute precision from its confirmation request); a stale
-    // one is rebased so a cadence edit applies to the pending workday.
-    if (Number.isFinite(storedAt) && Math.abs(storedAt - resolvedAt) <= 60_000) return context.firstFollowUpAt;
+    // A stored anchor written under the resolved cadence is preserved; the
+    // strict minute-scale bound keeps sub-minute confirmation precision while
+    // rebasing even a one-minute cadence edit.
+    if (Number.isFinite(storedAt) && Math.abs(storedAt - resolvedAt) < 60_000) return context.firstFollowUpAt;
   }
   return new Date(resolvedAt).toISOString();
 }
@@ -182,14 +184,19 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
       fallbackAt = latestResponseAt + intervalMs;
     } else {
       // The persisted deadline was written at delivery under the then-current
-      // cadence. Keep it when it still reflects the resolved cadence, allowing
-      // for the companion's delivery lag; a real cadence edit differs by tens
-      // of minutes, so it rebases and applies without another delivery.
+      // cadence, which is recorded alongside it. When that recorded interval
+      // matches the resolved cadence the drift-corrected deadline is kept;
+      // otherwise (or for legacy rows without a recorded interval) the
+      // deadline is compared with the delivery-lag tolerance and rebased when
+      // it no longer reflects the resolved cadence.
       const persistedFallbackAt = context.nextFallbackAt ? Date.parse(context.nextFallbackAt) : Number.NaN;
       const cadenceAnchorAt = (lastPromptAt ?? firstAt) + intervalMs;
+      const storedIntervalMinutes = checkInIntervalOption(context.storedCheckInIntervalMinutes);
       const lagToleranceMs = Math.max(60_000, Math.min(5 * 60_000, intervalMs / 2));
       const persistedMatchesCadence = lastPromptAt !== null && Number.isFinite(persistedFallbackAt)
-        && Math.abs(persistedFallbackAt - cadenceAnchorAt) <= lagToleranceMs;
+        && (storedIntervalMinutes !== null
+          ? storedIntervalMinutes === intervalMs / 60_000
+          : Math.abs(persistedFallbackAt - cadenceAnchorAt) <= lagToleranceMs);
       fallbackAt = persistedMatchesCadence ? persistedFallbackAt : cadenceAnchorAt;
     }
     if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
