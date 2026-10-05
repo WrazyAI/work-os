@@ -105,6 +105,16 @@
   outline-offset: 2px;
 }
 .planning-session-body { overflow: auto; padding: 16px 20px 18px; }
+.planning-session-body.is-compose { animation: planning-compose-enter 210ms var(--ease-product, cubic-bezier(.2, .8, .2, 1)) both; }
+.planning-session-body.is-review { animation: planning-review-enter 210ms var(--ease-product, cubic-bezier(.2, .8, .2, 1)) both; }
+@keyframes planning-compose-enter {
+  from { opacity: 0; transform: translate3d(0, 7px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes planning-review-enter {
+  from { opacity: 0; transform: translate3d(0, 7px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
 .planning-session-body > label { display: block; margin-bottom: 8px; color: var(--ink); font-size: 13px; font-weight: 650; }
 .planning-session-body > textarea {
   width: 100%;
@@ -432,7 +442,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .planning-session { animation: none; }
+  .planning-session,
+  .planning-session-body { animation: none; }
 }
 
 /* ── Plan review: feedback / annotation loop ────────────────────────────

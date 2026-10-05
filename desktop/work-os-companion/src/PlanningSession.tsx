@@ -200,7 +200,7 @@ export function PlanningConfirmation({ title, body, onClose }: { title: string; 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return <div className="task-modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="task-modal-backdrop planning-confirmation-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="checked-confirmation" role="dialog" aria-modal="true" aria-labelledby="planning-confirmation-title">
       <CheckedMoment />
       <h2 id="planning-confirmation-title">{title}</h2>
@@ -600,7 +600,7 @@ export function PlanningSession({
         <div><small>Today</small><h2 id="planning-session-title">Plan your day</h2></div>
         <button aria-label="Close planning session" onClick={onClose} disabled={busy || state === "saving"}><X size={16} /></button>
       </header>
-      <div className="planning-session-body" ref={bodyRef}>
+      <div className={`planning-session-body is-${view}`} ref={bodyRef}>
         {view === "compose" ? <>
         <div className="planning-intent-heading">
           <label htmlFor="planning-intent">What should today's plan focus on?</label>

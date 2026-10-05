@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Selecting tasks in the floating chat keeps the card steady and its actions clear above the message bar.
+- Moving from your written goal to its draft and recorded confirmation now feels smoother.
+
 ## 0.3.96
 
 - Suggested next steps that were lost to the earlier sync now come back when the companion opens, scrolled into view.

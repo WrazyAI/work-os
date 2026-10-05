@@ -186,11 +186,20 @@ export function avatarShiftProgressFixtureFacts(now = Date.now()): AvatarFixture
 }
 
 export function avatarSnoozeFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  const facts = avatarShiftProgressFixtureFacts(now);
   return {
-    ...avatarShiftProgressFixtureFacts(now),
+    ...facts,
     promptRequired: true,
     nextPromptAt: new Date(now - 60_000).toISOString(),
     promptKind: "hourly_fallback",
+    taskOptions: facts.taskOptions.map((task) => task.id === "fixture-old" ? {
+      ...task,
+      subtaskTotal: 2,
+      subtasks: [
+        { id: "fixture-old-subtask-1", title: "Reproduce the stale mirror" },
+        { id: "fixture-old-subtask-2", title: "Verify the provider refresh" },
+      ],
+    } : task),
   };
 }
 

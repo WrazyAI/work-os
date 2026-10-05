@@ -527,6 +527,12 @@ composer with the draft, and uses detached menus that cannot be clipped by a
 scroll region. Minimize-to-orb and hide-window remain distinct and truthfully
 named.
 
+The thread owns scrolling, but its bottom dissolve belongs to the fixed
+composer edge, not the scroll content: keep the thread fully opaque, disable
+scroll anchoring while an inline task card expands, and place the short fade
+outside the scroller at the composer’s top border. Task-card selection and
+confirmation actions remain clear above that edge.
+
 Both chat surfaces use the configured mascot head crop through
 src/chat/MascotMark.tsx. Never hardcode mascot art, the mascot name, or a
 generic sparkle as agent identity. Global mascot changes belong in mascot.ts.
@@ -988,6 +994,13 @@ Motion explains a state change:
 Use small transforms only: a 1px hover lift, 4–9px entry translation, or
 approximately .985 press scale. No ambient loops, bouncing, overshoot, or
 theatrical dashboard animation.
+
+The Plan your day session hands off between its input, drafted review, and
+recorded confirmation without replacing the modal backdrop. Compose/review
+content enters over 210ms with a 7px translation; recorded confirmation enters
+over 240ms with a 9px translation, using the product easing. Review focus and
+the confirmation state persist when motion is reduced, with nonessential
+animation removed.
 
 The floating companion starts a bounded three-play attention sequence when an
 actionable prompt needs input: repeat the familiar quick movement during each

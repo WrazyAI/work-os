@@ -25,6 +25,20 @@
   animation: modalRise 0.22s ease both;
 }
 
+.task-modal-backdrop.planning-confirmation-backdrop { animation: none; }
+.planning-confirmation-backdrop .checked-confirmation {
+  animation: planning-recorded-enter 240ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes planning-recorded-enter {
+  from { opacity: 0; transform: translate3d(0, 9px, 0) scale(.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planning-confirmation-backdrop .checked-confirmation { animation: none; }
+}
+
 .checked-confirmation h2 {
   margin: 12px 0 0;
   color: var(--ink);

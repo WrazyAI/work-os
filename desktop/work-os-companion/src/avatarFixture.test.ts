@@ -22,6 +22,7 @@ describe("avatar visual fixtures", () => {
       sessionState: "active",
       clockedInAt: expect.any(String),
     });
+    expect(facts.taskOptions.find((task) => task.id === "fixture-old")?.subtasks).toHaveLength(2);
     expect(avatarSnoozeFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_SNOOZE_FIXTURE}`)).toBe(true);
   });
 

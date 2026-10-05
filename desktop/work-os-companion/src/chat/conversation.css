@@ -707,7 +707,25 @@
   gap: 18px;
   border-radius: 0;
   background: var(--conversation-paper);
+  overflow-anchor: none;
   scrollbar-color: rgba(23, 26, 24, 0.24) transparent;
+}
+
+.conversation-surface-floating .conversation-scroll-region > .avatar-chat {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.conversation-surface-floating .conversation-scroll-region::after {
+  position: absolute;
+  z-index: 1;
+  inset: auto 0 0;
+  height: 18px;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(247, 244, 236, 0), var(--conversation-paper) 42%);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .conversation-surface-floating .avatar-context {
@@ -719,6 +737,15 @@
 
 .conversation-surface-floating .avatar-context.eod { background: #fff4df; }
 .conversation-surface-floating .avatar-task-context { margin: 0; }
+.conversation-surface-floating .avatar-task-context .chat-task-card {
+  max-height: min(360px, calc(100dvh - 304px));
+}
+.conversation-surface-floating .avatar-task-context .chat-task-body {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.conversation-surface-floating .avatar-task-context .chat-task-list { flex: 1 1 auto; }
+.conversation-surface-floating .avatar-task-context .chat-task-footer { flex: 0 0 auto; }
 .conversation-surface-floating .chat-turn-user { max-width: 82%; }
 .conversation-surface-floating .chat-turn .chat-markdown p { font-size: 13px; }
 .conversation-surface-floating .chat-turn-user .chat-markdown p { font-size: 12px; }
@@ -727,7 +754,7 @@
   min-width: 0;
   flex: 0 0 auto;
   padding: 12px 10px 10px;
-  border: 0;
+  border-top: 1px solid rgba(23, 26, 24, 0.08);
   background: var(--conversation-paper);
   backdrop-filter: none;
 }

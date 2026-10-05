@@ -82,6 +82,7 @@ describe("PlanningSession two-view flow", () => {
     expect(markup).toContain("checked-moment");
     expect(markup).not.toContain("Continue working");
     expect(markup).not.toContain('aria-label="Close planning session"');
+    expect(markup).toContain("planning-confirmation-backdrop");
   });
 
   it("offers one primary action per view", () => {
@@ -93,6 +94,7 @@ describe("PlanningSession two-view flow", () => {
 
   it("opens on the input view without the removed helper copy", () => {
     const markup = renderToStaticMarkup(createElement(PlanningSession, props));
+    expect(markup).toContain('class="planning-session-body is-compose"');
     expect(markup).toContain("What should today");
     expect(markup).toContain("Build my plan");
     // The drafted plan is its own view: the input view never renders the

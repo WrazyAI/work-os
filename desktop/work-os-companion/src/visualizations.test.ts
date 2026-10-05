@@ -434,6 +434,24 @@ describe("operational visualizations", () => {
     expect(conversationStyles).toContain(".conversation-scroll-region > .goal-composer-panel");
   });
 
+  it("anchors the floating chat fade to the composer and disables scroll anchoring", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.avatar-chat\s*\{[^}]*overflow-anchor:\s*none/s);
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region\s*>\s*\.avatar-chat\s*\{[^}]*mask-image:\s*none/s);
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region::after\s*\{[^}]*backdrop-filter:\s*blur/s);
+  });
+
+  it("animates plan-view changes and the recorded confirmation without motion overrides", () => {
+    const confirmationStyles = readText(resolve(root, "src/checked-moment.css"));
+    expect(workspaceStyles).toContain(".planning-session-body.is-compose");
+    expect(workspaceStyles).toContain(".planning-session-body.is-review");
+    expect(workspaceStyles).toContain("planning-compose-enter");
+    expect(workspaceStyles).toContain("planning-review-enter");
+    expect(workspaceStyles).toMatch(/prefers-reduced-motion:\s*reduce[\s\S]*?\.planning-session-body/);
+    expect(confirmationStyles).toContain(".planning-confirmation-backdrop .checked-confirmation");
+    expect(confirmationStyles).toContain("planning-recorded-enter");
+  });
+
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
     expect(app).toContain("TrendChart");
     expect(app).toContain("DailyRhythmStrip");
