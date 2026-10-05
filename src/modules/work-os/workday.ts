@@ -112,11 +112,19 @@ export function firstFollowUpMinutes(value: unknown = process.env.WORK_OS_FIRST_
 }
 
 export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "firstFollowUpMinutes" | "session" | "at">) {
-  if (context.firstFollowUpAt) return context.firstFollowUpAt;
   const baseline = context.planConfirmedAt ?? context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  return new Date(baselineAt + (firstFollowUpOption(context.firstFollowUpMinutes) ?? firstFollowUpMinutes()) * 60_000).toISOString();
+  const minutes = firstFollowUpOption(context.firstFollowUpMinutes) ?? firstFollowUpMinutes();
+  const resolvedAt = baselineAt + minutes * 60_000;
+  if (context.firstFollowUpAt) {
+    const storedAt = Date.parse(context.firstFollowUpAt);
+    // A stored anchor written under the resolved cadence is preserved (it
+    // carries sub-minute precision from its confirmation request); a stale
+    // one is rebased so a cadence edit applies to the pending workday.
+    if (Number.isFinite(storedAt) && Math.abs(storedAt - resolvedAt) <= 60_000) return context.firstFollowUpAt;
+  }
+  return new Date(resolvedAt).toISOString();
 }
 
 export function eodDueAt(scheduledEndsAt: string | null | undefined) {
@@ -169,9 +177,20 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
     const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : null;
     const latestResponseAt = lastSubstantiveAt !== null && lastSubstantiveAt > (lastPromptAt ?? -Infinity) ? lastSubstantiveAt : null;
     const intervalMs = checkInIntervalMs(context.checkInIntervalMinutes ?? undefined);
-    const fallbackAt = latestResponseAt !== null
-      ? latestResponseAt + intervalMs
-      : Date.parse(context.nextFallbackAt ?? new Date(firstAt + intervalMs).toISOString());
+    let fallbackAt: number;
+    if (latestResponseAt !== null) {
+      fallbackAt = latestResponseAt + intervalMs;
+    } else {
+      // The persisted deadline was written at delivery under the then-current
+      // cadence. Keep it when it still reflects the resolved cadence (allowing
+      // for the delivery lag); otherwise rebase it so an in-place cadence edit
+      // takes effect without waiting for another delivery.
+      const persistedFallbackAt = context.nextFallbackAt ? Date.parse(context.nextFallbackAt) : Number.NaN;
+      const cadenceAnchorAt = (lastPromptAt ?? firstAt) + intervalMs;
+      const persistedMatchesCadence = lastPromptAt !== null && Number.isFinite(persistedFallbackAt)
+        && Math.abs(persistedFallbackAt - cadenceAnchorAt) <= 60_000;
+      fallbackAt = persistedMatchesCadence ? persistedFallbackAt : cadenceAnchorAt;
+    }
     if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
     progress = now >= fallbackAt
       ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }

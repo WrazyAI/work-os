@@ -59,11 +59,13 @@ export function parseWorkOsLocalConfig(text: string): WorkOsLocalConfig {
     for (const [key, value] of Object.entries(peopleRaw as Record<string, unknown>)) {
       const name = key.trim();
       if (!name || !value || typeof value !== "object" || Array.isArray(value)) continue;
+      // Emails match case-insensitively; ids keep their exact spelling.
+      const normalized = name.includes("@") ? name.toLowerCase() : name;
       const entry = value as Record<string, unknown>;
       const checkIn = checkInIntervalOption(entry.checkInIntervalMinutes);
       const first = firstFollowUpOption(entry.firstFollowUpMinutes);
       if (checkIn === null && first === null) continue;
-      people[name] = {
+      people[normalized] = {
         ...(checkIn !== null ? { checkInIntervalMinutes: checkIn } : {}),
         ...(first !== null ? { firstFollowUpMinutes: first } : {}),
       };

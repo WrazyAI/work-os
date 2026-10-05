@@ -156,6 +156,34 @@ test("a resolved per-person cadence overrides the interval and first follow-up",
   assert.equal(firstFollowUpAt({ session, firstFollowUpMinutes: 30, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:30:00.000Z");
   // An invalid context window falls back to the environment/default path.
   assert.equal(firstFollowUpAt({ session, firstFollowUpMinutes: 4, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T10:15:00.000Z");
+  // A stored anchor written under the resolved cadence is preserved, including
+  // its sub-minute confirmation precision.
+  assert.equal(firstFollowUpAt({ session, firstFollowUpAt: "2026-08-12T09:10:30.000Z", firstFollowUpMinutes: 10, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:10:30.000Z");
+  // A stored anchor from an older cadence is rebased once the cadence changes.
+  assert.equal(firstFollowUpAt({ session, firstFollowUpAt: "2026-08-12T09:10:00.000Z", firstFollowUpMinutes: 30, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:30:00.000Z");
+});
+
+test("a cadence edit rebases the persisted next check-in deadline", () => {
+  const waiting = {
+    session: { ...session, lastPromptKind: "hourly_fallback" as const, lastPromptAt: "2026-08-12T09:05:00.000Z" },
+    breaks: [],
+    lastPromptKind: "hourly_fallback" as const,
+    lastPromptAt: "2026-08-12T09:05:00.000Z",
+    hasConfirmedPlan: true,
+  };
+  // A persisted deadline that still matches the resolved cadence (within the
+  // delivery lag) is preserved exactly.
+  const kept = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:15:30.000Z", checkInIntervalMinutes: 10, at: "2026-08-12T09:16:00.000Z" });
+  assert.equal(kept.kind, "hourly_fallback");
+  assert.equal(kept.nextPromptAt, "2026-08-12T09:15:30.000Z");
+  // A deadline persisted under a longer cadence rebases onto the shorter one.
+  const shortened = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T10:05:00.000Z", checkInIntervalMinutes: 10, at: "2026-08-12T09:18:00.000Z" });
+  assert.equal(shortened.kind, "hourly_fallback");
+  assert.equal(shortened.nextPromptAt, "2026-08-12T09:15:00.000Z");
+  // A deadline persisted under a shorter cadence rebases onto the longer one.
+  const lengthened = decideWorkdayPrompt({ ...waiting, nextFallbackAt: "2026-08-12T09:15:00.000Z", checkInIntervalMinutes: 60, at: "2026-08-12T09:18:00.000Z" });
+  assert.equal(lengthened.kind, null);
+  assert.equal(lengthened.nextPromptAt, "2026-08-12T10:05:00.000Z");
 });
 
 test("daily plan candidates deduplicate provider and local tasks", () => {

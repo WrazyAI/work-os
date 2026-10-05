@@ -18,6 +18,7 @@ test("local config parsing keeps only bounded cadence entries", () => {
       "below-floor@example.com": { checkInIntervalMinutes: 4 },
       "partial@example.com": { firstFollowUpMinutes: 30 },
       "bad@example.com": { checkInIntervalMinutes: "nope" },
+      "UPPER@Example.com": { checkInIntervalMinutes: 20 },
       "": { checkInIntervalMinutes: 10 },
     },
     unknownKey: true,
@@ -25,6 +26,7 @@ test("local config parsing keeps only bounded cadence entries", () => {
   assert.deepEqual(config.people, {
     "david@maigreeks.com": { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 },
     "partial@example.com": { firstFollowUpMinutes: 30 },
+    "upper@example.com": { checkInIntervalMinutes: 20 },
   });
   assert.deepEqual(parseWorkOsLocalConfig("{not json"), { people: {} });
   assert.deepEqual(parseWorkOsLocalConfig("[]"), { people: {} });
