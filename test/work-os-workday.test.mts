@@ -134,6 +134,30 @@ test("a confirmed plan anchors the first follow-up at seventy-five minutes", () 
   assert.equal(prompt.nextPromptAt, "2026-08-12T10:25:00.000Z");
 });
 
+test("a resolved per-person cadence overrides the interval and first follow-up", () => {
+  const afterPrompt = {
+    session: { ...session, lastPromptKind: "hourly_fallback" as const, lastPromptAt: "2026-08-12T09:05:00.000Z" },
+    breaks: [],
+    lastPromptKind: "hourly_fallback" as const,
+    lastPromptAt: "2026-08-12T09:05:00.000Z",
+    lastSubstantiveUpdateAt: "2026-08-12T09:07:00.000Z",
+    hasConfirmedPlan: true,
+  };
+  // A 10-minute cadence makes the next check-in due at 09:17.
+  const fast = decideWorkdayPrompt({ ...afterPrompt, checkInIntervalMinutes: 10, at: "2026-08-12T09:18:00.000Z" });
+  assert.equal(fast.kind, "hourly_fallback");
+  assert.equal(fast.nextPromptAt, "2026-08-12T09:17:00.000Z");
+  // The same story on the 60-minute default is still waiting.
+  const slow = decideWorkdayPrompt({ ...afterPrompt, checkInIntervalMinutes: 60, at: "2026-08-12T09:18:00.000Z" });
+  assert.equal(slow.kind, null);
+  assert.equal(slow.nextPromptAt, "2026-08-12T10:07:00.000Z");
+  // The context first-follow-up window anchors the computed prompt.
+  assert.equal(firstFollowUpAt({ session, firstFollowUpMinutes: 10, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:10:00.000Z");
+  assert.equal(firstFollowUpAt({ session, firstFollowUpMinutes: 30, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T09:30:00.000Z");
+  // An invalid context window falls back to the environment/default path.
+  assert.equal(firstFollowUpAt({ session, firstFollowUpMinutes: 4, at: "2026-08-12T09:05:00.000Z" }), "2026-08-12T10:15:00.000Z");
+});
+
 test("daily plan candidates deduplicate provider and local tasks", () => {
   assert.deepEqual(dedupePlanCandidates([{ id: "a", title: "A" }, { id: "a", title: "A duplicate" }, { provider_task_id: "b", title: "B" }]).map((item) => item.title), ["A", "B"]);
 });

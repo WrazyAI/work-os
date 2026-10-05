@@ -4,7 +4,7 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
 import { WorkOsConflictError } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
-import { getWorkday } from "@/lib/work-os-workday";
+import { getWorkday, workOsCadenceFor } from "@/lib/work-os-workday";
 import {
   personTimezone,
   prepareScreenshotWindow,
@@ -22,7 +22,7 @@ import {
   type RecordedActivityAllowlistEntry,
 } from "@/lib/work-os-github-activity";
 import { localDateForTimezone, localDayBounds } from "@/modules/work-os/companion";
-import { checkInCadenceOverridden } from "@/modules/work-os/workday";
+import { checkInCadenceOverride, checkInIntervalOption } from "@/modules/work-os/workday";
 
 type Json = Record<string, unknown>;
 
@@ -54,11 +54,13 @@ export type ActivityIntervalConfig = {
 /** Bounded, deployment-overridable configuration. Invalid values fall back so a
  * bad environment value can never create an unbounded model or vision spend.
  * A non-hourly check-in cadence override triples the daily recap cap (up to 72)
- * so short testing cadences are not silently capped at the base maximum. */
-export function activityIntervalConfig(env: NodeJS.ProcessEnv = process.env): ActivityIntervalConfig {
+ * so short testing cadences are not silently capped at the base maximum. The
+ * person's resolved cadence (local config, then environment) drives the scale. */
+export function activityIntervalConfig(env: NodeJS.ProcessEnv = process.env, cadenceMinutes?: number | null): ActivityIntervalConfig {
   const enabled = !["0", "false", "off"].includes(String(env.WORK_OS_ACTIVITY_INTERVALS_ENABLED ?? "1").trim().toLowerCase());
   const baseMaxPerDay = clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY, 10, 1, 24);
-  const maxPerDay = checkInCadenceOverridden(env.WORK_OS_CHECK_IN_INTERVAL_MINUTES) ? baseMaxPerDay * 3 : baseMaxPerDay;
+  const effectiveCadence = cadenceMinutes ?? checkInIntervalOption(env.WORK_OS_CHECK_IN_INTERVAL_MINUTES);
+  const maxPerDay = checkInCadenceOverride(effectiveCadence) ? baseMaxPerDay * 3 : baseMaxPerDay;
   return {
     enabled,
     maxMinutes: clampInt(env.WORK_OS_ACTIVITY_INTERVAL_MAX_MINUTES, 120, 30, 240),
@@ -554,7 +556,7 @@ export type ActivityIntervalRecord = Record<string, any>;
 const ensureInFlight = new Map<string, Promise<{ status: string; interval?: ActivityIntervalRecord; reason?: string }>>();
 
 function selectable(access: WorkOsAccess) {
-  const config = activityIntervalConfig();
+  const config = activityIntervalConfig(process.env, workOsCadenceFor(access).checkInIntervalMinutes);
   if (!config.enabled) return { ok: false as const, reason: "feature_disabled" };
   if (access.featureFlags.screenshot_summaries !== true) return { ok: false as const, reason: "screenshot_summaries_disabled" };
   if (access.featureFlags.activity_intervals === false) return { ok: false as const, reason: "activity_intervals_disabled" };

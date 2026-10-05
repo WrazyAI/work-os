@@ -1,0 +1,8 @@
+{
+  "people": {
+    "david@maigreeks.com": {
+      "checkInIntervalMinutes": 10,
+      "firstFollowUpMinutes": 10
+    }
+  }
+}

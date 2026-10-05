@@ -148,7 +148,11 @@ per due check-in from Worktivity frames; bounds are
 `WORK_OS_ACTIVITY_INTERVAL_MAX_FRAMES` (12),
 `WORK_OS_ACTIVITY_INTERVAL_MAX_RAW_FRAMES` (5), and
 `WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY` (10; a valid non-hourly cadence
-override triples the cap up to 72). AI inference never creates a
+override triples the cap up to 72). Per-person cadence overrides live in
+`config/work-os.local.json` (matched by email or person id;
+`WORK_OS_LOCAL_CONFIG_PATH` can point elsewhere): a person entry overrides the
+deployment environment, and everyone else falls back to the environment and
+then the 60-minute default. AI inference never creates a
 `work_check_ins` row and never advances `last_substantive_update_at`.
 
 Confirming or amending a recap queues one bounded next-step generation pass

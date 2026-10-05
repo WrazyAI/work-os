@@ -8,6 +8,7 @@ import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
 import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-local-config";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
@@ -131,11 +132,11 @@ async function transitionToEodIfDue(access: WorkOsAccess, session: Record<string
   return current.data ?? session;
 }
 
-async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date) {
+async function recordPromptDelivery(access: WorkOsAccess, session: Record<string, any> | null, prompt: ReturnType<typeof decideWorkdayPrompt>, at: Date, cadence: ResolvedWorkOsCadence) {
   if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);
   if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return { session, delivered: false };
-  const nextFallbackAt = new Date(scheduledAt + checkInIntervalMs()).toISOString();
+  const nextFallbackAt = new Date(scheduledAt + checkInIntervalMs(cadence.checkInIntervalMinutes)).toISOString();
   let query = db().from("work_sessions").update({
     last_prompt_kind: prompt.kind,
     last_prompt_at: at.toISOString(),
@@ -227,7 +228,14 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
   return loadPlanByDate(access, shiftDate);
 }
 
+/** Effective cadence for one person's workday: checkout-local config override,
+ * then the deployment environment, then the built-in defaults. */
+export function workOsCadenceFor(access: WorkOsAccess): ResolvedWorkOsCadence {
+  return resolveWorkOsCadence({ personId: access.personId, email: access.ctx.profile.email });
+}
+
 export async function getWorkday(access: WorkOsAccess, at = new Date()) {
+  const cadence = workOsCadenceFor(access);
   const loadedSession = await activeSession(access);
   const session = loadedSession ? await transitionToEodIfDue(access, loadedSession, at) : null;
   const context = await localWorkDate(access, at);
@@ -254,15 +262,17 @@ export async function getWorkday(access: WorkOsAccess, at = new Date()) {
     lastPromptKind: session?.last_prompt_kind as "follow_up" | "hourly_fallback" | "eod" | null,
     lastPromptAt: session?.last_prompt_at as string | null,
     lastSubstantiveUpdateAt: session?.last_substantive_update_at as string | null, at: at.toISOString(),
+    checkInIntervalMinutes: cadence.checkInIntervalMinutes,
+    firstFollowUpMinutes: cadence.firstFollowUpMinutes,
   });
-  return { session, plan, prompt: promptDecision };
+  return { session, plan, prompt: promptDecision, cadence };
 }
 
 /** Claims a due notification after a companion has decided to display it.
  * Read-only day polling must never advance this cadence. */
 export async function deliverWorkdayPrompt(access: WorkOsAccess, at = new Date()) {
   const workday = await getWorkday(access, at);
-  const delivery = await recordPromptDelivery(access, workday.session, workday.prompt, at);
+  const delivery = await recordPromptDelivery(access, workday.session, workday.prompt, at, workday.cadence);
   return { ...workday, session: delivery.session, delivered: delivery.delivered };
 }
 
@@ -779,8 +789,10 @@ export async function saveDailyPlanDraft(access: WorkOsAccess, body: Json, idemp
     removableOutcomeIds = existingItems.filter((item) => (item.item_kind === "outcome" || !item.task_id) && !retainedOutcomes.has(String(item.id))).map((item) => String(item.id));
   }
   const confirmedAt = plan.confirmed_at ? new Date(plan.confirmed_at as string) : new Date(now);
+  const cadence = workOsCadenceFor(access);
   const firstFollowUpAt = confirm && session && !session.first_follow_up_at ? nextFirstFollowUpAt({
     planConfirmedAt: confirmedAt.toISOString(),
+    firstFollowUpMinutes: cadence.firstFollowUpMinutes,
     session: {
       state: session.state as WorkSessionState,
       scheduledStartsAt: session.scheduled_starts_at as string | null,

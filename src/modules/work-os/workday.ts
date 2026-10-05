@@ -34,6 +34,10 @@ export interface PromptContext {
   lastPromptKind?: "follow_up" | "hourly_fallback" | "eod" | null;
   lastPromptAt?: string | null;
   lastSubstantiveUpdateAt?: string | null;
+  /** Resolved per-person cadence; omitted values fall back to the deployment
+   * environment and then the built-in defaults. */
+  checkInIntervalMinutes?: number | null;
+  firstFollowUpMinutes?: number | null;
   at: string;
 }
 
@@ -70,37 +74,49 @@ const MIN_CHECK_IN_INTERVAL_MINUTES = 5;
 const MAX_CHECK_IN_INTERVAL_MINUTES = 240;
 export const EOD_LEAD_TIME_MS = 10 * 60_000;
 
+/** Valid cadence options, or null when a value is invalid. Kept next to the
+ * bounds so local config and environment overrides share one contract. */
+export function checkInIntervalOption(value: unknown): number | null {
+  const minutes = Number(value);
+  return Number.isInteger(minutes) && minutes >= MIN_CHECK_IN_INTERVAL_MINUTES && minutes <= MAX_CHECK_IN_INTERVAL_MINUTES ? minutes : null;
+}
+
+export function firstFollowUpOption(value: unknown): number | null {
+  const minutes = Number(value);
+  return Number.isInteger(minutes) && minutes >= MIN_FIRST_FOLLOW_UP_MINUTES && minutes <= MAX_FIRST_FOLLOW_UP_MINUTES ? minutes : null;
+}
+
+/** True when a cadence differs from the hourly default (used to scale
+ * testing-time daily caps). */
+export function checkInCadenceOverride(minutes: number | null | undefined): boolean {
+  return minutes != null && minutes !== DEFAULT_CHECK_IN_INTERVAL_MINUTES;
+}
+
 /** The cadence is deployment-configurable but bounded so a bad environment
  * value cannot create a notification storm or silence a whole workday. */
-export function checkInIntervalMs(value = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): number {
-  const minutes = Number(value);
-  const valid = Number.isInteger(minutes) && minutes >= MIN_CHECK_IN_INTERVAL_MINUTES && minutes <= MAX_CHECK_IN_INTERVAL_MINUTES;
-  return (valid ? minutes : DEFAULT_CHECK_IN_INTERVAL_MINUTES) * 60_000;
+export function checkInIntervalMs(value: unknown = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): number {
+  return (checkInIntervalOption(value) ?? DEFAULT_CHECK_IN_INTERVAL_MINUTES) * 60_000;
 }
 
 /** True when a deployment set the check-in cadence to anything other than the
  * hourly default (used to scale testing-time daily caps). */
-export function checkInCadenceOverridden(value = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): boolean {
-  const minutes = Number(value);
-  const valid = Number.isInteger(minutes) && minutes >= MIN_CHECK_IN_INTERVAL_MINUTES && minutes <= MAX_CHECK_IN_INTERVAL_MINUTES;
-  return valid && minutes !== DEFAULT_CHECK_IN_INTERVAL_MINUTES;
+export function checkInCadenceOverridden(value: unknown = process.env.WORK_OS_CHECK_IN_INTERVAL_MINUTES): boolean {
+  return checkInCadenceOverride(checkInIntervalOption(value));
 }
 
 /** The first progress prompt follows clock-in (or plan confirmation) by this
  * many minutes. Deployment-configurable for testing phases, bounded so a bad
  * value cannot silence or storm the workday. */
-export function firstFollowUpMinutes(value = process.env.WORK_OS_FIRST_FOLLOW_UP_MINUTES): number {
-  const minutes = Number(value);
-  const valid = Number.isInteger(minutes) && minutes >= MIN_FIRST_FOLLOW_UP_MINUTES && minutes <= MAX_FIRST_FOLLOW_UP_MINUTES;
-  return valid ? minutes : FIRST_FOLLOW_UP_MINUTES;
+export function firstFollowUpMinutes(value: unknown = process.env.WORK_OS_FIRST_FOLLOW_UP_MINUTES): number {
+  return firstFollowUpOption(value) ?? FIRST_FOLLOW_UP_MINUTES;
 }
 
-export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "session" | "at">) {
+export function firstFollowUpAt(context: Pick<PromptContext, "planConfirmedAt" | "firstFollowUpAt" | "firstFollowUpMinutes" | "session" | "at">) {
   if (context.firstFollowUpAt) return context.firstFollowUpAt;
   const baseline = context.planConfirmedAt ?? context.session?.clockedInAt ?? context.session?.scheduledStartsAt ?? context.at;
   const baselineAt = Date.parse(baseline ?? context.at);
   if (!Number.isFinite(baselineAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
-  return new Date(baselineAt + firstFollowUpMinutes() * 60_000).toISOString();
+  return new Date(baselineAt + (firstFollowUpOption(context.firstFollowUpMinutes) ?? firstFollowUpMinutes()) * 60_000).toISOString();
 }
 
 export function eodDueAt(scheduledEndsAt: string | null | undefined) {
@@ -152,9 +168,10 @@ export function decideWorkdayPrompt(context: PromptContext): WorkdayPrompt {
     const lastPromptAt = context.lastPromptAt ? Date.parse(context.lastPromptAt) : null;
     const lastSubstantiveAt = context.lastSubstantiveUpdateAt ? Date.parse(context.lastSubstantiveUpdateAt) : null;
     const latestResponseAt = lastSubstantiveAt !== null && lastSubstantiveAt > (lastPromptAt ?? -Infinity) ? lastSubstantiveAt : null;
+    const intervalMs = checkInIntervalMs(context.checkInIntervalMinutes ?? undefined);
     const fallbackAt = latestResponseAt !== null
-      ? latestResponseAt + checkInIntervalMs()
-      : Date.parse(context.nextFallbackAt ?? new Date(firstAt + checkInIntervalMs()).toISOString());
+      ? latestResponseAt + intervalMs
+      : Date.parse(context.nextFallbackAt ?? new Date(firstAt + intervalMs).toISOString());
     if (!Number.isFinite(fallbackAt)) throw new Error("Prompt timestamps must be valid ISO timestamps.");
     progress = now >= fallbackAt
       ? { kind: "hourly_fallback", nextPromptAt: new Date(fallbackAt).toISOString(), required: false, reason: "Your next configured check-in is due." }

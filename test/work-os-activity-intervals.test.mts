@@ -217,6 +217,13 @@ test("a non-hourly cadence override triples the daily recap cap", () => {
   assert.equal(activityIntervalConfig({ WORK_OS_CHECK_IN_INTERVAL_MINUTES: "241", WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv).maxPerDay, 24);
 });
 
+test("a per-person cadence scales the daily recap cap for that person only", () => {
+  const env = { WORK_OS_ACTIVITY_INTERVAL_MAX_PER_DAY: "24" } as NodeJS.ProcessEnv;
+  assert.equal(activityIntervalConfig(env, 10).maxPerDay, 72);
+  assert.equal(activityIntervalConfig(env, 60).maxPerDay, 24);
+  assert.equal(activityIntervalConfig(env, null).maxPerDay, 24);
+});
+
 test("evidence entries keep raw flags only for the representative subset", () => {
   const entries: IntervalEvidenceEntry[] = selectIntervalEvidence([
     candidate("a", "2026-09-28T15:00:00.000Z", "VS Code", true),
