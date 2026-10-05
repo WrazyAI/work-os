@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.94
+
+- Your suggested next steps now stay in the chat instead of vanishing after the conversation syncs, and they are also visible in the app chat.
+
 ## 0.3.93
 
 - After you approve a recap, the chat stays open and shows suggested next steps — mark a task done, add a task, or add a subtask.
