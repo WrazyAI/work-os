@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
           background: "#14161b",
         }}
       >
-        <h1 style={{ fontSize: 20, margin: 0 }}>Reset your password</h1>
+        <h1 style={{ fontSize: 20, margin: 0, color: "#e8e9ec" }}>Reset your password</h1>
         {sent ? (
           <>
             <p style={{ margin: 0, fontSize: 13, lineHeight: "20px", color: "#9a9da6" }}>

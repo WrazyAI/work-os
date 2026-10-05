@@ -49,7 +49,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Reset link needed</h1>
+        <h1 style={{ fontSize: 20, margin: 0, color: "#e8e9ec" }}>Reset link needed</h1>
         <p style={{ margin: 0, fontSize: 13, lineHeight: "20px", color: "#9a9da6" }}>
           This page needs the link from your reset email. Request a new one and open it here.
         </p>
@@ -63,7 +63,7 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Password updated</h1>
+        <h1 style={{ fontSize: 20, margin: 0, color: "#e8e9ec" }}>Password updated</h1>
         <p style={{ margin: 0, fontSize: 13, lineHeight: "20px", color: "#9a9da6" }}>
           Your password has been changed. Sign in with it now.
         </p>
@@ -76,7 +76,7 @@ function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h1 style={{ fontSize: 20, margin: 0 }}>Choose a new password</h1>
+      <h1 style={{ fontSize: 20, margin: 0, color: "#e8e9ec" }}>Choose a new password</h1>
       <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
         New password
         <input

@@ -61,6 +61,7 @@ test("password reset is public and wired for every role", () => {
 
   assert.match(login, />WrazyOS<\/h1>/, "the auth screen must say WrazyOS");
   assert.doesNotMatch(login, />Work OS<\/h1>/, "the old Work OS title must be gone");
+  assert.match(login, /<h1 style=\{\{ fontSize: 20, margin: 0, color: "#e8e9ec" \}\}>WrazyOS<\/h1>/, "the title must carry its own color (the global heading token is light-theme dark)");
   assert.match(login, /\/forgot-password/, "the auth screen must offer the reset flow");
   assert.match(forgot, /\/api\/auth\/request-password-reset/, "the forgot page requests the reset email");
   assert.match(reset, /\/api\/auth\/reset-password/, "the reset page submits the new password");

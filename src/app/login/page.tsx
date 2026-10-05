@@ -57,7 +57,7 @@ export default function LoginPage() {
           background: "#14161b",
         }}
       >
-        <h1 style={{ fontSize: 20, margin: 0 }}>WrazyOS</h1>
+        <h1 style={{ fontSize: 20, margin: 0, color: "#e8e9ec" }}>WrazyOS</h1>
         <p style={{ margin: 0, fontSize: 13, color: "#9a9da6" }}>
           Sign in to continue. Accounts are invite-only.
         </p>
