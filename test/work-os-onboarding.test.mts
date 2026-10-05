@@ -18,9 +18,20 @@ test("catalog exposes eight reviewed employee archetypes", () => {
   assert.equal(new Set(WORK_ARCHETYPES.map((entry) => entry.id)).size, 8);
 });
 
+test("customer service replaces people & finance in the reviewed catalog", () => {
+  const customerService = WORK_ARCHETYPES.find((entry) => entry.id === "customer-service");
+  assert.ok(customerService, "customer service archetype is available");
+  assert.equal(customerService.name, "Customer Service");
+  assert.ok(customerService.specialties.length >= 4, "customer service carries specialties");
+  assert.ok(customerService.items.length >= 8, "customer service carries profile items");
+  assert.equal(WORK_ARCHETYPES.some((entry) => entry.id === "people-finance"), false, "the retired archetype is gone");
+});
+
 test("role inference is deterministic and leaves unmatched titles unassigned", () => {
   assert.equal(inferArchetype("Senior Software Engineer"), "engineering");
-  assert.equal(inferArchetype("Customer Service Representative"), "support");
+  assert.equal(inferArchetype("Customer Service Representative"), "customer-service");
+  assert.equal(inferArchetype("Customer Support Specialist"), "support");
+  assert.equal(inferArchetype("Customer Success Manager"), "support");
   assert.equal(inferArchetype("Mystery maker"), null);
 });
 
