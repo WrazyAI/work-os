@@ -5,6 +5,7 @@
 // - Invite-only: sign-up is disabled; provisioning is an admin operation.
 // See docs/NEON-MIGRATION-PLAN.md.
 import { betterAuth } from "better-auth";
+import { nextCookies } from "better-auth/next-js";
 import { kyselyAdapter } from "@better-auth/kysely-adapter";
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
@@ -52,4 +53,9 @@ export const auth = betterAuth({
       },
     },
   },
+  // Apply Better Auth's Set-Cookie headers inside Next.js Server Actions.
+  // Without it, `logout()`'s server-side signOut invalidated the session row
+  // but left the `__Secure-` session cookies in the browser, so the 5-minute
+  // signed session cache kept the user signed in. Must stay the last plugin.
+  plugins: [nextCookies()],
 });
