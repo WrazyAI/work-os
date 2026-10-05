@@ -939,15 +939,18 @@ conversation: it persists across reloads and renders in both the floating
 companion and the in-app chat, and a cross-window sync can never drop a card
 mid-decision (the local card wins when the incoming turn predates it). A turn
 whose card was lost to an older build re-attaches from the server on load —
-its entry id carries the interval — and a recovered moment never collapses
-itself, so pending suggestions are never stranded.
-When every item is decided the card shows its result
-(`2 changes applied · 1 skipped`) and the panel settles back to the orb
-after a short beat. If nothing is actionable the card says so quietly. Ending
-the moment with items undecided dismisses them, and a 24-hour sweep expires
-anything the client never closed, so suggestions never pile up. Generation
-never blocks the recap decision, never writes check-ins or cadence, and its
-outcome (`next_steps_status`) is recorded on the interval.
+its entry id carries the interval — so pending suggestions are never stranded.
+Once a moment has nothing left to decide — every item decided, or nothing
+actionable — the panel settles back to the orb after about three seconds,
+whether the moment was fresh or recovered; items still awaiting a decision
+keep it open. The recap confirmation's success animation is staggered: it
+plays on the orb only after the panel has closed (by the settle or a manual
+close), so the celebration is actually seen instead of finishing behind the
+next-steps card. If nothing is actionable the card says so quietly before it
+closes. Ending the moment with items undecided dismisses them, and a 24-hour
+sweep expires anything the client never closed, so suggestions never pile up.
+Generation never blocks the recap decision, never writes check-ins or cadence,
+and its outcome (`next_steps_status`) is recorded on the interval.
 
 The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance

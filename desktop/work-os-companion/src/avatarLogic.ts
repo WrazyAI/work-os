@@ -216,7 +216,7 @@ export function isHeaderDragStart(button: number, target: EventTarget | null): b
  * for its confirmation. After approval the chat lingers with the recap's
  * next-step suggestions; once they are decided, the panel returns to the orb
  * after this settle beat. */
-export const NEXT_STEPS_SETTLE_MS = 6_000;
+export const NEXT_STEPS_SETTLE_MS = 3_000;
 
 export function nextStepsSettleMs(): number {
   return NEXT_STEPS_SETTLE_MS;
