@@ -1141,7 +1141,7 @@ body {
 .chat-activity-bullets li::marker { color: var(--ink-3, #7b8278); }
 .chat-activity-flow { margin: 0; color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.4; }
 .chat-activity-flow strong { color: var(--ink-2, #626a61); font-weight: 650; }
-.chat-activity-github { display: grid; gap: 4px; border-left: 2px solid var(--line, #e2e6df); padding: 2px 0 2px 8px; }
+.chat-activity-github { display: grid; gap: 4px; }
 .chat-activity-github-head { display: flex; align-items: center; gap: 5px; margin: 0; color: var(--ink-2, #626a61); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .chat-activity-github ul { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .chat-activity-github li { display: flex; align-items: baseline; gap: 6px; color: var(--ink-2, #626a61); font-size: 11px; line-height: 1.45; }
@@ -1202,15 +1202,20 @@ body {
   resize: vertical;
 }
 .chat-activity-evidence { border-top: 1px solid var(--line, #e2e6df); padding-top: 6px; }
-.chat-activity-evidence summary {
+.chat-activity-evidence > summary {
   color: var(--ink-2, #626a61);
   font-size: 10.5px;
   font-weight: 700;
   cursor: pointer;
   list-style-position: inside;
 }
-.chat-activity-evidence[open] summary { margin-bottom: 4px; }
+.chat-activity-evidence[open] > summary { margin-bottom: 4px; }
+.chat-activity-evidence-groups { display: grid; gap: 5px; }
+.chat-activity-evidence-group { border-top: 1px solid var(--line, #e2e6df); padding-top: 5px; }
+.chat-activity-evidence-group > summary { color: var(--ink-2, #626a61); font-size: 10px; font-weight: 650; cursor: pointer; list-style-position: inside; }
+.chat-activity-evidence-group[open] > summary { margin-bottom: 4px; }
 .chat-activity-evidence ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.chat-activity-evidence-note { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
 .chat-activity-frame {
   display: flex;
   width: 100%;

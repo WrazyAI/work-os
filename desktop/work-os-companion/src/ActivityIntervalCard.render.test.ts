@@ -84,6 +84,9 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
+    expect(markup).toContain("Evidence · 3 screenshots · 2 GitHub events");
+    expect(markup).toContain("Screenshots · 3");
+    expect(markup).toContain("GitHub activity · 2");
     expect(markup).toContain("Recorded in GitHub");
     expect(markup).toContain("Pushed 3 commits to WrazyAI/work-os");
     expect(markup).toContain("CI for your commit on main: Work OS CI");
@@ -93,6 +96,28 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain(">Your work<");
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/compare/abc123"');
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/actions/runs/1"');
+    const githubEventPosition = markup.indexOf("Pushed 3 commits to WrazyAI/work-os");
+    const enclosingDisclosure = markup.lastIndexOf("<details", githubEventPosition);
+    expect(markup.slice(enclosingDisclosure, githubEventPosition)).toContain("GitHub activity · 2");
+  });
+
+  it("keeps GitHub evidence available when the recap has no screenshots", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...baseInterval,
+        evidence: [],
+        evidenceCount: 0,
+        recordedActivity: [
+          { description: "Opened pull request #42", relation: "performed", url: "https://github.com/WrazyAI/work-os/pull/42" },
+        ],
+      },
+    }));
+    expect(markup).toContain("Evidence · 0 screenshots · 1 GitHub event");
+    expect(markup).toContain("GitHub activity · 1");
+    expect(markup).not.toContain("Screenshots ·");
+    const eventPosition = markup.indexOf("Opened pull request #42");
+    const enclosingDisclosure = markup.lastIndexOf("<details", eventPosition);
+    expect(markup.slice(enclosingDisclosure, eventPosition)).toContain("GitHub activity · 1");
   });
 
   it("omits the GitHub section when no recorded activity is present", () => {

@@ -513,10 +513,11 @@ The card keeps the provenance and save-state line, with an inline retry when a
 save is queued offline or conflicted.
 
 Beneath the goal, the Focus tab carries the same Recent activity interval
-stream as the floating Tasks tab — recaps newest first, each with its evidence
-disclosure and confirm/amend actions — so the day's goal and its interval
-check-ins read as one record. The stream is separated by a hairline and scrolls
-with the rest of the sheet.
+stream as the floating Tasks tab — recaps newest first, each with one evidence
+disclosure that reports screenshot and GitHub event counts, then separate
+Screenshots and GitHub activity disclosures, plus confirm/amend actions — so the
+day's goal and its interval check-ins read as one record. The stream is
+separated by a hairline and scrolls with the rest of the sheet.
 
 ### 7.3 Floating Otter chat
 
@@ -887,12 +888,14 @@ in the same window, deployments they created, and reviews or closures on their
 pull requests). Recorded activity is provider fact, so the recap may state it
 exactly as recorded and leads with it when present — but a merged pull request,
 a passing workflow, or a deployment is never Nifty task completion, and
-triggered items are never described as the employee's own action. The card
-renders a `Recorded in GitHub` section with a per-item `You` / `Your work`
-tag and the artifact link; the model's structured `recorded_activity` output is
-kept only when it matches the recorded list, so it cannot fabricate an item. A
-GitHub read failure degrades silently to a Worktivity-only recap, and coverage
-records whether GitHub context was used.
+triggered items are never described as the employee's own action. GitHub events
+stay inside the recap's collapsed `Evidence` disclosure beside the screenshot
+count. Expanding it reveals separate `Screenshots` and `GitHub activity`
+disclosures; each GitHub item retains its `You` / `Your work` tag and artifact
+link. The model's structured `recorded_activity` output is kept only when it
+matches the recorded list, so it cannot fabricate an item. A GitHub read
+failure degrades silently to a Worktivity-only recap, and coverage records
+whether GitHub context was used.
 
 Review adds provenance without creating employee-authored truth:
 
@@ -942,8 +945,11 @@ outcome (`next_steps_status`) is recorded on the interval.
 The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance
 chip (`Not reviewed`, `Confirmed`, `Updated by you`), a concise headline, the
-detail, and a collapsed `Evidence · N screenshots` disclosure showing the exact
-analyzed frames with capture time and neutral frame summary. The floating
+detail, and a collapsed `Evidence · N screenshots · M GitHub events`
+disclosure. Expanding it reveals separate screenshot and GitHub activity
+disclosures: screenshots show the exact analyzed frames with capture time and
+neutral frame summary, while GitHub shows provider-recorded events with their
+relation tags and links. The floating
 stream's header carries a dark `View in app` action on the right that opens the
 dock's Focus tab in the main window, where the same stream sits beneath the
 daily goal. Expired images say

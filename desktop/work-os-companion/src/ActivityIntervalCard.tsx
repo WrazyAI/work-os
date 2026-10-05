@@ -87,8 +87,9 @@ interface ActivityIntervalCardProps {
 }
 
 /** One Activity Interval Review card: headline, evidence-bounded detail,
- * provenance chip, confirm/amend actions, and the exact analyzed frames behind
- * a collapsed disclosure. Looks like a chat card, not a dashboard tile. */
+ * provenance chip, confirm/amend actions, and a collapsed disclosure for its
+ * exact analyzed screenshots and recorded GitHub activity. Looks like a chat
+ * card, not a dashboard tile. */
 export function ActivityIntervalCard({
   interval,
   timezone,
@@ -107,8 +108,10 @@ export function ActivityIntervalCard({
   useModalScrollLock(lightbox !== null);
 
   const evidence = useMemo(() => (interval.evidence ?? []).filter((entry) => entry.usedInModel), [interval.evidence]);
+  const recordedActivity = interval.recordedActivity ?? [];
   const retained = evidence.filter((entry) => entry.summaryId && entry.retained);
   const evidenceExpired = interval.evidenceExpired === true || retained.length < evidence.length;
+  const screenshotCount = interval.evidenceCount ?? evidence.length;
   const showDate = !!currentDate && localDateKey(interval.windowStart, timezone) !== currentDate;
 
   const closeLightbox = useCallback(() => {
@@ -167,26 +170,6 @@ export function ActivityIntervalCard({
         </ul>
       ) : null}
       {interval.workflow && interval.workflow.length > 1 ? <p className="chat-activity-flow"><strong>Flow:</strong> {interval.workflow.join(" → ")}</p> : null}
-      {interval.recordedActivity?.length ? (
-        <div className="chat-activity-github">
-          <p className="chat-activity-github-head"><Github size={12} aria-hidden="true" /> Recorded in GitHub</p>
-          <ul>
-            {interval.recordedActivity.map((item, index) => (
-              <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
-                <span
-                  className={`chat-activity-github-tag is-${item.relation}`}
-                  title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
-                >
-                  {item.relation === "performed" ? "You" : "Your work"}
-                </span>
-                {item.url
-                  ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
-                  : <span>{item.description}</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       {interval.uncertainties?.length ? (
         <p className="chat-activity-uncertainty"><strong>Not established:</strong> {interval.uncertainties.join("; ")}</p>
       ) : null}
@@ -237,56 +220,88 @@ export function ActivityIntervalCard({
         )
       ) : null}
 
-      {evidence.length > 0 ? (
+      {screenshotCount > 0 || evidenceExpired || recordedActivity.length > 0 ? (
         <details className="chat-activity-evidence" open={defaultEvidenceOpen}>
-          <summary>Evidence · {evidence.length} screenshot{evidence.length === 1 ? "" : "s"}</summary>
-          <ul>
-            {evidence.map((entry, index) => {
-              const viewable = !!(entry.summaryId && entry.retained);
-              const copy = (
-                <>
-                  <time>{clockLabel(entry.capturedAt, timezone)}</time>
-                  <span className="chat-activity-frame-copy">
-                    {entry.frameSummary || "No frame summary was recorded."}
-                    {entry.visibleApp ? <small>{entry.visibleApp}</small> : null}
-                  </span>
-                </>
-              );
-              return (
-                <li key={entry.summaryId ?? `${entry.capturedAt}-${index}`}>
-                  {viewable ? (
-                    <button
-                      type="button"
-                      className="chat-activity-frame"
-                      onClick={(event) => { restoreFocusRef.current = event.currentTarget; setLightbox(entry); }}
-                      aria-label={`Open screenshot captured at ${clockLabel(entry.capturedAt, timezone)}`}
-                    >
-                      <ScreenshotImage
-                        summaryId={entry.summaryId as string}
-                        size="thumb"
-                        srcOverride={resolveSrc?.(entry.summaryId as string, "thumb")}
-                        alt={`Screenshot captured at ${clockLabel(entry.capturedAt, timezone)}${entry.visibleApp ? ` in ${entry.visibleApp}` : ""}`}
-                        className="eod-shot-thumb"
-                      />
-                      {copy}
-                    </button>
-                  ) : (
-                    <span className="chat-activity-frame is-static eod-shot-hour-row no-thumb">{copy}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          {evidenceExpired ? (
-            <small className="chat-activity-expired">
-              {retained.length > 0
-                ? "Some screenshots expired under the 30-day retention policy."
-                : "Screenshots expired under the 30-day retention policy. The recap text is kept."}
-            </small>
-          ) : null}
+          <summary>Evidence · {screenshotCount} screenshot{screenshotCount === 1 ? "" : "s"} · {recordedActivity.length} GitHub event{recordedActivity.length === 1 ? "" : "s"}</summary>
+          <div className="chat-activity-evidence-groups">
+            {screenshotCount > 0 || evidenceExpired ? (
+              <details className="chat-activity-evidence-group">
+                <summary>Screenshots · {screenshotCount}</summary>
+                {evidence.length > 0 ? (
+                  <ul>
+                    {evidence.map((entry, index) => {
+                      const viewable = !!(entry.summaryId && entry.retained);
+                      const copy = (
+                        <>
+                          <time>{clockLabel(entry.capturedAt, timezone)}</time>
+                          <span className="chat-activity-frame-copy">
+                            {entry.frameSummary || "No frame summary was recorded."}
+                            {entry.visibleApp ? <small>{entry.visibleApp}</small> : null}
+                          </span>
+                        </>
+                      );
+                      return (
+                        <li key={entry.summaryId ?? `${entry.capturedAt}-${index}`}>
+                          {viewable ? (
+                            <button
+                              type="button"
+                              className="chat-activity-frame"
+                              onClick={(event) => { restoreFocusRef.current = event.currentTarget; setLightbox(entry); }}
+                              aria-label={`Open screenshot captured at ${clockLabel(entry.capturedAt, timezone)}`}
+                            >
+                              <ScreenshotImage
+                                summaryId={entry.summaryId as string}
+                                size="thumb"
+                                srcOverride={resolveSrc?.(entry.summaryId as string, "thumb")}
+                                alt={`Screenshot captured at ${clockLabel(entry.capturedAt, timezone)}${entry.visibleApp ? ` in ${entry.visibleApp}` : ""}`}
+                                className="eod-shot-thumb"
+                              />
+                              {copy}
+                            </button>
+                          ) : (
+                            <span className="chat-activity-frame is-static eod-shot-hour-row no-thumb">{copy}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="chat-activity-evidence-note">Screenshot details are not available in this recap view.</p>
+                )}
+                {evidenceExpired ? (
+                  <small className="chat-activity-expired">
+                    {retained.length > 0
+                      ? "Some screenshots expired under the 30-day retention policy."
+                      : "Screenshots expired under the 30-day retention policy. The recap text is kept."}
+                  </small>
+                ) : null}
+              </details>
+            ) : null}
+            {recordedActivity.length > 0 ? (
+              <details className="chat-activity-evidence-group">
+                <summary>GitHub activity · {recordedActivity.length}</summary>
+                <div className="chat-activity-github">
+                  <p className="chat-activity-github-head"><Github size={12} aria-hidden="true" /> Recorded in GitHub</p>
+                  <ul>
+                    {recordedActivity.map((item, index) => (
+                      <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
+                        <span
+                          className={`chat-activity-github-tag is-${item.relation}`}
+                          title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
+                        >
+                          {item.relation === "performed" ? "You" : "Your work"}
+                        </span>
+                        {item.url
+                          ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
+                          : <span>{item.description}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </details>
+            ) : null}
+          </div>
         </details>
-      ) : interval.evidenceExpired ? (
-        <small className="chat-activity-expired">Screenshots expired under the 30-day retention policy. The recap text is kept.</small>
       ) : null}
 
       {lightbox && createPortal(
