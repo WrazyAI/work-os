@@ -769,7 +769,8 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   /** Ends the next-steps moment: still-undecided suggestions are dismissed on
-   * the server and shown as skipped, so nothing lingers in any queue. */
+   * the server and shown as skipped, so nothing lingers in any queue. A
+   * decision already in flight keeps its state and reports truthfully. */
   const endNextStepsMoment = useCallback((): void => {
     const ids = nextStepsPending.current;
     if (!ids.length) return;
@@ -778,7 +779,7 @@ export default function AvatarApp(): React.ReactElement {
       if (!entry.nextSteps || !ids.includes(entry.nextSteps.intervalId)) return entry;
       const states: Record<string, RecapNextStepState> = { ...entry.nextSteps.states };
       for (const item of entry.nextSteps.items) {
-        if (["pending", "processing"].includes(states[item.proposalId] ?? "pending")) states[item.proposalId] = "skipped";
+        if ((states[item.proposalId] ?? "pending") === "pending") states[item.proposalId] = "skipped";
       }
       return { ...entry, nextSteps: { ...entry.nextSteps, states, status: entry.nextSteps.status === "ready" ? "done" : entry.nextSteps.status } };
     }));
@@ -920,19 +921,21 @@ export default function AvatarApp(): React.ReactElement {
   }, [chat]);
 
   useEffect(() => {
-    const settled = chat.find((entry) => entry.nextSteps
+    const settledReady = chat.filter((entry) => entry.nextSteps
       && entry.nextSteps.status === "ready"
       && entry.nextSteps.items.length > 0
       && entry.nextSteps.items.every((item) => !["pending", "processing"].includes(entry.nextSteps!.states[item.proposalId] ?? "pending")));
-    if (!settled?.nextSteps) return;
-    const entryId = settled.id;
-    const intervalId = settled.nextSteps.intervalId;
-    if (settled.nextSteps.status !== "done") {
-      updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "done" }));
-      return;
+    for (const entry of settledReady) {
+      updateNextStepsEntry(entry.id, (moment) => ({ ...moment, status: "done" }));
     }
-    if (nextStepsSettled.current.has(intervalId)) return;
-    nextStepsSettled.current.add(intervalId);
+    const doneUnsettled = chat.filter((entry) => entry.nextSteps
+      && entry.nextSteps.status === "done"
+      && entry.nextSteps.items.length > 0
+      && !nextStepsSettled.current.has(entry.nextSteps.intervalId));
+    if (!doneUnsettled.length) return;
+    for (const entry of doneUnsettled) {
+      nextStepsSettled.current.add(entry.nextSteps!.intervalId);
+    }
     scheduleNextStepsSettle();
   }, [chat, scheduleNextStepsSettle, updateNextStepsEntry]);
 

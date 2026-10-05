@@ -373,6 +373,12 @@ export default function App() {
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+  /** Recap next steps live in the mascot chat moment, so the review surfaces
+   * and their counters only ever include proposals filed outside that flow. */
+  const reviewableProposals = useMemo(
+    () => (visibleDay?.proposals ?? []).filter((proposal) => !proposal.source_interval_id),
+    [visibleDay?.proposals],
+  );
 
   /* The organization flag says the workspace may use voice input; the server
      capability says this deployment can actually transcribe. The record
@@ -2063,13 +2069,13 @@ export default function App() {
     pulse,
     tasks: visibleTodayTasks,
     carryover: unfinishedCarryOver.map(({ task }) => task),
-    reviews: visibleDay?.proposals?.length ?? 0,
+    reviews: reviewableProposals.length,
     focus: planIntent || goalSuggestion?.text || "Your open tasks define today’s work.",
     focusSource: planIntent
       ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Derived from today’s tasks" : "Your focus note"
       : goalSuggestion ? "Suggested from today’s tasks" : "Task record",
     niftySync: visibleDay?.niftySync,
-  }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, pulseNow, visibleTodayTasks, unfinishedCarryOver, visibleDay?.proposals?.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
+  }), [active, paused, observedOnly, dashboardSchedule, dashboardShift, dashboardTimezone, workSession, visibleDay?.shiftDate, visibleDay?.attendance, pulse, pulseNow, visibleTodayTasks, unfinishedCarryOver, reviewableProposals.length, planIntent, goalSuggestion, goalProvenance, visibleDay?.niftySync]);
   const extendedClockOut = !!dashboardShift?.endsAt && pulseNow.getTime() > Date.parse(dashboardShift.endsAt) + 15 * 60_000;
 
   useEffect(() => {
@@ -3100,7 +3106,7 @@ export default function App() {
       onNavigate={(nextView) => setView(nextView)}
       onNewChat={startNewChat}
       onSignOut={() => { void logout(); }}
-      reviewCount={visibleDay?.proposals.length ?? 0}
+      reviewCount={reviewableProposals.length}
     />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{view !== "tasks" && visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
@@ -3170,7 +3176,7 @@ export default function App() {
           </div><div className="hero-companion-art"><MascotPet workday="off-shift" className="mascot-hero" artClassName="mascot-hero-art" /></div>
         </section>
         <ShiftPulseCard pulse={pulse} now={pulseNow} shift={visibleDay?.shift ?? null} active={active} attendance={visibleDay?.attendance ?? null} />
-        <KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />
+        <KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={reviewableProposals.length} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />
                 <section className="panel dashboard-tasks-card">
           <div className="card-title"><span><BriefcaseBusiness size={17} /> Today’s tasks</span><button onClick={() => { setTaskView("today"); setView("tasks"); }}>View all <ChevronRight size={14} /></button></div>
           {dashboardTopTasks.length ? <div className="dashboard-task-grid" ref={dashboardGridRef}>{dashboardTopTasks.map((task) => { const taskId = String(task.provider_task_id || task.id); return <DashboardTaskCard key={taskId} task={task} currentDate={visibleDay?.shiftDate ?? ""} flight={taskFlight.get(taskId) ?? null} onComplete={() => setTaskCompletion(task, true)} onOpen={() => void openTaskDetails(task)} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} />; })}</div> : <div className="dashboard-task-empty"><strong>{yesterdayDueTasks.length ? "Nothing scheduled yet" : "Your agenda is open"}</strong><span>{yesterdayDueTasks.length ? "Review unfinished work or add today’s first priority." : "Add your first priority — the composer below plans without clocking you in."}</span></div>}
@@ -3193,7 +3199,7 @@ export default function App() {
         timezone={visibleDay?.shift?.timezone}
         attendance={visibleDay?.attendance}
         providerBreakSeconds={workSession?.provider_break_seconds ?? visibleDay?.attendance?.providerBreakSeconds ?? 0}
-        reviews={(visibleDay?.proposals ?? []).length ?? 0}
+        reviews={reviewableProposals.length}
         paused={paused}
         busy={busy}
         observedOnly={observedOnly}
@@ -3213,13 +3219,13 @@ export default function App() {
           void act("shift.pause_toggle", () => performWorktivityControl(paused ? "resume" : "pause"));
         }}
         onClockOut={() => { setClockOutExtendedPrompt(false); setClockOutConfirmation(true); }}
-        kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={visibleDay?.proposals?.length ?? 0} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
+        kpiStrip={<KpiStrip scheduledCount={visibleTodayTasks.length} yesterdayDueCount={yesterdayDueTasks.length} completedCount={todayCompletedCount} reviewCount={reviewableProposals.length} onScheduled={() => { setTaskView("today"); setView("tasks"); }} onYesterday={() => { setCarryOverOpen(true); setView("tasks"); }} onCompleted={() => { setTaskView("completed"); setView("tasks"); }} onReviews={() => setView("review")} />}
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} workspaceHistory={workspaceTaskHistory} completedHistory={completedTaskHistory} historyOrder={syncBypass ? "local" : "server"} historyError={!viewingHistorical && (taskView === "all" ? workspaceHistoryQuery.isError : taskView === "completed" ? completedHistoryQuery.isError : false)} historyHasData={Boolean(activeTaskHistoryQuery.data)} onRetryHistory={() => void activeTaskHistoryQuery.refetch()} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
-        {!eodDate && visibleDay?.proposals?.some((proposal) => !proposal.source_interval_id) ? (
+        {!eodDate && reviewableProposals.length ? (
           <ReviewWorkspace
-            proposals={visibleDay.proposals.filter((proposal) => !proposal.source_interval_id)}
+            proposals={reviewableProposals}
             busy={busy}
             onReject={(id) => void decideDayProposal(id, "reject")}
             onApprove={(id) => void decideDayProposal(id, "accept")}
