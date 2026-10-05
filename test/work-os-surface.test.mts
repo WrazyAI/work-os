@@ -21,6 +21,9 @@ const REQUIRED_PATHS = [
   "src/app/globals.css",
   "src/app/work-os/page.tsx",
   "src/app/login/page.tsx",
+  "src/app/forgot-password/page.tsx",
+  "src/app/reset-password/page.tsx",
+  "src/lib/passwordResetEmail.ts",
   "src/lib/work-os-proposals.ts",
   "src/lib/work-os-employee-tasks.ts",
   "src/proxy.ts",
@@ -47,4 +50,22 @@ test("work-os layout stays standalone (no agent-os shell imports)", () => {
 
 test("work-os keeps its own next config", () => {
   assert.ok(existsSync(path.join(root, "next.config.mjs")), "next.config.mjs must exist in work-os");
+});
+
+test("password reset is public and wired for every role", () => {
+  const login = readFileSync(path.join(root, "src/app/login/page.tsx"), "utf8");
+  const forgot = readFileSync(path.join(root, "src/app/forgot-password/page.tsx"), "utf8");
+  const reset = readFileSync(path.join(root, "src/app/reset-password/page.tsx"), "utf8");
+  const auth = readFileSync(path.join(root, "src/lib/auth.ts"), "utf8");
+  const proxy = readFileSync(path.join(root, "src/proxy.ts"), "utf8");
+
+  assert.match(login, />WrazyOS<\/h1>/, "the auth screen must say WrazyOS");
+  assert.doesNotMatch(login, />Work OS<\/h1>/, "the old Work OS title must be gone");
+  assert.match(login, /\/forgot-password/, "the auth screen must offer the reset flow");
+  assert.match(forgot, /\/api\/auth\/request-password-reset/, "the forgot page requests the reset email");
+  assert.match(reset, /\/api\/auth\/reset-password/, "the reset page submits the new password");
+  assert.match(reset, /searchParams\.get\("token"\)/, "the reset page reads the email token");
+  assert.match(auth, /sendResetPassword/, "Better Auth must send reset emails");
+  assert.match(proxy, /"\/forgot-password"/, "the reset request page must be public");
+  assert.match(proxy, /"\/reset-password"/, "the reset page must be public");
 });

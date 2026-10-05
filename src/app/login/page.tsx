@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -56,7 +57,7 @@ export default function LoginPage() {
           background: "#14161b",
         }}
       >
-        <h1 style={{ fontSize: 20, margin: 0 }}>Work OS</h1>
+        <h1 style={{ fontSize: 20, margin: 0 }}>WrazyOS</h1>
         <p style={{ margin: 0, fontSize: 13, color: "#9a9da6" }}>
           Sign in to continue. Accounts are invite-only.
         </p>
@@ -103,6 +104,12 @@ export default function LoginPage() {
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
+        <Link
+          href="/forgot-password"
+          style={{ fontSize: 13, color: "#8ab4ff", textAlign: "center", textDecoration: "none" }}
+        >
+          Forgot password?
+        </Link>
       </form>
     </main>
   );

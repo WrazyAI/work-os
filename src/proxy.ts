@@ -8,6 +8,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // Paths reachable without a session.
 const PUBLIC_PREFIXES = [
   "/login",
+  "/forgot-password",
+  "/reset-password",
   "/auth",
   "/api/auth",
   "/api/work-os/desktop/token",

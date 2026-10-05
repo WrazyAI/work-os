@@ -10,6 +10,7 @@ import { kyselyAdapter } from "@better-auth/kysely-adapter";
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
+import { sendPasswordResetEmail } from "@/lib/passwordResetEmail";
 
 type AnyDB = Record<string, unknown>;
 
@@ -42,6 +43,21 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    // Deliver in the background: the endpoint must not be timed to reveal
+    // whether the address exists, and a slow mail provider must not hold the
+    // response. Failures are logged for operators.
+    sendResetPassword: ({ user, url }) => {
+      sendPasswordResetEmail({
+        appOrigin: process.env.APP_PUBLIC_ORIGIN?.trim() || "https://app.wrazyos.com",
+        displayName: user.name || user.email || "",
+        email: user.email,
+        resetUrl: url,
+      }).catch((error) => {
+        console.error("[auth] password reset email failed:", error);
+      });
+      return Promise.resolve();
+    },
     password: {
       hash: async (password: string) => bcrypt.hash(password, 10),
       verify: async ({ password, hash }: { password: string; hash: string }) => {
