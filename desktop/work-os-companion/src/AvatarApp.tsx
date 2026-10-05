@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -36,6 +36,7 @@ import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
 import type { WorkSession, ActivityIntervalCard as ActivityIntervalCardData, RecapNextStepItem } from "./types";
 import { RecapNextStepsCard, type RecapNextStepState, type RecapNextStepsMoment } from "./RecapNextStepsCard";
+import { AvatarPromptBubble } from "./AvatarPromptBubble";
 import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
@@ -175,6 +176,8 @@ export default function AvatarApp(): React.ReactElement {
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
   const avatarObservedFixture = avatarObservedFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
+  const avatarEodBubbleFixture = avatarEodBubbleFixtureRequested(window.location.search);
+  const avatarAgendaBubbleFixture = avatarAgendaBubbleFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
   const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
   const avatarNextStepsRecoveryFixture = avatarNextStepsRecoveryFixtureRequested(window.location.search);
@@ -183,12 +186,14 @@ export default function AvatarApp(): React.ReactElement {
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarObservedFixture ? avatarObservedFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
+    : avatarEodBubbleFixture ? avatarEodBubbleFixtureFacts()
+    : avatarAgendaBubbleFixture ? avatarAgendaBubbleFixtureFacts()
     : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarNextStepsRecoveryLike) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
@@ -1017,6 +1022,14 @@ export default function AvatarApp(): React.ReactElement {
     await toggleExpanded(false);
   }, [toggleExpanded]);
 
+  // "Set today's goal" on the agenda bubble: hand the employee to the main
+  // window's SOD planning modal instead of making them type in the chat first.
+  const openGoalPlan = useCallback(async (): Promise<void> => {
+    void emit("work-os://avatar-open-plan");
+    await invoke("focus_main").catch(() => undefined);
+    await toggleExpanded(false);
+  }, [toggleExpanded]);
+
   // "View in app" on the Recent activity header opens the dock's Focus tab,
   // where the same recaps live beneath the daily goal.
   const openFocusInApp = useCallback(async (): Promise<void> => {
@@ -1740,7 +1753,15 @@ export default function AvatarApp(): React.ReactElement {
             <button type="button" className="avatar-bubble-more" onClick={openRecapInChat}>View more</button>
           </div>
         )}
-        {bubble === "prompt" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>{contextualPrompt.heading}</strong><span>{contextualPrompt.compact}</span></button>}
+        {bubble === "prompt" && (
+          <AvatarPromptBubble
+            kind={contextualPrompt.kind}
+            heading={contextualPrompt.heading}
+            compact={contextualPrompt.compact}
+            onOpen={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}
+            onAction={(action) => { void (action === "open_eod" ? openEodReview() : openGoalPlan()); }}
+          />
+        )}
         <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"

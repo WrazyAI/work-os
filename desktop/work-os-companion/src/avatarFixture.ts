@@ -34,6 +34,8 @@ export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
 export const AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE = "recap-next-steps-empty";
+export const AVATAR_EOD_BUBBLE_FIXTURE = "eod-bubble";
+export const AVATAR_AGENDA_BUBBLE_FIXTURE = "agenda-bubble";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -74,7 +76,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarRecapFixtureRequested(search: string): boolean {
@@ -175,6 +177,37 @@ export function avatarAttentionFixtureRequested(search: string): boolean {
 export function avatarSnoozeFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_SNOOZE_FIXTURE;
+}
+
+export function avatarEodBubbleFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_EOD_BUBBLE_FIXTURE;
+}
+
+export function avatarAgendaBubbleFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_AGENDA_BUBBLE_FIXTURE;
+}
+
+/** The collapsed bubble at clock-out: the EOD prompt with its direct action
+ * into the EOD review page. No due hourly prompt, so the fixture renders the
+ * bubble without the delivery path a real session owns. */
+export function avatarEodBubbleFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarShiftProgressFixtureFacts(now),
+    promptKind: "eod",
+    sessionState: "eod_due",
+  };
+}
+
+/** The collapsed bubble before the plan is confirmed: the agenda prompt with
+ * its direct action into the SOD planning modal. The plan is marked confirmed
+ * so the fixture shows the collapsed bubble instead of auto-expanding. */
+export function avatarAgendaBubbleFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarShiftProgressFixtureFacts(now),
+    promptKind: "plan",
+  };
 }
 
 export function avatarShiftProgressFixtureFacts(now = Date.now()): AvatarFixtureFacts {

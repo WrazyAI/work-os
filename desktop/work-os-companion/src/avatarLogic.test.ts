@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
@@ -344,6 +344,20 @@ describe("composerSendTarget", () => {
   it("keeps the agenda prompt on the composer when no recap edit is active", () => {
     expect(composerSendTarget({ agendaDue: true, recapEditing: false })).toBe("agenda");
     expect(composerSendTarget({ agendaDue: false, recapEditing: false })).toBe("update");
+  });
+});
+
+describe("bubbleAction", () => {
+  it("offers the EOD review shortcut only for the EOD prompt", () => {
+    expect(bubbleAction("eod")).toEqual({ kind: "open_eod", label: "Open EOD review" });
+    expect(bubbleAction("check_in")).toBeNull();
+    expect(bubbleAction("paused")).toBeNull();
+    expect(bubbleAction("off_shift")).toBeNull();
+    expect(bubbleAction("available")).toBeNull();
+  });
+
+  it("offers the SOD planning shortcut only for the agenda prompt", () => {
+    expect(bubbleAction("agenda")).toEqual({ kind: "open_plan", label: "Set today's goal" });
   });
 });
 

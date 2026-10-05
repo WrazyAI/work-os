@@ -131,6 +131,38 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
+/* The copy area stays the tap target that opens the chat; the action button at
+   the bottom is the shortcut straight to the prompt's destination. */
+.avatar-prompt-open {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.avatar-prompt-open:focus-visible, .avatar-prompt-action:focus-visible { outline: 2px solid #a8f15b; outline-offset: 2px; border-radius: 8px; }
+.avatar-prompt-action {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--signal, #a8f15b);
+  color: var(--ink, #182018);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.avatar-prompt-action:hover { filter: brightness(1.03); }
 /* A ready recap hugs the mascot's head at any configured mascot size: the
    bubble's bottom edge sits just above the visible head, its tail points down
    at the head's center, and the copy clamps so the bubble always fits the

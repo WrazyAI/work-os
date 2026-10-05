@@ -1055,6 +1055,17 @@ export default function App() {
     return () => unlisten?.();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
 
+  // "Set today's goal" on the floating agenda bubble lands on the SOD planning
+  // modal, ready for the day's focus.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen("work-os://avatar-open-plan", () => {
+      openPlanningSession();
+    }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- openPlanningSession only calls stable setters
+
   /* Hold-to-talk: the global shortcut is registered in Rust so it reaches the
      app from any window, then routed here as press/release/cancel. The hold
      owns the whole capture, so a release always ends it.

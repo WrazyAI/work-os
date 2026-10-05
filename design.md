@@ -977,6 +977,15 @@ correction themselves. Sending that note records it as the employee amendment.
 Neither action mutates anything other than the recap, and the Tasks-tab stream
 keeps its inline `Looks right` / `Add or correct` review.
 
+The collapsed companion's prompt bubble carries the day's current demand
+(check-in, agenda, or EOD). Tapping the copy opens the chat; when the demand
+has an obvious destination, a full-width action at the bottom of the bubble
+goes straight there instead of making the employee type first: the EOD prompt
+offers `Open EOD review` (the main window's EOD review page) and the agenda
+prompt offers `Set today's goal` (the SOD `Plan your day` modal). Check-in
+prompts keep the tap-to-expand behavior alone. The action never replaces the
+tap target — both are one click away.
+
 The EOD uses a confirmed, amended, or inferred recap as activity context for
 the hours it covers, labeled with its provenance, and falls back to the hourly
 rollups elsewhere. A confirmed recap is still activity context: it never proves

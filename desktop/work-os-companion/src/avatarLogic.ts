@@ -53,6 +53,17 @@ export interface AvatarPrompt {
   action: "open_eod" | null;
 }
 
+export type BubbleActionKind = "open_eod" | "open_plan";
+
+/** The one direct action the collapsed prompt bubble offers, by prompt kind.
+ * Tapping the bubble still opens the chat; this shortcut skips the typing
+ * step for the two prompts with an obvious destination. */
+export function bubbleAction(kind: AvatarPromptKind): { kind: BubbleActionKind; label: string } | null {
+  if (kind === "eod") return { kind: "open_eod", label: "Open EOD review" };
+  if (kind === "agenda") return { kind: "open_plan", label: "Set today's goal" };
+  return null;
+}
+
 /** Clears only the locally displayed due state after the server confirms an
  * employee response. The next poll remains the authoritative schedule. */
 export function clearRecordedUpdatePrompt<T extends CompanionDayFacts>(facts: T): T {
