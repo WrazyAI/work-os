@@ -85,11 +85,15 @@ Confirming or amending a recap queues one bounded next-step generation pass
 existing proposal pipeline: `complete_task` for open tasks/subtasks the
 approved evidence shows as finished, and `create_task`/`add_subtask` for
 concrete untracked deliverables. Suggestions must cite the recap activities
-they are based on, targets must come from the exact open-task list the model
-saw, duplicates and previously skipped suggestions are suppressed, and nothing
-is ever auto-applied — the employee approves each proposal in the Review
-queue. Generation never blocks the recap decision and never writes check-ins
-or cadence.
+they are based on, must clear the confidence floor and stay grounded in the
+recap (a lone CI failure never becomes a task), targets must come from the
+exact open-task list the model saw, and subtask suggestions carry the parent's
+current state so approvals apply. The suggestions surface in the mascot chat
+moment after approval (inline `Mark done` / `Add task` / `Add subtask`, with
+inline title edit and skip) and are removed from the Review page; undecided
+items are dismissed when the moment ends and expire after a day. Nothing is
+ever auto-applied. Generation never blocks the recap decision and never writes
+check-ins or cadence.
 
 This dashboard is a **multi-user web platform**, not a localhost-only app. Full
 architecture in `WEB-PLATFORM-SPEC.md`; current status in `IMPLEMENTATION-STATUS.md`.

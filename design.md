@@ -908,19 +908,30 @@ one recap state trusted to drive task actions. One bounded generation pass per
 recap revision considers the approved recap (headline, detail, activity
 bullets, recorded GitHub activity, uncertainties), the interval's evidence
 snapshots, and the employee's open tasks and subtasks, and proposes at most
-about four suggestions of exactly two kinds: `complete_task` for an open
+three suggestions of exactly two kinds: `complete_task` for an open
 task/subtask the evidence shows as finished, and `create_task`/`add_subtask`
 for a concrete deliverable the evidence shows that is not tracked yet. Every
-suggestion must cite the recap activities it is based on; a proposed target
-must be a real open task/subtask from the list the model was given, so
-fabricated ids cannot file. Suggestions become ordinary proposals labeled
-`From your recap` in the Review queue, where the employee approves or skips
-each one — nothing is ever auto-applied, and a skipped suggestion is never
-re-proposed for the same task and operation. Generation never blocks the recap
-decision, never writes check-ins or cadence, and its outcome
-(`next_steps_status`) is recorded on the interval; an approved recap with
-pending suggestions carries a short `N suggested next steps → Review` link on
-the card.
+suggestion must cite the recap activities it is based on and clear the
+confidence floor; suggestions must be grounded in the recap's own activities,
+so a failed or successful CI run by itself never becomes a task. A proposed
+target must be a real open task/subtask from the list the model was given, and
+a subtask suggestion carries the parent's current state, so fabricated ids
+cannot file and approvals apply instead of going stale.
+
+The moment lives in the **mascot chat**, not in a queue. After the employee
+approves a recap, the panel lingers instead of returning to the orb: it shows
+the receipt and a `Next steps` card (`From your <interval> recap`) with each
+suggestion as an actionable row — `Mark done` / `Add task` / `Add subtask`,
+plus `Edit` (inline title edit) and `Skip` for new work. Each decision files
+through the same owner-scoped proposal endpoint as any other review card;
+nothing is ever auto-applied, and a skipped suggestion is never re-proposed
+for the same task and operation. When every item is decided the card shows its
+result (`2 changes applied · 1 skipped`) and the panel settles back to the orb
+after a short beat. If nothing is actionable the card says so quietly. Ending
+the moment with items undecided dismisses them, and a 24-hour sweep expires
+anything the client never closed, so suggestions never pile up. Generation
+never blocks the recap decision, never writes check-ins or cadence, and its
+outcome (`next_steps_status`) is recorded on the interval.
 
 The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance

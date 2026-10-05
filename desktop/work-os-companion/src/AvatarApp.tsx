@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAttentionFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -176,16 +176,17 @@ export default function AvatarApp(): React.ReactElement {
   const avatarObservedFixture = avatarObservedFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
+  const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarObservedFixture ? avatarObservedFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
-    : (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureFacts()
+    : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, attendanceState: null, clockedInAt: null,
@@ -195,13 +196,13 @@ export default function AvatarApp(): React.ReactElement {
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [chat, setChat] = useState<ChatEntry[]>(() => (avatarRecapFixture || avatarRecapProcessingFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+  const [chat, setChat] = useState<ChatEntry[]>(() => (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
-  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>(avatarRecapFixture ? avatarRecapFixtureCard() : null);
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarNextStepsFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
@@ -815,6 +816,7 @@ export default function AvatarApp(): React.ReactElement {
   /** After the moment is decided, the panel returns to the orb after a settle
    * beat unless the employee interacts again. */
   const scheduleNextStepsSettle = useCallback((): void => {
+    if (avatarNextStepsFixture) return;
     if (recapAutoCollapse.current !== null) window.clearTimeout(recapAutoCollapse.current);
     recapAutoCollapse.current = window.setTimeout(() => {
       recapAutoCollapse.current = null;
@@ -874,6 +876,14 @@ export default function AvatarApp(): React.ReactElement {
     setNextStepsBusyId(entryId);
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
     try {
+      if (avatarNextStepsFixture) {
+        // DEV-only fixture: the decision is simulated so the card's states can
+        // be exercised without a live session.
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        const state: RecapNextStepState = decision === "skip" ? "skipped" : "applied";
+        updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: state } }));
+        return;
+      }
       const row = await decideRecapNextStep(item.proposalId, decision === "accept" ? "accept" : "reject", edits);
       const outcome = row?.outcome ?? "";
       const state: RecapNextStepState = decision === "skip" || outcome === "rejected" ? "skipped"
@@ -951,6 +961,22 @@ export default function AvatarApp(): React.ReactElement {
   const decideActivityPrompt = useCallback(async (id: string, action: "confirm" | "amend", feedback?: string): Promise<void> => {
     setDecidingIntervalId(id);
     try {
+      if (avatarNextStepsFixture) {
+        // DEV-only fixture: the decision and its moment are simulated so the
+        // flow can be exercised without a live session.
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        setActivityPrompt(null);
+        setRecapEditMode(false);
+        setChat((current) => [...current.map((entry) => entry.activityInterval?.id === id
+          ? { ...entry, activityInterval: undefined, receipt: action === "confirm" ? "Recap confirmed" : "Recap updated with your note" }
+          : entry), {
+          id: "next-steps-fixture", role: "assistant",
+          text: "Recap confirmed — while it's fresh, here's what could come next:",
+          nextSteps: avatarNextStepsFixtureMoment(),
+        }]);
+        void toggleExpanded(true);
+        return;
+      }
       await decideActivityIntervalReview(id, action, feedback);
       const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
       setActivityPrompt(null);

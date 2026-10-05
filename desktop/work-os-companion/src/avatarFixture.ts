@@ -20,6 +20,7 @@
  * (design §25.9, §25.11). Never active outside `import.meta.env.DEV`. */
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { CompanionDayFacts } from "./avatarLogic";
+import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import type { ActivityIntervalCard } from "./types";
 
 export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
@@ -30,6 +31,7 @@ export const AVATAR_ATTENTION_PARAM = "avatar-attention";
 export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
 export const AVATAR_RECAP_FIXTURE = "recap";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
+export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -70,12 +72,35 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarRecapFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_FIXTURE;
+}
+
+/** DEV-only fixture for the post-approval moment: the recap bubble plus the
+ * three suggestion kinds, so the chat flow can be exercised end to end. */
+export function avatarNextStepsFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NEXT_STEPS_FIXTURE;
+}
+
+export function avatarNextStepsFixtureMoment(): RecapNextStepsMoment {
+  return {
+    intervalId: "fixture-recap",
+    label: "2:17–3:17 PM",
+    status: "ready",
+    items: [
+      { proposalId: "fixture-step-1", operation: "complete_task", status: "pending", title: "Wire GitHub context into interval recaps", rationale: "The render tests pass and the recap card shows the recorded activity.", taskId: "fixture-task-1", editable: false },
+      { proposalId: "fixture-step-2", operation: "create_task", status: "pending", title: "Deploy the recap next-steps release", rationale: "The release cut is a concrete deliverable visible in the recap.", taskId: null, editable: true },
+      { proposalId: "fixture-step-3", operation: "add_subtask", status: "pending", title: "Verify the drawer on staging", rationale: "The drawer shipped untested, so a staging check is still open.", taskId: "fixture-task-2", editable: true },
+    ],
+    states: {},
+    failures: {},
+    error: null,
+  };
 }
 
 export function avatarRecapProcessingFixtureRequested(search: string): boolean {
