@@ -33,6 +33,8 @@ import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { ChatTabs, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
+import type { RecapNextStepItem } from "./types";
+import type { RecapNextStepState } from "./RecapNextStepsCard";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
 import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, simulateAiEod, stripBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
@@ -539,6 +541,45 @@ export default function App() {
       setBusy(false);
     }
   }, [invalidateDayData, showError]);
+  /** One inline decision on a recap next-step suggestion from the shared
+   * conversation, filed through the same owner-scoped proposal endpoint as the
+   * companion's card (with the employee's inline title edit when present). */
+  const decideNextStepFromHistory = useCallback(async (turnId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => {
+    const patchMoment = (patch: (moment: NonNullable<WorkOsConversationTurn["nextSteps"]>) => NonNullable<WorkOsConversationTurn["nextSteps"]>) => {
+      setComposerHistory((current) => current.map((turn) => turn.id === turnId && turn.nextSteps
+        ? { ...turn, nextSteps: patch(turn.nextSteps) }
+        : turn));
+    };
+    patchMoment((moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
+    try {
+      const row = await apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(item.proposalId)}`, {
+        method: "PATCH",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({ decision: decision === "skip" ? "reject" : "accept", ...(edits ? { edits } : {}) }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const outcome = row?.outcome ?? "";
+      const state: RecapNextStepState = decision === "skip" || outcome === "rejected" ? "skipped"
+        : outcome === "applied" ? "applied"
+          : outcome === "applying" ? "processing"
+            : "failed";
+      patchMoment((moment) => ({
+        ...moment,
+        states: { ...moment.states, [item.proposalId]: state },
+        failures: state === "failed"
+          ? { ...moment.failures, [item.proposalId]: row?.failure_reason ?? "The change could not be applied." }
+          : moment.failures,
+      }));
+      if (state === "applied" || state === "skipped") invalidateDayData();
+    } catch (value) {
+      patchMoment((moment) => ({
+        ...moment,
+        states: { ...moment.states, [item.proposalId]: "failed" },
+        failures: { ...moment.failures, [item.proposalId]: value instanceof Error ? value.message : "The change could not be applied." },
+      }));
+    }
+  }, [invalidateDayData]);
+
   /** Refresh outstanding EOD state after actions that may change review readiness. */
   const invalidateOutstandingEods = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.outstandingEods() });
@@ -3418,6 +3459,7 @@ export default function App() {
         onLoadSubtasks={loadComposerSubtasks}
         onReviewHistoryOperations={approveHistoryOperations}
         onRetryHistoryOperation={retryHistoryOperation}
+        onDecideNextStep={decideNextStepFromHistory}
         onNavigateView={(page) => setView(page)}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
@@ -3705,7 +3747,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
+export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation, onDecideNextStep }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -3717,7 +3759,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   aiUnavailable?: string | null;
   voice?: import("./chat/voiceInput").VoiceInput;
   onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
-  onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void;
+  onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void; onDecideNextStep?: (turnId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -3833,6 +3875,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   onMarkSelectedDone={onMarkSelectedDone}
   onLoadSubtasks={onLoadSubtasks}
   onNavigateView={onNavigateView}
+  onDecideNextStep={(item, decision, edits) => onDecideNextStep?.(turn.id, item, decision, edits)}
   onRetryOperation={(result) => onRetryHistoryOperation?.(turn.id, result)}
 />)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" showMark={showLiveAssistantMark}>{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
    : echoReply ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} text={echoReply} stream onSettled={bumpSweep} />

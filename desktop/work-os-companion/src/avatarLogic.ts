@@ -4,6 +4,7 @@
  * side-effect free so the whole cadence is unit-testable.
  */
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
+import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 
 export interface CompanionDayFacts {
   shiftDate: string;
@@ -366,6 +367,9 @@ export interface AvatarStoredTurn {
   createdAt: string;
   operations?: ProposedOperation[];
   toolResults?: ToolCallResult[];
+  /** The recap next-steps moment, persisted so a reload or cross-window sync
+   * never drops the card mid-decision. */
+  nextSteps?: RecapNextStepsMoment;
 }
 
 /** Live avatar chat entry: persisted fields plus local-only review state. */
@@ -378,6 +382,8 @@ export interface AvatarChatEntryState {
   operations?: ProposedOperation[];
   toolResults?: ToolCallResult[];
   taskOptions?: Array<{ id: string; title: string }>;
+  /** The live recap next-steps moment (persisted once it has items). */
+  nextSteps?: RecapNextStepsMoment;
   /** UI-only reminders (plan, check-in, EOD). Ephemeral: never persisted, never
    * sent as conversation history, and removed once the prompt is answered. */
   kind?: "prompt";
@@ -436,6 +442,10 @@ export function serializeAvatarChatEntry(entry: AvatarChatEntryState): AvatarSto
   if (entry.receipt) turn.meta = entry.receipt;
   if (entry.operations) turn.operations = entry.operations;
   if (entry.toolResults) turn.toolResults = entry.toolResults;
+  // A drafting moment is transient; persisting it would restore a card that can
+  // never finish its poll. Everything else survives reloads and cross-window
+  // syncs so the card is never dropped mid-decision.
+  if (entry.nextSteps && entry.nextSteps.status !== "drafting") turn.nextSteps = entry.nextSteps;
   return turn;
 }
 
@@ -456,6 +466,9 @@ export function mergeAvatarChatEntries(current: AvatarChatEntryState[], incoming
       operations: turn.operations ?? local?.operations,
       toolResults: turn.toolResults ?? local?.toolResults,
       taskOptions: local?.taskOptions ?? [],
+      // Another window's save may predate the moment; the local card wins so a
+      // cross-window sync can never wipe a pending decision.
+      nextSteps: turn.nextSteps ?? local?.nextSteps,
     };
   });
 }

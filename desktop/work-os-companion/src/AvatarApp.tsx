@@ -270,6 +270,8 @@ export default function AvatarApp(): React.ReactElement {
   // the moment can dismiss them instead of leaving them in any queue.
   const nextStepsPending = useRef<string[]>([]);
   const nextStepsSettled = useRef<Set<string>>(new Set());
+  /** A restored conversation re-attaches lost moments at most once per load. */
+  const nextStepsRecovered = useRef(false);
   const expandedRef = useRef(expanded);
   const activityPromptRef = useRef(activityPrompt);
 
@@ -566,6 +568,7 @@ export default function AvatarApp(): React.ReactElement {
     if (avatarFixture) return;
     let cancelled = false;
     chatConversationSignature.current = "";
+    nextStepsRecovered.current = false;
     setLoadedChatConversation(null);
     setChat([]);
     if (!avatarConversationScope) return () => { cancelled = true; };
@@ -870,6 +873,25 @@ export default function AvatarApp(): React.ReactElement {
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
     scheduleNextStepsSettle();
   }, [scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
+
+  // A moment whose card was lost to an older sync (or an older build) still has
+  // its entry id — `next-steps-<intervalId>` — so its suggestions can be
+  // re-attached from the server instead of leaving pending items stranded.
+  useEffect(() => {
+    if (avatarFixture) return;
+    if (loadedChatConversation !== avatarConversationScope) return;
+    if (nextStepsRecovered.current) return;
+    nextStepsRecovered.current = true;
+    const missing = chatRef.current.filter((entry) => entry.id.startsWith("next-steps-") && !entry.nextSteps);
+    for (const entry of missing) {
+      const intervalId = entry.id.slice("next-steps-".length);
+      if (!intervalId) continue;
+      // A recovered moment never schedules the settle beat: the employee opened
+      // the companion to read it, not to have it collapse on its own.
+      nextStepsSettled.current.add(intervalId);
+      void startNextStepsMoment(intervalId, null, entry.id);
+    }
+  }, [avatarConversationScope, avatarFixture, loadedChatConversation, startNextStepsMoment]);
 
   /** One inline decision on a next-step suggestion, filed through the same
    * owner-scoped proposal endpoint as any other review card. */

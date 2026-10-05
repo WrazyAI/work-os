@@ -208,4 +208,30 @@ describe("HistoryTurn", () => {
     // ApprovalResults now that every mutating operation has a result.
     expect(markup.match(/class="approval-results"/g) ?? []).toHaveLength(1);
   });
+
+  it("renders the recap next-steps moment from the shared conversation", () => {
+    const turn = {
+      id: "next-steps-interval-1",
+      role: "assistant" as const,
+      text: "Recap confirmed — while it's fresh, here's what could come next:",
+      nextSteps: {
+        intervalId: "interval-1",
+        label: "2:17–3:17 PM",
+        status: "ready" as const,
+        items: [
+          { proposalId: "p-1", operation: "complete_task" as const, status: "pending", title: "Wire GitHub context", rationale: "The tests pass.", taskId: "task-1", editable: false },
+          { proposalId: "p-2", operation: "create_task" as const, status: "pending", title: "Deploy the recap release", rationale: "A concrete deliverable.", taskId: null, editable: true },
+        ],
+        states: {},
+        failures: {},
+      },
+    };
+    const markup = renderToStaticMarkup(createElement(HistoryTurn, { turn }));
+    expect(markup).toContain("chat-next-steps");
+    expect(markup).toContain("From your 2:17–3:17 PM recap");
+    expect(markup).toContain("Wire GitHub context");
+    expect(markup).toContain("Mark done");
+    expect(markup).toContain("Add task");
+    expect(markup).toContain("Edit");
+  });
 });

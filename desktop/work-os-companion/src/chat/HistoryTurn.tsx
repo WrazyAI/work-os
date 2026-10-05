@@ -9,6 +9,8 @@ import { TaskSelectionCard, type TaskSelectionCardSubtask, type TaskSelectionCar
 import { ChatTurn } from "./ChatTurn";
 import { taskSelectionFromResult } from "./selection";
 import type { CopyableTurn } from "./turnCopy";
+import { RecapNextStepsCard, type RecapNextStepsMoment } from "../RecapNextStepsCard";
+import type { RecapNextStepItem } from "../types";
 
 /** One persisted conversation turn, with everything it rendered.
  *
@@ -33,6 +35,8 @@ export interface HistoryTurnData extends CopyableTurn {
   trace?: { labels: string[]; elapsedMs: number; result?: string } | null;
   operations?: HistoryTurnOperation[];
   toolResults?: ToolCallResult[];
+  /** The post-approval recap next-steps moment, shared with the companion. */
+  nextSteps?: RecapNextStepsMoment;
 }
 
 export function historyDisplayTasks(selection: { view?: "pending" | "overdue"; tasks?: Array<Record<string, unknown>> }): TaskSelectionCardTask[] {
@@ -61,6 +65,7 @@ export function HistoryTurnExtras({
   onNavigateView,
   onRetryOperation,
   onReviewSelection,
+  onDecideNextStep,
   collapseCards = false,
   renderTrace,
 }: {
@@ -73,6 +78,8 @@ export function HistoryTurnExtras({
   onNavigateView?: (page: NonNullable<ProposedOperation["page"]>) => void;
   onRetryOperation?: (result: ToolCallResult) => void;
   onReviewSelection?: () => void;
+  /** The shared recap next-steps moment: one inline decision per suggestion. */
+  onDecideNextStep?: (item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => void;
   /** Cards from turns that are not the newest collapse to their summary line. */
   collapseCards?: boolean;
   renderTrace?: () => ReactNode;
@@ -117,6 +124,13 @@ export function HistoryTurnExtras({
   return (
     <ChatSectionBoundary label="chat turn actions">
       <>
+        {turn.nextSteps ? (
+          <RecapNextStepsCard
+            moment={turn.nextSteps}
+            busy={busy ?? false}
+            onDecide={(item, decision, edits) => onDecideNextStep?.(item, decision, edits)}
+          />
+        ) : null}
         {renderTrace?.()}
         {displayCards}
         {operations.length ? (
@@ -166,6 +180,7 @@ export function HistoryTurn(props: {
   onNavigateView?: (page: NonNullable<ProposedOperation["page"]>) => void;
   onRetryOperation?: (result: ToolCallResult) => void;
   onReviewSelection?: () => void;
+  onDecideNextStep?: (item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }) => void;
   collapseCards?: boolean;
   renderTrace?: () => ReactNode;
   showMark?: boolean;

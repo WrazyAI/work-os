@@ -242,6 +242,38 @@ describe("mergeAvatarChatEntries", () => {
       .toMatchObject({ id: "a-1", operations: [{ op: "complete_task" }] });
     expect(serializeAvatarChatEntry({ id: "s-1", role: "system", text: "Nope." })).toBeNull();
   });
+
+  it("persists a ready recap next-steps moment but never a drafting one", () => {
+    const moment = {
+      intervalId: "i-1", label: "2:17–3:17 PM", status: "ready" as const,
+      items: [{ proposalId: "p-1", operation: "complete_task" as const, status: "pending", title: "Wire GitHub context", rationale: "Tests pass.", taskId: "t-1", editable: false }],
+      states: {}, failures: {},
+    };
+    const ready = serializeAvatarChatEntry({ id: "next-steps-i-1", role: "assistant", text: "Lead.", nextSteps: moment });
+    expect(ready?.nextSteps).toEqual(moment);
+    const drafting = serializeAvatarChatEntry({ id: "next-steps-i-1", role: "assistant", text: "Lead.", nextSteps: { ...moment, status: "drafting" } });
+    expect(drafting?.nextSteps).toBeUndefined();
+  });
+
+  it("keeps the local next-steps card when another window saved a text-only turn", () => {
+    const moment = {
+      intervalId: "i-1", label: "2:17–3:17 PM", status: "ready" as const,
+      items: [{ proposalId: "p-1", operation: "add_subtask" as const, status: "pending", title: "Verify staging", rationale: "Untested.", taskId: "t-2", editable: true }],
+      states: {}, failures: {},
+    };
+    const merged = mergeAvatarChatEntries(
+      [{ id: "next-steps-i-1", role: "assistant", text: "Lead.", nextSteps: moment }],
+      [{ id: "next-steps-i-1", role: "assistant", text: "Lead.", createdAt: "2026-10-05T15:49:00Z" }],
+    );
+    expect(merged[0]?.nextSteps).toEqual(moment);
+    // And an incoming turn that does carry a moment wins over the local one.
+    const newer = { ...moment, status: "done" as const, states: { "p-1": "skipped" as const } };
+    const mergedNewer = mergeAvatarChatEntries(
+      [{ id: "next-steps-i-1", role: "assistant", text: "Lead.", nextSteps: moment }],
+      [{ id: "next-steps-i-1", role: "assistant", text: "Lead.", createdAt: "2026-10-05T15:50:00Z", nextSteps: newer }],
+    );
+    expect(mergedNewer[0]?.nextSteps).toEqual(newer);
+  });
 });
 
 describe("agenda auto-expand", () => {

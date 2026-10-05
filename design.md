@@ -925,8 +925,14 @@ suggestion as an actionable row — `Mark done` / `Add task` / `Add subtask`,
 plus `Edit` (inline title edit) and `Skip` for new work. Each decision files
 through the same owner-scoped proposal endpoint as any other review card;
 nothing is ever auto-applied, and a skipped suggestion is never re-proposed
-for the same task and operation. When every item is decided the card shows its
-result (`2 changes applied · 1 skipped`) and the panel settles back to the orb
+for the same task and operation. The moment is part of the shared workday
+conversation: it persists across reloads and renders in both the floating
+companion and the in-app chat, and a cross-window sync can never drop a card
+mid-decision (the local card wins when the incoming turn predates it). A turn
+whose card was lost to an older build re-attaches from the server on load —
+its entry id carries the interval — so pending suggestions are never stranded.
+When every item is decided the card shows its result
+(`2 changes applied · 1 skipped`) and the panel settles back to the orb
 after a short beat. If nothing is actionable the card says so quietly. Ending
 the moment with items undecided dismisses them, and a 24-hour sweep expires
 anything the client never closed, so suggestions never pile up. Generation

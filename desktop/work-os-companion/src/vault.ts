@@ -4,6 +4,7 @@ import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
+import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { mergeConversationTurns } from "./avatarLogic";
 import { APPEARANCE_DEFAULTS, appearanceFromChange, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 
@@ -29,6 +30,9 @@ export interface WorkOsConversationTurn {
   operations?: ProposedOperation[];
   /** Filed results stay visible as the receipt for an approved tool call. */
   toolResults?: ToolCallResult[];
+  /** The post-approval recap next-steps moment. Persisted for the same reason:
+   * a reload or cross-window sync must never drop the card mid-decision. */
+  nextSteps?: RecapNextStepsMoment;
 }
 
 let context: Promise<{ stronghold: Stronghold; client: Client }> | null = null;
