@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.93
+
+- After you approve a recap, the chat stays open and shows suggested next steps — mark a task done, add a task, or add a subtask — right there in the conversation.
+- The next-steps suggestions are no longer mixed into the Review page.
+
 ## 0.3.92
 
 - Confirming a recap that opened the companion on its own returns the chat to the mascot moments later.
