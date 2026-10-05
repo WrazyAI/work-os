@@ -100,38 +100,6 @@ describe("ActivityIntervalCard", () => {
     expect(markup).not.toContain("Recorded in GitHub");
   });
 
-  it("links approved recaps with pending next steps into the Review queue", () => {
-    const confirmed = { ...baseInterval, reviewStatus: "confirmed" as const, nextSteps: 2 };
-    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
-      interval: confirmed,
-      timezone: "UTC",
-      nextSteps: 2,
-      onOpenNextSteps: () => undefined,
-    }));
-    expect(markup).toContain("chat-activity-next-steps");
-    expect(markup).toContain("2 suggested next steps");
-    expect(markup).toContain("Review");
-    // Inferred recaps never show the link: suggestions come only from approved recaps.
-    const inferred = renderToStaticMarkup(createElement(ActivityIntervalCard, {
-      interval: baseInterval,
-      timezone: "UTC",
-      nextSteps: 2,
-      onOpenNextSteps: () => undefined,
-    }));
-    expect(inferred).not.toContain("chat-activity-next-steps");
-  });
-
-  it("uses a singular next-step label for one pending suggestion", () => {
-    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
-      interval: { ...baseInterval, reviewStatus: "amended" as const },
-      timezone: "UTC",
-      nextSteps: 1,
-      onOpenNextSteps: () => undefined,
-    }));
-    expect(markup).toContain("1 suggested next step");
-    expect(markup).not.toContain("1 suggested next steps");
-  });
-
   it("renders the chat bubble with a lead-in and Looks good / Edit actions", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: baseInterval,

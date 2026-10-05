@@ -13,7 +13,7 @@ import {
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
@@ -259,5 +259,35 @@ export function decideActivityIntervalReview(intervalId: string, action: "confir
     headers: { "Idempotency-Key": crypto.randomUUID() },
     signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({ action, ...(feedback ? { feedback } : {}) }),
+  });
+}
+
+/** The chat moment after an approval: generation status plus the recap's
+ * next-step suggestions with their current decision state. */
+export function fetchRecapNextSteps(intervalId: string) {
+  return apiRequest<RecapNextStepsView>(`/api/work-os/me/activity-intervals/${encodeURIComponent(intervalId)}/next-steps`, {
+    signal: AbortSignal.timeout(30_000),
+  });
+}
+
+/** Ends the chat moment: every still-undecided suggestion is dismissed so it
+ * never re-appears and nothing lingers in a queue. */
+export function dismissRecapNextSteps(intervalId: string) {
+  return apiRequest<{ dismissed: number }>(`/api/work-os/me/activity-intervals/${encodeURIComponent(intervalId)}/next-steps`, {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({ action: "dismiss" }),
+  });
+}
+
+/** One decision on a recap next-step suggestion. New task/subtask titles may
+ * carry the employee's edit, validated server-side against the operation. */
+export function decideRecapNextStep(proposalId: string, decision: "accept" | "reject", edits?: { name?: string }) {
+  return apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, {
+    method: "PATCH",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({ decision, ...(edits ? { edits } : {}) }),
   });
 }

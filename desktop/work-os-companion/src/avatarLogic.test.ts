@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, prunePromptReminderTurns, recapAutoCollapseMs, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
-  RECAP_AUTO_COLLAPSE_MS,
+  clockInNudge, collectNudges, composerSendTarget, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
@@ -401,10 +401,9 @@ describe("header window drag", () => {
   });
 });
 
-describe("recap confirmation returns to the orb", () => {
-  it("collapses only when the alert opened the chat and the employee confirmed", () => {
-    expect(recapAutoCollapseMs("confirm", true)).toBe(RECAP_AUTO_COLLAPSE_MS);
-    expect(recapAutoCollapseMs("confirm", false)).toBeNull();
-    expect(recapAutoCollapseMs("amend", true)).toBeNull();
+describe("recap next-steps moment settles back to the orb", () => {
+  it("uses one settle beat after the moment is fully decided", () => {
+    expect(nextStepsSettleMs()).toBe(NEXT_STEPS_SETTLE_MS);
+    expect(NEXT_STEPS_SETTLE_MS).toBeGreaterThanOrEqual(3_000);
   });
 });

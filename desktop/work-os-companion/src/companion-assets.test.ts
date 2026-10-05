@@ -204,6 +204,9 @@ describe("floating companion integration", () => {
     expect(runtime).toContain("const READY_MS = 3_600;");
     const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
     expect(avatar).toContain("setReadyPulse(false), 2_900");
-    expect(avatar).toContain("recapAutoCollapseMs");
+    expect(avatar).toContain("nextStepsSettleMs");
+    expect(avatar).toContain("RecapNextStepsCard");
+    const queries = readFileSync(resolve(root, "src/workOsQueries.ts"), "utf8");
+    expect(queries).toContain("/next-steps");
   });
 });

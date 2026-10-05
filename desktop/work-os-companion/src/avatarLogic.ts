@@ -212,12 +212,13 @@ export function isHeaderDragStart(button: number, target: EventTarget | null): b
 }
 
 /** A recap alert (toast click or the collapsed recap bubble) can open the chat
- * for its confirmation. The panel returns to the orb only when the alert — not
- * the employee — opened it, and only after the celebration beat. */
-export const RECAP_AUTO_COLLAPSE_MS = 500;
+ * for its confirmation. After approval the chat lingers with the recap's
+ * next-step suggestions; once they are decided, the panel returns to the orb
+ * after this settle beat. */
+export const NEXT_STEPS_SETTLE_MS = 6_000;
 
-export function recapAutoCollapseMs(action: "confirm" | "amend", alertOpened: boolean): number | null {
-  return action === "confirm" && alertOpened ? RECAP_AUTO_COLLAPSE_MS : null;
+export function nextStepsSettleMs(): number {
+  return NEXT_STEPS_SETTLE_MS;
 }
 
 /** Which send action the avatar composer owns right now. A recap edit wins over

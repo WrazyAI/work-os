@@ -3217,9 +3217,9 @@ export default function App() {
       />)}
       {view === "tasks" && <TasksWorkspace currentDate={visibleDay?.shiftDate ?? ""} historyDate={planHistoryDate} backlog={backlogQuery.data ?? null} backlogLoading={backlogQuery.isLoading} backlogError={backlogQuery.isError} currentPlan={visibleDay?.plan ?? null} historicalPlan={historicalPlan} historicalTasks={historicalTasks} goal={planIntent} goalProvenance={goalProvenance} suggestion={goalSuggestion} saveState={planSaveState} taskView={taskView} taskSort={taskWorkspaceSort} todayTasks={visibleTodayTasks} taskHistory={taskHistory} workspaceHistory={workspaceTaskHistory} completedHistory={completedTaskHistory} historyOrder={syncBypass ? "local" : "server"} historyError={!viewingHistorical && (taskView === "all" ? workspaceHistoryQuery.isError : taskView === "completed" ? completedHistoryQuery.isError : false)} historyHasData={Boolean(activeTaskHistoryQuery.data)} onRetryHistory={() => void activeTaskHistoryQuery.refetch()} carryOver={unfinishedCarryOver} carryOverOpen={carryOverOpen} loadingMore={activeTaskHistoryQuery.isFetchingNextPage} hasMore={activeTaskHistoryQuery.hasNextPage} busy={busy} loading={tasksInitialLoading} onTaskView={setTaskView} onTaskSort={setTaskWorkspaceSort} onDate={loadPlanHistory} onEditFocus={openPlanningSession} onAddTask={() => void openTaskComposer()} onOpenTask={(task, readOnly) => void openTaskDetails(task, readOnly)} onEditTask={editTask} onArchiveTask={(task) => requestTaskRemoval(task, true, "archive")} onDeleteTask={(task) => requestTaskRemoval(task, true, "delete")} onSurfaceTask={surfaceTask} onTaskCompletion={setTaskCompletion} taskFlight={taskFlight} onCarryOverOpen={setCarryOverOpen} onLoadMore={() => void loadMoreTasks()} onRetryPendingTask={retryPendingTask} onDismissPendingTask={dismissPendingTask} onRetryGoalSave={() => setPlanDirty(true)} />}
       {view === "review" && <main className="page">
-        {!eodDate && visibleDay?.proposals?.length ? (
+        {!eodDate && visibleDay?.proposals?.some((proposal) => !proposal.source_interval_id) ? (
           <ReviewWorkspace
-            proposals={visibleDay.proposals}
+            proposals={visibleDay.proposals.filter((proposal) => !proposal.source_interval_id)}
             busy={busy}
             onReject={(id) => void decideDayProposal(id, "reject")}
             onApprove={(id) => void decideDayProposal(id, "accept")}
@@ -3413,7 +3413,6 @@ export default function App() {
         onReviewHistoryOperations={approveHistoryOperations}
         onRetryHistoryOperation={retryHistoryOperation}
         onNavigateView={(page) => setView(page)}
-        onOpenReview={() => setView("review")}
         onRetryOperation={retryInterpretationOperation}
         onClassify={classifyProgressUpdate}
         onApplyGoal={applyGoal}
@@ -3700,7 +3699,7 @@ function AssistantOperations({ interpretation, busy, toolContext, onReviewOperat
   </>;
 }
 
-export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onOpenReview, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
+export function ProgressComposer({ mode = "progress", displayName = null, input, open, panel, pending, receipt, history = [], onClearChat, busy, required, goal, goalProvenance, goalSuggestion, saveState, activityDate = null, activityTimezone = null, activityPollMs, interpretation = null, thinking = null, toolContext = { shiftDate: null, personId: null, promptKind: "optional" }, aiUnavailable = null, voice, onInput, onOpen, onOpenGoal, onClose, onSubmit, onClassify, onApplyGoal, onRetryGoalSave, onReviewOperations, onMarkSelectedDone, onLoadSubtasks, onNavigateView, onRetryOperation, onReviewHistoryOperations, onRetryHistoryOperation }: {
   mode?: ComposerMode; displayName?: string | null;
   input: string; open: boolean; panel: ProgressPanel; pending: string; receipt: ProgressReceipt | null; history?: WorkOsConversationTurn[]; onClearChat?: () => void; busy: boolean; required: boolean; goal: string;
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
@@ -3711,7 +3710,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
   voice?: import("./chat/voiceInput").VoiceInput;
-  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onOpenReview?: () => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
+  onNavigateView?: (page: import("./interpretation").NavigatePage) => void; onReviewOperations?: (approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onMarkSelectedDone?: (tasks: Array<{ id: string; title: string }>) => void; onLoadSubtasks?: (taskId: string) => Promise<readonly { id: string; title: string; completed?: boolean }[]>; onRetryOperation?: (result: ToolCallResult) => void;
   onReviewHistoryOperations?: (turnId: string, approved: ProposedOperation[], rejected: ProposedOperation[]) => void; onRetryHistoryOperation?: (turnId: string, result: ToolCallResult) => void;
 }) {
   useEffect(() => {
@@ -3812,7 +3811,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
          <div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goalDraft} onChange={(event) => { setGoalDraft(event.target.value); setGoalFromSuggestion(false); }} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>
          <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
          {!cardGoal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button type="button" onClick={() => { setGoalDraft(goalSuggestion.text); setGoalFromSuggestion(true); }}>Use suggestion</button></div>}
-               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} onOpenReview={() => (onOpenReview ? onOpenReview() : onNavigateView?.("review"))} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
+               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
   key={turn.id ?? index}
   turn={{
     ...turn,
@@ -3949,14 +3948,15 @@ export function ReviewWorkspace({ proposals, busy, onReject, onApprove }: { prop
     {proposals.length ? <section className="proposal-list">{proposals.map((proposal, index) => {
       const fields = proposalFields(proposal);
       const actionable = proposal.status === "pending";
-      return <article className="proposal-card" key={proposal.id} data-source={proposal.source_interval_id ? "recap" : undefined}>
-        <header><div className="proposal-index">{String(index + 1).padStart(2, "0")}</div><div><span>{proposal.source_interval_id ? "From your recap" : sentence(String(proposal.operation || "workspace_change"))}</span><h3>{proposalTitle(proposal)}</h3></div><em>{sentence(String(proposal.status || "pending"))}</em></header>
+      const stale = proposal.status === "stale";
+      return <article className="proposal-card" key={proposal.id}>
+        <header><div className="proposal-index">{String(index + 1).padStart(2, "0")}</div><div><span>{sentence(String(proposal.operation || "workspace_change"))}</span><h3>{proposalTitle(proposal)}</h3></div><em>{sentence(String(proposal.status || "pending"))}</em></header>
         <div className="proposal-compare">
-          <section><span>{proposal.source_interval_id ? "Why it's suggested" : "What you said"}</span><blockquote>{proposal.input_text || "The original statement was preserved with this proposal."}</blockquote></section>
+          <section><span>What you said</span><blockquote>{proposal.input_text || "The original statement was preserved with this proposal."}</blockquote></section>
           <MoveRight size={18} />
           <section><span>Proposed change</span><strong>{proposalTitle(proposal)}</strong>{fields.length > 0 && <dl>{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>}</section>
         </div>
-        <footer><small><ShieldCheck size={13} /> {actionable ? "No provider change has been made." : "This proposal already has a recorded decision."}</small><div><button disabled={busy || !actionable} onClick={() => onReject(String(proposal.id))}>Reject</button><button className="primary" disabled={busy || !actionable} onClick={() => onApprove(String(proposal.id))}><Check size={15} /> Approve change</button></div></footer>
+        <footer><small><ShieldCheck size={13} /> {actionable ? "No provider change has been made." : stale ? "This suggestion is outdated because the task changed; it was not applied." : "This proposal already has a recorded decision."}</small><div><button disabled={busy || !actionable} onClick={() => onReject(String(proposal.id))}>Reject</button><button className="primary" disabled={busy || !actionable} onClick={() => onApprove(String(proposal.id))}><Check size={15} /> Approve change</button></div></footer>
       </article>;
     })}</section> : <section className="review-empty"><div><Check size={24} /></div><span>Review queue</span><h3>Everything is clear.</h3><p>No proposed changes are waiting. New interpretations will appear here before any write-back.</p></section>}
   </section>;

@@ -8,7 +8,7 @@ import type { PreviewResolver } from "./ScreenshotGallery";
 /** The Tasks tab's Recent activity stream: Activity Interval Reviews newest
  * first, oldest last, each able to reveal the exact frames it was built from.
  * Reads its own cached query so a new recap appears without reopening the tab. */
-export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc, onViewInApp, onOpenNextSteps }: {
+export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc, onViewInApp }: {
   date: string | null;
   enabled: boolean;
   timezone?: string | null;
@@ -18,8 +18,6 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
   resolveSrc?: PreviewResolver;
   /** Floating companion only: jump to the Focus tab in the main window. */
   onViewInApp?: () => void;
-  /** Opens the Review queue from a recap's next-steps link. */
-  onOpenNextSteps?: () => void;
 }) {
   const query = useActivityIntervalsQuery({ enabled, date, pollMs });
   const intervals = query.data?.intervals ?? [];
@@ -57,8 +55,6 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
               onDecide={onDecide}
               deciding={decidingId === interval.id}
               resolveSrc={resolveSrc}
-              nextSteps={interval.nextSteps ?? null}
-              onOpenNextSteps={onOpenNextSteps}
             />
           ))}
         </div>
@@ -70,13 +66,11 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
 /** Self-contained stream for the in-app Focus tab: owns its decision calls and
  * cache invalidation so the dock can embed the same list without App-level
  * wiring. Renders only while a workday date is available. */
-export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs, onOpenReview }: {
+export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs }: {
   date: string | null;
   enabled?: boolean;
   timezone?: string | null;
   pollMs?: number;
-  /** Opens the Review queue when the employee follows a recap's next-steps link. */
-  onOpenReview?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [decidingId, setDecidingId] = useState<string | null>(null);
@@ -95,6 +89,6 @@ export function ActivityIntervalStream({ date, enabled = true, timezone, pollMs,
   };
   return <>
     {error ? <p className="chat-activity-error" role="alert">{error}</p> : null}
-    <ActivityIntervalList date={date} enabled={enabled} timezone={timezone} onDecide={decide} decidingId={decidingId} pollMs={pollMs} onOpenNextSteps={onOpenReview} />
+    <ActivityIntervalList date={date} enabled={enabled} timezone={timezone} onDecide={decide} decidingId={decidingId} pollMs={pollMs} />
   </>;
 }

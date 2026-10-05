@@ -11,7 +11,7 @@ import { useAttendanceWatch } from "./useAttendanceWatch";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { decideActivityIntervalReview, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchTaskDetails } from "./workOsQueries";
+import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails } from "./workOsQueries";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
@@ -34,12 +34,13 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { lateReasonRequired } from "./lateStart";
 import type { PlanningInterpretation } from "./PlanningSession";
 import { formatWorkOsDate } from "./dateFormat";
-import type { WorkSession, ActivityIntervalCard as ActivityIntervalCardData } from "./types";
+import type { WorkSession, ActivityIntervalCard as ActivityIntervalCardData, RecapNextStepItem } from "./types";
+import { RecapNextStepsCard, type RecapNextStepState, type RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, prunePromptReminderTurns, recapAutoCollapseMs, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -100,6 +101,9 @@ interface ChatEntry {
   /** The live recap card for this prompt turn (local-only; the Tasks tab
    * carries the durable stream). */
   activityInterval?: ActivityIntervalCardData;
+  /** The post-approval next-steps moment (local-only; a reload keeps only its
+   * lead text). */
+  nextSteps?: RecapNextStepsMoment;
   /** UI-only reminder scaffolding: never persisted or sent as conversation. */
   kind?: "prompt";
 }
@@ -227,6 +231,7 @@ export default function AvatarApp(): React.ReactElement {
     if (avatarMascotFixture) document.documentElement.dataset.mascotSize = avatarMascotFixture;
   }, [avatarMascotFixture]);
   const [decidingIntervalId, setDecidingIntervalId] = useState<string | null>(null);
+  const [nextStepsBusyId, setNextStepsBusyId] = useState<string | null>(null);
   const [thinkingTrace, setThinkingTrace] = useState<{ stages: AvatarThinkingStage[]; active: number; startedAt: number } | null>(null);
   const thinking = thinkingTrace !== null;
   const [agendaReview, setAgendaReview] = useState<AgendaReview | null>(null);
@@ -257,11 +262,13 @@ export default function AvatarApp(): React.ReactElement {
   // The agenda auto-expand key last acted on, so a deliberate collapse is never
   // fought by a re-render. Reset when the agenda stops being due.
   const autoExpandedAgenda = useRef<string | null>(null);
-  // A recap alert (a toast click or the collapsed recap bubble) can open the
-  // chat for its confirmation. When the alert — not the employee — opened it,
-  // the panel returns to the orb after a short celebration beat.
-  const recapAlertOpened = useRef(false);
+  // The settle timer that returns the panel to the orb after the next-steps
+  // moment is fully decided; cleared by any deliberate interaction.
   const recapAutoCollapse = useRef<number | null>(null);
+  // Interval ids whose next-step suggestions are still undecided, so ending
+  // the moment can dismiss them instead of leaving them in any queue.
+  const nextStepsPending = useRef<string[]>([]);
+  const nextStepsSettled = useRef<Set<string>>(new Set());
   const expandedRef = useRef(expanded);
   const activityPromptRef = useRef(activityPrompt);
 
@@ -274,9 +281,6 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     const unlisten = listen("avatar://expand", () => {
       setMissed(false);
-      // Clicking the alert is not a deliberate open: remember it so a recap
-      // confirmation can hand the panel back to the orb.
-      if (!expandedRef.current && activityPromptRef.current) recapAlertOpened.current = true;
       void toggleExpanded(true);
     });
     return () => { unlisten.then((fn) => fn()).catch(() => { /* noop */ }); };
@@ -751,16 +755,41 @@ export default function AvatarApp(): React.ReactElement {
   // Cancel a scheduled return-to-orb: a deliberate interaction keeps the chat
   // open and forgets the alert-open state.
   const clearRecapAutoCollapse = useCallback((): void => {
-    recapAlertOpened.current = false;
     if (recapAutoCollapse.current !== null) {
       window.clearTimeout(recapAutoCollapse.current);
       recapAutoCollapse.current = null;
     }
   }, []);
 
+  const updateNextStepsEntry = useCallback((entryId: string, update: (moment: RecapNextStepsMoment) => RecapNextStepsMoment): void => {
+    setChat((current) => current.map((entry) => entry.id === entryId && entry.nextSteps
+      ? { ...entry, nextSteps: update(entry.nextSteps) }
+      : entry));
+  }, []);
+
+  /** Ends the next-steps moment: still-undecided suggestions are dismissed on
+   * the server and shown as skipped, so nothing lingers in any queue. */
+  const endNextStepsMoment = useCallback((): void => {
+    const ids = nextStepsPending.current;
+    if (!ids.length) return;
+    nextStepsPending.current = [];
+    setChat((current) => current.map((entry) => {
+      if (!entry.nextSteps || !ids.includes(entry.nextSteps.intervalId)) return entry;
+      const states: Record<string, RecapNextStepState> = { ...entry.nextSteps.states };
+      for (const item of entry.nextSteps.items) {
+        if (["pending", "processing"].includes(states[item.proposalId] ?? "pending")) states[item.proposalId] = "skipped";
+      }
+      return { ...entry, nextSteps: { ...entry.nextSteps, states, status: entry.nextSteps.status === "ready" ? "done" : entry.nextSteps.status } };
+    }));
+    for (const id of ids) void dismissRecapNextSteps(id).catch(() => undefined);
+  }, []);
+
   // ── Expanded/collapsed window sizing ──
   const toggleExpanded = useCallback(async (open: boolean): Promise<void> => {
-    if (!open) clearRecapAutoCollapse();
+    if (!open) {
+      clearRecapAutoCollapse();
+      endNextStepsMoment();
+    }
     setExpanded(open);
     const size = open ? AVATAR_EXPANDED : AVATAR_COLLAPSED;
     // Resize first, on its own: a monitor/position failure must never leave the
@@ -781,7 +810,121 @@ export default function AvatarApp(): React.ReactElement {
       }
       await win.setPosition(new LogicalPosition(x, y));
     } catch { /* sizing is cosmetic */ }
-  }, [clearRecapAutoCollapse, win]);
+  }, [clearRecapAutoCollapse, endNextStepsMoment, win]);
+
+  /** After the moment is decided, the panel returns to the orb after a settle
+   * beat unless the employee interacts again. */
+  const scheduleNextStepsSettle = useCallback((): void => {
+    if (recapAutoCollapse.current !== null) window.clearTimeout(recapAutoCollapse.current);
+    recapAutoCollapse.current = window.setTimeout(() => {
+      recapAutoCollapse.current = null;
+      void toggleExpanded(false);
+    }, nextStepsSettleMs());
+  }, [toggleExpanded]);
+
+  /** The post-approval moment: the chat lingers while the recap's suggestions
+   * are generated, then shows them inline as actionable cards. */
+  const startNextStepsMoment = useCallback(async (intervalId: string, label: string | null, existingEntryId?: string): Promise<void> => {
+    const entryId = existingEntryId ?? `next-steps-${intervalId}`;
+    if (existingEntryId) {
+      updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "drafting", error: null, items: [], states: {}, failures: {} }));
+    } else {
+      setChat((current) => current.some((entry) => entry.id === entryId) ? current : [...current, {
+        id: entryId,
+        role: "assistant",
+        text: "Recap confirmed — while it's fresh, here's what could come next:",
+        nextSteps: { intervalId, label, status: "drafting", items: [], states: {}, failures: {}, error: null },
+      }]);
+    }
+    void toggleExpanded(true);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 900 : 1_500));
+      let view: Awaited<ReturnType<typeof fetchRecapNextSteps>> | null = null;
+      try {
+        view = await fetchRecapNextSteps(intervalId);
+      } catch {
+        continue;
+      }
+      if (!view) continue;
+      if (view.status === "ready" && view.items.length) {
+        const states: Record<string, RecapNextStepState> = {};
+        for (const item of view.items) {
+          states[item.proposalId] = item.status === "applied" ? "applied" : item.status === "rejected" ? "skipped" : "pending";
+        }
+        updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "ready", label: view.label ?? moment.label, items: view.items, states }));
+        return;
+      }
+      if (view.status === "failed") {
+        updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "failed", error: "Next steps could not be drafted from this recap." }));
+        return;
+      }
+      if (view.status === "skipped" || view.status === "none" || (view.status === "ready" && !view.items.length)) {
+        updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
+        scheduleNextStepsSettle();
+        return;
+      }
+    }
+    updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
+    scheduleNextStepsSettle();
+  }, [scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
+
+  /** One inline decision on a next-step suggestion, filed through the same
+   * owner-scoped proposal endpoint as any other review card. */
+  const decideNextStep = useCallback(async (entryId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }): Promise<void> => {
+    setNextStepsBusyId(entryId);
+    updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
+    try {
+      const row = await decideRecapNextStep(item.proposalId, decision === "accept" ? "accept" : "reject", edits);
+      const outcome = row?.outcome ?? "";
+      const state: RecapNextStepState = decision === "skip" || outcome === "rejected" ? "skipped"
+        : outcome === "applied" ? "applied"
+          : outcome === "applying" ? "processing"
+            : "failed";
+      updateNextStepsEntry(entryId, (moment) => ({
+        ...moment,
+        states: { ...moment.states, [item.proposalId]: state },
+        failures: state === "failed"
+          ? { ...moment.failures, [item.proposalId]: row?.failure_reason ?? "The change could not be applied." }
+          : moment.failures,
+      }));
+      if (state === "applied" || state === "skipped") void loadDay();
+    } catch (value) {
+      updateNextStepsEntry(entryId, (moment) => ({
+        ...moment,
+        states: { ...moment.states, [item.proposalId]: "failed" },
+        failures: { ...moment.failures, [item.proposalId]: value instanceof Error ? value.message : "The change could not be applied." },
+      }));
+    } finally {
+      setNextStepsBusyId(null);
+    }
+  }, [loadDay, updateNextStepsEntry]);
+
+  // Which moments still have undecided items (for dismissal on close) and
+  // which fully settled moments already scheduled their settle beat.
+  useEffect(() => {
+    const pending = chat.flatMap((entry) => entry.nextSteps
+      && (entry.nextSteps.status === "ready" || entry.nextSteps.status === "done")
+      && entry.nextSteps.items.some((item) => ["pending", "processing"].includes(entry.nextSteps!.states[item.proposalId] ?? "pending"))
+      ? [entry.nextSteps.intervalId] : []);
+    nextStepsPending.current = [...new Set(pending)];
+  }, [chat]);
+
+  useEffect(() => {
+    const settled = chat.find((entry) => entry.nextSteps
+      && entry.nextSteps.status === "ready"
+      && entry.nextSteps.items.length > 0
+      && entry.nextSteps.items.every((item) => !["pending", "processing"].includes(entry.nextSteps!.states[item.proposalId] ?? "pending")));
+    if (!settled?.nextSteps) return;
+    const entryId = settled.id;
+    const intervalId = settled.nextSteps.intervalId;
+    if (settled.nextSteps.status !== "done") {
+      updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "done" }));
+      return;
+    }
+    if (nextStepsSettled.current.has(intervalId)) return;
+    nextStepsSettled.current.add(intervalId);
+    scheduleNextStepsSettle();
+  }, [chat, scheduleNextStepsSettle, updateNextStepsEntry]);
 
   const openEodReview = useCallback(async (): Promise<void> => {
     void emit("work-os://avatar-open-eod");
@@ -809,6 +952,7 @@ export default function AvatarApp(): React.ReactElement {
     setDecidingIntervalId(id);
     try {
       await decideActivityIntervalReview(id, action, feedback);
+      const recapLabel = chatRef.current.find((entry) => entry.activityInterval?.id === id)?.activityInterval?.label ?? activityPrompt?.label ?? null;
       setActivityPrompt(null);
       setRecapEditMode(false);
       setFacts((current) => clearRecordedUpdatePrompt(current));
@@ -817,18 +961,10 @@ export default function AvatarApp(): React.ReactElement {
         : entry));
       if (facts.shiftDate) void workOsQueryClient.invalidateQueries({ queryKey: workOsKeys.activityIntervals(facts.shiftDate) });
       void loadDay();
-      // A confirmation from an alert-opened chat hands the celebration back to
-      // the orb; the employee never has to close the panel themselves.
-      const collapseMs = recapAutoCollapseMs(action, recapAlertOpened.current);
-      if (collapseMs !== null) {
-        recapAlertOpened.current = false;
-        recapAutoCollapse.current = window.setTimeout(() => {
-          recapAutoCollapse.current = null;
-          void toggleExpanded(false);
-        }, collapseMs);
-      } else {
-        clearRecapAutoCollapse();
-      }
+      // The panel lingers instead of returning to the orb: the approved recap
+      // becomes a next-steps moment with actionable suggestions inline.
+      clearRecapAutoCollapse();
+      void startNextStepsMoment(id, recapLabel);
     } catch (value) {
       setChat((current) => [...current, {
         id: `activity-decision-error-${Date.now()}`, role: "system",
@@ -837,7 +973,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setDecidingIntervalId(null);
     }
-  }, [clearRecapAutoCollapse, facts.shiftDate, loadDay, toggleExpanded]);
+  }, [activityPrompt, clearRecapAutoCollapse, facts.shiftDate, loadDay, startNextStepsMoment]);
 
   // Edit on the recap bubble hands editing to the composer: the employee writes
   // the correction there, and sending it records the recap note.
@@ -847,11 +983,9 @@ export default function AvatarApp(): React.ReactElement {
   }, []);
 
   // View more on the recap bubble: open the chat on the latest item. The recap
-  // turn stays in the thread until it is decided.
+  // turn stays in the thread until it is decided; the panel then lingers into
+  // the next-steps moment instead of returning straight to the orb.
   const openRecapInChat = useCallback((): void => {
-    // The alert bubble, not the employee, opened the chat: a confirmation
-    // returns it to the orb.
-    recapAlertOpened.current = true;
     setAvatarTab("chat");
     setScrollToLatest((signal) => signal + 1);
     void toggleExpanded(true);
@@ -1418,6 +1552,7 @@ export default function AvatarApp(): React.ReactElement {
   }, [agendaDue, expanded, facts.shiftDate, facts.planStatus, toggleExpanded]);
 
   function clearAvatarConversation() {
+    endNextStepsMoment();
     setChat([]);
     chatConversationSignature.current = "";
     if (avatarConversationScope) {
@@ -1621,6 +1756,14 @@ export default function AvatarApp(): React.ReactElement {
                               <span>All recaps</span>
                             </button>
                           ) : undefined}>
+                        {entry.nextSteps && (
+                          <RecapNextStepsCard
+                            moment={entry.nextSteps}
+                            busy={nextStepsBusyId === entry.id}
+                            onDecide={(item, decision, edits) => void decideNextStep(entry.id, item, decision, edits)}
+                            onRetry={() => void startNextStepsMoment(entry.nextSteps!.intervalId, entry.nextSteps!.label, entry.id)}
+                          />
+                        )}
                         {entry.trace && (
                           <AvatarThinking
                             stages={entry.trace.labels.map((label) => ({ label }))}

@@ -48,20 +48,21 @@ test("only suggestions backed by the supplied open-task list survive parsing", (
     suggestions: [
       { kind: "complete_task", task_id: "task-1", title: null, rationale: "The render tests pass and the card renders.", activity_indexes: [2], confidence: 0.9 },
       { kind: "complete_task", task_id: "fabricated-id", title: null, rationale: "Not in the list.", activity_indexes: [1], confidence: 0.9 },
-      { kind: "complete_task", task_id: "task-3", title: null, rationale: "Duplicate of the same completion.", activity_indexes: [1], confidence: 0.8 },
+      { kind: "complete_task", task_id: "task-3", title: null, rationale: "A second open task the evidence shows finished.", activity_indexes: [1], confidence: 0.8 },
       { kind: "complete_task", task_id: "task-2", title: null, rationale: "No activity index cited.", activity_indexes: [], confidence: 0.9 },
       { kind: "add_subtask", task_id: "task-2", title: "Verify the drawer on staging", rationale: "The drawer shipped untested.", activity_indexes: [2], confidence: 0.7 },
       { kind: "add_subtask", task_id: "task-2", title: "Verify the drawer on staging", rationale: "Duplicate subtask.", activity_indexes: [2], confidence: 0.7 },
       { kind: "create_task", task_id: null, title: "Deploy the recap card release", rationale: "A release cut is a concrete deliverable.", activity_indexes: [2], confidence: 0.6 },
       { kind: "create_task", task_id: null, title: null, rationale: "No title.", activity_indexes: [1], confidence: 0.6 },
-      { kind: "complete_task", task_id: "task-3", title: null, rationale: "Second duplicate kept below the cap.", activity_indexes: [1], confidence: 0.5 },
+      { kind: "complete_task", task_id: "task-3", title: null, rationale: "Duplicate of the earlier task-3 completion.", activity_indexes: [1], confidence: 0.5 },
     ],
   }, baseInput);
+  // The cap keeps the first three well-formed, well-supported suggestions; the
+  // fourth valid one (the release task) is dropped by the cap.
   assert.deepEqual(parsed.map((suggestion) => [suggestion.kind, suggestion.taskId ?? suggestion.title]), [
     ["complete_task", "task-1"],
     ["complete_task", "task-3"],
     ["add_subtask", "task-2"],
-    ["create_task", "Deploy the recap card release"],
   ]);
 });
 
@@ -80,7 +81,21 @@ test("the suggestion cap holds and malformed entries never throw", () => {
       { kind: "create_task", task_id: null, title: "Created four", rationale: "Reason create four.", activity_indexes: [1], confidence: 0.9 },
     ],
   }, baseInput);
-  assert.equal(many.length, 4);
+  assert.equal(many.length, 3);
+});
+
+test("low-confidence and ungrounded suggestions never reach the moment", () => {
+  const parsed = parseNextSteps({
+    suggestions: [
+      { kind: "complete_task", task_id: "task-1", title: null, rationale: "Weak guess.", activity_indexes: [1], confidence: 0.4 },
+      { kind: "create_task", task_id: null, title: "No evidence cited", rationale: "Nothing cited.", activity_indexes: [], confidence: 0.9 },
+      { kind: "create_task", task_id: null, title: "Solid follow-up", rationale: "The evidence shows this.", activity_indexes: [2], confidence: 0.8 },
+    ],
+  }, baseInput);
+  assert.deepEqual(parsed.map((suggestion) => suggestion.title), ["Solid follow-up"]);
+  const [system] = nextStepsMessages(baseInput);
+  assert.match(system.content, /At most three suggestions/);
+  assert.match(system.content, /failed or successful CI run by itself is never a task/);
 });
 
 test("dedupe keys mirror the proposal history that should suppress a suggestion", () => {

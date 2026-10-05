@@ -4,30 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ReviewWorkspace } from "./App";
 
 describe("ReviewWorkspace", () => {
-  it("labels recap-sourced suggestions with their provenance and offers the decision", () => {
-    const markup = renderToStaticMarkup(createElement(ReviewWorkspace, {
-      proposals: [{
-        id: "proposal-1",
-        operation: "complete_task",
-        status: "pending",
-        input_text: "The render tests pass and the card renders, so this task looks finished.",
-        proposed_change: {},
-        source_interval_id: "interval-1",
-        task_id: "task-1",
-      }],
-      busy: false,
-      onReject: () => undefined,
-      onApprove: () => undefined,
-    }));
-    expect(markup).toContain("From your recap");
-    expect(markup).toContain("The render tests pass and the card renders");
-    expect(markup).toContain("Approve change");
-    expect(markup).toContain("Reject");
-    expect(markup).toContain("review-page");
-    expect(markup).toContain("Proposals awaiting review");
-  });
-
-  it("keeps non-recap proposals on the operation label", () => {
+  it("renders non-recap proposals with their statement and decision", () => {
     const markup = renderToStaticMarkup(createElement(ReviewWorkspace, {
       proposals: [{
         id: "proposal-2",
@@ -41,8 +18,28 @@ describe("ReviewWorkspace", () => {
       onReject: () => undefined,
       onApprove: () => undefined,
     }));
-    expect(markup).not.toContain("From your recap");
     expect(markup).toContain("Log progress");
     expect(markup).toContain("Phase 1 runtime is ready for review");
+    expect(markup).toContain("Approve change");
+    expect(markup).toContain("review-page");
+    expect(markup).toContain("Proposals awaiting review");
+  });
+
+  it("explains a stale proposal instead of claiming it has a decision", () => {
+    const markup = renderToStaticMarkup(createElement(ReviewWorkspace, {
+      proposals: [{
+        id: "proposal-3",
+        operation: "update_task",
+        status: "stale",
+        input_text: "Move this task to In review.",
+        proposed_change: { task_group_id: "group-1" },
+        source_interval_id: null,
+      }],
+      busy: false,
+      onReject: () => undefined,
+      onApprove: () => undefined,
+    }));
+    expect(markup).toContain("This suggestion is outdated because the task changed; it was not applied.");
+    expect(markup).not.toContain("This proposal already has a recorded decision.");
   });
 });

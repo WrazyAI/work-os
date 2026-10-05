@@ -1248,3 +1248,31 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .chat-activity-skeleton { animation: none; }
 }
+
+/* ── Recap next steps (the post-approval chat moment) ── */
+.chat-next-steps { display: grid; gap: 8px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line, #e2e6df); border-radius: 12px; background: var(--surface, #fbfcf9); }
+.chat-next-steps-head { display: flex; align-items: center; gap: 8px; color: var(--ink-2, #626a61); }
+.chat-next-steps-head strong { display: block; color: var(--ink, #182018); font-size: 12px; }
+.chat-next-steps-head small { display: block; color: var(--ink-3, #7b8278); font-size: 10px; }
+.chat-next-steps-note { margin: 0; color: var(--ink-3, #7b8278); font-size: 11px; }
+.chat-next-steps-failed { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chat-next-steps-failed p { margin: 0; color: #8a4b1f; font-size: 11px; }
+.chat-next-steps-failed button, .chat-next-steps-state button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line, #e2e6df); border-radius: 999px; padding: 3px 10px; background: var(--surface, #fff); color: var(--ink, #182018); font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.chat-next-steps-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.chat-next-steps-list li { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line, #e2e6df); border-radius: 10px; background: var(--surface, #fff); }
+.chat-next-steps-list li[data-state="skipped"] { opacity: .65; }
+.chat-next-steps-row { display: flex; gap: 8px; align-items: flex-start; }
+.chat-next-steps-kind { flex: 0 0 auto; border-radius: 999px; padding: 1px 7px; background: var(--inset, #edf0ea); color: var(--ink-2, #626a61); font-size: 9px; font-weight: 700; white-space: nowrap; margin-top: 1px; }
+.chat-next-steps-copy { display: grid; gap: 2px; min-width: 0; }
+.chat-next-steps-copy strong { color: var(--ink, #182018); font-size: 12px; line-height: 1.35; }
+.chat-next-steps-copy small { color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.4; }
+.chat-next-steps-copy input { width: 100%; border: 1px solid var(--line, #e2e6df); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; color: var(--ink, #182018); background: #fff; }
+.chat-next-steps-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.chat-next-steps-actions button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line, #e2e6df); border-radius: 999px; padding: 3px 10px; background: var(--surface, #fff); color: var(--ink, #182018); font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.chat-next-steps-actions button.primary { background: var(--signal, #a8f15b); border-color: transparent; }
+.chat-next-steps-actions button:hover:not(:disabled) { filter: brightness(1.03); }
+.chat-next-steps-actions button:disabled { opacity: .6; cursor: default; }
+.chat-next-steps-state { display: flex; align-items: center; gap: 8px; color: var(--ink-3, #7b8278); font-size: 10.5px; }
+.chat-next-steps-state > span { font-weight: 650; color: var(--ink-2, #626a61); }
+.chat-next-steps-state small { flex: 1; color: #8a4b1f; }
+.chat-next-steps-result { margin: 0; color: var(--ink-2, #626a61); font-size: 11px; font-weight: 650; }

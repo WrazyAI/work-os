@@ -30,9 +30,12 @@ export {
   reviewWorkOsProposalBatch,
 } from "@/lib/work-os-proposal-batches";
 export {
+  dismissRecapNextSteps,
   ensureRecapNextSteps,
   ensureRecapNextStepsForInterval,
+  expireStaleRecapSuggestions,
   listNextStepCandidates,
+  listRecapNextSteps,
   nextStepsMessages,
   parseNextSteps,
   suppressedSuggestionKeys,

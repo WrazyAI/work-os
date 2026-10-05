@@ -418,8 +418,6 @@ export interface ActivityInterval {
   /** Provider-recorded GitHub activity attributed to the employee (performed
    * by their accounts) or triggered by their work (CI, deployments, reviews). */
   recordedActivity?: Array<{ description: string; relation: "performed" | "triggered"; url: string | null }>;
-  /** Recap-sourced suggestions still awaiting a decision in the Review queue. */
-  nextSteps?: number | null;
   employeeFeedback: string | null;
   failureReason: string | null;
   generatedAt: string | null;
@@ -439,11 +437,30 @@ export interface ActivityIntervalsData {
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
   "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
-  | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt" | "nextSteps"
+  | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
 >;
 
 export interface ActivityIntervalEnsureResult {
   status: "ready" | "preparing" | "unavailable" | "failed" | "no_prompt";
   reason: string | null;
   interval: ActivityIntervalCard | null;
+}
+
+/** One recap-sourced next-step suggestion shown in the mascot chat moment. */
+export interface RecapNextStepItem {
+  proposalId: string;
+  operation: "complete_task" | "create_task" | "add_subtask";
+  status: string;
+  title: string;
+  rationale: string;
+  taskId: string | null;
+  /** New task/subtask titles may be edited before they are added. */
+  editable: boolean;
+}
+
+/** The chat moment's payload: generation status plus the recap's suggestions. */
+export interface RecapNextStepsView {
+  status: "pending" | "generating" | "ready" | "skipped" | "failed" | "none";
+  label: string | null;
+  items: RecapNextStepItem[];
 }

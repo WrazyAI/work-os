@@ -72,7 +72,6 @@ const fixtures: ActivityInterval[] = [
     evidenceExpired: false,
     evidenceCount: 3,
     evidence: evidence.slice(0, 3),
-    nextSteps: 2,
   },
   {
     ...base,
@@ -175,7 +174,6 @@ export default function ActivityIntervalPreview() {
           onDecide={decide}
           decidingId={null}
           resolveSrc={resolveSrc}
-          onOpenNextSteps={() => setEditRequested(true)}
         />
       </div>
     </QueryClientProvider>
