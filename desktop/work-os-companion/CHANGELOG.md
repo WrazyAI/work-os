@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.97
+
+- Suggested next steps now close back to the mascot after about three seconds, and the success animation plays once the window is closed.
 - Selecting tasks in the floating chat keeps the card steady and its actions clear above the message bar.
 - Moving from your written goal to its draft and recorded confirmation now feels smoother.
 
