@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.98
+
+- When your EOD is due, the companion bubble now has an Open EOD review button, and the morning bubble has Set today's goal.
+
 ## 0.3.97
 
 - Suggested next steps now close back to the mascot after about three seconds, and the success animation plays once the window is closed.
