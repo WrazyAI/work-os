@@ -130,10 +130,12 @@ async function main(): Promise<void> {
   let pushed = false;
   try {
     const patchFile = join(tmpdir(), `agentos-converge-${Date.now()}.patch`);
-    writeFileSync(
-      patchFile,
-      `${git(["diff", "--binary", base, commit, "--", ...selected.map((entry) => entry.path)], repo)}\n`,
-    );
+    // Preserve git's exact diff bytes: trimming can eat a trailing blank
+    // context line, which makes the patch fail with "corrupt patch".
+    const patch = execFileSync("git", ["diff", "--binary", base, commit, "--", ...selected.map((entry) => entry.path)], {
+      cwd: repo, encoding: "utf8", maxBuffer: 128 * 1024 * 1024,
+    });
+    writeFileSync(patchFile, patch.endsWith("\n") ? patch : `${patch}\n`);
     execFileSync("git", ["apply", "--index", patchFile], { cwd: worktree, stdio: "inherit" });
     for (const entry of selected) {
       const staged = git(["rev-parse", `:${entry.path}`], worktree);
