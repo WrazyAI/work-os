@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.96
+
+- Suggested next steps that were lost to the earlier sync now come back when the companion opens, scrolled into view.
+
 ## 0.3.95
 
 - Recap evidence now keeps GitHub activity with its screenshot count inside one disclosure.
