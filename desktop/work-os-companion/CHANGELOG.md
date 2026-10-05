@@ -26,7 +26,7 @@ they change what the employee sees or does.
 
 ## 0.3.93
 
-- After you approve a recap, the chat stays open and shows suggested next steps — mark a task done, add a task, or add a subtask — right there in the conversation.
+- After you approve a recap, the chat stays open and shows suggested next steps — mark a task done, add a task, or add a subtask.
 - The next-steps suggestions are no longer mixed into the Review page.
 
 ## 0.3.92
