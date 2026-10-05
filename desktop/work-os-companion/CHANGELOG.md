@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.95
+
 - Recap evidence now keeps GitHub activity with its screenshot count inside one disclosure.
 
 ## 0.3.94
