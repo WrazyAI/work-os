@@ -24,6 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Closing a page guide now keeps it dismissed when you return, including after account sync.
+- Page guide illustrations now play once and respond to each numbered step, while reduced-motion stays still.
+
 ## 0.4.1
 
 - The companion is now available for Intel and Apple Silicon Macs; use Worktivity on your Mac for clock actions.
