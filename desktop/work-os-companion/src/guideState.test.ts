@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, decideGuideOpen, guideAutoOpens, isGuideView, normalizeGuideState, reconcileGuideState, type CachedGuideState } from "./guideState";
+import * as guideStateModule from "./guideState";
+import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, decideGuideOpen, guideAutoOpens, isGuideView, normalizeGuideState, reconcileGuideState, type CachedGuideState, type GuideState, type GuideView } from "./guideState";
 
 const org = "org-1";
 
 function cache(state: CachedGuideState["state"], pendingAutoOpen: boolean | null = null, organizationId = org): CachedGuideState {
   return { organizationId, savedAt: "2026-10-06T10:00:00.000Z", state, pendingAutoOpen };
 }
+
+type GuideStateModuleWithLifecycle = typeof guideStateModule & {
+  markGuideSeen?: (state: GuideState, view: GuideView, seenAt: string) => GuideState;
+  mergeGuideServerState?: (current: GuideState, incoming: GuideState, pendingAutoOpen: boolean | null) => GuideState;
+};
+
+const lifecycle = guideStateModule as GuideStateModuleWithLifecycle;
 
 describe("page guide state", () => {
   it("normalizes malformed payloads to the historical default", () => {
@@ -47,6 +55,47 @@ describe("page guide state", () => {
     expect(decideGuideOpen({ ...base, activeView: "insights", evaluatedView: "tasks" })).toEqual({ action: "schedule", view: "insights" });
   });
 
+  it("acknowledges a dismissed guide once and preserves its first seen timestamp", () => {
+    expect(lifecycle.markGuideSeen).toBeTypeOf("function");
+    const once = lifecycle.markGuideSeen!(EMPTY_GUIDE_STATE, "insights", "2026-10-06T10:00:00.000Z");
+    const twice = lifecycle.markGuideSeen!(once, "insights", "2026-10-06T10:05:00.000Z");
+    expect(twice).toEqual({
+      guides: { insights: "2026-10-06T10:00:00.000Z" },
+      autoOpen: true,
+    });
+    expect(guideAutoOpens(twice, "insights")).toBe(false);
+  });
+
+  it("never lets an older server response erase a local seen mark or pending guide preference", () => {
+    expect(lifecycle.mergeGuideServerState).toBeTypeOf("function");
+    const current: GuideState = {
+      guides: {
+        day: "2026-10-06T10:00:00.000Z",
+        tasks: "2026-10-06T10:01:00.000Z",
+      },
+      autoOpen: false,
+    };
+    const staleServer: GuideState = {
+      guides: { day: "2026-10-06T10:00:00.000Z" },
+      autoOpen: true,
+    };
+    expect(lifecycle.mergeGuideServerState!(current, staleServer, false)).toEqual(current);
+  });
+
+
+
+  it("does not let a stale mutation response change the current auto-open preference", () => {
+    expect(lifecycle.mergeGuideServerState).toBeTypeOf("function");
+    const current: GuideState = {
+      guides: { day: "2026-10-06T10:00:00.000Z" },
+      autoOpen: false,
+    };
+    const staleServer: GuideState = {
+      guides: { day: "2026-10-06T10:00:00.000Z" },
+      autoOpen: true,
+    };
+    expect(lifecycle.mergeGuideServerState!(current, staleServer, null).autoOpen).toBe(false);
+  });
   it("re-pushes local seen marks the server never stored", () => {
     const server = { guides: { day: "2026-10-06T09:00:00.000Z" }, autoOpen: true };
     const local = cache({ guides: { day: "2026-10-06T09:00:00.000Z", tasks: "2026-10-06T09:30:00.000Z" }, autoOpen: true });
