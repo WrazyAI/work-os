@@ -11,6 +11,7 @@ function cache(state: CachedGuideState["state"], pendingAutoOpen: boolean | null
 type GuideStateModuleWithLifecycle = typeof guideStateModule & {
   markGuideSeen?: (state: GuideState, view: GuideView, seenAt: string) => GuideState;
   mergeGuideServerState?: (current: GuideState, incoming: GuideState, pendingAutoOpen: boolean | null) => GuideState;
+  queueGuidePreferenceWrite?: (tail: Promise<void>, write: () => Promise<void>) => Promise<void>;
 };
 
 const lifecycle = guideStateModule as GuideStateModuleWithLifecycle;
@@ -96,6 +97,26 @@ describe("page guide state", () => {
     };
     expect(lifecycle.mergeGuideServerState!(current, staleServer, null).autoOpen).toBe(false);
   });
+  it("serializes preference writes so the latest user choice reaches the server last", async () => {
+    expect(lifecycle.queueGuidePreferenceWrite).toBeTypeOf("function");
+    const calls: string[] = [];
+    let releaseFirst: (() => void) | null = null;
+    const first = lifecycle.queueGuidePreferenceWrite!(Promise.resolve(), async () => {
+      calls.push("first:start");
+      await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      calls.push("first:end");
+    });
+    const second = lifecycle.queueGuidePreferenceWrite!(first, async () => {
+      calls.push("second:start");
+      calls.push("second:end");
+    });
+    await Promise.resolve();
+    expect(calls).toEqual(["first:start"]);
+    releaseFirst!();
+    await Promise.all([first, second]);
+    expect(calls).toEqual(["first:start", "first:end", "second:start", "second:end"]);
+  });
+
   it("re-pushes local seen marks the server never stored", () => {
     const server = { guides: { day: "2026-10-06T09:00:00.000Z" }, autoOpen: true };
     const local = cache({ guides: { day: "2026-10-06T09:00:00.000Z", tasks: "2026-10-06T09:30:00.000Z" }, autoOpen: true });
