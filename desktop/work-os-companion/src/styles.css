@@ -4670,8 +4670,8 @@ body.modal-open {
 /* ── Page guides ─────────────────────────────────────────────────────────
    One short first-visit guide per workspace page (design §8: one modal, one
    primary action, Escape/backdrop/close all dismiss, focus returns to the
-   header). The scene is inline SVG on the workspace palette, so there is no
-   raster art to ship and nothing animates under reduced motion. */
+   header). The scene is inline SVG on the workspace palette. It plays one
+   bounded three-step sequence and each numbered step can drive it directly. */
 .task-modal.guide-modal {
   width: min(560px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
@@ -4696,8 +4696,10 @@ body.modal-open {
   line-height: 1.5;
 }
 .task-modal.guide-modal > header button {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   border-color: transparent;
   background: transparent;
   color: #62675f;
@@ -4721,17 +4723,49 @@ body.modal-open {
   width: 100%;
   height: auto;
 }
+.guide-phase {
+  opacity: 0.34;
+  transform: translateY(3px) scale(0.985);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.guide-phase.is-active {
+  opacity: 1;
+  transform: none;
+}
 .guide-steps {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 12px;
+  gap: 4px;
 }
 .guide-step {
+  min-width: 0;
+}
+.guide-step-control {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 7px 8px;
+  background: transparent;
+  color: inherit;
   display: flex;
   gap: 11px;
   align-items: flex-start;
+  text-align: left;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.guide-step-control:not(:disabled):hover {
+  background: #f1f0ea;
+  box-shadow: none;
+  transform: none;
+}
+.guide-step-control[aria-pressed="true"] {
+  border-color: #d5dfca;
+  background: #eef4e7;
 }
 .guide-step-mark {
   display: grid;
@@ -4744,6 +4778,10 @@ body.modal-open {
   border-radius: 9px;
   background: var(--white);
   color: var(--ink);
+}
+.guide-step-control[aria-pressed="true"] .guide-step-mark {
+  border-color: #bad49a;
+  background: #e3f6cb;
 }
 .guide-step-copy {
   display: grid;
@@ -4766,12 +4804,12 @@ body.modal-open {
   padding: 14px 24px 18px;
 }
 .task-modal.guide-modal > footer .primary {
-  min-height: 38px;
+  min-height: 40px;
 }
 .task-modal.guide-modal > footer .guide-quiet-action {
-  min-height: 0;
+  min-height: 40px;
   border: 0;
-  padding: 6px 0;
+  padding: 10px 0;
   background: transparent;
   color: #6f7369;
   font-size: 11px;
@@ -4798,3 +4836,13 @@ body.modal-open {
     flex-wrap: wrap;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .guide-phase {
+    transform: none;
+    transition: none;
+  }
+  .guide-step-control {
+    transition: none;
+  }
+}
+

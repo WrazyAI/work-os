@@ -6,7 +6,7 @@ import { GUIDE_VIEWS } from "./guideState";
 import { PAGE_GUIDES } from "./guides";
 
 describe("page guide modal", () => {
-  it("renders dialog semantics, custom art, numbered steps, and one primary action", () => {
+  it("renders dialog semantics, interactive steps, phased art, and one primary action", () => {
     const markup = renderToStaticMarkup(createElement(PageGuide, {
       view: "day",
       autoOpen: true,
@@ -19,9 +19,14 @@ describe("page guide modal", () => {
     expect(markup).toContain('aria-describedby="page-guide-promise"');
     expect(markup).toContain("How My Day works");
     expect(markup).toContain("Your workday in one place");
-    expect(markup).toContain("guide-art");
+    expect(markup).toContain('id="page-guide-art"');
+    expect(markup).toContain('data-guide-view="day"');
+    expect(markup).toContain('data-active-step="0"');
+    expect(markup).toContain("guide-phase");
     expect(markup).toContain('aria-hidden="true"');
-    expect((markup.match(/<li class="guide-step">/g) ?? []).length).toBe(PAGE_GUIDES.day.steps.length);
+    expect((markup.match(/class="guide-step-control/g) ?? []).length).toBe(PAGE_GUIDES.day.steps.length);
+    expect(markup).toContain('aria-controls="page-guide-art"');
+    expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("Start with a plan");
     expect(markup).toContain("Got it");
     expect(markup).toContain("show these automatically");
@@ -48,7 +53,8 @@ describe("page guide modal", () => {
         onDisableAutoOpen: () => undefined,
       }));
       expect(markup).toContain(PAGE_GUIDES[view].title);
-      expect(markup).toContain("guide-art");
+      expect(markup).toContain(`data-guide-view="${view}"`);
+      expect(markup).toContain("guide-phase");
     }
   });
 });
