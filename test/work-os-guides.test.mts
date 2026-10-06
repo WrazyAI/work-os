@@ -67,6 +67,7 @@ test("member ui state migration is additive and idempotent", async () => {
   assert.match(migration, /create or replace function work_mark_guide_seen/);
   assert.match(migration, /create or replace function work_set_guide_auto_open/);
   assert.match(migration, /p_membership_id/);
-  assert.match(migration, /revoke execute on function work_mark_guide_seen\(uuid, text\) from public, authenticated/);
-  assert.match(migration, /revoke execute on function work_set_guide_auto_open\(uuid, boolean\) from public, authenticated/);
+  assert.match(migration, /revoke execute on function work_mark_guide_seen\(uuid, text\) from public/);
+  assert.match(migration, /revoke execute on function work_set_guide_auto_open\(uuid, boolean\) from public/);
+  assert.match(migration, /rolname = 'authenticated'/, "the legacy role revoke is guarded for Neon");
 });
