@@ -209,4 +209,15 @@ describe("floating companion integration", () => {
     const queries = readFileSync(resolve(root, "src/workOsQueries.ts"), "utf8");
     expect(queries).toContain("/next-steps");
   });
+
+  it("opens Settings with Ctrl+, from either window", () => {
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("isSettingsHotkey(event)");
+    expect(app).toContain('setView("settings")');
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    expect(avatar).toContain("isSettingsHotkey(event)");
+    expect(avatar).toContain('navigateToPage("settings")');
+    const sidebar = readFileSync(resolve(root, "src/SidebarNav.tsx"), "utf8");
+    expect(sidebar).toContain('"Ctrl + ,"');
+  });
 });

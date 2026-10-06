@@ -78,6 +78,7 @@ import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
 import SidebarNav, { type SidebarView } from "./SidebarNav";
+import { isSettingsHotkey } from "./settingsHotkey";
 import { TaskDateNavigator } from "./TaskDateNavigator";
 import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
@@ -1109,6 +1110,17 @@ export default function App() {
     }).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
   }, [refresh]);
+
+  // Ctrl + , (Cmd + , on macOS) opens Settings from anywhere in the window.
+  useEffect(() => {
+    const onSettingsHotkey = (event: KeyboardEvent) => {
+      if (!isSettingsHotkey(event)) return;
+      event.preventDefault();
+      setView("settings");
+    };
+    window.addEventListener("keydown", onSettingsHotkey);
+    return () => window.removeEventListener("keydown", onSettingsHotkey);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setPulseNow(new Date()), 30_000);

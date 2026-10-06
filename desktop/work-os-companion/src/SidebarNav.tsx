@@ -89,6 +89,7 @@ function SidebarRow({
   label,
   active = false,
   badge,
+  hint,
   onClick,
   className = "",
 }: {
@@ -96,6 +97,7 @@ function SidebarRow({
   label: string;
   active?: boolean;
   badge?: number;
+  hint?: string | undefined;
   onClick?: () => void;
   className?: string;
 }) {
@@ -105,7 +107,7 @@ function SidebarRow({
       data-sidebar-row
       data-sidebar-nav-option
       data-label={label}
-      title={label}
+      title={hint ? `${label} (${hint})` : label}
       aria-label={label}
       aria-current={active ? "page" : undefined}
       className={`sidebar-row ${active ? "active" : ""} ${className}`}
@@ -318,7 +320,7 @@ export default function SidebarNav({
         <div className="sidebar-footer">
           <SidebarGlideGroup className="nav-group nav-settings">
             {settings.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
+              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} hint={id === "settings" ? "Ctrl + ," : undefined} onClick={() => onNavigate(id)} />
             ))}
           </SidebarGlideGroup>
         </div>

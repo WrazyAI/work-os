@@ -216,7 +216,9 @@ Navigation is a stable noun: Today, Tasks, Review, Insights, Evidence, Settings.
 The active destination uses a quiet inset surface, ink/signal icon treatment,
 and a visible focus ring. A narrow marker is allowed only for the primary
 navigation rail itself; it is not allowed beside content rows, task rows, cards,
-or selected records.
+or selected records. Settings opens from either window with `Ctrl + ,`
+(`Cmd + ,` on macOS) — a window-focused shortcut, never a system-wide capture —
+and the Settings destination names it in its tooltip.
 
 The companion sidebar intentionally does not render a persistent Chats section
 or an empty recent-chat placeholder. Chat remains available through New chat and

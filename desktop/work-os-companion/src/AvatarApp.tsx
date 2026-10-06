@@ -27,6 +27,7 @@ import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
 import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
 import { agendaReceipt, applicableAnswers, unansweredQuestions, withAnswerRound, type AgendaAnswers } from "./avatarAgenda";
@@ -1042,6 +1043,17 @@ export default function AvatarApp(): React.ReactElement {
     void emit("work-os://avatar-navigate", { view: page });
     await invoke("focus_main").catch(() => undefined);
   }, []);
+
+  // Ctrl + , (Cmd + , on macOS) reaches Settings from the floating window too.
+  useEffect(() => {
+    const onSettingsHotkey = (event: KeyboardEvent) => {
+      if (!isSettingsHotkey(event)) return;
+      event.preventDefault();
+      void navigateToPage("settings");
+    };
+    window.addEventListener("keydown", onSettingsHotkey);
+    return () => window.removeEventListener("keydown", onSettingsHotkey);
+  }, [navigateToPage]);
 
   // Confirm/amend an Activity Interval Review. The AI inference never becomes
   // an employee check-in and never advances the check-in cadence; only the
