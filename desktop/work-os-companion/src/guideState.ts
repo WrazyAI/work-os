@@ -78,6 +78,16 @@ export function mergeGuideServerState(
   };
 }
 
+/** Chain preference writes in call order so rapid toggles cannot arrive at the
+ * server out of order and leave an older choice as the durable value. A failed
+ * write does not poison the queue; the next local choice still gets a chance. */
+export function queueGuidePreferenceWrite(
+  tail: Promise<void>,
+  write: () => Promise<void>,
+): Promise<void> {
+  return tail.catch(() => undefined).then(write);
+}
+
 export type GuideDecision =
   /** Nothing to decide yet (flags unknown, no page, or already evaluated). */
   | { action: "wait" }
