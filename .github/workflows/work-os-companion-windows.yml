@@ -294,12 +294,19 @@ jobs:
             }
           }
 
-          $existingJson = gh api "repos/${{ github.repository }}/releases/tags/$env:RELEASE_TAG" 2>$null
-          if ($LASTEXITCODE -ne 0) {
+          # The tag endpoint only finds published releases. Read drafts from
+          # the paginated catalog and reject ambiguous or published matches.
+          $catalogJson = gh api "repos/${{ github.repository }}/releases?per_page=100" --paginate --slurp
+          if ($LASTEXITCODE -ne 0) { throw "Could not read the internal release catalog" }
+          $catalogPath = Join-Path $env:RUNNER_TEMP "release-catalog.json"
+          [IO.File]::WriteAllText($catalogPath, ($catalogJson -join "`n"), [Text.UTF8Encoding]::new($false))
+          $existingJson = node scripts/macos-release.mjs select-draft $catalogPath $env:RELEASE_TAG
+          if ($LASTEXITCODE -ne 0) { throw "Could not resolve one safe draft release" }
+          $existing = $existingJson | ConvertFrom-Json
+          if ($null -eq $existing) {
             gh release create $env:RELEASE_TAG --repo "${{ github.repository }}" --target "${{ github.sha }}" --draft --prerelease --title $title --notes-file $notesPath
             if ($LASTEXITCODE -ne 0) { throw "Could not create draft release $env:RELEASE_TAG" }
           } else {
-            $existing = $existingJson | ConvertFrom-Json
             if (-not $existing.draft) { throw "Release $env:RELEASE_TAG is already published and cannot be overwritten" }
             $tagCommit = gh api "repos/${{ github.repository }}/commits/$env:RELEASE_TAG" --jq '.sha' 2>$null
             if ($LASTEXITCODE -eq 0) {

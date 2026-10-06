@@ -4,7 +4,15 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { combineRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
+import { combineRelease, findDraftRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
+
+test("finds an unpublished draft in the paginated catalog without a Git tag", () => {
+  const draft = { id: 1, tag_name: "candidate", draft: true, target_commitish: "source" };
+  assert.deepEqual(findDraftRelease([[{ ...draft, tag_name: "older" }], [draft]], "candidate"), draft);
+  assert.equal(findDraftRelease([[draft]], "missing"), null);
+  assert.throws(() => findDraftRelease([[draft], [draft]], "candidate"), /Ambiguous/);
+  assert.throws(() => findDraftRelease([[{ ...draft, draft: false }]], "candidate"), /already published/);
+});
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "work-os-mac-release-"));
