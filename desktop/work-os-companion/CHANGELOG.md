@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.2
+
 - Closing a page guide now keeps it dismissed when you return, including after account sync.
 - Page guide illustrations now play once and respond to each numbered step, while reduced-motion stays still.
 
