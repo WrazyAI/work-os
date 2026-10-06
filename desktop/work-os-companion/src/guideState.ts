@@ -55,6 +55,29 @@ export function guideAutoOpens(state: GuideState, view: GuideView): boolean {
   return state.autoOpen !== false && !state.guides[view];
 }
 
+/** Record an acknowledgement without changing an existing first-seen time. */
+export function markGuideSeen(state: GuideState, view: GuideView, seenAt: string): GuideState {
+  if (state.guides[view]) return state;
+  return {
+    ...state,
+    guides: { ...state.guides, [view]: seenAt },
+  };
+}
+
+/** Server writes return whole-state snapshots. Keep local seen marks monotonic
+ * so an older response can never resurrect a dismissed guide. While an
+ * auto-open preference is pending, that local value also remains authoritative. */
+export function mergeGuideServerState(
+  current: GuideState,
+  incoming: GuideState,
+  pendingAutoOpen: boolean | null,
+): GuideState {
+  return {
+    guides: { ...incoming.guides, ...current.guides },
+    autoOpen: pendingAutoOpen ?? current.autoOpen,
+  };
+}
+
 export type GuideDecision =
   /** Nothing to decide yet (flags unknown, no page, or already evaluated). */
   | { action: "wait" }
