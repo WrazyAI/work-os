@@ -48,13 +48,23 @@ export function stageMacRelease(bundle, stage, version, tag, repository) {
 }
 
 export function combineRelease(stage, version, tag, repository) {
-  verifyChecksums(stage, "SHA256SUMS.txt", releaseAssets.slice(0, 5).concat("latest-internal.json"));
-  verifyChecksums(stage, "SHA256SUMS-macos.txt", [macInstaller, macUpdater, `${macUpdater}.sig`, "macos-updater.json"]);
   const windows = JSON.parse(readFileSync(join(stage, "latest-internal.json"), "utf8").replace(/^\uFEFF/, ""));
+  const keys = Object.keys(windows.platforms).sort().join();
+  const combined = keys === "darwin-aarch64,darwin-x86_64,windows-x86_64";
+  if (!combined && keys !== "windows-x86_64") throw new Error("Unexpected release platforms");
+  verifyChecksums(stage, "SHA256SUMS.txt", combined ? releaseAssets : releaseAssets.slice(0, 5).concat("latest-internal.json"));
+  verifyChecksums(stage, "SHA256SUMS-macos.txt", [macInstaller, macUpdater, `${macUpdater}.sig`, "macos-updater.json"]);
   const mac = JSON.parse(readFileSync(join(stage, "macos-updater.json"), "utf8"));
   if (windows.version !== version || mac.version !== version) throw new Error("Release versions disagree");
-  if (Object.keys(windows.platforms).join() !== "windows-x86_64" || Object.keys(mac.platforms).sort().join() !== "darwin-aarch64,darwin-x86_64") {
+  if (Object.keys(mac.platforms).sort().join() !== "darwin-aarch64,darwin-x86_64") {
     throw new Error("Unexpected release platforms");
+  }
+  if (combined) {
+    for (const platform of Object.keys(mac.platforms)) {
+      if (windows.platforms[platform].url !== mac.platforms[platform].url || windows.platforms[platform].signature !== mac.platforms[platform].signature) {
+        throw new Error(`Invalid updater entry: ${platform}`);
+      }
+    }
   }
   const platforms = { ...windows.platforms, ...mac.platforms };
   for (const [platform, entry] of Object.entries(platforms)) {

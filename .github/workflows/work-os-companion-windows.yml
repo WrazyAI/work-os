@@ -301,8 +301,13 @@ jobs:
           } else {
             $existing = $existingJson | ConvertFrom-Json
             if (-not $existing.draft) { throw "Release $env:RELEASE_TAG is already published and cannot be overwritten" }
-            $tagCommit = gh api "repos/${{ github.repository }}/commits/$env:RELEASE_TAG" --jq '.sha'
-            if ($tagCommit -ne "${{ github.sha }}") { throw "Existing release tag points to a different commit" }
+            $tagCommit = gh api "repos/${{ github.repository }}/commits/$env:RELEASE_TAG" --jq '.sha' 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              if ($tagCommit -ne "${{ github.sha }}") { throw "Existing release tag points to a different commit" }
+            } elseif ($existing.target_commitish -ne "${{ github.sha }}") {
+              # GitHub does not create a draft's tag until publication.
+              throw "Existing draft targets a different commit"
+            }
             gh release edit $env:RELEASE_TAG --repo "${{ github.repository }}" --title $title --notes-file $notesPath --prerelease
             if ($LASTEXITCODE -ne 0) { throw "Could not refresh draft release metadata" }
           }

@@ -42,6 +42,18 @@ test("refuses damaged binaries before publication", (t) => {
   assert.throws(combine, /mismatched/);
 });
 
+test("can safely finalize again after combined assets have been uploaded", (t) => {
+  const { stage, combine } = fixture(t);
+  combine();
+  const manifest = readFileSync(join(stage, "latest-internal.json"), "utf8");
+  const checksums = readFileSync(join(stage, "SHA256SUMS.txt"), "utf8");
+  combine();
+  assert.equal(readFileSync(join(stage, "latest-internal.json"), "utf8"), manifest);
+  assert.equal(readFileSync(join(stage, "SHA256SUMS.txt"), "utf8"), checksums);
+  writeFileSync(join(stage, macUpdater), "corrupt-after-upload");
+  assert.throws(combine, /mismatched/);
+});
+
 test("refuses a different Mac version even with valid checksums", (t) => {
   const { stage, combine } = fixture(t);
   assert.throws(() => combineRelease(stage, "1.2.4", "work-os-companion-internal-v1.2.03", "WrazyAI/work-os"), /versions disagree/);
