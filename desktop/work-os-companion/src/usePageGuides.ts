@@ -7,6 +7,7 @@ import {
   markGuideSeen,
   mergeGuideServerState,
   normalizeGuideState,
+  queueGuidePreferenceWrite,
   reconcileGuideState,
   type GuideState,
   type GuideView,
@@ -52,6 +53,7 @@ export function usePageGuides(options: {
   stateRef.current = state;
   const pendingAutoOpenRef = useRef<boolean | null>(null);
   const autoOpenWriteVersionRef = useRef(0);
+  const autoOpenWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const evaluatedFor = useRef<string | null>(null);
 
   const saveCache = useCallback(async (next: GuideState, pendingAutoOpen: boolean | null) => {
@@ -80,6 +82,7 @@ export function usePageGuides(options: {
     evaluatedFor.current = null;
     pendingAutoOpenRef.current = null;
     autoOpenWriteVersionRef.current = 0;
+    autoOpenWriteQueueRef.current = Promise.resolve();
     setTrusted(false);
     setState(EMPTY_GUIDE_STATE);
     setOpen(null);
@@ -118,12 +121,16 @@ export function usePageGuides(options: {
         if (saved && !cancelled) await saveCache(saved, pendingAutoOpenRef.current);
       }
       if (reconciled.pushAutoOpen !== null) {
+        const value = reconciled.pushAutoOpen;
         const writeVersion = ++autoOpenWriteVersionRef.current;
-        const saved = await push({ autoOpen: reconciled.pushAutoOpen });
-        if (saved && !cancelled && autoOpenWriteVersionRef.current === writeVersion) {
-          pendingAutoOpenRef.current = null;
-          await saveCache(saved, null);
-        }
+        autoOpenWriteQueueRef.current = queueGuidePreferenceWrite(autoOpenWriteQueueRef.current, async () => {
+          const saved = await push({ autoOpen: value });
+          if (saved && !cancelled && autoOpenWriteVersionRef.current === writeVersion) {
+            pendingAutoOpenRef.current = null;
+            await saveCache(saved, null);
+          }
+        });
+        await autoOpenWriteQueueRef.current;
       }
     })();
     return () => { cancelled = true; };
@@ -151,10 +158,11 @@ export function usePageGuides(options: {
     pendingAutoOpenRef.current = value;
     const writeVersion = ++autoOpenWriteVersionRef.current;
     void saveCache(next, value);
-    void push({ autoOpen: value }).then((saved) => {
+    autoOpenWriteQueueRef.current = queueGuidePreferenceWrite(autoOpenWriteQueueRef.current, async () => {
+      const saved = await push({ autoOpen: value });
       if (!saved || autoOpenWriteVersionRef.current !== writeVersion) return;
       pendingAutoOpenRef.current = null;
-      void saveCache(saved, null);
+      await saveCache(saved, null);
     });
   }, [push, saveCache]);
 
