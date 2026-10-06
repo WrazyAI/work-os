@@ -4,6 +4,8 @@ import { secureState } from "./vault";
 import {
   EMPTY_GUIDE_STATE,
   decideGuideOpen,
+  markGuideSeen,
+  mergeGuideServerState,
   normalizeGuideState,
   reconcileGuideState,
   type GuideState,
@@ -29,8 +31,8 @@ export interface PageGuides {
  *   and reconcile with the vault cache, so a write that landed offline is
  *   pushed on the next load.
  * - A guide auto-opens once when its page becomes active, after a short beat,
- *   and only when no other overlay owns the screen. Opening it — automatically
- *   or by hand — is what marks it seen.
+ *   and only when no other overlay owns the screen. Dismissing it acknowledges
+ *   it for the account; opening by hand never consumes that acknowledgement.
  * - Opening by hand always works, even in offline bypass mode; only the
  *   automatic path and syncing are disabled there.
  */
@@ -49,6 +51,7 @@ export function usePageGuides(options: {
   const stateRef = useRef(state);
   stateRef.current = state;
   const pendingAutoOpenRef = useRef<boolean | null>(null);
+  const autoOpenWriteVersionRef = useRef(0);
   const evaluatedFor = useRef<string | null>(null);
 
   const saveCache = useCallback(async (next: GuideState, pendingAutoOpen: boolean | null) => {
@@ -58,11 +61,13 @@ export function usePageGuides(options: {
 
   const push = useCallback(async (body: { guide: GuideView } | { autoOpen: boolean }): Promise<GuideState | null> => {
     try {
-      const next = normalizeGuideState(await apiRequest<unknown>(GUIDES_ENDPOINT, {
+      const incoming = normalizeGuideState(await apiRequest<unknown>(GUIDES_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }));
+      const next = mergeGuideServerState(stateRef.current, incoming, pendingAutoOpenRef.current);
+      stateRef.current = next;
       setState(next);
       return next;
     } catch {
@@ -74,6 +79,7 @@ export function usePageGuides(options: {
   useEffect(() => {
     evaluatedFor.current = null;
     pendingAutoOpenRef.current = null;
+    autoOpenWriteVersionRef.current = 0;
     setTrusted(false);
     setState(EMPTY_GUIDE_STATE);
     setOpen(null);
@@ -112,8 +118,9 @@ export function usePageGuides(options: {
         if (saved && !cancelled) await saveCache(saved, pendingAutoOpenRef.current);
       }
       if (reconciled.pushAutoOpen !== null) {
+        const writeVersion = ++autoOpenWriteVersionRef.current;
         const saved = await push({ autoOpen: reconciled.pushAutoOpen });
-        if (saved && !cancelled) {
+        if (saved && !cancelled && autoOpenWriteVersionRef.current === writeVersion) {
           pendingAutoOpenRef.current = null;
           await saveCache(saved, null);
         }
@@ -124,11 +131,12 @@ export function usePageGuides(options: {
 
   const openGuide = useCallback((view: GuideView) => {
     setOpen(view);
+  }, []);
+
+  const acknowledgeGuide = useCallback((view: GuideView) => {
     if (stateRef.current.guides[view]) return;
-    const next: GuideState = {
-      ...stateRef.current,
-      guides: { ...stateRef.current.guides, [view]: new Date().toISOString() },
-    };
+    const next = markGuideSeen(stateRef.current, view, new Date().toISOString());
+    stateRef.current = next;
     setState(next);
     void saveCache(next, pendingAutoOpenRef.current);
     void push({ guide: view }).then((saved) => {
@@ -138,11 +146,13 @@ export function usePageGuides(options: {
 
   const setAutoOpen = useCallback((value: boolean) => {
     const next: GuideState = { ...stateRef.current, autoOpen: value };
+    stateRef.current = next;
     setState(next);
     pendingAutoOpenRef.current = value;
+    const writeVersion = ++autoOpenWriteVersionRef.current;
     void saveCache(next, value);
     void push({ autoOpen: value }).then((saved) => {
-      if (!saved) return;
+      if (!saved || autoOpenWriteVersionRef.current !== writeVersion) return;
       pendingAutoOpenRef.current = null;
       void saveCache(saved, null);
     });
@@ -170,7 +180,11 @@ export function usePageGuides(options: {
     return () => window.clearTimeout(timer);
   }, [activeView, blocked, delayMs, enabled, openGuide, organizationId, state, trusted]);
 
-  const closeGuide = useCallback(() => setOpen(null), []);
+  const closeGuide = useCallback(() => {
+    const closing = open;
+    setOpen(null);
+    if (closing) acknowledgeGuide(closing);
+  }, [acknowledgeGuide, open]);
   const disableAutoOpen = useCallback(() => setAutoOpen(false), [setAutoOpen]);
 
   return { open, autoOpen: state.autoOpen, openGuide, closeGuide, disableAutoOpen, setAutoOpen };
