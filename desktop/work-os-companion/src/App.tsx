@@ -62,6 +62,7 @@ import { PlanningSession, type PlanningInterpretation } from "./PlanningSession"
 import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
+import { isMacOS } from "./platform";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
 import { MemorySettings } from "./MemorySettings";
 import { SettingsSwitch } from "./SettingsSwitch";
@@ -2048,7 +2049,8 @@ export default function App() {
   const paused = sessionActive ? workSession?.state === "paused" : observedOnly && visibleDay?.attendance?.state === "paused";
   const providerAttendanceActive = visibleDay?.attendance?.source === "worktivity" && !visibleDay.attendance.stale
     && (visibleDay.attendance.state === "active" || visibleDay.attendance.state === "paused");
-  const canControlWorktivity = sessionActive || providerAttendanceActive;
+  const attendanceControlsSupported = !isMacOS();
+  const canControlWorktivity = attendanceControlsSupported && (sessionActive || providerAttendanceActive);
   const hasVisibleSession = Boolean(visibleSession);
   const lateReasonMissing = lateReasonRequired(visibleDay?.session);
   const clockInLateProlonged = clockInConfirmation?.kind === "late" && !!visibleDay?.shift
@@ -2649,6 +2651,7 @@ export default function App() {
   }
 
   function performWorktivityControl(action: WorktivityControlAction, body: Record<string, unknown> = {}, operationId?: string) {
+    if (!attendanceControlsSupported) throw new Error("Use Worktivity on your Mac for clock actions. Work OS shows its confirmed status.");
     if (worktivityPending) throw new Error("A Worktivity action is waiting for confirmation. Check its status before starting another clock action.");
     return runWorktivityControl(action, body, worktivityControlTransport, {
       operationId,
@@ -3211,7 +3214,8 @@ export default function App() {
         tasks={visibleTodayTasks}
         currentDate={visibleDay.shiftDate}
         busy={busy}
-        canClockIn={gate.canClockIn && !worktivityPending}
+        attendanceControlsSupported={attendanceControlsSupported}
+        canClockIn={attendanceControlsSupported && gate.canClockIn && !worktivityPending}
         goalSaveState={planSaveState}
         onClockIn={clockIn}
         onOpenTasks={(nextView = "today") => { setTaskView(nextView); setView("tasks"); }}
@@ -3230,6 +3234,7 @@ export default function App() {
         otherTasks={unfinishedCarryOver.filter((item) => !!item.attribution.date && item.attribution.date < moveDate(visibleDay.shiftDate, -1)).map((item) => item.task)}
         currentDate={visibleDay.shiftDate}
         busy={busy || !!worktivityPending || !!worktivityControlPhase}
+        attendanceControlsSupported={attendanceControlsSupported}
         canPause={canControlWorktivity}
         canClockOut={canControlWorktivity}
         observedOnly={observedOnly}

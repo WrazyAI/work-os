@@ -688,6 +688,8 @@ pub fn run() {
         .expect("error while building Work OS Companion")
         .run(|app, event| {
             match event {
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => show_main(app),
                 // Arm the terminate watchdog when the process begins exiting so
                 // a hung detach (WebView2/COM) can never outlive the exit
                 // request.

@@ -31,6 +31,7 @@ export interface OffShiftDashboardProps extends DashboardSurfaceActions {
   currentDate: string;
   busy?: boolean;
   canClockIn?: boolean;
+  attendanceControlsSupported?: boolean;
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
 }
 
@@ -43,6 +44,7 @@ export interface ActiveWorkdayDashboardProps extends DashboardSurfaceActions {
   busy?: boolean;
   canPause?: boolean;
   canClockOut?: boolean;
+  attendanceControlsSupported?: boolean;
   observedOnly?: boolean;
   goalSaveState?: "saved" | "saving" | "offline" | "conflict";
   onRetryGoalSave?: () => void;
@@ -152,7 +154,7 @@ function PulseTimeline({ model }: { model: WorkdayDashboardModel }) {
   </div>;
 }
 
-export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask }: OffShiftDashboardProps) {
+export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask }: OffShiftDashboardProps) {
   const taskCopy = model.metrics.carryover > 0
     ? { title: "Start by clearing the oldest decision", body: `${model.metrics.carryover} unfinished task${model.metrics.carryover === 1 ? "" : "s"} is waiting from an earlier workday.` }
     : { title: "Your agenda is open", body: "Choose a first priority or use the composer below to add one without clocking in." };
@@ -161,9 +163,9 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
       <div className="dashboard-readiness-copy">
         <div className="dashboard-eyebrow">{statusDot(model.stateTone)} {model.stateLabel}</div>
         <h2>Start the day with one clear move.</h2>
-        <p>{model.stateDetail} {model.schedule.phase === "upcoming" ? "Clock in with Worktivity from the Windows Companion; Work OS waits for provider confirmation." : "Shape the agenda now, then clock in with Worktivity from the Windows Companion when you are ready."}</p>
+        <p>{model.stateDetail} {!attendanceControlsSupported ? "Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status." : model.schedule.phase === "upcoming" ? "Clock in with Worktivity from the Windows Companion; Work OS waits for provider confirmation." : "Shape the agenda now, then clock in with Worktivity from the Windows Companion when you are ready."}</p>
         {model.activityWatch === "clock-in" && <p className="dashboard-activity-watch" role="status">Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.</p>}
-        <div className="dashboard-primary-actions"><button className="dashboard-primary-action" disabled={busy || !canClockIn} onClick={onClockIn}><CirclePlay size={16} /> Clock in</button><button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={14} /> Set focus</button></div>
+        <div className="dashboard-primary-actions">{attendanceControlsSupported && <button className="dashboard-primary-action" disabled={busy || !canClockIn} onClick={onClockIn}><CirclePlay size={16} /> Clock in</button>}<button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={14} /> Set focus</button></div>
       </div>
       <div className="dashboard-readiness-art"><div className="dashboard-art-orbit"><MascotPet workday="off-shift" className="dashboard-otto" /></div><MascotStatus fallback={model.schedule.phase === "upcoming" ? "Ready when you are" : "No active workday"} /></div>
       <footer className="dashboard-panel-footer"><span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span><small>{model.sync.detail}</small>{goalSaveState !== "saved" && <small className="dashboard-save-warning"><RefreshCw size={12} /> Focus changes are {goalSaveState === "saving" ? "saving" : "waiting to retry"}.</small>}</footer>
@@ -190,15 +192,16 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
   const tabLabel = tab === "today" ? "Today’s queue" : tab === "previous" ? "Yesterday’s carryover" : "Older carryover";
   return <main className="dashboard-shell active-dashboard">
     <section className="dashboard-panel active-command-panel">
-      <header className="active-command-header"><div className="active-status-heading"><MascotPet className="dashboard-otto-active" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} /><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} /><div><span className="dashboard-eyebrow">{observedOnly ? "Worktivity status" : model.stateLabel}</span><h2>{model.stateDetail}</h2></div></div><div className="active-command-actions">{canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} /> : <CirclePause size={14} />}{model.state === "paused" ? "Resume" : "Pause"}</button>}{canClockOut && <button className="dashboard-danger-action" disabled={busy} onClick={onClockOut}>Clock out</button>}<button className="dashboard-icon-link" aria-label="Open today’s Tasks" onClick={() => onOpenTasks("today")}><MoreHorizontal size={17} /></button></div></header>
+      <header className="active-command-header"><div className="active-status-heading"><MascotPet className="dashboard-otto-active" workday={observedOnly ? model.attendance?.state === "paused" ? "paused" : model.attendance?.state === "active" ? "active" : "off-shift" : model.state === "paused" ? "paused" : "active"} /><span className={`dashboard-status-dot ${syncClass(model.stateTone)}`} /><div><span className="dashboard-eyebrow">{observedOnly ? "Worktivity status" : model.stateLabel}</span><h2>{model.stateDetail}</h2></div></div><div className="active-command-actions">{attendanceControlsSupported && canPause && <button className="dashboard-secondary-action" disabled={busy} onClick={onPause}>{model.state === "paused" ? <CirclePlay size={14} /> : <CirclePause size={14} />}{model.state === "paused" ? "Resume" : "Pause"}</button>}{attendanceControlsSupported && canClockOut && <button className="dashboard-danger-action" disabled={busy} onClick={onClockOut}>Clock out</button>}<button className="dashboard-icon-link" aria-label="Open today’s Tasks" onClick={() => onOpenTasks("today")}><MoreHorizontal size={17} /></button></div></header>
       <div className="active-time-grid"><div><small>Elapsed</small><strong>{observedOnly ? model.pulse.observedElapsedLabel : model.pulse.elapsedLabel}</strong><span>{observedOnly ? "Worktivity active time" : "Mirrored Worktivity time"}</span></div><div className="active-progress-orb" style={{ "--progress": `${model.pulse.progressPercent}%` } as CSSProperties}><span><strong>{Math.round(model.pulse.progressPercent)}%</strong><small>window elapsed</small></span></div><div><small>Remaining</small><strong>{dashboardRemainingLabel(model).replace(" remaining", "")}</strong><span>{scheduleLabel(model)}</span></div></div>
       <PulseTimeline model={model} />
+      {!attendanceControlsSupported && <p className="dashboard-activity-watch">Use Worktivity on your Mac to clock in, pause, resume, or clock out. Work OS shows its confirmed status.</p>}
       <footer className="dashboard-panel-footer"><span className={`dashboard-sync-chip ${syncClass(model.sync.tone)}`}><i />{model.sync.label}</span><small>{model.attendance?.message || "Observed context is unavailable."}</small>{model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}{goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} /> Retry focus save</button>}</footer>
     </section>
 

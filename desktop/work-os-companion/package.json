@@ -1,6 +1,6 @@
 {
   "name": "@wrazy/work-os-companion",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "tauri build --bundles nsis,msi",
+    "tauri:build:macos": "tauri build --config src-tauri/tauri.macos.conf.json --target universal-apple-darwin --bundles app,dmg",
+    "tauri:dev:macos": "tauri dev --config src-tauri/tauri.dev.conf.json --config src-tauri/tauri.macos.conf.json",
     "test": "vitest run"
   },
   "dependencies": {

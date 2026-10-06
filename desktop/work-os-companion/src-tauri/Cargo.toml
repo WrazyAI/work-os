@@ -1,6 +1,6 @@
 [package]
 name = "work-os-companion"
-version = "0.4.0"
+version = "0.4.1"
 
 description = "WrazyOS employee companion"
 authors = ["Wrazy"]
@@ -38,6 +38,9 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 work-os-diagnostics-core = { path = "diagnostics-core" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.2"

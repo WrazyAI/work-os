@@ -343,6 +343,12 @@ visual anchor.
 
 ### 5.3 Observed-only and degraded states
 
+The macOS Companion keeps attendance visible but uses the Worktivity Mac app
+for clock actions. Hide the Companion clock controls and state that Work OS
+shows Worktivity’s confirmed status; tasks, planning, recaps, and reports keep
+their shared contracts.
+
+
 Observed-only mode changes the labels and available actions, not the entire
 composition. Name Worktivity as the attendance source and show whether Work OS
 has mirrored the session yet. A stale or unknown provider state must not be

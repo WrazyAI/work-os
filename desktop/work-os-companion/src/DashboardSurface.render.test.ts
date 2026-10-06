@@ -22,6 +22,16 @@ function baseActions() {
 }
 
 describe("dashboard surfaces", () => {
+  it("keeps Mac attendance visible without advertising unsupported clock controls", () => {
+    const now = Date.parse("2026-08-26T12:08:00Z");
+    const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], reviews: 0, focus: "Make the first task visible", focusSource: "Written by you" }, now);
+    const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [task], currentDate: "2026-08-26", attendanceControlsSupported: false, onClockIn: noop }));
+    expect(markup).toContain("Use Worktivity on your Mac to clock in, pause, resume, or clock out.");
+    expect(markup).not.toContain("Windows Companion");
+    expect(markup).not.toMatch(/<button[^>]*>.*?Clock in<\/button>/);
+    expect(markup).toContain("Set focus");
+    expect(markup).toContain("Make the first task visible");
+  });
   it("renders a ready command center with a truthful remaining label", () => {
     const now = Date.parse("2026-08-26T12:08:00Z");
     const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], reviews: 0, focus: "Make the first task visible", focusSource: "Written by you", niftySync: { fresh: true, syncedAt: "2026-08-26T12:06:00Z" } }, now);

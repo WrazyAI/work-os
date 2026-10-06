@@ -5,6 +5,7 @@ import {
   getLatestInternalReleaseUpdate,
   getWorkOsPublicRequestOrigin,
   isNewerInternalReleaseVersion,
+  internalReleasePlatform,
   ReleaseDownloadError,
 } from "@/lib/work-os-release-download";
 
@@ -32,14 +33,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ target: 
     });
     if (auth.response) return auth.response;
     const values = await params;
-    if (values.target !== "windows" || values.arch !== "x86_64") return noUpdate();
-    const update = await getLatestInternalReleaseUpdate();
+    const platform = internalReleasePlatform(values.target, values.arch);
+    if (!platform) return noUpdate();
+    const update = await getLatestInternalReleaseUpdate(undefined, undefined, platform);
     if (!isNewerInternalReleaseVersion(update.version, values.version)) return noUpdate();
     const downloadUrl = new URL(
       `/api/work-os/desktop/updates/${encodeURIComponent(update.version)}/download`,
       getWorkOsPublicRequestOrigin(req.url, req.headers),
     );
-    downloadUrl.searchParams.set("grant", createInternalReleaseDownloadGrant(update.version));
+    downloadUrl.searchParams.set("platform", platform);
+    downloadUrl.searchParams.set("grant", createInternalReleaseDownloadGrant(update.version, undefined, undefined, platform));
     return NextResponse.json({
       version: update.version,
       notes: update.notes,

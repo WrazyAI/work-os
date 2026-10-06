@@ -15,6 +15,8 @@ import {
   WINDOWS_CHECKSUM_ASSET,
   WINDOWS_INSTALLER_ASSET,
   WINDOWS_INSTALLER_SIGNATURE_ASSET,
+  MACOS_UPDATER_ASSET,
+  internalReleasePlatform,
 } from "../src/lib/work-os-release-download";
 
 const release = {
@@ -165,3 +167,32 @@ await assert.rejects(
 );
 
 console.log("Work OS release download proxy tests passed.");
+
+assert.equal(internalReleasePlatform("darwin", "aarch64"), "darwin-aarch64");
+assert.equal(internalReleasePlatform("darwin", "x86_64"), "darwin-x86_64");
+assert.equal(internalReleasePlatform("windows", "x86_64"), "windows-x86_64");
+assert.equal(internalReleasePlatform("darwin", "arm"), null);
+assert.equal(internalReleasePlatform("linux", "x86_64"), null);
+const macRelease = { ...release, assets: [
+  { ...release.assets[0], name: MACOS_UPDATER_ASSET, url: "https://api.github.test/assets/mac" },
+  { ...release.assets[2], name: `${MACOS_UPDATER_ASSET}.sig`, url: "https://api.github.test/assets/mac-sig" },
+] };
+const macFetch: typeof fetch = async (input) => {
+  const url = String(input);
+  if (url.includes("/releases?")) return Response.json([macRelease]);
+  if (url.endsWith("/mac-sig")) return new Response("mac-signature");
+  if (url.endsWith("/mac")) return new Response("mac-archive");
+  throw new Error(`Unexpected URL: ${url}`);
+};
+for (const platform of ["darwin-aarch64", "darwin-x86_64"] as const) {
+  const macUpdate = await getLatestInternalReleaseUpdate("secret-token", macFetch, platform);
+  assert.equal(macUpdate.signature, "mac-signature");
+  const macDownload = await downloadInternalReleaseAsset("0.2.2", MACOS_UPDATER_ASSET, "secret-token", macFetch);
+  assert.equal(await macDownload.response.text(), "mac-archive");
+  const macGrant = createInternalReleaseDownloadGrant("0.2.2", "secret-token", 1_000_000, platform);
+  assert.equal(verifyInternalReleaseDownloadGrant("0.2.2", macGrant, "secret-token", 1_000_001, platform), true);
+  assert.equal(verifyInternalReleaseDownloadGrant("0.2.2", macGrant, "secret-token", 1_000_001), false);
+  assert.equal(verifyInternalReleaseDownloadGrant("0.2.2", grant, "secret-token", 1_000_001, platform), false);
+}
+await assert.rejects(getLatestInternalReleaseUpdate("secret-token", mockFetch, "darwin-aarch64"),
+  (error: unknown) => error instanceof ReleaseDownloadError && error.status === 404);

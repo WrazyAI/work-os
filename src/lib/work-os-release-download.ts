@@ -8,6 +8,20 @@ const DOWNLOAD_GRANT_TTL_SECONDS = 10 * 60;
 export const WINDOWS_INSTALLER_ASSET = "Work-OS-Companion-Setup-UNSIGNED.exe";
 export const WINDOWS_INSTALLER_SIGNATURE_ASSET = `${WINDOWS_INSTALLER_ASSET}.sig`;
 export const WINDOWS_CHECKSUM_ASSET = "SHA256SUMS.txt";
+export const MACOS_INSTALLER_ASSET = "Work-OS-Companion-macOS-Universal-UNSIGNED.dmg";
+export const MACOS_UPDATER_ASSET = "Work-OS-Companion-macOS-Universal-UNSIGNED.app.tar.gz";
+export type InternalReleasePlatform = "windows-x86_64" | "darwin-aarch64" | "darwin-x86_64";
+type UpdaterAsset = typeof WINDOWS_INSTALLER_ASSET | typeof MACOS_UPDATER_ASSET;
+
+export function internalReleasePlatform(target: string, arch: string): InternalReleasePlatform | null {
+  if (target === "windows" && arch === "x86_64") return "windows-x86_64";
+  if (target === "darwin" && (arch === "aarch64" || arch === "x86_64")) return `darwin-${arch}`;
+  return null;
+}
+
+export function internalReleaseUpdaterAsset(platform: InternalReleasePlatform): UpdaterAsset {
+  return platform === "windows-x86_64" ? WINDOWS_INSTALLER_ASSET : MACOS_UPDATER_ASSET;
+}
 
 interface GitHubAsset {
   name: string;
@@ -145,20 +159,23 @@ function githubHeaders(token: string, accept: string): HeadersInit {
   };
 }
 
-function downloadGrantSignature(version: string, expiresAt: number, token: string) {
-  return createHmac("sha256", token).update(`${version}.${expiresAt}`).digest("base64url");
+function downloadGrantSignature(version: string, expiresAt: number, token: string, platform: InternalReleasePlatform) {
+  // Keep existing Windows grants valid; Mac grants bind the platform too.
+  const scope = platform === "windows-x86_64" ? `${version}.${expiresAt}` : `${platform}.${version}.${expiresAt}`;
+  return createHmac("sha256", token).update(scope).digest("base64url");
 }
 
 export function createInternalReleaseDownloadGrant(
   version: string,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   now = Date.now(),
+  platform: InternalReleasePlatform = "windows-x86_64",
 ) {
   if (!token?.trim()) {
     throw new ReleaseDownloadError("The release download service is not configured.", 503);
   }
   const expiresAt = Math.floor(now / 1000) + DOWNLOAD_GRANT_TTL_SECONDS;
-  return `${expiresAt}.${downloadGrantSignature(version, expiresAt, token)}`;
+  return `${expiresAt}.${downloadGrantSignature(version, expiresAt, token, platform)}`;
 }
 
 export function verifyInternalReleaseDownloadGrant(
@@ -166,13 +183,14 @@ export function verifyInternalReleaseDownloadGrant(
   grant: string | null,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   now = Date.now(),
+  platform: InternalReleasePlatform = "windows-x86_64",
 ) {
   if (!token?.trim() || !grant) return false;
   const [expiresAtRaw, signature, extra] = grant.split(".");
   if (extra || !/^\d+$/.test(expiresAtRaw) || !/^[A-Za-z0-9_-]{43}$/.test(signature)) return false;
   const expiresAt = Number(expiresAtRaw);
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= Math.floor(now / 1000)) return false;
-  const expected = Buffer.from(downloadGrantSignature(version, expiresAt, token));
+  const expected = Buffer.from(downloadGrantSignature(version, expiresAt, token, platform));
   const received = Buffer.from(signature);
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
@@ -222,7 +240,7 @@ function findRelease(
       .filter(({ version: candidateVersion }) => parseSemVer(candidateVersion) !== null)
       .sort((left, right) => compareInternalReleaseVersions(right.version, left.version) ?? 0)[0]?.candidate;
   if (!release) {
-    throw new ReleaseDownloadError("No approved internal Windows release is available.", 404);
+    throw new ReleaseDownloadError("No approved internal Companion release is available.", 404);
   }
   return release;
 }
@@ -253,7 +271,7 @@ async function downloadAsset(
 }
 
 export async function downloadLatestInternalAsset(
-  assetName: typeof WINDOWS_INSTALLER_ASSET | typeof WINDOWS_CHECKSUM_ASSET,
+  assetName: typeof WINDOWS_INSTALLER_ASSET | typeof WINDOWS_CHECKSUM_ASSET | typeof MACOS_INSTALLER_ASSET,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ReleaseAssetDownload> {
@@ -264,7 +282,7 @@ export async function downloadLatestInternalAsset(
 
 export async function downloadInternalReleaseAsset(
   version: string,
-  assetName: typeof WINDOWS_INSTALLER_ASSET,
+  assetName: UpdaterAsset,
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ReleaseAssetDownload> {
@@ -276,11 +294,13 @@ export async function downloadInternalReleaseAsset(
 export async function getLatestInternalReleaseUpdate(
   token = process.env.WORK_OS_RELEASE_GITHUB_TOKEN,
   fetchImpl: typeof fetch = fetch,
+  platform: InternalReleasePlatform = "windows-x86_64",
 ): Promise<InternalReleaseUpdate> {
   const releases = await listApprovedInternalReleases(token, fetchImpl);
   const release = findRelease(releases);
+  findAsset(release, internalReleaseUpdaterAsset(platform));
   const signatureDownload = await downloadAsset(
-    findAsset(release, WINDOWS_INSTALLER_SIGNATURE_ASSET),
+    findAsset(release, `${internalReleaseUpdaterAsset(platform)}.sig`),
     release.tag_name,
     token!,
     fetchImpl,

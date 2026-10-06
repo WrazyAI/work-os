@@ -102,3 +102,55 @@ Rollback should create a new, higher SemVer release containing the reverted code
 ### Antivirus software
 
 The installer is unsigned, so antivirus products (Avast CyberCapture and equivalents) may hold it for scanning on first sight — observed past 50 seconds. The app stays open through the hold: the in-app install waits it out, and if the attempt is rejected the failure card offers Retry once the scan clears. A second attempt then succeeds because the file is already known. If an install ever reports failure, use the card's Retry action (or Settings → Desktop updates → Install) before falling back to the manual setup installer.
+
+## macOS internal packages
+
+The release workflow also builds a **universal macOS 12+ package** for Intel
+and Apple Silicon. The floating companion uses Tauri's macOS private API for
+transparency; this distribution targets GitHub Releases, not the Mac App Store.
+
+1. Install the universal `Work-OS-Companion-macOS-Universal-UNSIGNED.dmg` from
+   the approved internal release and drag Work OS Companion to Applications.
+2. Verify the download against `SHA256SUMS.txt`. The Mac bundle has an ad-hoc
+   signature required by Apple Silicon, but no Developer ID signature or Apple
+   notarization. If macOS blocks it, use System Settings → Privacy & Security →
+   Open Anyway after verification. Never disable Gatekeeper globally.
+3. Open Work OS, connect the workspace in your browser, and authorize microphone
+   access when recording a voice note. Settings opens with Cmd+,; hold-to-talk
+   keeps Ctrl+M on both platforms. Recover a hidden app from its Dock icon or
+   the menu-bar menu.
+
+Use the Worktivity Mac app to clock in, pause/resume, and clock out. Work OS
+shows confirmed provider attendance; its Windows PowerShell automation is not
+included in the Mac package. Tasks, planning, recaps, EOD, and floating chat
+use the shared Companion code.
+
+Local build (on a Mac, with a native Node/Rust toolchain):
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm ci
+npm run tauri:build:macos
+```
+
+Set the existing Tauri updater signing environment variables for a release
+build. `npm run tauri:dev:macos` opens a local development build. The pull
+request Mac workflow builds both architectures without release secrets, checks
+both executable slices and the bundle signature, and uploads a seven-day DMG
+artifact for manual Mac testing.
+
+Release CI reuses the `windows-production-release` environment's existing
+Tauri signing secrets. After the Windows draft is staged, the Mac job uploads
+its DMG, signed `.app.tar.gz`, signature, and checksum fragment. Only after
+both jobs succeed does the final job verify downloaded checksums, combine
+`windows-x86_64`, `darwin-aarch64`, and `darwin-x86_64` in `latest-internal.json`,
+read back the assets, and publish if the existing publication gate permits it.
+A failed Mac build leaves the release as a draft. The optional Actions artifact
+copy remains independent of release upload so storage quota cannot block it.
+
+The authenticated updater endpoint accepts those three platforms and chooses
+an exact allowlisted asset. Mac download grants bind the architecture as well
+as the version and expiry; no GitHub token reaches the employee. Port the shared
+update library and both update routes to Agent OS and deploy them before
+claiming the installed Mac updater works against production. Apple Developer ID
+signing and notarization require a separate credential-backed release change.

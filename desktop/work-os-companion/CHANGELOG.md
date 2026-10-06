@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.1
+
+- The companion is now available for Intel and Apple Silicon Macs; use Worktivity on your Mac for clock actions.
+
 ## 0.4.0
 
 - Each page now explains itself the first time you open it, with one short illustrated guide.
