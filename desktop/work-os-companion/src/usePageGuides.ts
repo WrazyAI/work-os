@@ -73,8 +73,10 @@ export function usePageGuides(options: {
 
   useEffect(() => {
     evaluatedFor.current = null;
+    pendingAutoOpenRef.current = null;
     setTrusted(false);
     setState(EMPTY_GUIDE_STATE);
+    setOpen(null);
   }, [organizationId, enabled]);
 
   useEffect(() => {

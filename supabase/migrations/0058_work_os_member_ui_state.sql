@@ -55,3 +55,9 @@ begin
   return v_state;
 end;
 $$;
+
+-- These helpers write another member's row state and are only ever invoked by
+-- the authenticated Work OS API through the server client. Keep them off the
+-- public PostgREST surface for every client role.
+revoke execute on function work_mark_guide_seen(uuid, text) from public, authenticated;
+revoke execute on function work_set_guide_auto_open(uuid, boolean) from public, authenticated;
