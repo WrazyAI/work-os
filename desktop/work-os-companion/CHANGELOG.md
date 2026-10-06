@@ -24,10 +24,13 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Each page now explains itself the first time you open it, with one short illustrated guide.
+- Open any page's guide again from the question mark in the header.
+- Turn automatic page guides off in Settings, or from the guide itself.
+
 ## 0.3.99
 
 - Press Ctrl + , anywhere in Work OS to open Settings.
-
 ## 0.3.98
 
 - When your EOD is due, the companion bubble now has an Open EOD review button, and the morning bubble has Set today's goal.

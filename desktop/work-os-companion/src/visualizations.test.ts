@@ -366,11 +366,12 @@ describe("operational visualizations", () => {
     expect(app).not.toContain("Your companion, your boundaries.");
     expect(app).toContain('className="settings-group"');
     expect(app).toContain('className="settings-group danger"');
-    // Three device switches: start with Windows, automatic update checks, and
-    // the hold-to-talk shortcut. Each one is a real registration, not a stored
-    // wish, so none of them can be a bare checkbox.
-    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(3);
+    // Four switches: start with Windows, automatic update checks, the
+    // hold-to-talk shortcut, and automatic page guides. Each one is a real
+    // registration, not a stored wish, so none of them can be a bare checkbox.
+    expect((app.match(/<SettingsSwitch/g) ?? []).length).toBe(4);
     expect(app).toContain('title="Hold-to-talk (Ctrl + M)"');
+    expect(app).toContain('title="Show page guides automatically"');
     expect(app).toContain('from "./SettingsSwitch"');
     expect(readFileSync(resolve(root, "src/SettingsSwitch.tsx"), "utf8")).toContain("export function SettingsSwitch");
     const settingSource = readFileSync(resolve(root, "src/Setting.tsx"), "utf8");

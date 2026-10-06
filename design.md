@@ -802,6 +802,34 @@ that scrolls away:
 - Player and renderer stay local: the bundled wasm and the `.lottie` asset ship
   with each app, and static assets are never auth-gated into a redirect.
 
+### 8.11 First-visit page guides
+
+Every primary workspace page carries exactly one guide: My Day, Tasks, EOD
+Review, Insights, and Settings. A hidden destination (Evidence) has none, and
+there is never more than one guide per page.
+
+- **First visit** — the guide opens once after a short beat, once flags are
+  known. Opening it — automatically or by hand — marks it seen for the account
+  (`work_org_members.ui_state` through `/api/work-os/me/guides`), so it never
+  auto-opens again on any device. A visit that is skipped because another
+  overlay owns the screen, because onboarding is incomplete, or because flags
+  could not be loaded is not marked seen and is re-evaluated on the next visit.
+- **Any time** — one icon-only `?` control in the masthead (accessible name
+  `How <page> works`) reopens the guide for the page on screen. Opening by hand
+  also counts as seen.
+- **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
+  described by its promise. It holds one custom inline-SVG scene drawn on the
+  workspace palette (`aria-hidden`; no raster art), at most three numbered
+  steps as an ordered list, and one primary `Got it`. While automatic guides are
+  on it also offers one quiet `Don't show these automatically`; once off, the
+  footer states that automatic guides are off and points at the `?` instead.
+- **Dismissal** — Escape, backdrop press, and the close control dismiss it; the
+  body is the only scroll region; focus lands inside on open and returns to the
+  `?` after. Below 560px the modal takes the viewport inset. Under reduced
+  motion nothing in the scene animates.
+- **Opt-out** — Settings → Page guides switches automatic guides; the modal's
+  quiet action writes the same account flag. The `?` keeps working either way.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:

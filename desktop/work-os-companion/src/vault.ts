@@ -7,6 +7,7 @@ import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./int
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { mergeConversationTurns } from "./avatarLogic";
 import { APPEARANCE_DEFAULTS, appearanceFromChange, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
+import type { CachedGuideState, GuideState } from "./guideState";
 
 export interface WorkOsSettings {
   apiBase: string;
@@ -136,6 +137,7 @@ export const secureState = {
     await remove("offline-queue");
     await remove("day-snapshot");
     await remove("query-cache");
+    await remove("guide-state");
     // Conversations and pending approval cards are per-shift keys; remove each
     // scope this device wrote so a sign-out leaves no employee data behind.
     const scopes = (await get<string[]>(CHAT_SCOPE_KEYS)) ?? [];
@@ -183,6 +185,19 @@ export const secureState = {
     if (session) await set("query-cache", { savedAt: new Date().toISOString(), organizationId: session.organizationId, token: session.token, state });
   },
   clearQueryCache: () => isTauri() ? remove("query-cache") : Promise.resolve(),
+  /** Last-known page-guide flags, account-scoped. Reconciled with the server on
+   * every load so a mark or opt-out that landed offline is retried, never
+   * silently dropped. */
+  guideState: async (): Promise<CachedGuideState | null> => {
+    if (!isTauri()) return null;
+    const [session, cached] = await Promise.all([secureState.session(), get<CachedGuideState>("guide-state")]);
+    if (!session || !cached || cached.organizationId !== session.organizationId) return null;
+    return cached;
+  },
+  saveGuideState: async (value: { organizationId: string; state: GuideState; pendingAutoOpen: boolean | null }) => {
+    if (!isTauri()) return;
+    await set("guide-state", { ...value, savedAt: new Date().toISOString() });
+  },
   conversation: async (scope: string) => isTauri() ? (await get<WorkOsConversationTurn[]>(`conversation:${scope}`)) ?? [] : [],
   /** Additive save: merge with what another window already wrote instead of
    * overwriting it, so a shared review turn can never be clobbered. */

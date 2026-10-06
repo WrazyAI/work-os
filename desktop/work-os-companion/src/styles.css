@@ -4666,3 +4666,135 @@ body.modal-open {
     transition: none;
   }
 }
+
+/* ── Page guides ─────────────────────────────────────────────────────────
+   One short first-visit guide per workspace page (design §8: one modal, one
+   primary action, Escape/backdrop/close all dismiss, focus returns to the
+   header). The scene is inline SVG on the workspace palette, so there is no
+   raster art to ship and nothing animates under reduced motion. */
+.task-modal.guide-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 22px;
+  background: #f8f7f1;
+}
+.task-modal.guide-modal > header {
+  align-items: flex-start;
+  padding: 20px 24px 16px;
+  background: rgba(248, 247, 241, 0.97);
+}
+.task-modal.guide-modal > header h2 {
+  max-width: 440px;
+  font-size: 23px;
+}
+.task-modal.guide-modal > header p {
+  max-width: 440px;
+  margin: 7px 0 0;
+  color: #74796f;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.task-modal.guide-modal > header button {
+  width: 32px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+  color: #62675f;
+}
+.task-modal.guide-modal > header button:not(:disabled):hover {
+  border-color: var(--line);
+  background: #efeee8;
+  box-shadow: none;
+  transform: none;
+}
+.task-modal.guide-modal > .task-modal-body.guide-modal-body {
+  padding: 18px 24px 20px;
+  gap: 16px;
+}
+.guide-art {
+  border-radius: 14px;
+  overflow: hidden;
+}
+.guide-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.guide-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.guide-step {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+.guide-step-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  color: var(--ink);
+}
+.guide-step-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  align-content: start;
+}
+.guide-step-copy strong {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.guide-step-copy small {
+  color: #6f7369;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.task-modal.guide-modal > footer {
+  justify-content: space-between;
+  padding: 14px 24px 18px;
+}
+.task-modal.guide-modal > footer .primary {
+  min-height: 38px;
+}
+.task-modal.guide-modal > footer .guide-quiet-action {
+  min-height: 0;
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: #6f7369;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.task-modal.guide-modal > footer .guide-quiet-action:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.guide-auto-note {
+  max-width: 280px;
+  color: #6f7369;
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .task-modal.guide-modal {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+  .task-modal.guide-modal > footer {
+    flex-wrap: wrap;
+  }
+}
