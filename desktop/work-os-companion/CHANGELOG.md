@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.0
+
 - Each page now explains itself the first time you open it, with one short illustrated guide.
 - Open any page's guide again from the question mark in the header.
 - Turn automatic page guides off in Settings, or from the guide itself.
