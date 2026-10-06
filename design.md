@@ -815,17 +815,22 @@ Review, Insights, and Settings. A hidden destination (Evidence) has none, and
 there is never more than one guide per page.
 
 - **First visit** — the guide opens once after a short beat, once flags are
-  known. Opening it — automatically or by hand — marks it seen for the account
-  (`work_org_members.ui_state` through `/api/work-os/me/guides`), so it never
-  auto-opens again on any device. A visit that is skipped because another
+  known. Dismissing it through `Got it`, close, backdrop, or Escape marks it
+  seen for the account (`work_org_members.ui_state` through
+  `/api/work-os/me/guides`), so it never auto-opens again on any device. A
+  visit that is skipped because another
   overlay owns the screen, because onboarding is incomplete, or because flags
   could not be loaded is not marked seen and is re-evaluated on the next visit.
 - **Any time** — one icon-only `?` control in the masthead (accessible name
-  `How <page> works`) reopens the guide for the page on screen. Opening by hand
-  also counts as seen.
+  `How <page> works`) reopens the guide for the page on screen. Reopening by
+  hand does not consume an unseen guide; acknowledgement happens on dismissal.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
   described by its promise. It holds one custom inline-SVG scene drawn on the
-  workspace palette (`aria-hidden`; no raster art), at most three numbered
+  workspace palette (`aria-hidden`; no raster art). The scene plays one
+  bounded pass through the numbered steps; each step is also a real button that
+  activates the matching scene phase on hover, focus, or click. Reduced-motion
+  skips the automatic sequence and keeps the same selectable states. It has at
+  most three numbered
   steps as an ordered list, and one primary `Got it`. While automatic guides are
   on it also offers one quiet `Don't show these automatically`; once off, the
   footer states that automatic guides are off and points at the `?` instead.
