@@ -1,0 +1,57 @@
+-- Work OS member UI state: per-user presentation flags that are not feature
+-- entitlements or onboarding consent. Page-guide flags record which first-visit
+-- guides an employee has seen so each page auto-opens at most once per account,
+-- while staying replayable from the page header at any time.
+
+alter table work_org_members
+  add column if not exists ui_state jsonb not null default '{}'::jsonb;
+
+create or replace function work_mark_guide_seen(p_membership_id uuid, p_guide text)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_state jsonb;
+begin
+  if p_guide is null or p_guide !~ '^[a-z][a-z0-9_]{0,31}$' then
+    raise exception 'a valid guide key is required';
+  end if;
+  update work_org_members
+     set ui_state = jsonb_set(
+           ui_state,
+           '{guides}',
+           case when jsonb_typeof(ui_state -> 'guides') = 'object' then ui_state -> 'guides' else '{}'::jsonb end
+             || jsonb_build_object(p_guide, to_jsonb(now())),
+           true
+         ),
+         updated_at = now()
+   where id = p_membership_id
+   returning ui_state into v_state;
+  if v_state is null then
+    raise exception 'work org member not found';
+  end if;
+  return v_state;
+end;
+$$;
+
+create or replace function work_set_guide_auto_open(p_membership_id uuid, p_enabled boolean)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_state jsonb;
+begin
+  if p_enabled is null then
+    raise exception 'a guide auto-open preference is required';
+  end if;
+  update work_org_members
+     set ui_state = jsonb_set(ui_state, '{autoOpen}', to_jsonb(p_enabled), true),
+         updated_at = now()
+   where id = p_membership_id
+   returning ui_state into v_state;
+  if v_state is null then
+    raise exception 'work org member not found';
+  end if;
+  return v_state;
+end;
+$$;

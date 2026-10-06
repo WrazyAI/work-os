@@ -66,6 +66,7 @@ const migrations = [
     "supabase/migrations/0052_work_os_sorted_task_history.sql",
     "supabase/migrations/0053_work_activity_intervals.sql",
     "neon/migrations/0041_work_activity_intervals.sql",
+    "supabase/migrations/0058_work_os_member_ui_state.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {
@@ -192,6 +193,11 @@ test("Work OS companion migration is complete and idempotent", async () => {
   assert.equal(accountSettingsRpc.rows.length, 1);
   const profileUpdatedAt = await db.query(`select column_name from information_schema.columns where table_schema='public' and table_name='profiles' and column_name='updated_at'`);
   assert.equal(profileUpdatedAt.rows.length, 1);
+  const memberUiState = await db.query(`select column_name, is_nullable from information_schema.columns where table_schema='public' and table_name='work_org_members' and column_name='ui_state'`);
+  assert.equal(memberUiState.rows.length, 1, "member ui state column exists");
+  assert.equal(memberUiState.rows[0].is_nullable, "NO");
+  const guideFunctions = await db.query(`select proname from pg_proc where proname = any($1)`, [["work_mark_guide_seen", "work_set_guide_auto_open"]]);
+  assert.equal(guideFunctions.rows.length, 2, "guide state functions exist");
 
   const users = await db.query(`
     insert into auth.users(email) values ('owner-a@test.invalid'),('employee-a@test.invalid'),('employee-b@test.invalid') returning id,email
