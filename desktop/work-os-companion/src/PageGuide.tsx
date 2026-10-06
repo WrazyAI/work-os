@@ -1,13 +1,14 @@
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { PageGuideArt } from "./PageGuideArt";
 import type { GuideView } from "./guideState";
 
 /**
- * The one page-guide modal. It shows a custom scene, at most three steps, and
- * exactly two ways out: `Got it`, or turning automatic guides off. The app's
+ * The one page-guide modal. Its illustration plays one short, bounded sequence
+ * on entry, then each numbered step can drive the scene directly. The app's
  * modal layer supplies the focus trap, Escape handling, scroll lock, and focus
- * restore; this component only declares the dialog.
+ * restore; every dismissal path is wired through the shared onClose callback.
  */
 export default function PageGuide({
   view,
@@ -21,6 +22,22 @@ export default function PageGuide({
   onDisableAutoOpen: () => void;
 }) {
   const guide = PAGE_GUIDES[view];
+  const [activeStep, setActiveStep] = useState(0);
+  const interactedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timers = guide.steps.slice(1).map((_, index) => window.setTimeout(() => {
+      if (!interactedRef.current) setActiveStep(index + 1);
+    }, (index + 1) * 900));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [guide.steps.length, view]);
+
+  const activateStep = (index: number) => {
+    interactedRef.current = true;
+    setActiveStep(index);
+  };
+
   return (
     <div
       className="task-modal-backdrop guide-backdrop"
@@ -43,17 +60,30 @@ export default function PageGuide({
           <button type="button" aria-label="Close page guide" title="Close page guide" onClick={onClose}><X size={17} /></button>
         </header>
         <div className="task-modal-body guide-modal-body">
-          <PageGuideArt view={view} />
+          <PageGuideArt view={view} activeStep={activeStep} />
           <ol className="guide-steps">
-            {guide.steps.map((step, index) => (
-              <li key={step.title} className="guide-step">
-                <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
-                <span className="guide-step-copy">
-                  <strong>{index + 1}. {step.title}</strong>
-                  <small>{step.body}</small>
-                </span>
-              </li>
-            ))}
+            {guide.steps.map((step, index) => {
+              const active = activeStep === index;
+              return (
+                <li key={step.title} className="guide-step">
+                  <button
+                    type="button"
+                    className="guide-step-control"
+                    aria-controls="page-guide-art"
+                    aria-pressed={active}
+                    onMouseEnter={() => activateStep(index)}
+                    onFocus={() => activateStep(index)}
+                    onClick={() => activateStep(index)}
+                  >
+                    <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
+                    <span className="guide-step-copy">
+                      <strong>{index + 1}. {step.title}</strong>
+                      <small>{step.body}</small>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
         </div>
         <footer className="guide-modal-footer">
