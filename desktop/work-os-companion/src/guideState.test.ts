@@ -111,6 +111,7 @@ describe("page guide state", () => {
       calls.push("second:end");
     });
     await Promise.resolve();
+    await Promise.resolve();
     expect(calls).toEqual(["first:start"]);
     releaseFirst!();
     await Promise.all([first, second]);
