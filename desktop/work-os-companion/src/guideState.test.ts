@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, guideAutoOpens, isGuideView, normalizeGuideState, reconcileGuideState, type CachedGuideState } from "./guideState";
+import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, decideGuideOpen, guideAutoOpens, isGuideView, normalizeGuideState, reconcileGuideState, type CachedGuideState } from "./guideState";
 
 const org = "org-1";
 
@@ -25,6 +25,26 @@ describe("page guide state", () => {
     expect(guideAutoOpens(EMPTY_GUIDE_STATE, "tasks")).toBe(true);
     expect(guideAutoOpens({ guides: { tasks: "2026-10-06T10:00:00.000Z" }, autoOpen: true }, "tasks")).toBe(false);
     expect(guideAutoOpens({ guides: {}, autoOpen: false }, "tasks")).toBe(false);
+  });
+
+  it("spends one chance per page visit and never ambushes a blocked screen", () => {
+    const base = {
+      enabled: true,
+      trusted: true,
+      activeView: "tasks" as const,
+      evaluatedView: null as string | null,
+      blocked: false,
+      state: EMPTY_GUIDE_STATE,
+    };
+    expect(decideGuideOpen(base)).toEqual({ action: "schedule", view: "tasks" });
+    expect(decideGuideOpen({ ...base, blocked: true })).toEqual({ action: "skip" });
+    expect(decideGuideOpen({ ...base, state: { guides: { tasks: "seen" }, autoOpen: true } })).toEqual({ action: "skip" });
+    expect(decideGuideOpen({ ...base, state: { guides: {}, autoOpen: false } })).toEqual({ action: "skip" });
+    expect(decideGuideOpen({ ...base, evaluatedView: "tasks" })).toEqual({ action: "wait" });
+    expect(decideGuideOpen({ ...base, trusted: false })).toEqual({ action: "wait" });
+    expect(decideGuideOpen({ ...base, enabled: false })).toEqual({ action: "wait" });
+    expect(decideGuideOpen({ ...base, activeView: null })).toEqual({ action: "wait" });
+    expect(decideGuideOpen({ ...base, activeView: "insights", evaluatedView: "tasks" })).toEqual({ action: "schedule", view: "insights" });
   });
 
   it("re-pushes local seen marks the server never stored", () => {

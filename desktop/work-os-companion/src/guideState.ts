@@ -55,6 +55,30 @@ export function guideAutoOpens(state: GuideState, view: GuideView): boolean {
   return state.autoOpen !== false && !state.guides[view];
 }
 
+export type GuideDecision =
+  /** Nothing to decide yet (flags unknown, no page, or already evaluated). */
+  | { action: "wait" }
+  /** This visit's one chance is spent: seen, opted out, or blocked. */
+  | { action: "skip" }
+  | { action: "schedule"; view: GuideView };
+
+/** The auto-open decision for one page visit. "skip" ends this visit's chance
+ * (the guide is not marked seen), "wait" leaves the decision open until flags
+ * load or the next page change. */
+export function decideGuideOpen(options: {
+  enabled: boolean;
+  trusted: boolean;
+  activeView: GuideView | null;
+  evaluatedView: string | null;
+  blocked: boolean;
+  state: GuideState;
+}): GuideDecision {
+  if (!options.enabled || !options.trusted || !options.activeView) return { action: "wait" };
+  if (options.evaluatedView === options.activeView) return { action: "wait" };
+  if (options.blocked || !guideAutoOpens(options.state, options.activeView)) return { action: "skip" };
+  return { action: "schedule", view: options.activeView };
+}
+
 /** Merge the cached local record into the server record at load: local-only
  * seen marks are pushed back (a write may have landed offline), and a local
  * opt-out/in preference that never reached the server is retried. */

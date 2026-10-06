@@ -3,7 +3,7 @@ import { apiRequest } from "./api";
 import { secureState } from "./vault";
 import {
   EMPTY_GUIDE_STATE,
-  guideAutoOpens,
+  decideGuideOpen,
   normalizeGuideState,
   reconcileGuideState,
   type GuideState,
@@ -147,18 +147,23 @@ export function usePageGuides(options: {
   }, [push, saveCache]);
 
   useEffect(() => {
-    if (!enabled || !organizationId || !activeView || !trusted) return;
-    if (evaluatedFor.current === activeView) return;
-    // One evaluation per page visit: a blocked moment (another overlay owns
-    // the screen) or an already-seen guide ends this visit's chance, so the
-    // guide never ambushes the employee later in the same visit.
-    if (blocked || !guideAutoOpens(state, activeView)) {
-      evaluatedFor.current = activeView;
+    const decision = decideGuideOpen({
+      enabled,
+      trusted,
+      activeView,
+      evaluatedView: evaluatedFor.current,
+      blocked,
+      state,
+    });
+    if (decision.action === "wait") return;
+    if (decision.action === "skip") {
+      if (activeView) evaluatedFor.current = activeView;
       return;
     }
+    const view = decision.view;
     const timer = window.setTimeout(() => {
-      evaluatedFor.current = activeView;
-      openGuide(activeView);
+      evaluatedFor.current = view;
+      openGuide(view);
     }, delayMs);
     return () => window.clearTimeout(timer);
   }, [activeView, blocked, delayMs, enabled, openGuide, organizationId, state, trusted]);
