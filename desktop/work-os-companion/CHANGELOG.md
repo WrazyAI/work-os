@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.3.99
+
+- Press Ctrl + , anywhere in Work OS to open Settings.
+
 ## 0.3.98
 
 - When your EOD is due, the companion bubble now has an Open EOD review button, and the morning bubble has Set today's goal.
