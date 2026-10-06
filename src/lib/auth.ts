@@ -32,6 +32,14 @@ const trustedOrigins = [
 ].filter((o): o is string => Boolean(o));
 
 export const auth = betterAuth({
+  // Pin the public auth origin. cloudflared forwards app.wrazyos.com to
+  // localhost:3000, so a request-derived base URL produced password reset
+  // links on https://localhost:3000. Set BETTER_AUTH_URL (or APP_PUBLIC_ORIGIN)
+  // per deployment; the canonical domain is the last resort.
+  baseURL:
+    process.env.BETTER_AUTH_URL?.trim() ||
+    process.env.APP_PUBLIC_ORIGIN?.trim() ||
+    "https://app.wrazyos.com",
   database: kyselyAdapter(kysely, { type: "postgres" }),
   // neon_auth tables use uuid primary keys — make Better Auth emit uuids.
   advanced: { database: { generateId: "uuid" } },

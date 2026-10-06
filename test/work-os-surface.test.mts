@@ -67,6 +67,7 @@ test("password reset is public and wired for every role", () => {
   assert.match(reset, /\/api\/auth\/reset-password/, "the reset page submits the new password");
   assert.match(reset, /searchParams\.get\("token"\)/, "the reset page reads the email token");
   assert.match(auth, /sendResetPassword/, "Better Auth must send reset emails");
+  assert.match(auth, /baseURL:\s*\n?\s*process\.env\.BETTER_AUTH_URL\?\.trim\(\)/, "the auth base URL must be pinned: cloudflared forwards to localhost, so request-derived reset links pointed at https://localhost:3000");
   assert.match(proxy, /"\/forgot-password"/, "the reset request page must be public");
   assert.match(proxy, /"\/reset-password"/, "the reset page must be public");
 });
