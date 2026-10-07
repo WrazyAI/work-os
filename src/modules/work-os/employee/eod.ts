@@ -4,8 +4,8 @@
  * record is created first, then the AI narrative replaces the placeholder —
  * and a gated or unavailable assistant keeps the standard draft honest. */
 
-/** The refine request must not let the assistant rewrite the bottleneck
- * answer the employee owns, so that section is stripped before sending. */
+/** The refine request must not let the assistant rewrite the Bottleneck
+ * section, so that section is stripped before sending. */
 export function stripBottleneckSection(markdown: string): string {
   return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
 }

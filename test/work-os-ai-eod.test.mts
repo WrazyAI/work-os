@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildEodPrompt, ensureBottleneckSection, parseEodSelection, renderCommitmentReconciliation, renderEodSelection } from "../src/lib/aiEod";
+import { buildEodPrompt, parseEodSelection, renderCommitmentReconciliation, renderEodSelection } from "../src/lib/aiEod";
 
 test("the prompt grounds the model in only the recorded facts", () => {
   const prompt = buildEodPrompt({
@@ -23,20 +23,15 @@ test("reconciles persisted daily commitments without treating them as task evide
   ]);
 });
 
-test("keeps a valid bottleneck section untouched", () => {
-  const markdown = "## Summary\nA calm day.\n## Bottleneck\nThe certificate is still pending.";
-  assert.equal(ensureBottleneckSection(markdown), markdown.replace(/\s+$/, ""));
-});
-
-test("appends an explicit placeholder when the model omitted the bottleneck", () => {
-  const markdown = ensureBottleneckSection("## Summary\nA calm day.\n## Completed\n- Nothing.");
-  assert.match(markdown ?? "", /## Bottleneck/);
-  assert.match(markdown ?? "", /needs your input/);
-});
-
-test("rejects non-string or empty narratives", () => {
-  assert.equal(ensureBottleneckSection(null), null);
-  assert.equal(ensureBottleneckSection("   "), null);
+test("renders the Bottleneck section only when blockers were recorded", () => {
+  const grounding = { date: "2026-08-27", personName: "David", clockedInAt: null, clockedOutAt: null, updates: [], completed: [], carried: [], blockers: ["Signing certificate"] };
+  const selection = { summaryFactIds: [], completedFactIds: [], carriedFactIds: [], blockerFactIds: ["blocker:0"], observedFactIds: [], mediaFactIds: [] };
+  const withBlocker = renderEodSelection(selection, grounding);
+  assert.match(withBlocker, /## Bottleneck/);
+  assert.match(withBlocker, /- Signing certificate/);
+  const withoutBlocker = renderEodSelection({ ...selection, blockerFactIds: [] }, { ...grounding, blockers: [] });
+  assert.doesNotMatch(withoutBlocker, /## Bottleneck/);
+  assert.doesNotMatch(withoutBlocker, /needs your input/);
 });
 
 test("accepts only record-bound EOD fact ids and renders the original facts", () => {

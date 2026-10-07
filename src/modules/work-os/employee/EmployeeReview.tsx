@@ -118,7 +118,7 @@ export default function EmployeeReview() {
       if (variables.date !== activeReportDateRef.current) return;
       if (result.markdown) setReportMarkdown(result.markdown);
       setDraftSource("ai");
-      if (variables.mode === "refine") setEodNotice({ tone: "info", text: "The draft was refined from your feedback. Your bottleneck answer was not changed." });
+      if (variables.mode === "refine") setEodNotice({ tone: "info", text: "The draft was refined from your feedback." });
       else if (variables.mode === "loom") setEodNotice({ tone: "info", text: "Draft rebuilt from your Loom recording. Review every line." });
       else if (result.clockedOut) setEodNotice({ tone: "info", text: "You were clocked out automatically and the assistant drafted your EOD. Review every line." });
       else setEodNotice({ tone: "info", text: assistantDraftNotice(result) });

@@ -239,7 +239,7 @@ export function applyDayScenario(data: DayData | null, scenario: DebugScenario):
       ...result,
       report: {
         id: "debug-report-eod", status: "draft", report_date: result.shiftDate,
-        markdown: ["# EOD Report: David Z (scenario)", "", "## Summary", "Worked on the debugger fix and desktop recovery states.", "", "## Completed", "- Reviewed desktop recovery states", "", "## Carried forward", "- Complete the Work OS Phase 1 runtime", "", "## Bottleneck", "(needs your input — what prevented you from completing your task list?)"].join("\n"),
+        markdown: ["# EOD Report: David Z (scenario)", "", "## Summary", "Worked on the debugger fix and desktop recovery states.", "", "## Completed", "- Reviewed desktop recovery states", "", "## Carried forward", "- Complete the Work OS Phase 1 runtime"].join("\n"),
       },
     };
   }

@@ -1352,10 +1352,10 @@ export default function App() {
         method: "POST", body: JSON.stringify({ date: target.shiftDate, draft: stripBottleneckSection(markdown), feedback, annotations }),
       });
       setEodDraft((current) => current ? { ...current, markdown: result.markdown, source: "ai" } : { markdown: result.markdown, source: "ai" });
-      notifications.success("The draft was refined from your feedback. Your bottleneck answer was not changed.", "Draft refined");
+      notifications.success("The draft was refined from your feedback.", "Draft refined");
       return true;
     } catch (value) {
-      showError(value, "Your feedback was not applied. Your draft and bottleneck answer are unchanged.", "Draft refinement failed");
+      showError(value, "Your feedback was not applied. Your draft is unchanged.", "Draft refinement failed");
       return false;
     } finally { setEodRedrafting(false); }
   };
@@ -2180,12 +2180,7 @@ export default function App() {
   const dashboardGridRef = useRef<HTMLDivElement | null>(null);
   useListShift(dashboardGridRef);
   const openTasks = visibleTodayTasks.filter((task) => !task.completed);
-  const allTodayTasksCompleted = visibleTodayTasks.length > 0 && openTasks.length === 0;
   const reviewDay = eodDate ? reportDayQuery.data ?? null : visibleDay;
-  const reviewParentTasks = parentTasks(reviewDay?.tasks ?? []);
-  const allReviewTasksCompleted = eodDate
-    ? reviewParentTasks.length > 0 && reviewParentTasks.every((task) => task.completed === true)
-    : allTodayTasksCompleted;
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
@@ -3425,12 +3420,9 @@ export default function App() {
               />
                 : reviewDay?.report && !eodSubmitted && eodRedrafting && !eodDraft ? <EodLoadingState title="Drafting your EOD…" detail={`Checking ${eodDate ? "that day’s" : "today’s"} recorded work and writing a draft for you to review.`} />
                 : reviewDay?.report && !eodSubmitted && !eodLanding && (!eodRedrafting || eodDraft) ? <EodComposer
-                    reportId={String(reviewDay.report.id ?? "unknown")}
                     initialMarkdown={eodDraft?.markdown ?? String(reviewDay.report.markdown ?? "")}
                     source={eodDraft?.source ?? "deterministic"}
                     dayLabel={eodDate ? formatWorkOsDate(eodDate) : "today"}
-                    suggestedBottleneck={reviewDay.plan?.items?.find((item) => typeof item.blocker === "string" && item.blocker.trim())?.blocker ?? null}
-                    allTasksCompleted={allReviewTasksCompleted}
                     redrafting={eodRedrafting}
                     clockedOut={eodClockedOut}
                     screenshotContext={eodDraft?.screenshots ?? null}

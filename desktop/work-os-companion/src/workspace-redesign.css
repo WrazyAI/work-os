@@ -5876,14 +5876,6 @@ button:not(:disabled):active {
   gap: 16px;
 }
 
-.eod-composer-header span {
-  color: #557d35;
-  font-size: 9px;
-  font-weight: 780;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
 .eod-composer-header h2 {
   margin: 5px 0 0;
   font: 650 20px/1.2 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -6131,41 +6123,6 @@ button:not(:disabled):active {
   box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
 }
 
-.eod-bottleneck-label {
-  display: grid;
-  gap: 6px;
-}
-
-.eod-bottleneck-label > span {
-  color: #666a61;
-  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.eod-bottleneck-label textarea {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: #fff;
-  color: var(--ink);
-  padding: 12px;
-  font: 400 12px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  resize: vertical;
-}
-
-.eod-bottleneck-label textarea:focus {
-  outline: none;
-  border-color: #a7c982;
-  box-shadow: 0 0 0 4px rgba(129, 180, 70, 0.11);
-}
-
-.eod-bottleneck-label small {
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.45;
-}
-
 .eod-refine {
   display: grid;
   gap: 6px;
@@ -6227,8 +6184,6 @@ button:not(:disabled):active {
   opacity: 0.55;
   cursor: default;
 }
-.eod-bottleneck-label textarea:disabled { background: var(--surface, #eef1eb); color: var(--muted); cursor: not-allowed; }
-
 .eod-composer > footer {
   display: flex;
   align-items: center;

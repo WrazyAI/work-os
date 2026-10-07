@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- EOD reports are simpler: no bottleneck reason is required to submit, and the review header is cleaner.
+
 ## 0.4.9
 
 - A suggested next step now always finishes: if the change applied, the card shows Added instead of staying on Saving.

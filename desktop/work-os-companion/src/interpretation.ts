@@ -423,24 +423,17 @@ export function partialFilingMessage(filed: number, failed: Array<{ title?: stri
 
 // ── EOD composer helpers ──────────────────────────────────────────────────
 
-export const BOTTLENECK_QUESTION = "What prevented you from completing your task list?";
-
-/** Removes any existing Bottleneck section so the employee's answer is authoritative. */
+/** Removes any existing Bottleneck section so refine sends only the narrative. */
 export function stripBottleneckSection(markdown: string): string {
   return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
 }
 
-export function hasBottleneckAnswer(answer: string): boolean {
-  return typeof answer === "string" && answer.trim().length >= 3;
-}
-
-/** The server's draft placeholder is not an answer. */
+/** The server's legacy draft placeholder is not an answer. */
 const BOTTLENECK_PLACEHOLDER = /^\(needs your input[^)]*\)$/i;
 
-/** Reads a real answer out of the report draft. The AI draft appends a
- * `## Bottleneck` section; when the employee edits that section instead of the
- * dedicated field, the answer must still count — stripping it on submit would
- * silently discard what they wrote. */
+/** Reads a real answer out of the report draft. A real recorded-blocker or
+ * employee-written Bottleneck section must survive; the legacy placeholder
+ * does not count as content. */
 export function extractBottleneckAnswer(markdown: string): string {
   const match = typeof markdown === "string" ? markdown.match(/\n+##\s*Bottleneck\s*\n([\s\S]*)$/i) : null;
   const body = match?.[1]?.trim() ?? "";
@@ -448,15 +441,10 @@ export function extractBottleneckAnswer(markdown: string): string {
   return body;
 }
 
-/** The employee's answer, wherever they actually provided it. */
-export function resolvedBottleneck(fieldAnswer: string, markdown: string): string {
-  return hasBottleneckAnswer(fieldAnswer) ? fieldAnswer.trim() : extractBottleneckAnswer(markdown);
-}
-
-/** Final submitted markdown: the narrative (placeholder-free) plus the employee's bottleneck answer. */
-export function composeEodMarkdown(markdown: string, bottleneck: string, requiresBottleneck = true): string {
-  const narrative = stripBottleneckSection(markdown);
-  return requiresBottleneck ? `${narrative}\n\n## Bottleneck\n${bottleneck.trim()}` : narrative;
+/** Legacy drafts can carry the old placeholder Bottleneck section; it must
+ * never be shown or filed. A real recorded-blocker section is preserved. */
+export function stripPlaceholderBottleneck(markdown: string): string {
+  return extractBottleneckAnswer(markdown) ? markdown : stripBottleneckSection(markdown);
 }
 
 /** Offline playground stand-in for the AI EOD draft — device-only, clearly labeled. */
@@ -476,9 +464,6 @@ export function simulateAiEod(day: { tasks: Array<Record<string, unknown>>; plan
     "",
     "## Carried forward",
     ...(open.length ? open : ["- Nothing pending"]),
-    "",
-    "## Bottleneck",
-    "(needs your input — what prevented you from completing your task list?)",
   ].join("\n");
 }
 

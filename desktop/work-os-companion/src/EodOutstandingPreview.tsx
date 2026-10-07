@@ -64,12 +64,9 @@ export default function EodOutstandingPreview() {
     return <div className="workspace preview-workspace"><section className="stage">{masthead}<main className="page">
       <div className="eod-day-context"><button type="button"><ArrowLeft size={14} /> Back to today</button><span>EOD for September 10.</span></div>
       <EodComposer
-        reportId="preview-outstanding"
         initialMarkdown={DRAFT}
         source="deterministic"
         dayLabel="September 10"
-        suggestedBottleneck={null}
-        allTasksCompleted={false}
         redrafting={false}
         busy={false}
         onRedraft={() => undefined}

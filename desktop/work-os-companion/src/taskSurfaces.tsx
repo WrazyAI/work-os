@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { Archive, CalendarDays, Check, CheckCircle2, ChevronRight, Clock3, ListChecks, MoreHorizontal, MoveRight, Pencil, Plus, RotateCcw, Target, Trash2, UserRound, Video, X } from "lucide-react";
 import { computeMenuPlacement } from "./menuPlacement";
 import { renderViewportSurface } from "./viewportSurface";
-import { BOTTLENECK_QUESTION, composeEodMarkdown, extractBottleneckAnswer, hasBottleneckAnswer, resolvedBottleneck } from "./interpretation";
+import { stripPlaceholderBottleneck } from "./interpretation";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText, taskKind, type TaskRow } from "./taskWorkspace";
@@ -450,15 +450,13 @@ export type LoomAttached = {
   url: string;
 };
 
-export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "today", suggestedBottleneck, allTasksCompleted, redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
-  reportId: string; initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; suggestedBottleneck: string | null;
-  allTasksCompleted: boolean; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
+export function EodComposer({ initialMarkdown, source, dayLabel = "today", redrafting, clockedOut = false, screenshotContext = null, screenshotGallery = null, screenshotResolveSrc, screenshotSyncUnavailable = false, screenshotNotice = null, preparing = null, onDraftAnyway, loomEnabled = false, loomAttached = null, onLoomPreview, onLoomDraft, busy, onRedraft, onRefresh, onRefine, onSubmit }: {
+  initialMarkdown: string; source: "ai" | "deterministic" | "simulated" | null; dayLabel?: string; redrafting: boolean; clockedOut?: boolean; screenshotContext?: { processed: number; excluded: number; failed: number; pending: number; hours: EodScreenshotHour[] } | null; screenshotGallery?: EodScreenshotGallery | null; screenshotResolveSrc?: PreviewResolver; screenshotSyncUnavailable?: boolean; screenshotNotice?: string | null; preparing?: { analyzed: number; total: number; pending: number | null } | null; onDraftAnyway?: () => void; loomEnabled?: boolean; loomAttached?: LoomAttached | null; onLoomPreview?: (url: string) => Promise<LoomReadback | null>; onLoomDraft?: (loom: { url: string; transcript?: string }) => Promise<{ ok: boolean; message?: string }>; busy: boolean; onRedraft: () => void; onRefresh?: () => void; onRefine: (markdown: string, feedback: string, annotations: Array<{ quote: string; comment: string }>) => Promise<boolean>; onSubmit: (markdown: string, idempotencyKey: string) => void;
 }) {
   const dayReference = dayLabel === "today" ? "today's" : `${dayLabel}'s`;
   const hasGalleryFrames = (screenshotGallery?.viewable.length ?? 0) > 0 || (screenshotGallery?.processed ?? 0) > 0;
   const pendingFrames = screenshotGallery?.pending ?? screenshotContext?.pending ?? 0;
-  const [markdown, setMarkdown] = useState(initialMarkdown);
-  const [bottleneck, setBottleneck] = useState(suggestedBottleneck ?? "");
+  const [markdown, setMarkdown] = useState(() => stripPlaceholderBottleneck(initialMarkdown));
   const [feedback, setFeedback] = useState("");
   const [refining, setRefining] = useState(false);
   const [view, setView] = useState<"preview" | "raw">("preview");
@@ -475,17 +473,15 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
   const previewRef = useRef<HTMLDivElement | null>(null);
   const flashTimer = useRef<number | null>(null);
   // A redraft replaces the buffer (and any in-progress edits) by design.
-  useEffect(() => { setMarkdown(initialMarkdown); }, [initialMarkdown]);
+  useEffect(() => { setMarkdown(stripPlaceholderBottleneck(initialMarkdown)); }, [initialMarkdown]);
   useEffect(() => () => { if (flashTimer.current) window.clearTimeout(flashTimer.current); }, []);
-  const draftBottleneck = extractBottleneckAnswer(markdown);
-  const reason = resolvedBottleneck(bottleneck, markdown);
   // Report actions compete for the same draft, so a Loom analysis locks them
   // exactly like a redraft or refine does.
   const reportLocked = busy || redrafting || loomDrafting;
-  const canSubmit = (allTasksCompleted || !!reason) && markdown.trim() && !reportLocked && !refining;
+  const canSubmit = !!markdown.trim() && !reportLocked && !refining;
   const refineReady = (Boolean(feedback.trim()) || annotations.length > 0) && !reportLocked && !refining;
   // A disabled Submit always names its blocker, so the employee is never left
-  // guessing why the reason they typed did not unlock the report.
+  // guessing why the report cannot be filed.
   const submitHint = busy
     ? "Submitting…"
     : loomDrafting
@@ -496,12 +492,10 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
           ? "Refine is still running — submit unlocks when it finishes."
           : !markdown.trim()
             ? "The report is empty. Add content in Raw before submitting."
-            : !allTasksCompleted && !reason
-              ? "Add the reason above (Bottleneck) to submit."
-              : null;
+            : null;
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit(composeEodMarkdown(markdown, reason, !allTasksCompleted), crypto.randomUUID());
+    onSubmit(stripPlaceholderBottleneck(markdown), crypto.randomUUID());
   };
   /** Reads the pasted Loom link's public metadata and day verdict. */
   const readLoom = async () => {
@@ -601,9 +595,8 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
   };
   return <section className="panel eod-composer" aria-label="End-of-day report">
     <header className="eod-composer-header">
-      <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><span>EOD review</span><h2>Record the day, then hand it to your manager.</h2>
-      {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}
-      <small>{source === "ai" ? `Drafted by the assistant from ${dayReference} record — review every line before submitting.` : source === "simulated" ? "Simulated on-device draft (offline playground) — review every line before submitting." : `Standard draft from ${dayReference} record.`} Report id {reportId.slice(0, 8)}…</small></div></div>
+      <div className="eod-title-with-pet"><Otto pose="focus" className="otto-eod" /><div><h2>Record the day, then hand it to your manager.</h2>
+      {clockedOut && <small className="eod-clocked-out-note">Your shift was clocked out automatically when this draft was created.</small>}</div></div>
       <div className="eod-composer-actions">{onRefresh && <button disabled={reportLocked} onClick={onRefresh}>Refresh from record</button>}<button disabled={reportLocked} onClick={onRedraft}>{redrafting ? <><FadeArc size={14} /> Drafting…</> : "Draft with AI"}</button></div>
     </header>
     {preparing && <div className="eod-screenshot-preparing" role="status">
@@ -666,19 +659,9 @@ export function EodComposer({ reportId, initialMarkdown, source, dayLabel = "tod
         <button type="button" className="eod-note-remove" aria-label="Remove this note" onClick={() => setAnnotations((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={12} /></button>
       </li>)}</ul>
     </section>}
-    <label className="eod-bottleneck-label"><span>{allTasksCompleted ? "Bottleneck not needed" : "Bottleneck — required"}</span>
-      <textarea value={bottleneck} rows={2} maxLength={2000} disabled={allTasksCompleted} placeholder={allTasksCompleted ? `Every task in ${dayReference} list is complete.` : BOTTLENECK_QUESTION} onChange={(event) => setBottleneck(event.target.value)} aria-label={allTasksCompleted ? "No bottleneck is needed because every task is complete" : BOTTLENECK_QUESTION} />
-      <small>{allTasksCompleted
-        ? `Every task in ${dayReference} list is complete, so no reason is needed or sent with this report.`
-        : hasBottleneckAnswer(bottleneck)
-          ? "This goes to your manager with the report."
-          : draftBottleneck
-            ? "Found in the report draft. Submitting uses it, or type here to replace it."
-            : "What prevented you from completing your task list? This goes to your manager with the report."}</small>
-    </label>
     <section className="eod-refine" aria-label="Draft feedback">
       <span>Refine this draft</span>
-      <small>Select text in the preview to add a note, or describe the change. Your bottleneck answer stays separate.</small>
+      <small>Select text in the preview to add a note, or describe the change.</small>
       <textarea value={feedback} rows={2} maxLength={2000} placeholder="For example: make the summary shorter and mention the client handoff." onChange={(event) => setFeedback(event.target.value)} aria-label="Feedback for refining this draft" />
       <div className="eod-refine-actions"><button disabled={!refineReady} onClick={() => void refine()}>{refining ? <><FadeArc size={14} /> Refining…</> : "Refine draft"}</button></div>
     </section>

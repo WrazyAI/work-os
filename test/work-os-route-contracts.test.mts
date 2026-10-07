@@ -400,8 +400,8 @@ test("web Review drafts EODs for outstanding historical days", async () => {
   assert.match(review, /outstandingRowMeta/);
   assert.match(review, /Outstanding EODs/);
   // The assistant draft is the default on both surfaces: the web creates the
-  // standard record, asks the assistant, and refines without touching the
-  // bottleneck answer.
+  // standard record, asks the assistant, and refines without rewriting the
+  // Bottleneck section.
   assert.match(review, /\/api\/work-os\/me\/eod\/ai-draft/);
   assert.match(review, /stripBottleneckSection\(reportMarkdown\)/);
   assert.match(review, /prepareOneScreenshotRound\(date\)/);

@@ -153,7 +153,6 @@ assert.doesNotMatch(app, /width: active \? "42%"/);
 assert.match(app, /Promise\.allSettled/);
 assert.match(app, /bootstrap\.day\.degraded/);
 assert.match(app, /onRefine=\{\(markdown, feedback, annotations\) => refineEod\(reviewDay, markdown, feedback, annotations\)\}/);
-assert.match(app, /allTasksCompleted=\{allReviewTasksCompleted\}/);
 assert.match(app, /NotificationsBell/);
 assert.match(app, /resyncPlanFromServer/);
 assert.match(app, /eod-attention-pill/);
@@ -179,12 +178,12 @@ assert.match(queryLayer, /fetchDay\(\{ variant: "details", date: options\.date! 
 assert.match(taskSurfaces, /Refresh from record/);
 assert.match(app, /eod-start-earlier/);
 assert.match(taskSurfaces, /Refine this draft/);
-assert.match(taskSurfaces, /Your bottleneck answer stays separate/);
+assert.doesNotMatch(taskSurfaces, /Bottleneck — required/);
 const interpretationHelpers = read("src/interpretation.ts");
 assert.match(interpretationHelpers, /export function extractBottleneckAnswer/);
-assert.match(interpretationHelpers, /export function resolvedBottleneck/);
+assert.match(interpretationHelpers, /export function stripPlaceholderBottleneck/);
 assert.match(interpretationHelpers, /BOTTLENECK_PLACEHOLDER/);
-assert.match(taskSurfaces, /resolvedBottleneck/);
+assert.match(taskSurfaces, /stripPlaceholderBottleneck/);
 assert.match(taskSurfaces, /eod-loom/);
 assert.match(taskSurfaces, /onLoomDraft/);
 assert.match(taskSurfaces, /Analyze and rebuild draft/);
@@ -205,15 +204,9 @@ assert.match(planningSession, /onLoomPreview/);
 assert.match(planningSession, /Plan from a Loom recording/);
 assert.match(planningSession, /Build from Loom/);
 assert.match(planningSession, /Use Loom only/);
-assert.doesNotMatch(taskSurfaces, /if \(allTasksCompleted\) setBottleneck\(""\)/);
-assert.match(taskSurfaces, /Add the reason above \(Bottleneck\) to submit\./);
-const bottleneckLabelAt = taskSurfaces.indexOf('className="eod-bottleneck-label"');
-const refineBlockAt = taskSurfaces.indexOf('className="eod-refine"');
-assert.ok(bottleneckLabelAt >= 0 && refineBlockAt >= 0, "both EOD reason blocks exist");
-assert.ok(
-  bottleneckLabelAt < refineBlockAt,
-  "the required reason must render before the optional refine block",
-);
+assert.doesNotMatch(taskSurfaces, /eod-bottleneck-label/);
+assert.doesNotMatch(taskSurfaces, /Add the reason above/);
+assert.match(taskSurfaces, /stripPlaceholderBottleneck/);
 const screenshotGallery = read("src/ScreenshotGallery.tsx");
 assert.match(screenshotGallery, /eod-shot-carousel/);
 assert.match(screenshotGallery, /eod-shot-grid/);

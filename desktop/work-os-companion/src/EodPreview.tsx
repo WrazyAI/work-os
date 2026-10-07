@@ -108,17 +108,15 @@ const STRESS_RESOLVE_SRC = (summaryId: string, size: "thumb" | "preview" | "full
 
 export default function EodPreview() {
   const params = new URLSearchParams(window.location.search);
-  const allTasksCompleted = params.has("all-complete");
   const refiningPreview = params.has("refining");
   const shotsPreview = params.has("shots");
   const stressPreview = params.has("shots-stress");
   const pendingPreview = params.has("shots-pending");
   const [draftedAnyway, setDraftedAnyway] = useState(false);
   const waitingPreview = pendingPreview && !draftedAnyway;
-  const draftBottleneckPreview = params.has("draft-bottleneck");
   const loomPreview = params.has("loom");
   const loadingPreview = params.has("loading");
-  const [markdown, setMarkdown] = useState(draftBottleneckPreview ? `${draft}\n\n## Bottleneck\nWaiting on the security review before the release can ship.` : draft);
+  const [markdown, setMarkdown] = useState(draft);
   const [submitted, setSubmitted] = useState(false);
   if (loadingPreview) return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
     <EodLoadingState title="Preparing Worktivity analysis…" detail="Checking today’s screenshots." progress="23 of 117 frames analyzed — 40 still analyzing." onDraftAnyway={() => undefined} />
@@ -139,6 +137,6 @@ export default function EodPreview() {
       <CheckedMoment />
       <strong>EOD submitted</strong>
       <p>Your report is with your manager. You are done for today.</p>
-    </section> : <EodComposer reportId="preview-eod" initialMarkdown={markdown} source="ai" suggestedBottleneck={draftBottleneckPreview ? null : "A pending approval delayed the final handoff."} allTasksCompleted={allTasksCompleted} redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
+    </section> : <EodComposer initialMarkdown={markdown} source="ai" redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
   </main></section></div>;
 }

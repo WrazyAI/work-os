@@ -36,8 +36,6 @@ export interface EodGrounding {
   contextBlock?: string;
 }
 
-const BOTTLENECK_PLACEHOLDER = "(needs your input — what prevented you from completing your task list?)";
-
 export interface EodSelection {
   summaryFactIds: string[];
   completedFactIds: string[];
@@ -143,7 +141,7 @@ export function renderEodSelection(selection: EodSelection, grounding: EodGround
       ? ["", "## Observed activity context", ...observed.map((text) => `- ${text}`), "Activity context is descriptive; recorded GitHub activity is a provider fact and still does not prove attendance, productivity, or task completion."]
       : []),
     "", "## Daily commitment reconciliation", ...renderCommitmentReconciliation(grounding.commitments),
-    "", "## Bottleneck", ...(blockers.length ? blockers.map((text) => `- ${text}`) : [BOTTLENECK_PLACEHOLDER]),
+    ...(blockers.length ? ["", "## Bottleneck", ...blockers.map((text) => `- ${text}`)] : []),
   ].join("\n");
 }
 
@@ -179,14 +177,6 @@ export function buildEodPrompt(grounding: EodGrounding): string {
     "Return ONLY a JSON object with summaryFactIds, completedFactIds, carriedFactIds, blockerFactIds, observedFactIds, and mediaFactIds.",
     "Each array must contain only IDs from its matching section above. Never invent prose, counts, or inferred facts.",
   ].join("\n");
-}
-
-/** Guarantees the required bottleneck section exists with an explicit placeholder if the model omitted it. */
-export function ensureBottleneckSection(markdown: unknown): string | null {
-  if (typeof markdown !== "string" || !markdown.trim()) return null;
-  const trimmed = markdown.replace(/\s+$/, "");
-  if (/##\s*Bottleneck/i.test(trimmed)) return trimmed;
-  return `${trimmed}\n\n## Bottleneck\n${BOTTLENECK_PLACEHOLDER}`;
 }
 
 export type EodAnnotation = { quote: string; comment: string };
@@ -351,7 +341,7 @@ function withoutBottleneck(markdown: string) {
   return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
 }
 
-/** Refines report wording from employee feedback without touching their separate bottleneck answer. */
+/** Refines report wording from employee feedback without rewriting any Bottleneck section. */
 export async function refineEodNarrative(grounding: EodGrounding, draft: string, feedback: string, annotations: EodAnnotation[] = []): Promise<EodDraftResult> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return { ok: false, reason: "ai_unconfigured", detail: "OPENROUTER_API_KEY is not set on the server" };

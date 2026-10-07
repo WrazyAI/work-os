@@ -4,11 +4,8 @@ import { describe, expect, it } from "vitest";
 import { EodComposer } from "./taskSurfaces";
 
 const baseProps = {
-  reportId: "report-12345678",
   initialMarkdown: "## Summary\n\nDid the work.\n\n## Completed\n\n- Shipped it",
   source: null as null,
-  suggestedBottleneck: null as null,
-  allTasksCompleted: true,
   redrafting: false,
   busy: false,
   onRedraft: () => undefined,
@@ -123,39 +120,38 @@ describe("EodComposer review surface", () => {
 
   const submitButton = (markup: string) => markup.match(/<button class="primary"[^>]*>Submit EOD<\/button>/)?.[0] ?? "";
 
-  it("unlocks Submit when the reason was written in the report draft", () => {
-    const markup = renderToStaticMarkup(createElement(EodComposer, {
-      ...baseProps,
-      allTasksCompleted: false,
-      initialMarkdown: "## Summary\n\nDid the work.\n\n## Bottleneck\nWaiting on the security review.",
-    }));
-    expect(markup).toContain("Found in the report draft");
+  it("submits a drafted report immediately without a bottleneck step", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, baseProps));
     expect(submitButton(markup)).toContain("Submit EOD");
     expect(submitButton(markup)).not.toContain("disabled");
+    expect(markup).not.toContain("Bottleneck — required");
     expect(markup).not.toContain("Add the reason above");
+    expect(markup).not.toContain("eod-bottleneck-label");
   });
 
-  it("keeps Submit disabled and names the missing reason when only the placeholder exists", () => {
+  it("never shows the legacy placeholder section", () => {
     const markup = renderToStaticMarkup(createElement(EodComposer, {
       ...baseProps,
-      allTasksCompleted: false,
       initialMarkdown: "## Summary\n\nDid the work.\n\n## Bottleneck\n(needs your input — what prevented you from completing your task list?)",
     }));
-    expect(submitButton(markup)).toContain("disabled");
-    expect(markup).toContain("Add the reason above (Bottleneck) to submit.");
-    expect(markup).not.toContain("Found in the report draft");
+    expect(markup).not.toContain("needs your input");
+    expect(markup).not.toContain("Bottleneck");
+    expect(submitButton(markup)).not.toContain("disabled");
+  });
+
+  it("keeps a recorded bottleneck section in the draft", () => {
+    const markup = renderToStaticMarkup(createElement(EodComposer, {
+      ...baseProps,
+      initialMarkdown: "## Summary\n\nDid the work.\n\n## Bottleneck\nWaiting on the security review.",
+    }));
+    expect(markup).toContain("Waiting on the security review.");
+    expect(submitButton(markup)).not.toContain("disabled");
   });
 
   it("explains a disabled Submit while the draft is still being written", () => {
-    const markup = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, allTasksCompleted: false, redrafting: true }));
+    const markup = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, redrafting: true }));
     expect(submitButton(markup)).toContain("disabled");
     expect(markup).toContain("Waiting for the draft to finish before this can be submitted.");
-  });
-
-  it("puts the required reason before the optional refine block", () => {
-    const markup = renderToStaticMarkup(createElement(EodComposer, { ...baseProps, allTasksCompleted: false }));
-    expect(markup.indexOf("Bottleneck — required")).toBeGreaterThan(-1);
-    expect(markup.indexOf("Bottleneck — required")).toBeLessThan(markup.indexOf("Refine this draft"));
   });
 
   it("offers the Loom update path only when the organization enables it", () => {
