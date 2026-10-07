@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { threadScrollTarget } from "./chat/core";
+import { isThreadNearBottom, threadScrollTarget } from "./chat/core";
 
 /* newestTop is the newest turn's top relative to the thread's visible top. */
 const base = {
@@ -12,6 +12,12 @@ const base = {
 };
 
 describe("threadScrollTarget", () => {
+  it("treats a floating chat's visible card footer as near the latest turn", () => {
+    expect(isThreadNearBottom({ scrollHeight: 502, scrollTop: 0, clientHeight: 429, thresholdPx: 96 })).toBe(true);
+    expect(isThreadNearBottom({ scrollHeight: 502, scrollTop: 0, clientHeight: 429, thresholdPx: 48 })).toBe(false);
+    expect(isThreadNearBottom({ scrollHeight: 700, scrollTop: 0, clientHeight: 429, thresholdPx: 96 })).toBe(false);
+  });
+
   it("pins to the end for a turn that fits while the reader is at the bottom", () => {
     expect(threadScrollTarget(base)).toBe(600);
   });
@@ -45,6 +51,17 @@ describe("threadScrollTarget", () => {
       wasAtBottom: true,
     });
     expect(target).toBe(1000);
+  });
+
+  it("reveals the start of a turn that nearly fills the thread", () => {
+    expect(threadScrollTarget({
+      clientHeight: 429,
+      scrollTop: 0,
+      scrollHeight: 825,
+      newestHeight: 426,
+      newestTop: 365,
+      wasAtBottom: true,
+    })).toBe(32);
   });
 
   it("never asks for a negative or past-the-end position", () => {

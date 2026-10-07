@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   AVATAR_RECORDED_FIXTURE, AVATAR_SHIFT_PROGRESS_FIXTURE, AVATAR_SNOOZE_FIXTURE, avatarFixtureChat, avatarFixtureFacts,
-  avatarAttentionFixtureRequested, avatarFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
+  avatarAttentionFixtureRequested, avatarFixtureRequested, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts,
+  avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested,
   avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested,
 } from "./avatarFixture";
 
@@ -9,6 +10,7 @@ describe("avatar visual fixtures", () => {
   it("activates only for a supported fixture value", () => {
     expect(avatarFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_RECORDED_FIXTURE}`)).toBe(true);
     expect(avatarFixtureRequested(`?window=avatar&avatar-fixture=${AVATAR_SNOOZE_FIXTURE}`)).toBe(true);
+    expect(avatarFixtureRequested("?window=avatar&avatar-fixture=multi-select-scroll")).toBe(true);
     expect(avatarFixtureRequested("?window=avatar")).toBe(false);
     expect(avatarFixtureRequested("?window=avatar&avatar-fixture=other")).toBe(false);
     expect(avatarFixtureRequested("")).toBe(false);
@@ -39,6 +41,15 @@ describe("avatar visual fixtures", () => {
     const recorded = results.find((result) => result.op.op === "complete_task");
     expect(recorded?.status).toBe("recorded");
     expect((recorded!.data as { provider_result: unknown }).provider_result).toEqual({});
+  });
+
+  it("provides a dense three-selection fixture with the production task limit", () => {
+    const facts = avatarMultiSelectScrollFixtureFacts();
+    const results = avatarMultiSelectScrollFixtureChat().flatMap((turn) => turn.toolResults ?? []);
+    const display = results.find((result) => Array.isArray((result.data as { provider_result?: { tasks?: unknown } })?.provider_result?.tasks));
+    expect(facts.openTasks).toBe(23);
+    expect(facts.taskOptions).toHaveLength(23);
+    expect((display!.data as { provider_result: { tasks: unknown[] } }).provider_result.tasks).toHaveLength(20);
   });
 
   it("ships loaded facts with no session or agenda prompt", () => {

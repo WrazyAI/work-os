@@ -525,6 +525,7 @@
 .chat-task-row.is-proposed { opacity: .72; }
 .chat-task-row-main { display: flex; min-height: var(--chat-row, 40px); align-items: center; gap: var(--chat-space-2, 8px); }
 .chat-task-check {
+  position: relative;
   display: grid;
   flex: 0 0 auto;
   place-items: center;

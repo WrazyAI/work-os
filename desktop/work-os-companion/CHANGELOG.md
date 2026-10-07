@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.3
+
+- Selecting multiple tasks keeps the list reachable, and new chat replies remain visible as they arrive.
+
 ## 0.4.2
 
 - Closing a page guide now keeps it dismissed when you return, including after account sync.

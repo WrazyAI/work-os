@@ -21,12 +21,12 @@ import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCa
 import { ActivityIntervalList } from "./ActivityIntervalList";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, isThreadNearBottom, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -174,6 +174,7 @@ export default function AvatarApp(): React.ReactElement {
   // completion without a session token so TestSprite or a plain browser can
   // check the avatar's recorded-result rendering. Inert in production.
   const avatarAttentionFixture = avatarAttentionFixtureRequested(window.location.search);
+  const avatarMultiSelectScrollFixture = avatarMultiSelectScrollFixtureRequested(window.location.search);
   const avatarShiftProgressFixture = avatarShiftProgressFixtureRequested(window.location.search);
   const avatarObservedFixture = avatarObservedFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
@@ -192,6 +193,7 @@ export default function AvatarApp(): React.ReactElement {
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarObservedFixture ? avatarObservedFixtureFacts()
+    : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
     : avatarEodBubbleFixture ? avatarEodBubbleFixtureFacts()
     : avatarAgendaBubbleFixture ? avatarAgendaBubbleFixtureFacts()
@@ -209,6 +211,7 @@ export default function AvatarApp(): React.ReactElement {
     ? avatarNextStepsRecoveryFixtureChat("fixture-empty")
     : avatarNextStepsRecoveryFixture
       ? avatarNextStepsRecoveryFixtureChat()
+      : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
       : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
@@ -1353,6 +1356,30 @@ export default function AvatarApp(): React.ReactElement {
       task_id: task.id,
       task_title: task.title,
     }));
+    if (avatarMultiSelectScrollFixture) {
+      const reviewed = operations.map((operation, index) => ({
+        op: operation.op,
+        statement: operation.statement,
+        taskId: operation.task_id,
+        taskTitle: operation.task_title,
+        proposalId: `fixture-scroll-proposal-${index + 1}`,
+        enabled: true,
+      }));
+      const reviewId = `fixture-scroll-review-${Date.now()}`;
+      const streamId = `fixture-scroll-stream-${Date.now()}`;
+      setProposedTaskIds((current) => new Set([...current, ...tasks.map((task) => task.id)]));
+      setChat((current) => [...current, {
+        id: reviewId,
+        role: "assistant",
+        text: "Review the selected task completions before anything changes.",
+        operations: reviewed,
+      }, {
+        id: streamId,
+        role: "assistant",
+        text: "Your selected tasks are ready for review. New chat details should remain visible while this reply streams, and the task list stays independently scrollable for anything still open.",
+      }]);
+      return;
+    }
     setFiling(true);
     try {
       const { proposals, failures } = await apiRequest<{
@@ -1387,7 +1414,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setFiling(false);
     }
-  }, [filing]);
+  }, [avatarMultiSelectScrollFixture, filing]);
 
   const agendaDue = ["clocked_in", "active", "paused"].includes(facts.sessionState ?? "") && facts.planStatus !== "confirmed" && facts.loaded;
   const composerTarget = composerSendTarget({ agendaDue, recapEditing: recapEditMode && activityPrompt !== null });
@@ -1697,7 +1724,12 @@ export default function AvatarApp(): React.ReactElement {
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
     const newest = el.lastElementChild as HTMLElement | null;
     const previousHeight = threadMetricsRef.current?.scrollHeight ?? el.scrollHeight;
-    const wasAtBottom = previousHeight - el.scrollTop - el.clientHeight < 48;
+    const wasAtBottom = isThreadNearBottom({
+      clientHeight: el.clientHeight,
+      scrollTop: el.scrollTop,
+      scrollHeight: previousHeight,
+      thresholdPx: 96,
+    });
     const target = threadScrollTarget({
       clientHeight: el.clientHeight,
       scrollTop: el.scrollTop,
@@ -1708,7 +1740,29 @@ export default function AvatarApp(): React.ReactElement {
     });
     if (target !== null) el.scrollTo({ top: target, behavior });
     threadMetricsRef.current = { scrollHeight: el.scrollHeight };
-  }, [chat.length, thinking]);
+    const newestTurn = el.lastElementChild as HTMLElement | null;
+    if (!newestTurn || typeof ResizeObserver === "undefined") return;
+    let previousNewestHeight = newestTurn.getBoundingClientRect().height;
+    let previousScrollHeight = el.scrollHeight;
+    const observer = new ResizeObserver(() => {
+      const newestHeight = newestTurn.getBoundingClientRect().height;
+      const scrollHeight = el.scrollHeight;
+      const wasNearBottom = isThreadNearBottom({
+        clientHeight: el.clientHeight,
+        scrollTop: el.scrollTop,
+        scrollHeight: previousScrollHeight,
+        thresholdPx: 96,
+      });
+      previousScrollHeight = scrollHeight;
+      threadMetricsRef.current = { scrollHeight };
+      if (newestHeight <= previousNewestHeight) return;
+      previousNewestHeight = newestHeight;
+      if (!wasNearBottom) return;
+      el.scrollTo({ top: scrollHeight, behavior: "instant" });
+    });
+    observer.observe(newestTurn);
+    return () => observer.disconnect();
+  }, [avatarTab, chat.length, thinking]);
 
   // View more — and a fresh recap while the window is already open — lands the
   // reader on the latest item instead of the top of the thread.

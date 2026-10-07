@@ -737,15 +737,21 @@
 
 .conversation-surface-floating .avatar-context.eod { background: #fff4df; }
 .conversation-surface-floating .avatar-task-context { margin: 0; }
-.conversation-surface-floating .avatar-task-context .chat-task-card {
-  max-height: min(360px, calc(100dvh - 304px));
+.conversation-surface-floating [data-workos-tool-surface="task-selection"].chat-task-card {
+  max-height: min(360px, calc(100dvh - 320px));
+  overflow: clip;
 }
-.conversation-surface-floating .avatar-task-context .chat-task-body {
+.conversation-surface-floating [data-workos-tool-surface="task-selection"] .chat-task-body {
+  min-height: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow: visible;
 }
-.conversation-surface-floating .avatar-task-context .chat-task-list { flex: 1 1 auto; }
-.conversation-surface-floating .avatar-task-context .chat-task-footer { flex: 0 0 auto; }
+.conversation-surface-floating [data-workos-tool-surface="task-selection"] .chat-task-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overscroll-behavior-y: auto;
+}
+.conversation-surface-floating [data-workos-tool-surface="task-selection"] .chat-task-footer { flex: 0 0 auto; }
 .conversation-surface-floating .chat-turn-user { max-width: 82%; }
 .conversation-surface-floating .chat-turn .chat-markdown p { font-size: 13px; }
 .conversation-surface-floating .chat-turn-user .chat-markdown p { font-size: 12px; }

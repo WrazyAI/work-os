@@ -17,6 +17,7 @@ export {
   WORK_OS_CHAT_SOURCES,
   workOsChatCommands,
   parseChatToken,
+  isThreadNearBottom,
   threadScrollTarget,
   type ThreadScrollInput,
   isWideDraft,

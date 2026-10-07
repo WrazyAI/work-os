@@ -179,13 +179,17 @@ export interface ThreadScrollInput {
   revealPx?: number;
 }
 
+export function isThreadNearBottom(input: Pick<ThreadScrollInput, "clientHeight" | "scrollTop" | "scrollHeight"> & { thresholdPx?: number }): boolean {
+  return input.scrollHeight - input.scrollTop - input.clientHeight < (input.thresholdPx ?? 48);
+}
+
 /** Returns the scrollTop to apply, or null to leave the reader where they are. */
 export function threadScrollTarget(input: ThreadScrollInput): number | null {
   const max = Math.max(0, input.scrollHeight - input.clientHeight);
   if (input.forceBottom) return max;
   if (!input.wasAtBottom) return null;
-  if (input.newestHeight > input.clientHeight) {
-    const reveal = input.revealPx ?? 96;
+  const reveal = input.revealPx ?? 96;
+  if (input.newestHeight > input.clientHeight - reveal) {
     return Math.max(0, Math.min(input.scrollTop + input.newestTop - (input.clientHeight - reveal), max));
   }
   return max;

@@ -442,6 +442,26 @@ describe("operational visualizations", () => {
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region::after\s*\{[^}]*backdrop-filter:\s*blur/s);
   });
 
+  it("bounds floating task cards and lets thread scrolling continue past the task list", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    const chatStyles = readText(resolve(root, "src/chat/chat.css"));
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\[data-workos-tool-surface="task-selection"\]\.chat-task-card\s*\{[^}]*max-height:\s*min\(360px,\s*calc\(100dvh\s*-\s*320px\)\)[^}]*overflow:\s*clip/s);
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\[data-workos-tool-surface="task-selection"\]\s+\.chat-task-body\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*visible/s);
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\[data-workos-tool-surface="task-selection"\]\s+\.chat-task-footer\s*\{[^}]*flex:\s*0\s+0\s+auto/s);
+    expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\[data-workos-tool-surface="task-selection"\]\s+\.chat-task-list\s*\{[^}]*overscroll-behavior-y:\s*auto/s);
+    expect(chatStyles).toMatch(/\.chat-task-check\s*\{[^}]*position:\s*relative/s);
+  });
+
+  it("keeps streamed floating chat replies visible while the reader is near the tail", () => {
+    expect(avatarApp).toContain("new ResizeObserver");
+    expect(avatarApp).toContain("observer.observe(newestTurn)");
+    expect(avatarApp).toContain("thresholdPx: 96");
+    expect(avatarApp).toContain("let previousScrollHeight = el.scrollHeight");
+    expect(avatarApp).toContain("scrollHeight: previousScrollHeight");
+    expect(avatarApp).toMatch(/\}, \[avatarTab, chat\.length, thinking\]\);/);
+    expect(avatarApp).toContain('behavior: "instant"');
+  });
+
   it("animates plan-view changes and the recorded confirmation without motion overrides", () => {
     const confirmationStyles = readText(resolve(root, "src/checked-moment.css"));
     expect(workspaceStyles).toContain(".planning-session-body.is-compose");

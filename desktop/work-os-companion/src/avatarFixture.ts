@@ -25,6 +25,7 @@ import type { ActivityIntervalCard } from "./types";
 
 export const AVATAR_FIXTURE_PARAM = "avatar-fixture";
 export const AVATAR_RECORDED_FIXTURE = "recorded-completion";
+export const AVATAR_MULTI_SELECT_SCROLL_FIXTURE = "multi-select-scroll";
 export const AVATAR_SHIFT_PROGRESS_FIXTURE = "shift-progress";
 export const AVATAR_OBSERVED_FIXTURE = "observed-working";
 export const AVATAR_ATTENTION_PARAM = "avatar-attention";
@@ -75,8 +76,13 @@ export interface AvatarFixtureTurn {
 export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
-  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
+  return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_MULTI_SELECT_SCROLL_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
     || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+}
+
+export function avatarMultiSelectScrollFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_MULTI_SELECT_SCROLL_FIXTURE;
 }
 
 export function avatarRecapFixtureRequested(search: string): boolean {
@@ -316,6 +322,45 @@ export function avatarFixtureFacts(): AvatarFixtureFacts {
     planItems: [],
     lateReasonRequired: false,
   };
+}
+
+export function avatarMultiSelectScrollFixtureFacts(): AvatarFixtureFacts {
+  const taskOptions = Array.from({ length: 23 }, (_, index) => ({
+    id: `fixture-scroll-${index + 1}`,
+    title: `Review task ${String(index + 1).padStart(2, "0")} before the next handoff`,
+    dueDate: null,
+    completed: false,
+  }));
+  return { ...avatarFixtureFacts(), openTasks: taskOptions.length, taskOptions };
+}
+
+export function avatarMultiSelectScrollFixtureChat(): AvatarFixtureTurn[] {
+  const displayOperation: ProposedOperation = { op: "display_pending_tasks", statement: "Show my pending tasks.", limit: 20, enabled: false };
+  const tasks = Array.from({ length: 20 }, (_, index) => ({
+    id: `fixture-scroll-${index + 1}`,
+    title: `Review task ${String(index + 1).padStart(2, "0")} before the next handoff`,
+    due_date: null,
+    project_name: "Work OS",
+    state: "pending",
+    subtask_total: 0,
+    subtask_completed: 0,
+  }));
+  return [
+    { id: "fixture-scroll-user", role: "user", text: "Show my pending tasks.", createdAt: "2026-09-18T20:00:00.000Z" },
+    {
+      id: "fixture-scroll-pending",
+      role: "assistant",
+      text: "Here are your pending tasks for review. No changes will be made.",
+      createdAt: "2026-09-18T20:00:05.000Z",
+      operations: [displayOperation],
+      toolResults: [{
+        op: displayOperation,
+        status: "recorded",
+        message: "Pending tasks loaded.",
+        data: { provider_result: { view: "pending", tasks } },
+      }],
+    },
+  ];
 }
 
 export function avatarFixtureChat(): AvatarFixtureTurn[] {
