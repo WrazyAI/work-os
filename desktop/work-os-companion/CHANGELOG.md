@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The EOD review button now reads “Draft today’s EOD”.
+
 ## 0.4.6
 
 - The EOD review button now reads “Drafts today’s EOD”.

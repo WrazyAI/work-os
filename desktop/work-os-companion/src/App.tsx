@@ -3353,7 +3353,7 @@ export default function App() {
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
                           {reviewDay?.report && !["draft", "rejected"].includes(String(reviewDay.report.status))
                             ? <small className="eod-start-status" role="status">{String(reviewDay.report.status) === "approved" ? "This day’s report is approved." : "This day’s report is already with your manager."}</small>
-                            : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Drafts today’s EOD"}</button>}
+                            : <button className="primary" disabled={busy || eodRedrafting} onClick={() => { setEodLanding(false); void createEodDraft(reviewDay); }}>{eodRedrafting ? "Preparing…" : eodDate ? "Create draft for this day" : "Draft today’s EOD"}</button>}
                         </div>
                       </section>
                       : null}

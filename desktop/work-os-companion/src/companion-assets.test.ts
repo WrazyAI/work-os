@@ -223,7 +223,8 @@ describe("floating companion integration", () => {
 
   it("names the EOD drafting action for what it does", () => {
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toContain('"Drafts today’s EOD"');
+    expect(app).toContain('"Draft today’s EOD"');
+    expect(app).not.toContain('"Drafts today’s EOD"');
     expect(app).not.toContain('"Create EOD draft"');
   });
 });
