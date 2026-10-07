@@ -440,7 +440,6 @@ select:focus-visible {
 .capture-card,
 .focus-card,
 .panel,
-.proposal-card,
 .metric,
 .evidence-list {
   border: 1px solid var(--line);
@@ -627,7 +626,6 @@ button:disabled {
   color: var(--muted);
 }
 .focus-row > span,
-.proposal-card > span,
 .evidence-kind {
   font-size: 9px;
   text-transform: uppercase;
@@ -707,34 +705,6 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
-}
-.proposal-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.proposal-card {
-  padding: 20px;
-}
-.proposal-card h3 {
-  font: 600 17px/1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-.proposal-card p {
-  color: var(--muted);
-  font-size: 11px;
-}
-.proposal-card > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-  margin-top: 22px;
-}
-.proposal-card button {
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
 }
 .metric-grid {
   display: grid;
@@ -1359,9 +1329,6 @@ button:disabled {
   .metric-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .proposal-grid {
-    grid-template-columns: 1fr;
-  }
   .hero-copy {
     max-width: 70%;
   }
@@ -1545,7 +1512,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .capture-card,
 .focus-card,
 .panel,
-.proposal-card,
 .evidence-list,
 .daily-goal-card,
 .task-records {
@@ -1556,7 +1522,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .capture-card,
 .focus-card,
 .panel,
-.proposal-card,
 .daily-goal-card {
   transition: border-color 0.22s var(--ease-product), box-shadow 0.22s var(--ease-product), transform 0.22s var(--ease-product);
 }
@@ -2390,11 +2355,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .pulse-schedule small,
 .pulse-timeline p,
 .pulse-stats small { font-size: 9px; }
-.review-flow small,
-.proposal-card > header span,
-.proposal-compare section > span,
-.proposal-compare dl div,
-.proposal-card > footer small { font-size: 9px; }
 
 @keyframes pageEnter {
   from { opacity: 0; transform: translateY(8px); }
@@ -2911,250 +2871,15 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .pulse-provider { grid-template-columns: auto 1fr; }
   .pulse-provider .pulse-provider-facts { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.review-page { max-width: 1040px; }
-.review-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 28px;
-}
-.review-count {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 30px;
-  padding: 10px 13px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--paper);
-  white-space: nowrap;
-}
-.review-count strong {
-  font: 650 29px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  color: #739e3d;
-}
-.review-count span {
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.3;
-}
-.review-control {
-  display: grid;
-  grid-template-columns: minmax(230px, 0.7fr) minmax(440px, 1.3fr);
-  align-items: center;
-  gap: 22px;
-  margin-bottom: 13px;
-  padding: 17px 19px;
-  border: 1px solid #cfdbbf;
-  border-radius: 14px;
-  background: linear-gradient(115deg, rgba(184, 255, 90, 0.12), rgba(245, 244, 237, 0.9) 55%);
-}
-.review-control-copy {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-.review-control-copy > svg {
-  flex: 0 0 auto;
-  color: #668f34;
-}
-.review-control-copy div {
-  display: grid;
-  gap: 3px;
-}
-.review-control-copy strong { font-size: 11px; }
-.review-control-copy small { color: var(--muted); font-size: 9px; }
-.review-flow {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-  align-items: center;
-  gap: 6px;
-}
-.review-flow > svg { color: #afb1a8; }
-.review-flow span {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  text-align: center;
-}
-.review-flow i {
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #cbccc4;
-  border-radius: 50%;
-  background: var(--paper);
-  color: var(--muted);
-  font: 600 8px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  font-style: normal;
-}
-.review-flow .complete i {
-  border-color: #a5c67f;
-  background: #e5f5d2;
-  color: #507523;
-}
-.review-flow .current i {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #fff;
-  box-shadow: 0 0 0 4px rgba(23, 25, 20, 0.09);
-}
-.review-flow small { color: var(--muted); font-size: 7px; }
-.proposal-list {
-  display: grid;
-  gap: 12px;
-}
-.proposal-card {
-  padding: 0;
-  overflow: hidden;
-  box-shadow: 0 8px 28px rgba(23, 25, 20, 0.045);
-}
-.proposal-card > header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 13px;
-  padding: 17px 19px;
-  border-bottom: 1px solid var(--line);
-}
-.proposal-index {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--ink);
-  color: var(--signal);
-  font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-.proposal-card > header > div:nth-child(2) { display: grid; gap: 4px; }
-.proposal-card > header span {
-  color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.proposal-card > header h3 {
-  margin: 0;
-  font: 600 15px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-.proposal-card > header em {
-  border: 1px solid #d7d4b5;
-  border-radius: 30px;
-  background: #f1eed7;
-  padding: 6px 9px;
-  color: #70682c;
-  font-size: 8px;
-  font-style: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.proposal-compare {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: 12px;
-  margin: 0 !important;
-  padding: 17px 19px;
-  background: #eeede6;
-}
-.proposal-compare > svg {
-  align-self: center;
-  color: #9b9e95;
-}
-.proposal-compare section {
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--paper);
-}
-.proposal-compare section > span {
-  display: block;
-  margin-bottom: 9px;
-  color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-.proposal-compare blockquote {
-  margin: 0;
-  color: #4e5149;
-  font: 500 11px/1.55 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-.proposal-compare blockquote:before { content: "“"; color: #8fbe51; }
-.proposal-compare blockquote:after { content: "”"; color: #8fbe51; }
-.proposal-compare section > strong { font: 600 12px/1.45 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
-.proposal-compare dl { display: grid; gap: 6px; margin: 11px 0 0; }
-.proposal-compare dl div { display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 8px; }
-.proposal-compare dt { color: var(--muted); }
-.proposal-compare dd { margin: 0; font-weight: 600; text-align: right; }
-.proposal-card > footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 13px 19px;
-}
-.proposal-card > footer small {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 8px;
-}
-.proposal-card > footer div { display: flex; gap: 7px; }
-.proposal-card > footer button {
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
-}
-.review-empty {
-  min-height: 310px;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  text-align: center;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--paper);
-}
-.review-empty > div {
-  width: 58px;
-  height: 58px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 14px;
-  border-radius: 50%;
-  background: #e2f6c9;
-  color: #5f8e29;
-  box-shadow: 0 0 0 9px rgba(184, 255, 90, 0.1);
-}
-.review-empty > span { color: var(--muted); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
-.review-empty h3 { margin: 7px 0; font: 600 22px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; }
-.review-empty p { max-width: 390px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 
 @media (max-width: 850px) {
   .pulse-visual { grid-template-columns: 124px minmax(0, 1fr); gap: 14px; }
   .pulse-orbit { width: 120px; height: 120px; }
-  .review-heading { align-items: flex-start; }
-  .review-control { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .pulse-visual { grid-template-columns: 1fr; justify-items: center; }
   .pulse-timeline { width: 100%; }
   .pulse-stats { grid-template-columns: 1fr; }
-  .review-heading { display: block; }
-  .review-count { width: max-content; }
-  .review-flow { overflow-x: auto; padding: 6px 0; }
-  .proposal-compare { grid-template-columns: 1fr; }
-  .proposal-compare > svg { transform: rotate(90deg); justify-self: center; }
-  .proposal-card > footer { align-items: flex-start; flex-direction: column; }
-  .proposal-card > footer div { width: 100%; }
-  .proposal-card > footer button { flex: 1; }
 }
 .card-title button.primary {
   border: 1px solid #a6e852;
@@ -4562,10 +4287,7 @@ body.modal-open {
 .goal-independence,
 .carry-alert small,
 .carry-alert em,
-.today-progress,
-.review-count span,
-.review-control-copy small,
-.proposal-card > footer small { font-size: 10.5px; line-height: 1.5; }
+.today-progress { font-size: 10.5px; line-height: 1.5; }
 .subtask-menu > button,
 .move-target-menu > button,
 .carry-flyout article button { font-size: 10.5px; }
@@ -4574,10 +4296,6 @@ body.modal-open {
 .today-goal span,
 .carry-flyout > header span,
 .move-target-menu > span,
-.review-flow small,
-.proposal-card > header span,
-.proposal-compare section > span,
-.proposal-compare dl div,
 .pulse-orbit small,
 .pulse-orbit span,
 .pulse-schedule small,

@@ -38,7 +38,6 @@ function input(overrides: Partial<Parameters<typeof buildWorkdayDashboardModel>[
       { id: "done", title: "Done task", completed: true, due_date: "2026-09-20" },
     ],
     carryover: [{ id: "old", title: "Old task", completed: false, due_date: "2026-09-19" }],
-    reviews: 2,
     focus: "Finish the release",
     focusSource: "Your focus note",
     niftySync: { fresh: true, syncing: false, syncedAt: "2026-09-20T12:00:00Z" },
@@ -50,7 +49,7 @@ describe("buildWorkdayDashboardModel", () => {
   it("projects truthful task flow metrics across dashboard surfaces", () => {
     const model = buildWorkdayDashboardModel(input());
     expect(model.state).toBe("off_shift");
-    expect(model.metrics).toMatchObject({ planned: 2, open: 1, completed: 1, carryover: 1, overdue: 1, reviews: 2 });
+    expect(model.metrics).toMatchObject({ planned: 2, open: 1, completed: 1, carryover: 1, overdue: 1 });
     expect(model.sync.label).toBe("Synced");
   });
 

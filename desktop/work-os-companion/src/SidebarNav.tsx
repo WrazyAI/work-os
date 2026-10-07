@@ -24,7 +24,6 @@ export type SidebarNavProps = {
   onNavigate: (view: SidebarView) => void;
   onNewChat: () => void;
   onSignOut?: () => void;
-  reviewCount?: number;
   initiallyCollapsed?: boolean;
 };
 
@@ -88,7 +87,6 @@ function SidebarRow({
   icon: Icon,
   label,
   active = false,
-  badge,
   hint,
   onClick,
   className = "",
@@ -96,7 +94,6 @@ function SidebarRow({
   icon: LucideIcon;
   label: string;
   active?: boolean;
-  badge?: number;
   hint?: string | undefined;
   onClick?: () => void;
   className?: string;
@@ -115,7 +112,6 @@ function SidebarRow({
     >
       <span className="sidebar-row-icon"><Icon size={18} strokeWidth={1.85} /></span>
       <span className="sidebar-row-copy">{label}</span>
-      {badge !== undefined && badge > 0 && <span className="sidebar-row-badge">{badge > 99 ? "99+" : badge}</span>}
     </button>
   );
 }
@@ -209,7 +205,6 @@ export default function SidebarNav({
   onNavigate,
   onNewChat,
   onSignOut,
-  reviewCount = 0,
   initiallyCollapsed = true,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
@@ -307,7 +302,7 @@ export default function SidebarNav({
         <nav className="sidebar-navigation" aria-label="Work OS">
           <SidebarGlideGroup className="nav-group nav-core">
             {primary.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} badge={id === "review" ? reviewCount : undefined} onClick={() => onNavigate(id)} />
+              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
             ))}
           </SidebarGlideGroup>
           <SidebarGlideGroup className="nav-group nav-context">

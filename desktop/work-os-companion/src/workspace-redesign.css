@@ -1024,7 +1024,6 @@ body {
 .capture-card,
 .focus-card,
 .panel,
-.proposal-card,
 .metric,
 .evidence-list {
   border-color: var(--line);

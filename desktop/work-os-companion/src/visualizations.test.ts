@@ -53,11 +53,12 @@ describe("operational visualizations", () => {
     expect(app).toContain('className={`task-state ${state}`}');
   });
 
-  it("shows the human review barrier before provider write-back", () => {
-    expect(app).toContain("You are the write barrier.");
-    expect(app).toContain("No provider change has been made.");
-    expect(app).toContain("What you said");
-    expect(styles).toContain(".review-flow");
+  it("keeps the EOD Review page on the EOD flow without a proposal queue", () => {
+    expect(app).not.toContain("Human in the loop");
+    expect(app).not.toContain("ReviewWorkspace");
+    expect(app).not.toContain("Reviews pending");
+    expect(styles).not.toContain(".review-flow");
+    expect(styles).not.toContain(".proposal-card");
   });
 
   it("retains reduced-motion support for chart transitions", () => {

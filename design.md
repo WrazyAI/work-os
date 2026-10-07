@@ -975,7 +975,9 @@ suggestion as an actionable row — `Mark done` / `Add task` / `Add subtask`,
 plus `Edit` (inline title edit) and `Skip` for new work. Each decision files
 through the same owner-scoped proposal endpoint as any other review card;
 nothing is ever auto-applied, and a skipped suggestion is never re-proposed
-for the same task and operation. The moment is part of the shared workday
+for the same task and operation. The companion's EOD Review page renders only
+the end-of-day flow: suggestions are never collected into a review queue
+there, and no dashboard metric, sidebar badge, or stage count advertises one. The moment is part of the shared workday
 conversation: it persists across reloads and renders in both the floating
 companion and the in-app chat, and a cross-window sync can never drop a card
 mid-decision (the local card wins when the incoming turn predates it). A turn

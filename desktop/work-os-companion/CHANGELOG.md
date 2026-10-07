@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.4
+
+- The EOD Review page now shows only your end-of-day report; the old suggestions queue and its counters are gone.
+
 ## 0.4.3
 
 - Selecting multiple tasks keeps the list reachable, and new chat replies remain visible as they arrive.

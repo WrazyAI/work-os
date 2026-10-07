@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react";
-import { Activity, AlertTriangle, CalendarDays, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, FileCheck2, ListChecks, MoreHorizontal, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Activity, AlertTriangle, CalendarDays, Check, CheckCircle2, ChevronRight, CirclePause, CirclePlay, Clock3, ListChecks, MoreHorizontal, Pencil, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { formatWorkOsDate, formatWorkOsTime } from "./dateFormat";
 import { dashboardRemainingLabel, type WorkdayDashboardModel } from "./dashboardModel";
 import { MascotPet, MascotStatus } from "./MascotPet";
@@ -11,7 +11,6 @@ export type DashboardTaskView = "today" | "unfinished" | "completed";
 
 export interface DashboardSurfaceActions {
   onOpenTasks: (view?: DashboardTaskView) => void;
-  onOpenReviews: () => void;
   onOpenCarryover: () => void;
   onOpenFocus: () => void;
   onOpenTask: (task: TaskRow) => void;
@@ -154,7 +153,7 @@ function PulseTimeline({ model }: { model: WorkdayDashboardModel }) {
   </div>;
 }
 
-export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask }: OffShiftDashboardProps) {
+export function OffShiftDashboard({ model, tasks, currentDate, busy = false, canClockIn = true, attendanceControlsSupported = true, goalSaveState = "saved", taskFlight, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onClockIn, onRetryPendingTask, onDismissPendingTask }: OffShiftDashboardProps) {
   const taskCopy = model.metrics.carryover > 0
     ? { title: "Start by clearing the oldest decision", body: `${model.metrics.carryover} unfinished task${model.metrics.carryover === 1 ? "" : "s"} is waiting from an earlier workday.` }
     : { title: "Your agenda is open", body: "Choose a first priority or use the composer below to add one without clocking in." };
@@ -182,7 +181,6 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
       <DashboardMetric icon={ListChecks} label="Planned today" value={model.metrics.planned} detail={model.metrics.open ? `${model.metrics.open} still open` : "Plan your first task"} onClick={() => onOpenTasks("today")} tone="signal" />
       <DashboardMetric icon={AlertTriangle} label="Carryover" value={model.metrics.carryover} detail={model.metrics.carryover ? "Needs a decision" : "Nothing carried forward"} onClick={model.metrics.carryover ? onOpenCarryover : undefined} tone={model.metrics.carryover ? "warning" : "quiet"} />
       <DashboardMetric icon={CheckCircle2} label="Completed today" value={model.metrics.completed} detail={model.metrics.completed ? "Review the record" : "Finish a task first"} onClick={model.metrics.completed ? () => onOpenTasks("completed") : undefined} tone="signal" />
-      <DashboardMetric icon={FileCheck2} label="Reviews pending" value={model.metrics.reviews} detail={model.metrics.reviews ? "Needs your decision" : "Queue is clear"} onClick={model.metrics.reviews ? onOpenReviews : undefined} tone={model.metrics.reviews ? "warning" : "quiet"} />
     </section>
 
     <section className="dashboard-lower-grid">
@@ -192,7 +190,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
   </main>;
 }
 
-export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenReviews, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
+export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks, currentDate, busy = false, canPause = false, canClockOut = true, attendanceControlsSupported = true, observedOnly = false, goalSaveState = "saved", taskFlight, onRetryGoalSave, onOpenTasks, onOpenCarryover, onOpenFocus, onOpenTask, onToggleTask, onPause, onClockOut, onAddTask, onRetryPendingTask, onDismissPendingTask }: ActiveWorkdayDashboardProps) {
   const [tab, setTab] = useState<"today" | "previous" | "other">("today");
   const sourceTasks = tab === "today" ? tasks.filter((task) => task.completed !== true) : tab === "previous" ? previousTasks : otherTasks;
   const tabLabel = tab === "today" ? "Today’s queue" : tab === "previous" ? "Yesterday’s carryover" : "Older carryover";
@@ -207,7 +205,7 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
 
     <section className="active-summary-grid">
       <section className="dashboard-panel active-focus-panel"><header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><Sparkles size={13} /> Today’s focus</span><h3>{model.focus.text}</h3></div><button className="dashboard-secondary-action" onClick={onOpenFocus}><Pencil size={13} /> Update</button></header><p>{model.focus.source}</p><WorkdayFlow model={model} /></section>
-      <section className="dashboard-panel active-summary-panel"><header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><ListChecks size={13} /> Workday at a glance</span><h3>Keep the queue moving.</h3></div><button className="dashboard-icon-link" aria-label="Open reviews" onClick={onOpenReviews}><ChevronRight size={16} /></button></header><div className="active-summary-facts"><span><strong>{model.metrics.completed}</strong><small>completed</small></span><span><strong>{model.metrics.open}</strong><small>open</small></span><span><strong className={model.metrics.overdue ? "is-danger" : ""}>{model.metrics.overdue}</strong><small>overdue</small></span><span><strong>{model.metrics.reviews}</strong><small>reviews</small></span></div><button className="dashboard-inline-link active-summary-action" onClick={() => onOpenTasks("unfinished")}>Review unfinished work <ChevronRight size={14} /></button></section>
+      <section className="dashboard-panel active-summary-panel"><header className="dashboard-panel-heading"><div><span className="dashboard-eyebrow"><ListChecks size={13} /> Workday at a glance</span><h3>Keep the queue moving.</h3></div></header><div className="active-summary-facts"><span><strong>{model.metrics.completed}</strong><small>completed</small></span><span><strong>{model.metrics.open}</strong><small>open</small></span><span><strong className={model.metrics.overdue ? "is-danger" : ""}>{model.metrics.overdue}</strong><small>overdue</small></span></div><button className="dashboard-inline-link active-summary-action" onClick={() => onOpenTasks("unfinished")}>Review unfinished work <ChevronRight size={14} /></button></section>
     </section>
 
     <section className="dashboard-panel active-task-panel"><header className="active-task-panel-header"><div><span className="dashboard-eyebrow"><ListChecks size={13} /> Task queue</span><h3>{tabLabel}</h3></div><div className="active-task-panel-actions"><button className="dashboard-secondary-action" onClick={onAddTask}><Plus size={14} /> Add task</button><button className="dashboard-inline-link" onClick={() => onOpenTasks("today")}>Full workspace <ChevronRight size={14} /></button></div></header><div className="active-task-tabs" role="tablist" aria-label="Active workday tasks"><button role="tab" aria-selected={tab === "today"} className={tab === "today" ? "active" : ""} onClick={() => setTab("today")}>Today <em>{tasks.filter((task) => task.completed !== true).length}</em></button><button role="tab" aria-selected={tab === "previous"} className={tab === "previous" ? "active" : ""} onClick={() => setTab("previous")}>Yesterday <em>{previousTasks.length}</em></button><button role="tab" aria-selected={tab === "other"} className={tab === "other" ? "active" : ""} onClick={() => setTab("other")}>Older <em>{otherTasks.length}</em></button></div><div className="active-task-queue"><DashboardTaskQueue tasks={sourceTasks} currentDate={currentDate} emptyTitle={tab === "today" ? "Today is clear" : "Nothing left behind"} emptyBody={tab === "today" ? "Add the next task you want to move forward." : "Earlier work is complete or already planned."} busy={busy} taskFlight={taskFlight} onOpenTask={onOpenTask} onToggleTask={onToggleTask} onRetryPendingTask={onRetryPendingTask} onDismissPendingTask={onDismissPendingTask} /></div><footer className="dashboard-panel-footer"><span>{model.metrics.carryover ? `${model.metrics.carryover} task${model.metrics.carryover === 1 ? "" : "s"} still needs a decision.` : "Changes save to your workday record."}</span><button className="dashboard-inline-link" onClick={onOpenCarryover}>Review carryover <ChevronRight size={14} /></button></footer></section>
