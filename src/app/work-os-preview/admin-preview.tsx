@@ -40,10 +40,12 @@ function overviewFixture(state: PreviewState) {
       recentActivity: [],
       attention: [],
       series: overviewSeries(0),
+      timeSeries: [],
       freshness: { niftySyncedAt: null, niftyTasksToday: 0, worktivityObservedAt: null, githubLastEventAt: null, githubEventsToday: 0, lastPlanAt: null, lastReportSubmittedAt: null },
       readiness: { status: "ready", ready: true, issues: [], checks: { people: { active: 0 }, tasks: { open: 0 }, organization: { activeTeams: 0, activeSchedules: 0 } } },
     };
   }
+  const series = overviewSeries(1);
   const people = PEOPLE.map((person, index) => ({
     personId: person.id,
     displayName: person.name,
@@ -97,7 +99,8 @@ function overviewFixture(state: PreviewState) {
       ],
       checks: { people: { active: 4 }, tasks: { open: 41 }, organization: { activeTeams: 2, activeSchedules: 3 } },
     },
-    series: overviewSeries(1),
+    series,
+    timeSeries: timeSeriesForDates(series.map((point) => point.date)),
     freshness: {
       niftySyncedAt: `${TODAY}T15:40:00.000Z`,
       niftyTasksToday: 312,
@@ -120,6 +123,25 @@ function overviewSeries(scale: number) {
       completed: scale === 0 ? 0 : 2 + (index % 5),
       updates: scale === 0 ? 0 : 1 + (index % 3),
       evidence: scale === 0 ? 0 : 4 + (index % 6),
+    };
+  });
+}
+
+/** Deterministic stacked time series: three or four teammates with different
+ * minutes each day, so segments, hover, and legend can be reviewed by hand.
+ * The empty preview state returns no points at all, so the pages show their
+ * honest empty copy instead of an empty chart. */
+function timeSeriesForDates(dates: string[]) {
+  return dates.map((date, index) => {
+    const people = PEOPLE.slice(0, 3 + (index % 2)).map((person, personIndex) => ({
+      personId: person.id,
+      name: person.name,
+      minutes: 30 + ((index * 37 + personIndex * 53) % 150),
+    }));
+    return {
+      date,
+      totalMinutes: people.reduce((sum, person) => sum + person.minutes, 0),
+      people,
     };
   });
 }
@@ -161,6 +183,7 @@ function insightsFixture(state: PreviewState) {
     previous: { outcomesCompleted: 28, outcomesLate: 3, updates: 55, substantiveUpdates: 38, eodSubmitted: 21, eodApproved: 18, eodRejected: 2, planned: 26, plannedCompleted: 18, trackedMinutes: 2650, evidenceOutput: 10, evidenceActivity: 96, sessionsNeedingCorrection: 2, activePeople: 4 },
     people,
     series,
+    timeSeries: empty ? [] : timeSeriesForDates(series.map((point) => point.date)),
     updateKinds: empty ? [] : [
       { kind: "material_progress", count: 18 },
       { kind: "blocked", count: 4 },

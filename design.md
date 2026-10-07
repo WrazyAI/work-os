@@ -1254,8 +1254,12 @@ Administration endpoints are admin- or manager-scoped and organization-scoped
 on every query, with bounded limits and no raw storage paths. Observed activity
 keeps its cool observation treatment and its labels; employee-authored updates,
 task records, provider evidence, and review state remain visually distinct.
-Empty, loading, and degraded states follow §9's state matrix: skeletons reserve
-geometry, empty states name the next action, and errors stay local.
+The Overview and Insights day charts stack observed work time by teammate:
+each segment is one employee's observed minutes for that day, sized by time
+worked and named in the hover tooltip and legend, and activity context is never
+completion. Empty, loading, and degraded states follow §9's state matrix:
+skeletons reserve geometry, empty states name the next action, and errors stay
+local.
 
 ### 16.4 Evidence integrations
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { formatDuration } from "./ui";
 
 /** Recharts wrappers themed with the admin design tokens.
  *
@@ -67,6 +68,155 @@ export function TrendBars({ data, series, ariaLabel }: {
           ))}
         </BarChart>
       </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Categorical palette for stacked-by-person charts: semantic workspace
+ * tokens where one exists, plus fixed mid-tone hexes chosen to stay legible
+ * against both the light and dark workspace surfaces. */
+export const CHART_PALETTE = [
+  "var(--accent)",
+  "var(--status-observed)",
+  "var(--status-warn)",
+  "var(--status-error)",
+  "#8b5cf6",
+  "#d946ef",
+  "#0d9488",
+  "#f97316",
+  "#6366f1",
+  "var(--text-tertiary)",
+] as const;
+
+export interface StackedTimePerson {
+  personId: string;
+  name: string;
+  minutes: number;
+}
+
+export interface StackedTimePoint {
+  date: string;
+  totalMinutes: number;
+  people: StackedTimePerson[];
+}
+
+function dayLabel(date: string) {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime())
+    ? date
+    : parsed.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+interface StackedTooltipEntry {
+  name?: string | number;
+  value?: number | string;
+  color?: string;
+  fill?: string;
+  payload?: { totalMinutes?: number } | null;
+}
+
+/** Hover content for the stacked time chart: every teammate with minutes that
+ * day, strongest first, then the day's total. */
+function StackedTimeTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: ReadonlyArray<StackedTooltipEntry>;
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  const entries = payload
+    .filter((entry) => Number(entry.value ?? 0) > 0)
+    .sort((left, right) => Number(right.value ?? 0) - Number(left.value ?? 0));
+  if (!entries.length) return null;
+  const total = Number(payload[0]?.payload?.totalMinutes ?? entries.reduce((sum, entry) => sum + Number(entry.value ?? 0), 0));
+  return (
+    <div style={TOOLTIP_STYLE}>
+      <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
+      <ul style={{ margin: "5px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 3 }}>
+        {entries.map((entry, index) => (
+          <li key={`${String(entry.name)}:${index}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <span aria-hidden style={{ width: 8, height: 8, borderRadius: 2, background: entry.color ?? entry.fill ?? "var(--text-tertiary)" }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
+            </span>
+            <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{formatDuration(Number(entry.value ?? 0) * 60)}</span>
+          </li>
+        ))}
+      </ul>
+      <p style={{ margin: "5px 0 0", color: "var(--text-tertiary)" }}>Total {formatDuration(total * 60)}</p>
+    </div>
+  );
+}
+
+/** Stacked daily bars where each segment is one teammate's observed work time.
+ * The legend and hover tooltip name the person behind every color; observed
+ * time is activity context, never completion. Renders nothing when the range
+ * holds no minutes so the caller can show honest empty copy. */
+export function StackedTimeBars({ data, ariaLabel }: {
+  data: StackedTimePoint[];
+  ariaLabel: string;
+}) {
+  const reduced = useReducedMotion();
+  const totals = new Map<string, { personId: string; name: string; minutes: number }>();
+  for (const point of data) {
+    for (const person of point.people) {
+      const existing = totals.get(person.personId);
+      if (existing) existing.minutes += person.minutes;
+      else totals.set(person.personId, { personId: person.personId, name: person.name, minutes: person.minutes });
+    }
+  }
+  const people = [...totals.values()]
+    .filter((person) => person.minutes > 0)
+    .sort((left, right) => right.minutes - left.minutes || left.name.localeCompare(right.name))
+    .map((person, index) => ({ ...person, color: CHART_PALETTE[index % CHART_PALETTE.length] }));
+  if (!people.length) return null;
+  const rows = data.map((point) => {
+    const row: Record<string, string | number> = { label: dayLabel(point.date), totalMinutes: point.totalMinutes };
+    for (const person of point.people) row[person.personId] = person.minutes;
+    return row;
+  });
+  return (
+    <div className="w-full">
+      <div role="img" aria-label={ariaLabel} className="h-[190px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 6, right: 6, bottom: 0, left: -18 }} barCategoryGap="26%">
+            <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={AXIS_TICK} interval="preserveStartEnd" />
+            <YAxis
+              allowDecimals={false}
+              tickLine={false}
+              axisLine={false}
+              tick={AXIS_TICK}
+              width={36}
+              tickFormatter={(value) => {
+                const minutes = Number(value);
+                if (!minutes) return "0";
+                if (minutes % 60 === 0) return `${minutes / 60}h`;
+                return `${(minutes / 60).toFixed(1)}h`;
+              }}
+            />
+            <Tooltip content={<StackedTimeTooltip />} cursor={{ fill: "var(--accent-subtle)" }} isAnimationActive={false} />
+            {people.map((person) => (
+              <Bar
+                key={person.personId}
+                dataKey={person.personId}
+                stackId="time"
+                name={person.name}
+                fill={person.color}
+                isAnimationActive={!reduced}
+                maxBarSize={22}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5" aria-label="Chart legend: employees by color">
+        {people.map((person) => (
+          <li key={person.personId} className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)]">
+            <span aria-hidden className="size-2.5 shrink-0 rounded-[3px]" style={{ background: person.color }} />
+            {person.name}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

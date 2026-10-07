@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys, type AdminOverview } from "./api";
-import { CHART_COLORS, TrendBars } from "./charts";
+import { StackedTimeBars } from "./charts";
 import {
   AdminCard,
   Avatar,
@@ -87,31 +87,26 @@ export default function AdminOverviewPage() {
   });
   const visiblePeople = people.slice(0, 10);
   const readiness = data.readiness;
+  const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
 
   return (
     <div className="grid gap-5">
-      {/* Activity — lead with the visual, then the attention list and tables */}
+      {/* Time worked — lead with the visual, then the attention list and tables */}
       <AdminCard>
         <SectionHeading
-          icon={Activity}
-          title="Activity"
-          detail="Completed outcomes, recorded updates, and evidence over the last 14 days."
+          icon={Clock3}
+          title="Time worked"
+          detail="Observed work time per day, split by teammate."
           action={<span className="text-[11px] text-[var(--text-tertiary)]">Updated {relativeTime(data.generatedAt)}</span>}
         />
-        <TrendBars
-          ariaLabel="Daily completed outcomes, recorded updates, and evidence for the last 14 days"
-          data={data.series.map((point) => ({
-            label: new Date(`${point.date}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-            completed: point.completed,
-            updates: point.updates,
-            evidence: point.evidence,
-          }))}
-          series={[
-            { key: "completed", label: "Completed", color: CHART_COLORS.accent },
-            { key: "updates", label: "Updates", color: CHART_COLORS.observed },
-            { key: "evidence", label: "Evidence", color: CHART_COLORS.neutral },
-          ]}
-        />
+        {hasTimeData ? (
+          <StackedTimeBars
+            ariaLabel="Observed work time per day for the last 14 days, split by teammate"
+            data={data.timeSeries}
+          />
+        ) : (
+          <p className="text-[12.5px] text-[var(--text-tertiary)]">No observed work time in the last 14 days.</p>
+        )}
       </AdminCard>
 
       {/* Data sources — what feeds the record, how fresh, and today's volume */}

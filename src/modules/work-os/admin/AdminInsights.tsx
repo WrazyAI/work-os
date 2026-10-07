@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ArrowRight, Gauge, ListChecks, Users } from "lucide-react";
+import { Activity, ArrowRight, Clock3, Gauge, ListChecks, Users } from "lucide-react";
 import { adminFetch, adminKeys, type AdminInsights, type AdminInsightRange } from "./api";
-import { CHART_COLORS, TrendBars } from "./charts";
+import { CHART_COLORS, StackedTimeBars, TrendBars } from "./charts";
 import {
   AdminCard,
   Avatar,
@@ -69,6 +69,7 @@ export default function AdminInsightsPage() {
   const peopleRows = personId ? data.people.filter((row) => row.personId === personId) : data.people;
   const selectedRow = selectedPerson ? data.people.find((row) => row.personId === selectedPerson) ?? null : null;
   const maxAppMinutes = Math.max(1, ...data.topApps.map((app) => app.minutes));
+  const hasTimeData = data.timeSeries.some((point) => point.totalMinutes > 0);
 
   return (
     <div className="grid gap-5">
@@ -144,6 +145,24 @@ export default function AdminInsightsPage() {
         <Metric label="Tracked context" value={totals.trackedMinutes >= 60 ? formatDuration(totals.trackedMinutes * 60) : `${totals.trackedMinutes}m`} detail={comparison(totals.trackedMinutes, data.previous.trackedMinutes, "m")} tone="observed" />
         <Metric label="Sessions to fix" value={totals.sessionsNeedingCorrection} detail={totals.sessionsNeedingCorrection ? "Unresolved time excluded" : "No corrections open"} tone={totals.sessionsNeedingCorrection ? "warn" : "neutral"} />
       </div>
+
+      {/* Time worked — observed work time per day, split by teammate, leads the
+          record charts; the Daily record chart below keeps outcomes/updates/EOD. */}
+      <AdminCard>
+        <SectionHeading
+          icon={Clock3}
+          title="Time worked"
+          detail={`Observed work time per day, split by teammate, ${data.from} to ${data.through}.`}
+        />
+        {hasTimeData ? (
+          <StackedTimeBars
+            ariaLabel={`Observed work time per day, split by teammate, from ${data.from} to ${data.through}`}
+            data={data.timeSeries}
+          />
+        ) : (
+          <p className="text-[12.5px] text-[var(--text-tertiary)]">No observed work time in this range.</p>
+        )}
+      </AdminCard>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <AdminCard>

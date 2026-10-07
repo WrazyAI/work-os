@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
+import { timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 
 type Json = Record<string, any>;
@@ -210,6 +211,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
   }
 
   const people = ((peopleResult.data ?? []) as Json[]).filter((person) => !allowedSet || allowedSet.has(String(person.id)));
+  const nameById = new Map(people.map((person) => [String(person.id), String(person.display_name)]));
   const events = (eventsResult.data ?? []) as Json[];
   const checkIns = (checkInsResult.data ?? []) as Json[];
   const reports = (reportsResult.data ?? []) as Json[];
@@ -438,6 +440,13 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     ),
   }));
 
+  const timeSeries = timeSeriesFromSessions(
+    currentSessions,
+    dateRange(current.from, current.through),
+    now,
+    (personId) => nameById.get(personId) ?? null,
+  );
+
   const outstandingDays = await countOutstandingDays(organizationId, now, { personId: personFilter, allowedSet });
 
   return {
@@ -448,6 +457,7 @@ export async function getAdminInsights(access: WorkOsAccess, range: AdminInsight
     previous: previousTotals,
     people: peopleRows,
     series,
+    timeSeries,
     updateKinds: [...updateKindCounts.entries()].map(([kind, count]) => ({ kind, count })).sort((left, right) => right.count - left.count),
     topApps: [...topApps.entries()].map(([name, minutes]) => ({ name, minutes: Math.round(minutes) })).sort((left, right) => right.minutes - left.minutes).slice(0, 6),
     overdueOpen: overdueResult.count,

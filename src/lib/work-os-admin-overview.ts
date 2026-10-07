@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate, type OutstandingEodDay } from "@/lib/work-os-eod";
+import { observedSecondsForSession, timeSeriesFromSessions, type AdminTimeSeriesPoint } from "@/lib/work-os-admin-time-series";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { loadWorkOsReadinessReport } from "@/lib/work-os-readiness-report";
 
@@ -85,6 +86,8 @@ export interface AdminOverview {
   attention: AdminOverviewAttention[];
   /** Fourteen-day daily counts for the overview trend chart. */
   series: Array<{ date: string; completed: number; updates: number; evidence: number }>;
+  /** Fourteen-day observed work time split by teammate for the stacked time chart. */
+  timeSeries: AdminTimeSeriesPoint[];
   /** When each source last delivered data, so "is it syncing?" is answerable
    * without reading the database. */
   freshness: {
@@ -128,15 +131,6 @@ function isoOrNull(value: unknown): string | null {
   if (!value) return null;
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function observedSecondsForSession(session: Json, now: Date): number {
-  const start = Date.parse(String(session.clocked_in_at ?? ""));
-  if (!Number.isFinite(start)) return 0;
-  const rawEnd = session.clocked_out_at ? Date.parse(String(session.clocked_out_at)) : now.getTime();
-  if (!Number.isFinite(rawEnd)) return 0;
-  const paused = Number(session.paused_seconds ?? 0) || 0;
-  return Math.max(0, Math.round((rawEnd - start) / 1000) - paused);
 }
 
 /** Groups outstanding-EOD candidates per person and classifies each day with
@@ -187,6 +181,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     seriesEventsResult,
     seriesCheckInsResult,
     seriesEvidenceResult,
+    timeSeriesSessionsResult,
     freshnessNiftyResult,
     freshnessAttendanceResult,
     freshnessGithubResult,
@@ -262,6 +257,11 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     db.from("work_evidence").select("evidence_date")
       .eq("organization_id", organizationId)
       .gte("evidence_date", addDaysIso(date, -13)).lte("evidence_date", date).limit(2000),
+    // Fourteen-day observed work time per person for the stacked time chart.
+    db.from("work_sessions")
+      .select("id,person_id,shift_date,clocked_in_at,clocked_out_at,paused_seconds")
+      .eq("organization_id", organizationId)
+      .gte("shift_date", addDaysIso(date, -13)).lte("shift_date", date),
     // Source freshness: when each stream last delivered anything.
     db.from("work_projects").select("synced_at")
       .eq("organization_id", organizationId).not("synced_at", "is", null)
@@ -309,6 +309,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["evidence counts", evidenceTodayCountResult], ["activity evidence counts", evidenceActivityTodayCountResult],
     ["completed event counts", completedEventsTodayCountResult], ["pending report counts", pendingReportsCountResult],
     ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult], ["series evidence", seriesEvidenceResult],
+    ["time series sessions", timeSeriesSessionsResult],
     ["nifty freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
     ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
     ["nifty volume", niftyTasksTodayResult], ["github volume", githubEventsTodayResult],
@@ -586,6 +587,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     if (bucket) bucket.evidence += 1;
   }
   const series = seriesDates.map((day) => seriesBuckets.get(day)!);
+  const timeSeries = timeSeriesFromSessions(
+    (timeSeriesSessionsResult.data ?? []) as Json[],
+    seriesDates,
+    now,
+    (personId) => personName.get(personId) ?? null,
+  );
   const freshness = {
     niftySyncedAt: isoOrNull(freshnessNiftyResult.data?.synced_at),
     niftyTasksToday: niftyTasksTodayResult.count ?? 0,
@@ -645,5 +652,5 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     });
   }
 
-  return { date, generatedAt: now.toISOString(), counts, people: personRows, recentActivity: recentActivity.slice(0, 24), attention, series, freshness, readiness };
+  return { date, generatedAt: now.toISOString(), counts, people: personRows, recentActivity: recentActivity.slice(0, 24), attention, series, timeSeries, freshness, readiness };
 }
