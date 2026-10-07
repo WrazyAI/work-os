@@ -89,13 +89,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tagPrefix = "work-os-companion-internal-v"
-          if ("${{ github.event_name }}" -eq "push") {
-            if ("${{ github.ref }}".StartsWith("refs/tags/$tagPrefix")) {
-              $version = node scripts/macos-release.mjs tag-version "${{ github.ref_name }}"
+          if ($env:GITHUB_EVENT_NAME -eq "push") {
+            if ($env:GITHUB_REF.StartsWith("refs/tags/$tagPrefix")) {
+              $version = node scripts/macos-release.mjs tag-version $env:GITHUB_REF_NAME
               if ($LASTEXITCODE -ne 0) { throw "Invalid internal release tag" }
               $publish = "false"
-              $tag = "${{ github.ref_name }}"
-            } elseif ("${{ github.ref }}" -eq "refs/heads/main") {
+              $tag = $env:GITHUB_REF_NAME
+            } elseif ($env:GITHUB_REF -eq "refs/heads/main") {
               $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
               $publish = "true"
               $tag = "$tagPrefix$version"
@@ -107,7 +107,7 @@ jobs:
             $publish = $env:DISPATCH_PUBLISH.ToLowerInvariant()
             $tag = "$tagPrefix$version"
             if ($publish -eq "true") {
-              if ("${{ github.ref }}" -ne "refs/heads/main") { throw "Internal release publication is restricted to the main branch" }
+              if ($env:GITHUB_REF -ne "refs/heads/main") { throw "Internal release publication is restricted to the main branch" }
               if ($env:DISPATCH_ACKNOWLEDGEMENT -cne "UNSIGNED INTERNAL") { throw "Publishing requires the exact acknowledgement: UNSIGNED INTERNAL" }
             }
           }
@@ -127,8 +127,8 @@ jobs:
           # tauri.conf.json, package.json, Cargo.toml, and the updater
           # manifest keep the canonical unpadded version; only the release
           # tag and human-facing titles use the padded display form.
-          $versionParts = $version.Split('.')
-          $displayVersion = "$($versionParts[0]).$($versionParts[1])." + [string]$versionParts[2].PadLeft(2, '0')
+          $displayVersion = node scripts/macos-release.mjs display-version $version
+          if ($LASTEXITCODE -ne 0) { throw "Invalid internal release version" }
           $tag = "$tagPrefix$displayVersion"
           "version=$version" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "display_version=$displayVersion" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append

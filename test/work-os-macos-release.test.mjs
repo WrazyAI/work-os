@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { spawn } from "node:child_process";
-import { canonicalTagVersion, combineRelease, findDraftRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
+import { fileURLToPath } from "node:url";
+import { canonicalTagVersion, releaseDisplayVersion, combineRelease, findDraftRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
 
 test("finds an unpublished draft in the paginated catalog without a Git tag", () => {
   const draft = { id: 1, tag_name: "candidate", draft: true, target_commitish: "source" };
@@ -86,6 +87,9 @@ test("refuses ambiguous and empty updater artifacts", (t) => {
 
 test("padded release tags resolve canonical versions and reject invalid inputs", () => {
   assert.equal(canonicalTagVersion("work-os-companion-internal-v0.4.02"), "0.4.2");
+  assert.equal(canonicalTagVersion("work-os-companion-internal-v0.2.2"), "0.2.2");
+  assert.equal(releaseDisplayVersion("0.4.2-beta.1+build.2"), "0.4.02-beta.1+build.2");
+  assert.equal(canonicalTagVersion(`work-os-companion-internal-v${releaseDisplayVersion("0.4.2-beta.1+build.2")}`), "0.4.2-beta.1+build.2");
   assert.equal(canonicalTagVersion("work-os-companion-internal-v1.2.103-beta.1+build.2"), "1.2.103-beta.1+build.2");
   for (const tag of ["other-v0.4.02", "work-os-companion-internal-v01.4.02", "work-os-companion-internal-v0.4.02-beta.01", "work-os-companion-internal-v0.4.002"]) {
     assert.throws(() => canonicalTagVersion(tag), /Invalid internal release tag/);
@@ -97,6 +101,9 @@ test("release mutations serialize across refs and publication checks packaged st
   const check = readFileSync(new URL("../.github/workflows/work-os-companion-macos-check.yml", import.meta.url), "utf8");
   assert.match(release, /group: work-os-companion-internal-release\n/);
   assert.match(release, /queue: max/);
+  const metadata = release.slice(release.indexOf("      - name: Resolve and validate release metadata"), release.indexOf("      - name: Require changelog"));
+  assert.doesNotMatch(metadata, /\$\{\{ github\.(ref|ref_name|event_name) \}\}/);
+  assert.match(metadata, /\$env:GITHUB_REF_NAME/);
   assert.match(release, /node scripts\/macos-release.mjs tag-version/);
   for (const workflow of [release, check]) {
     assert.match(workflow, /run: bash scripts\/check-macos-startup.sh/);
@@ -110,7 +117,7 @@ test("release mutations serialize across refs and publication checks packaged st
 test("packaged startup gate accepts a live process and rejects an early crash", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "work-os-startup-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const script = new URL("../desktop/work-os-companion/scripts/check-macos-startup.sh", import.meta.url).pathname;
+  const script = fileURLToPath(new URL("../desktop/work-os-companion/scripts/check-macos-startup.sh", import.meta.url));
   const run = async (name, body) => {
     const cwd = join(root, name);
     const binary = join(cwd, "src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion");
@@ -122,7 +129,7 @@ test("packaged startup gate accepts a live process and rejects an early crash", 
       child.stdout.on("data", (chunk) => { output += chunk; });
       child.stderr.on("data", (chunk) => { output += chunk; });
       child.on("error", reject);
-      child.on("exit", (code) => resolve({ code, output, log: readFileSync(join(cwd, "companion-startup.log"), "utf8") }));
+      child.on("close", (code) => resolve({ code, output, log: readFileSync(join(cwd, "companion-startup.log"), "utf8") }));
     });
   };
   const [live, crash] = await Promise.all([
