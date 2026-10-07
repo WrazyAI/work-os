@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The EOD review button now reads “Drafts today’s EOD”.
+
 ## 0.4.5
 
 - Review cards are simpler: each one shows the action to decide, with technical details tucked away and no repeated explanation.

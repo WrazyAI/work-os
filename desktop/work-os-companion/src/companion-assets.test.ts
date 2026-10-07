@@ -220,4 +220,10 @@ describe("floating companion integration", () => {
     const sidebar = readFileSync(resolve(root, "src/SidebarNav.tsx"), "utf8");
     expect(sidebar).toContain('"Ctrl + ,"');
   });
+
+  it("names the EOD drafting action for what it does", () => {
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain('"Drafts today’s EOD"');
+    expect(app).not.toContain('"Create EOD draft"');
+  });
 });
