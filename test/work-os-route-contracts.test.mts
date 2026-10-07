@@ -205,6 +205,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(attendance, /EmployeeId: employeeId/);
   assert.match(attendance, /normalizeWorktivityActivityLogs/);
   assert.match(attendance, /syncWorktivitySession/);
+  // Completing or reopening a task must keep the plan's commitment state aligned.
+  assert.match(await source("src/lib/work-os-employee-tasks.ts"), /syncPlanItemCompletion\(\{/);
   // A second work interval on the same shift row must re-stamp the
   // substantive update so the check-in cadence does not read stale progress.
   assert.match(await source("src/lib/work-os-workday.ts"), /restarted \? \{ last_substantive_update_at: projection\.observedAt \} : \{\}/);

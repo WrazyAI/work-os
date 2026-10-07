@@ -13,6 +13,7 @@ import {
   updateTask,
 } from "@/lib/work-os";
 import { createLocalWorkOsTask } from "@/lib/work-os-local-tasks";
+import { syncPlanItemCompletion } from "@/lib/work-os-plan-items";
 import { filterAssignableTaskPeople } from "@/lib/work-os-task-assignees";
 import { isTaskOutcomeEvidence } from "@/modules/work-os/companion";
 import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
@@ -196,6 +197,14 @@ export async function setWorkOsEmployeeTaskCompletion(access: WorkOsAccess, task
     exactAt,
     provenance: "employee_explicit",
   });
+  // The task record is authoritative for the plan's commitment state.
+  await syncPlanItemCompletion({
+    organizationId: access.organizationId,
+    taskId: String(task.id),
+    completed,
+    completedAt: completed ? text((updated as Json).completed_at) : null,
+    personId: access.personId,
+  });
   const local = String(task.provider ?? "") === "local";
   await audit(access, completed ? "task.completed" : "task.reopened", local ? "work_os_task" : "nifty_task", String(task.provider_task_id ?? task.id), {
     source: "employee_explicit",
@@ -366,5 +375,14 @@ export async function completeWorkOsTask(access: WorkOsAccess, taskId: string, c
   if (completed && !(await completionEvidence(task.id as string, access.organizationId, ownerId))) {
     throw new Error("sufficient outcome or artifact evidence is required before completing this task");
   }
-  return completeTask(ownerId, taskId, completed);
+  const updated = await completeTask(ownerId, taskId, completed);
+  // An admin completing a task still completes the plan items that committed
+  // to it, across whoever planned it.
+  await syncPlanItemCompletion({
+    organizationId: access.organizationId,
+    taskId: String(task.id),
+    completed,
+    completedAt: completed ? text((updated as Json).completed_at) : null,
+  });
+  return updated;
 }
