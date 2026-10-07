@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate } from "@/lib/work-os-eod";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -70,12 +71,6 @@ function dateRange(from: string, through: string) {
   const dates: string[] = [];
   for (let date = from; date <= through; date = addDaysIso(date, 1)) dates.push(date);
   return dates;
-}
-
-function dateOnly(value: unknown): string | null {
-  const raw = String(value ?? "");
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
-  return match ? match[1] : null;
 }
 
 /** Completion timing uses the task snapshot's due date: a completed outcome is

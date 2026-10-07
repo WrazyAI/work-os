@@ -9,6 +9,7 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  Database,
   FileCheck2,
   ListChecks,
   MessageSquareText,
@@ -111,13 +112,22 @@ export default function AdminOverviewPage() {
             { key: "evidence", label: "Evidence", color: CHART_COLORS.neutral },
           ]}
         />
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <FreshnessChip label="Nifty" at={data.freshness.niftySyncedAt} now={generatedAt} freshWithinMs={60 * 60_000} />
-          <FreshnessChip label="Worktivity" at={data.freshness.worktivityObservedAt} now={generatedAt} freshWithinMs={15 * 60_000} />
-          <FreshnessChip label="GitHub" at={data.freshness.githubLastEventAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} />
-          <FreshnessChip label="Plans" at={data.freshness.lastPlanAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} />
-          <FreshnessChip label="EOD" at={data.freshness.lastReportSubmittedAt} now={generatedAt} freshWithinMs={48 * 60 * 60_000} />
-        </div>
+      </AdminCard>
+
+      {/* Data sources — what feeds the record, how fresh, and today's volume */}
+      <AdminCard>
+        <SectionHeading
+          icon={Database}
+          title="Data sources"
+          detail="Where the record comes from, when each source last delivered, and today's volume."
+        />
+        <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          <SourceRow label="Nifty" at={data.freshness.niftySyncedAt} now={generatedAt} freshWithinMs={60 * 60_000} volume={`${data.freshness.niftyTasksToday} task${data.freshness.niftyTasksToday === 1 ? "" : "s"} synced today`} />
+          <SourceRow label="Worktivity" at={data.freshness.worktivityObservedAt} now={generatedAt} freshWithinMs={15 * 60_000} volume={`${data.counts.evidenceActivityToday} frame${data.counts.evidenceActivityToday === 1 ? "" : "s"} today`} />
+          <SourceRow label="GitHub" at={data.freshness.githubLastEventAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} volume={`${data.freshness.githubEventsToday} event${data.freshness.githubEventsToday === 1 ? "" : "s"} today`} />
+          <SourceRow label="Plans" at={data.freshness.lastPlanAt} now={generatedAt} freshWithinMs={24 * 60 * 60_000} volume="Plan edits and confirmations" />
+          <SourceRow label="EOD reports" at={data.freshness.lastReportSubmittedAt} now={generatedAt} freshWithinMs={48 * 60 * 60_000} volume={`${data.counts.reportsPendingReview} awaiting review`} />
+        </ul>
       </AdminCard>
 
       {/* Needs attention */}
@@ -340,22 +350,29 @@ export default function AdminOverviewPage() {
   );
 }
 
-/** Per-source freshness: green inside its expected window, amber within three
- * times that window, neutral once it has clearly gone quiet. Ages are measured
- * against the payload's generation time so a render is deterministic. */
-function FreshnessChip({ label, at, now, freshWithinMs }: { label: string; at: string | null; now: number; freshWithinMs: number }) {
+/** One source row: name, today's volume, and a freshness dot measured
+ * against the payload's generation time so a render stays deterministic. */
+function SourceRow({ label, at, now, freshWithinMs, volume }: { label: string; at: string | null; now: number; freshWithinMs: number; volume: string }) {
   const parsed = at ? Date.parse(at) : Number.NaN;
   const age = Number.isFinite(parsed) ? now - parsed : Number.POSITIVE_INFINITY;
   const tone = !Number.isFinite(age) ? "none" : age <= freshWithinMs ? "fresh" : age <= freshWithinMs * 3 ? "stale" : "cold";
   const color = tone === "fresh" ? "var(--status-ok)" : tone === "stale" ? "var(--status-warn)" : "var(--text-tertiary)";
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] text-[var(--text-secondary)]"
+    <li
+      className="flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5"
       style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}
       title={at ? `Last data ${new Date(at).toLocaleString()}` : "No data recorded yet"}
     >
-      <span aria-hidden className="size-1.5 rounded-full" style={{ background: color }} />
-      {label} · {Number.isFinite(parsed) ? relativeTime(at, new Date(now)) : "no data yet"}
-    </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 text-[12.5px] font-semibold text-[var(--text-primary)]">
+          <span aria-hidden className="size-2 rounded-full" style={{ background: color }} />
+          {label}
+        </span>
+        <span className="mt-0.5 block text-[11px] text-[var(--text-tertiary)]">{volume}</span>
+      </span>
+      <span className="shrink-0 text-[11.5px] tabular-nums text-[var(--text-secondary)]">
+        {Number.isFinite(parsed) ? relativeTime(at, new Date(now)) : "no data yet"}
+      </span>
+    </li>
   );
 }

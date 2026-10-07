@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import { createEvidence } from "@/lib/work-os";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsAdmin, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
@@ -80,7 +81,7 @@ export async function GET(req: Request) {
       for (const row of (summaryResult.data ?? []) as Array<Record<string, unknown>>) {
         const source = String(row.source ?? "unknown");
         sources.set(source, (sources.get(source) ?? 0) + 1);
-        const day = String(row.evidence_date ?? "").slice(0, 10);
+        const day = dateOnly(row.evidence_date) ?? "";
         if (day) days.set(day, (days.get(day) ?? 0) + 1);
       }
       return NextResponse.json({

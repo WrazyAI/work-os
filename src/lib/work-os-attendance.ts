@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import type { WorkOsAccess } from "@/lib/work-os-api";
 import { activeSession, clockIn, insertHistoricalWorktivitySession, syncWorktivitySession, transitionSession } from "@/lib/work-os-workday";
 import { worktivityConfigured, wtPost, type WtActivityLog, type WtEmployee, type WtPaged } from "@/lib/worktivity";
@@ -404,10 +405,8 @@ const MIN_RECONCILED_SESSION_MS = 5 * 60_000;
 /** pg returns `date` columns as local-midnight Date objects; normalize without
  * any timezone re-interpretation. */
 function dateOnlyString(value: unknown): string {
-  if (value instanceof Date && Number.isFinite(value.getTime())) {
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-  }
-  return String(value ?? "").slice(0, 10);
+  // pg returns DATE columns as Date objects; the canonical helper handles both.
+  return dateOnly(value) ?? "";
 }
 
 type AttendanceObservationRow = {

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import { addDaysIso, todayIso } from "@/lib/work-os-dates";
 import { classifyOutstandingEodDays, type OutstandingEodCandidate, type OutstandingEodDay } from "@/lib/work-os-eod";
 import type { WorkOsAccess } from "@/lib/work-os-api";
@@ -88,8 +89,10 @@ export interface AdminOverview {
    * without reading the database. */
   freshness: {
     niftySyncedAt: string | null;
+    niftyTasksToday: number;
     worktivityObservedAt: string | null;
     githubLastEventAt: string | null;
+    githubEventsToday: number;
     lastPlanAt: string | null;
     lastReportSubmittedAt: string | null;
   };
@@ -189,6 +192,8 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     freshnessGithubResult,
     freshnessPlanResult,
     freshnessReportResult,
+    niftyTasksTodayResult,
+    githubEventsTodayResult,
     windowSessionsResult,
     windowPlansResult,
     windowReportsResult,
@@ -273,6 +278,12 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     db.from("work_reports").select("submitted_at")
       .eq("organization_id", organizationId).not("submitted_at", "is", null)
       .order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
+    // Today's volume per source, so the Data sources card can show more than a
+    // last-seen timestamp.
+    db.from("work_tasks").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("provider", "nifty").gte("synced_at", `${date}T00:00:00.000Z`),
+    db.from("work_evidence_events").select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId).eq("provider", "github").gte("occurred_at", `${date}T00:00:00.000Z`),
     db.from("work_sessions")
       .select("person_id,shift_date,clocked_in_at,clocked_out_at,paused_seconds,correction_status")
       .eq("organization_id", organizationId).gte("shift_date", outstandingFrom).lte("shift_date", outstandingThrough),
@@ -300,6 +311,7 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
     ["series events", seriesEventsResult], ["series check-ins", seriesCheckInsResult], ["series evidence", seriesEvidenceResult],
     ["nifty freshness", freshnessNiftyResult], ["attendance freshness", freshnessAttendanceResult],
     ["github freshness", freshnessGithubResult], ["plan freshness", freshnessPlanResult], ["report freshness", freshnessReportResult],
+    ["nifty volume", niftyTasksTodayResult], ["github volume", githubEventsTodayResult],
     ["outstanding plans", windowPlansResult], ["outstanding reports", windowReportsResult], ["outstanding events", windowEventsResult],
   ] as const) {
     if (result.error) throw new Error(`load admin overview ${label}: ${result.error.message}`);
@@ -562,22 +574,24 @@ export async function getAdminOverview(access: WorkOsAccess, options: { date?: s
   const seriesDates = Array.from({ length: 14 }, (_, index) => addDaysIso(date, index - 13));
   const seriesBuckets = new Map(seriesDates.map((day) => [day, { date: day, completed: 0, updates: 0, evidence: 0 }]));
   for (const row of (seriesEventsResult.data ?? []) as Json[]) {
-    const bucket = seriesBuckets.get(String(row.local_date ?? "").slice(0, 10));
+    const bucket = seriesBuckets.get(dateOnly(row.local_date) ?? "");
     if (bucket) bucket.completed += 1;
   }
   for (const row of (seriesCheckInsResult.data ?? []) as Json[]) {
-    const bucket = seriesBuckets.get(String(row.shift_date ?? "").slice(0, 10));
+    const bucket = seriesBuckets.get(dateOnly(row.shift_date) ?? "");
     if (bucket) bucket.updates += 1;
   }
   for (const row of (seriesEvidenceResult.data ?? []) as Json[]) {
-    const bucket = seriesBuckets.get(String(row.evidence_date ?? "").slice(0, 10));
+    const bucket = seriesBuckets.get(dateOnly(row.evidence_date) ?? "");
     if (bucket) bucket.evidence += 1;
   }
   const series = seriesDates.map((day) => seriesBuckets.get(day)!);
   const freshness = {
     niftySyncedAt: isoOrNull(freshnessNiftyResult.data?.synced_at),
+    niftyTasksToday: niftyTasksTodayResult.count ?? 0,
     worktivityObservedAt: isoOrNull(freshnessAttendanceResult.data?.observed_at),
     githubLastEventAt: isoOrNull(freshnessGithubResult.data?.occurred_at),
+    githubEventsToday: githubEventsTodayResult.count ?? 0,
     lastPlanAt: isoOrNull(freshnessPlanResult.data?.updated_at),
     lastReportSubmittedAt: isoOrNull(freshnessReportResult.data?.submitted_at),
   };

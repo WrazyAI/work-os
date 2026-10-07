@@ -40,7 +40,7 @@ function overviewFixture(state: PreviewState) {
       recentActivity: [],
       attention: [],
       series: overviewSeries(0),
-      freshness: { niftySyncedAt: null, worktivityObservedAt: null, githubLastEventAt: null, lastPlanAt: null, lastReportSubmittedAt: null },
+      freshness: { niftySyncedAt: null, niftyTasksToday: 0, worktivityObservedAt: null, githubLastEventAt: null, githubEventsToday: 0, lastPlanAt: null, lastReportSubmittedAt: null },
       readiness: { status: "ready", ready: true, issues: [], checks: { people: { active: 0 }, tasks: { open: 0 }, organization: { activeTeams: 0, activeSchedules: 0 } } },
     };
   }
@@ -100,8 +100,10 @@ function overviewFixture(state: PreviewState) {
     series: overviewSeries(1),
     freshness: {
       niftySyncedAt: `${TODAY}T15:40:00.000Z`,
+      niftyTasksToday: 312,
       worktivityObservedAt: `${TODAY}T15:58:00.000Z`,
       githubLastEventAt: `${TODAY}T14:12:00.000Z`,
+      githubEventsToday: 60,
       lastPlanAt: `${TODAY}T09:20:00.000Z`,
       lastReportSubmittedAt: `${TODAY}T13:05:00.000Z`,
     },

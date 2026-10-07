@@ -75,33 +75,41 @@ export default function AdminPeoplePage() {
 
   const roleOptions = (roster.data?.roleProfiles ?? []).map((profile) => ({ value: profile.id, label: profile.name }));
   const selectedStatus = selectedId ? peopleById.get(selectedId) ?? null : null;
+  // Only people with recorded work today, strongest first: an all-zero chart
+  // row per teammate reads as noise, and evidence belongs in the table.
+  const pulseRows = (overview.data?.people ?? [])
+    .filter((person) => person.updatesToday + person.tasksCompletedToday > 0)
+    .sort((left, right) => (right.updatesToday + right.tasksCompletedToday) - (left.updatesToday + left.tasksCompletedToday))
+    .slice(0, 10)
+    .map((person) => ({ label: person.displayName, updates: person.updatesToday, completed: person.tasksCompletedToday }));
 
   return (
     <div className="grid gap-5">
-      {/* Roster pulse — lead with who is moving today, then the table */}
-      {(overview.data?.people ?? []).length ? (
+      {/* Roster pulse — who recorded work today, then the full table */}
+      {pulseRows.length ? (
         <AdminCard>
           <SectionHeading
             icon={MessageSquareText}
             title="Roster pulse"
-            detail="Today's recorded updates, completed outcomes, and evidence per teammate."
+            detail="Today's recorded updates and completed outcomes, strongest first. Evidence and GitHub activity are context, not completion — see the roster below."
           />
           <PulseBars
-            ariaLabel="Today's recorded updates, completed outcomes, and evidence per teammate"
-            data={(overview.data?.people ?? []).map((person) => ({
-              label: person.displayName,
-              updates: person.updatesToday,
-              completed: person.tasksCompletedToday,
-              evidence: person.evidenceToday,
-            }))}
+            ariaLabel="Today's recorded updates and completed outcomes per teammate"
+            data={pulseRows}
             series={[
               { key: "updates", label: "Updates", color: CHART_COLORS.observed },
               { key: "completed", label: "Completed", color: CHART_COLORS.accent },
-              { key: "evidence", label: "Evidence", color: CHART_COLORS.neutral },
             ]}
           />
         </AdminCard>
-      ) : null}
+      ) : (
+        <AdminCard>
+          <SectionHeading icon={MessageSquareText} title="Roster pulse" detail="Today's recorded updates and completed outcomes." />
+          <p className="text-[12.5px] text-[var(--text-secondary)]">
+            No updates or completed outcomes have been recorded today yet. The roster below shows each teammate&apos;s live status and evidence context.
+          </p>
+        </AdminCard>
+      )}
 
       <AdminCard padded={false}>
         <div className="px-5 py-4">
@@ -162,7 +170,7 @@ export default function AdminPeoplePage() {
                         </StatusPill>
                       </td>
                       <td className="px-3 py-3 tabular-nums text-[var(--text-secondary)]">
-                        {status ? `${status.updatesToday} update${status.updatesToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done` : "—"}
+                        {status ? `${status.updatesToday} update${status.updatesToday === 1 ? "" : "s"} · ${status.tasksCompletedToday} done${status.evidenceToday ? ` · ${status.evidenceToday} evidence` : ""}` : "—"}
                       </td>
                       <td className="px-3 py-3">
                         {status?.eodToday ? (

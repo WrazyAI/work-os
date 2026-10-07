@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateOnly } from "@/lib/work-os-internal";
 import { accessibleWorkOsPersonIds, jsonError, requireWorkOsAccess, requireWorkOsPersonAccess } from "@/lib/work-os-api";
 
 export const runtime = "nodejs";
@@ -91,7 +92,7 @@ export async function GET(req: Request) {
       seriesBuckets.set(date, { date, submitted: 0, drafted: 0 });
     }
     for (const row of (seriesResult.data ?? []) as Array<Record<string, unknown>>) {
-      const bucket = seriesBuckets.get(String(row.report_date ?? "").slice(0, 10));
+      const bucket = seriesBuckets.get(dateOnly(row.report_date) ?? "");
       if (!bucket) continue;
       if (["pending_review", "approved"].includes(String(row.status))) bucket.submitted += 1;
       else if (String(row.status) === "draft") bucket.drafted += 1;
