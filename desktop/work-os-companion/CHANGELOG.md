@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.10
+
 - EOD reports are simpler: no bottleneck reason is required to submit, and the review header is cleaner.
 
 ## 0.4.9
