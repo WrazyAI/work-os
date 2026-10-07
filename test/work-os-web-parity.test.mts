@@ -196,6 +196,8 @@ test("EOD refinement strips only the bottleneck section", () => {
   assert.equal(section, "## Bottleneck\nAwaiting access.");
   assert.equal(restoreBottleneckSection("## Summary\nRefined.", section), "## Summary\nRefined.\n\n## Bottleneck\nAwaiting access.");
   assert.equal(restoreBottleneckSection("## Summary\nRefined.\n\n## Bottleneck\nKept.", section), "## Summary\nRefined.\n\n## Bottleneck\nKept.");
+  assert.equal(stripBottleneckSection("## Bottleneck\nAwaiting access."), "");
+  assert.equal(extractBottleneckSection("## Bottleneck\nAwaiting access."), "## Bottleneck\nAwaiting access.");
 });
 
 test("assistant draft notices name what grounded the draft", () => {

@@ -6,7 +6,7 @@
 
 /** Matches a real `## Bottleneck` heading line and its body, up to the next
  * `## ` heading or the end of the report. */
-const BOTTLENECK_SECTION = /\n+##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
+const BOTTLENECK_SECTION = /(?:^|\n+)##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
 
 /** The refine request must not let the assistant rewrite the Bottleneck
  * section, so that section is stripped before sending. */

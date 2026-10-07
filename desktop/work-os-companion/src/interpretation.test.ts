@@ -117,6 +117,12 @@ describe("EOD composer helpers", () => {
     expect(stripBottleneckSection(analysis)).toBe(analysis);
   });
 
+  it("handles a report that starts with the Bottleneck heading", () => {
+    expect(stripBottleneckSection("## Bottleneck\nWaiting on finance.")).toBe("");
+    expect(extractBottleneckAnswer("## Bottleneck\nWaiting on finance.")).toBe("Waiting on finance.");
+    expect(extractBottleneckSection("## Bottleneck\nWaiting on finance.")).toBe("## Bottleneck\nWaiting on finance.");
+  });
+
   it("extracts the exact section for preservation across refine", () => {
     expect(extractBottleneckSection("## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.\n\n## Notes\nExtra."))
       .toBe("## Bottleneck\nWaiting on finance.");

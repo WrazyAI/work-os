@@ -425,7 +425,7 @@ export function partialFilingMessage(filed: number, failed: Array<{ title?: stri
 
 /** Matches a real `## Bottleneck` heading line and its body, up to the next
  * `## ` heading or the end of the report. */
-const BOTTLENECK_SECTION = /\n+##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
+const BOTTLENECK_SECTION = /(?:^|\n+)##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
 
 /** Removes any existing Bottleneck section so refine sends only the narrative. */
 export function stripBottleneckSection(markdown: string): string {
