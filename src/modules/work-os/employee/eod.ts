@@ -4,10 +4,26 @@
  * record is created first, then the AI narrative replaces the placeholder —
  * and a gated or unavailable assistant keeps the standard draft honest. */
 
+/** Matches a real `## Bottleneck` heading line and its body, up to the next
+ * `## ` heading or the end of the report. */
+const BOTTLENECK_SECTION = /\n+##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
+
 /** The refine request must not let the assistant rewrite the Bottleneck
  * section, so that section is stripped before sending. */
 export function stripBottleneckSection(markdown: string): string {
-  return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
+  return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
+}
+
+/** The exact Bottleneck section (heading and body) when the draft carries one. */
+export function extractBottleneckSection(markdown: string): string {
+  return typeof markdown === "string" ? (markdown.match(BOTTLENECK_SECTION)?.[0] ?? "").replace(/^\n+/, "") : "";
+}
+
+/** Re-attaches a preserved Bottleneck section to a refined draft unless the
+ * refined report already carries one. */
+export function restoreBottleneckSection(refined: string, section: string): string {
+  if (!section || !refined.trim() || /##[ \t]*Bottleneck[ \t]*\n/i.test(refined)) return refined;
+  return `${refined.replace(/\s+$/, "")}\n\n${section}`;
 }
 
 export interface AssistantEodDraftResponse {

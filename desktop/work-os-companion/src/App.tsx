@@ -37,7 +37,7 @@ import type { RecapNextStepItem } from "./types";
 import type { RecapNextStepState } from "./RecapNextStepsCard";
 import { taskSelectionFromResult } from "./chat/selection";
 import { MASCOT } from "./mascot";
-import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, simulateAiEod, stripBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
+import { fileApprovedOperations, interpretationFallbackReason, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, simulateAiEod, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, toolCallKey, usesGroupedCard, type PendingToolReview, type ProposedOperation, type ToolCallResult } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
@@ -1348,10 +1348,14 @@ export default function App() {
     if (!target || syncBypassRef.current) return false;
     setEodRedrafting(true);
     try {
+      // The assistant must not rewrite the Bottleneck section, so it is held
+      // back from the refine request and restored onto the refined draft.
+      const bottleneckSection = extractBottleneckSection(markdown);
       const result = await apiRequest<{ markdown: string }>('/api/work-os/me/eod/ai-draft', {
         method: "POST", body: JSON.stringify({ date: target.shiftDate, draft: stripBottleneckSection(markdown), feedback, annotations }),
       });
-      setEodDraft((current) => current ? { ...current, markdown: result.markdown, source: "ai" } : { markdown: result.markdown, source: "ai" });
+      const refined = restoreBottleneckSection(String(result.markdown ?? ""), bottleneckSection);
+      setEodDraft((current) => current ? { ...current, markdown: refined, source: "ai" } : { markdown: refined, source: "ai" });
       notifications.success("The draft was refined from your feedback.", "Draft refined");
       return true;
     } catch (value) {

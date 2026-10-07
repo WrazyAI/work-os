@@ -337,8 +337,12 @@ export async function draftEodNarrative(grounding: EodGrounding): Promise<EodDra
   }
 }
 
+/** Matches a real `## Bottleneck` heading line and its body, up to the next
+ * `## ` heading or the end of the report. */
+const BOTTLENECK_SECTION = /\n+##[ \t]*Bottleneck[ \t]*\n[\s\S]*?(?=\n{1,2}##[ \t]|\s*$)/i;
+
 function withoutBottleneck(markdown: string) {
-  return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
+  return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
 }
 
 /** Refines report wording from employee feedback without rewriting any Bottleneck section. */

@@ -423,9 +423,25 @@ export function partialFilingMessage(filed: number, failed: Array<{ title?: stri
 
 // ── EOD composer helpers ──────────────────────────────────────────────────
 
+/** Matches a real `## Bottleneck` heading line and its body, up to the next
+ * `## ` heading or the end of the report. */
+const BOTTLENECK_SECTION = /\n+##[ \t]*Bottleneck[ \t]*\n([\s\S]*?)(?=\n{1,2}##[ \t]|\s*$)/i;
+
 /** Removes any existing Bottleneck section so refine sends only the narrative. */
 export function stripBottleneckSection(markdown: string): string {
-  return markdown.replace(/\n+##\s*Bottleneck[\s\S]*$/i, "").replace(/\s+$/, "");
+  return markdown.replace(BOTTLENECK_SECTION, "").replace(/\s+$/, "");
+}
+
+/** The exact Bottleneck section (heading and body) when the draft carries one. */
+export function extractBottleneckSection(markdown: string): string {
+  return typeof markdown === "string" ? (markdown.match(BOTTLENECK_SECTION)?.[0] ?? "").replace(/^\n+/, "") : "";
+}
+
+/** Re-attaches a preserved Bottleneck section to a refined draft unless the
+ * refined report already carries one. */
+export function restoreBottleneckSection(refined: string, section: string): string {
+  if (!section || !refined.trim() || /##[ \t]*Bottleneck[ \t]*\n/i.test(refined)) return refined;
+  return `${refined.replace(/\s+$/, "")}\n\n${section}`;
 }
 
 /** The server's legacy draft placeholder is not an answer. */
@@ -435,7 +451,7 @@ const BOTTLENECK_PLACEHOLDER = /^\(needs your input[^)]*\)$/i;
  * employee-written Bottleneck section must survive; the legacy placeholder
  * does not count as content. */
 export function extractBottleneckAnswer(markdown: string): string {
-  const match = typeof markdown === "string" ? markdown.match(/\n+##\s*Bottleneck\s*\n([\s\S]*)$/i) : null;
+  const match = typeof markdown === "string" ? markdown.match(BOTTLENECK_SECTION) : null;
   const body = match?.[1]?.trim() ?? "";
   if (!body || BOTTLENECK_PLACEHOLDER.test(body)) return "";
   return body;

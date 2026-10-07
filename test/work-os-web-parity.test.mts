@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
 import { applyCommitmentEdits, buildPlanItemsFromInterpretation, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
 import { consistencyChips, flowBreakdown, insightRangeSummary, insightSeries, periodDeltas } from "../src/modules/work-os/employee/insights";
-import { assistantDraftFallbackNotice, assistantDraftNotice, stripBottleneckSection } from "../src/modules/work-os/employee/eod";
+import { assistantDraftFallbackNotice, assistantDraftNotice, extractBottleneckSection, restoreBottleneckSection, stripBottleneckSection } from "../src/modules/work-os/employee/eod";
 import { hasRecapForSlot, recapEnsureSlot, recapPromptDueInMs } from "../src/modules/work-os/employee/recaps";
 import { normalizeCheckInKind } from "../src/lib/work-os-checkins";
 
@@ -184,6 +184,18 @@ test("EOD refinement strips only the bottleneck section", () => {
   const markdown = "## Summary\nShipped the fix.\n\n## Bottleneck\nAwaiting access.\n";
   assert.equal(stripBottleneckSection(markdown), "## Summary\nShipped the fix.");
   assert.equal(stripBottleneckSection("## Summary\nNo bottleneck section."), "## Summary\nNo bottleneck section.");
+  assert.equal(
+    stripBottleneckSection("## Summary\nShipped.\n\n## Bottleneck\nAwaiting access.\n\n## Notes\nExtra."),
+    "## Summary\nShipped.\n\n## Notes\nExtra.",
+  );
+  assert.equal(
+    stripBottleneckSection("## Summary\nShipped.\n\n## Bottleneck analysis\nLate starts."),
+    "## Summary\nShipped.\n\n## Bottleneck analysis\nLate starts.",
+  );
+  const section = extractBottleneckSection(markdown);
+  assert.equal(section, "## Bottleneck\nAwaiting access.");
+  assert.equal(restoreBottleneckSection("## Summary\nRefined.", section), "## Summary\nRefined.\n\n## Bottleneck\nAwaiting access.");
+  assert.equal(restoreBottleneckSection("## Summary\nRefined.\n\n## Bottleneck\nKept.", section), "## Summary\nRefined.\n\n## Bottleneck\nKept.");
 });
 
 test("assistant draft notices name what grounded the draft", () => {

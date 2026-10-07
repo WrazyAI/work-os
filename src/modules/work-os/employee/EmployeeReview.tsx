@@ -20,7 +20,7 @@ import EmployeeEodEvidence from "./EmployeeEodEvidence";
 import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { HttpError, fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
-import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, type AssistantEodDraftResponse } from "./eod";
+import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
 import {
   EmptyState,
   IconButton,
@@ -102,7 +102,7 @@ export default function EmployeeReview() {
 
   type AssistantDraftMode = "draft" | "redraft" | "refine" | "loom";
   const assistantDraft = useMutation({
-    mutationFn: (variables: { mode: AssistantDraftMode; date: string; draft?: string; feedback?: string; loom?: { url: string; transcript?: string } }) =>
+    mutationFn: (variables: { mode: AssistantDraftMode; date: string; draft?: string; bottleneck?: string; feedback?: string; loom?: { url: string; transcript?: string } }) =>
       fetchJson<AssistantEodDraftResponse>("/api/work-os/me/eod/ai-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,7 +116,7 @@ export default function EmployeeReview() {
     onSuccess: (result, variables) => {
       // A response for a day the editor has left is dropped, not applied.
       if (variables.date !== activeReportDateRef.current) return;
-      if (result.markdown) setReportMarkdown(result.markdown);
+      if (result.markdown) setReportMarkdown(variables.mode === "refine" ? restoreBottleneckSection(result.markdown, variables.bottleneck ?? "") : result.markdown);
       setDraftSource("ai");
       if (variables.mode === "refine") setEodNotice({ tone: "info", text: "The draft was refined from your feedback." });
       else if (variables.mode === "loom") setEodNotice({ tone: "info", text: "Draft rebuilt from your Loom recording. Review every line." });
@@ -318,7 +318,7 @@ export default function EmployeeReview() {
                   />
                   <SecondaryButton
                     disabled={!refineInput.trim() || assistantDraft.isPending}
-                    onClick={() => assistantDraft.mutate({ mode: "refine", date: eodDay?.shiftDate ?? "", draft: stripBottleneckSection(reportMarkdown), feedback: refineInput.trim() })}
+                    onClick={() => assistantDraft.mutate({ mode: "refine", date: eodDay?.shiftDate ?? "", draft: stripBottleneckSection(reportMarkdown), bottleneck: extractBottleneckSection(reportMarkdown), feedback: refineInput.trim() })}
                   >
                     <Wand2 size={13} /> {assistantDraft.isPending ? "Refining…" : "Apply refinement"}
                   </SecondaryButton>

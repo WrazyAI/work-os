@@ -86,7 +86,7 @@ describe("normalizeInterpretation", () => {
   });
 });
 
-import { extractBottleneckAnswer, stripBottleneckSection, stripPlaceholderBottleneck } from "./interpretation";
+import { extractBottleneckAnswer, extractBottleneckSection, restoreBottleneckSection, stripBottleneckSection, stripPlaceholderBottleneck } from "./interpretation";
 
 describe("EOD composer helpers", () => {
   it("strips any existing bottleneck section before refine sends the narrative", () => {
@@ -108,6 +108,27 @@ describe("EOD composer helpers", () => {
     const recorded = "## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.";
     expect(stripPlaceholderBottleneck(recorded)).toBe(recorded);
     expect(stripPlaceholderBottleneck("## Summary\nA day.")).toBe("## Summary\nA day.");
+  });
+
+  it("strips only the exact Bottleneck section and keeps other sections", () => {
+    expect(stripBottleneckSection("## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.\n\n## Notes\nExtra context."))
+      .toBe("## Summary\nA day.\n\n## Notes\nExtra context.");
+    const analysis = "## Summary\nA day.\n\n## Bottleneck analysis\nLate starts were common.";
+    expect(stripBottleneckSection(analysis)).toBe(analysis);
+  });
+
+  it("extracts the exact section for preservation across refine", () => {
+    expect(extractBottleneckSection("## Summary\nA day.\n\n## Bottleneck\nWaiting on finance.\n\n## Notes\nExtra."))
+      .toBe("## Bottleneck\nWaiting on finance.");
+    expect(extractBottleneckSection("## Summary\nA day.")).toBe("");
+  });
+
+  it("restores a preserved section onto a refined draft exactly once", () => {
+    expect(restoreBottleneckSection("## Summary\nRefined.", "## Bottleneck\nWaiting on finance."))
+      .toBe("## Summary\nRefined.\n\n## Bottleneck\nWaiting on finance.");
+    expect(restoreBottleneckSection("## Summary\nRefined.\n\n## Bottleneck\nKept.", "## Bottleneck\nWaiting on finance."))
+      .toBe("## Summary\nRefined.\n\n## Bottleneck\nKept.");
+    expect(restoreBottleneckSection("## Summary\nRefined.", "")).toBe("## Summary\nRefined.");
   });
 });
 
