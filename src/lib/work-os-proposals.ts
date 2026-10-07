@@ -389,7 +389,8 @@ export async function listWorkOsProposals(access: WorkOsAccess, personId: string
     .order("created_at", { ascending: false })
     .limit(100);
   if (Array.isArray(status)) {
-    if (status.length) query = query.in("status", status);
+    if (!status.length) return [];
+    query = query.in("status", status);
   } else if (status) {
     query = query.eq("status", status);
   }
