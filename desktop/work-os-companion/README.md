@@ -137,7 +137,12 @@ Set the existing Tauri updater signing environment variables for a release
 build. `npm run tauri:dev:macos` opens a local development build. The pull
 request Mac workflow builds both architectures without release secrets, checks
 both executable slices and the bundle signature, and uploads a seven-day DMG
-artifact for manual Mac testing.
+artifact for manual Mac testing. Both the PR check and release build run the
+same packaged-process startup gate and retain its log when a check fails.
+Cached installer directories are cleared before packaging, preserving compiled
+Rust dependencies while preventing an older installer from entering a new build.
+Release runs serialize across refs so two runs cannot replace the same draft's
+assets at once.
 
 Release CI reuses the `windows-production-release` environment's existing
 Tauri signing secrets. After the Windows draft is staged, the Mac job uploads

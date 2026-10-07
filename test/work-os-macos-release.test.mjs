@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { combineRelease, findDraftRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
+import { spawn } from "node:child_process";
+import { canonicalTagVersion, combineRelease, findDraftRelease, macInstaller, macUpdater, releaseAssets, stageMacRelease } from "../desktop/work-os-companion/scripts/macos-release.mjs";
 
 test("finds an unpublished draft in the paginated catalog without a Git tag", () => {
   const draft = { id: 1, tag_name: "candidate", draft: true, target_commitish: "source" };
@@ -80,4 +81,56 @@ test("refuses ambiguous and empty updater artifacts", (t) => {
   assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "tag", "repo"), /Empty Mac updater signature/);
   writeFileSync(join(bundle, "macos", macUpdater), "extra");
   assert.throws(() => stageMacRelease(bundle, stage, "1.2.3", "tag", "repo"), /Expected one/);
+});
+
+
+test("padded release tags resolve canonical versions and reject invalid inputs", () => {
+  assert.equal(canonicalTagVersion("work-os-companion-internal-v0.4.02"), "0.4.2");
+  assert.equal(canonicalTagVersion("work-os-companion-internal-v1.2.103-beta.1+build.2"), "1.2.103-beta.1+build.2");
+  for (const tag of ["other-v0.4.02", "work-os-companion-internal-v01.4.02", "work-os-companion-internal-v0.4.02-beta.01", "work-os-companion-internal-v0.4.002"]) {
+    assert.throws(() => canonicalTagVersion(tag), /Invalid internal release tag/);
+  }
+});
+
+test("release mutations serialize across refs and publication checks packaged startup", () => {
+  const release = readFileSync(new URL("../.github/workflows/work-os-companion-windows.yml", import.meta.url), "utf8");
+  const check = readFileSync(new URL("../.github/workflows/work-os-companion-macos-check.yml", import.meta.url), "utf8");
+  assert.match(release, /group: work-os-companion-internal-release\n/);
+  assert.match(release, /queue: max/);
+  assert.match(release, /node scripts\/macos-release.mjs tag-version/);
+  for (const workflow of [release, check]) {
+    assert.match(workflow, /run: bash scripts\/check-macos-startup.sh/);
+    assert.match(workflow, /src-tauri\/target\/universal-apple-darwin\/release\/bundle/);
+    assert.match(workflow, /name: Clear cached installer outputs/);
+    assert.match(workflow, /if: failure\(\)/);
+  }
+});
+
+
+test("packaged startup gate accepts a live process and rejects an early crash", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "work-os-startup-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const script = new URL("../desktop/work-os-companion/scripts/check-macos-startup.sh", import.meta.url).pathname;
+  const run = async (name, body) => {
+    const cwd = join(root, name);
+    const binary = join(cwd, "src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion");
+    mkdirSync(join(binary, ".."), { recursive: true });
+    writeFileSync(binary, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+    return new Promise((resolve, reject) => {
+      const child = spawn("bash", [script], { cwd, env: { ...process.env, RUNNER_TEMP: cwd } });
+      let output = "";
+      child.stdout.on("data", (chunk) => { output += chunk; });
+      child.stderr.on("data", (chunk) => { output += chunk; });
+      child.on("error", reject);
+      child.on("exit", (code) => resolve({ code, output, log: readFileSync(join(cwd, "companion-startup.log"), "utf8") }));
+    });
+  };
+  const [live, crash] = await Promise.all([
+    run("live", 'echo started; exec sleep 30'),
+    run("crash", 'echo startup-crash; exit 7'),
+  ]);
+  assert.equal(live.code, 0);
+  assert.match(live.log, /started/);
+  assert.equal(crash.code, 1);
+  assert.match(crash.output, /startup-crash/);
 });

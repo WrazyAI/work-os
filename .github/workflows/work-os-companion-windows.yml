@@ -33,7 +33,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: work-os-companion-internal-release-${{ github.ref }}
+  # All refs mutate the same release catalog and draft assets.
+  group: work-os-companion-internal-release
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -89,7 +91,8 @@ jobs:
           $tagPrefix = "work-os-companion-internal-v"
           if ("${{ github.event_name }}" -eq "push") {
             if ("${{ github.ref }}".StartsWith("refs/tags/$tagPrefix")) {
-              $version = "${{ github.ref_name }}".Substring($tagPrefix.Length)
+              $version = node scripts/macos-release.mjs tag-version "${{ github.ref_name }}"
+              if ($LASTEXITCODE -ne 0) { throw "Invalid internal release tag" }
               $publish = "false"
               $tag = "${{ github.ref_name }}"
             } elseif ("${{ github.ref }}" -eq "refs/heads/main") {
@@ -174,6 +177,11 @@ jobs:
 
       - name: Build frontend assets
         run: npm run build
+
+      - name: Clear cached installer outputs
+        run: |
+          # Rust cache can retain installers from a previous version.
+          Remove-Item "src-tauri/target/release/bundle" -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Build unsigned MSI, NSIS, and updater artifacts
         env:
@@ -375,6 +383,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Test packaged frontend
         run: npm test
+      - name: Clear cached installer outputs
+        run: rm -rf src-tauri/target/universal-apple-darwin/release/bundle
       - name: Build universal app, DMG, and signed updater archive
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -390,6 +400,16 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$app/Contents/Info.plist"
           tar -tzf "${app}.tar.gz" | grep 'Contents/MacOS/work-os-companion' > /dev/null
+      - name: Check packaged Mac app starts
+        run: bash scripts/check-macos-startup.sh
+      - name: Upload Mac startup diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-release-startup-${{ github.run_id }}
+          path: ${{ runner.temp }}/companion-startup.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Stage and upload Mac assets to the draft
         env:
           GH_TOKEN: ${{ github.token }}

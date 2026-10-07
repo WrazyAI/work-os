@@ -39,7 +39,11 @@ jobs:
           workspaces: desktop/work-os-companion/src-tauri -> target
           shared-key: work-os-companion-macos-universal-check
       - run: npm ci --no-audit --no-fund
+      - name: Test release safety and startup failure paths
+        run: node --test ../../test/work-os-macos-release.test.mjs
       - run: npm test
+      - name: Clear cached installer outputs
+        run: rm -rf src-tauri/target/universal-apple-darwin/release/bundle
       - name: Build Mac packages without release credentials
         run: npm run tauri:build:macos -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
       - name: Verify Intel and Apple Silicon executable
@@ -48,17 +52,15 @@ jobs:
           lipo "$app/Contents/MacOS/work-os-companion" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
       - name: Check packaged Mac app starts
-        run: |
-          set -euo pipefail
-          binary="src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion"
-          "$binary" > "$RUNNER_TEMP/companion-startup.log" 2>&1 &
-          companion_pid=$!
-          trap 'kill "$companion_pid" 2>/dev/null || true' EXIT
-          sleep 8
-          if ! kill -0 "$companion_pid" 2>/dev/null; then
-            cat "$RUNNER_TEMP/companion-startup.log"
-            exit 1
-          fi
+        run: bash scripts/check-macos-startup.sh
+      - name: Upload Mac startup diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-check-startup-${{ github.run_id }}
+          path: ${{ runner.temp }}/companion-startup.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload Mac installer for testing
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -32,6 +32,18 @@ function oneFile(directory, suffix) {
 }
 const assetUrl = (repository, tag, file) => `https://github.com/${repository}/releases/download/${tag}/${file}`;
 
+export function canonicalTagVersion(tag) {
+  const match = tag.match(/^work-os-companion-internal-v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d+)((?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/);
+  if (!match) throw new Error("Invalid internal release tag");
+  const [, major, minor, patch, suffix] = match;
+  const canonicalPatch = patch.replace(/^0+(?=\d)/, "");
+  const prerelease = suffix.split("+")[0].replace(/^-/, "");
+  if (patch !== canonicalPatch.padStart(2, "0") || prerelease.split(".").some((part) => /^0\d+$/.test(part))) {
+    throw new Error("Invalid internal release tag");
+  }
+  return `${major}.${minor}.${canonicalPatch}${suffix}`;
+}
+
 export function findDraftRelease(pages, tag) {
   if (!Array.isArray(pages)) throw new Error("Invalid release catalog");
   const matches = pages.flat().filter((release) => release?.tag_name === tag);
@@ -97,8 +109,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [mode, ...args] = process.argv.slice(2);
   if (mode === "stage" && args.length === 5) stageMacRelease(...args);
   else if (mode === "combine" && args.length === 4) combineRelease(...args);
+  else if (mode === "tag-version" && args.length === 1) console.log(canonicalTagVersion(args[0]));
   else if (mode === "select-draft" && args.length === 2) {
     const draft = findDraftRelease(JSON.parse(readFileSync(args[0], "utf8").replace(/^\uFEFF/, "")), args[1]);
     console.log(JSON.stringify(draft && { id: draft.id, draft: draft.draft, tag_name: draft.tag_name, target_commitish: draft.target_commitish }));
-  } else throw new Error(`Usage: ${basename(process.argv[1])} stage <bundle> <stage> <version> <tag> <repo> | combine <stage> <version> <tag> <repo> | select-draft <catalog.json> <tag>`);
+  } else throw new Error(`Usage: ${basename(process.argv[1])} stage <bundle> <stage> <version> <tag> <repo> | combine <stage> <version> <tag> <repo> | select-draft <catalog.json> <tag> | tag-version <tag>`);
 }
