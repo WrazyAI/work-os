@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.11
+
 - Debugger can replay the current page guide without changing first-visit guide state.
 
 ## 0.4.10
