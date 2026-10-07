@@ -5,12 +5,28 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
+function releasePolicySource(workflow) {
+  workflow = workflow.replaceAll("\r\n", "\n");
+  const step = workflow.slice(workflow.indexOf("      - name: Resolve and validate release metadata"), workflow.indexOf("      - name: Require changelog"));
+  const marker = "        run: |\n";
+  const offset = step.indexOf(marker);
+  assert(offset >= 0, "Missing release metadata script");
+  return step.slice(offset + marker.length).trimEnd().split("\n").map((line) => line.slice(10)).join("\n");
+}
+
+test("release policy extraction handles Windows checkout line endings", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/work-os-companion-windows.yml", import.meta.url), "utf8").replaceAll("\r\n", "\n");
+  const source = releasePolicySource(workflow);
+  assert.equal(releasePolicySource(workflow.replaceAll("\n", "\r\n")), source);
+  assert(source.startsWith('$ErrorActionPreference = "Stop"'));
+  assert.doesNotMatch(source, /inputs\.version|^\s*env:/m);
+});
+
 test("Windows executes release policy for padded tags, prereleases, and publication guards", { skip: process.platform !== "win32" }, (t) => {
   const root = mkdtempSync(join(tmpdir(), "work-os-policy-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const workflow = readFileSync(new URL("../.github/workflows/work-os-companion-windows.yml", import.meta.url), "utf8");
-  const step = workflow.slice(workflow.indexOf("      - name: Resolve and validate release metadata"), workflow.indexOf("      - name: Require changelog"));
-  const source = step.slice(step.indexOf("        run: |\n") + "        run: |\n".length).trimEnd().split("\n").map((line) => line.slice(10)).join("\n");
+  const source = releasePolicySource(workflow);
   const script = join(root, "policy.ps1");
   writeFileSync(script, source);
   mkdirSync(join(root, "src-tauri"));
