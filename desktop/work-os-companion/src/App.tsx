@@ -349,6 +349,7 @@ export default function App() {
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [debugPageGuide, setDebugPageGuide] = useState<ReturnType<typeof guideViewForSidebar>>(null);
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
@@ -434,7 +435,7 @@ export default function App() {
   useEffect(() => { voiceRef.current = voice; }, [voice]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const baseModalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen;
+  const baseModalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen || !!debugPageGuide;
   const pageGuideView = guideViewForSidebar(view);
   const pageGuideLabel = views.find((item) => item.id === view)?.label ?? "this page";
   const {
@@ -453,6 +454,24 @@ export default function App() {
   const modalOpen = baseModalOpen || openPageGuide !== null;
   useModalScrollLock(modalOpen);
 
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | null = null;
+    void listen("work-os://debug-show-page-guide", () => {
+      if (disposed) return;
+      const opened = pageGuideView !== null;
+      if (opened && !openPageGuide) setDebugPageGuide(pageGuideView);
+      void emit("work-os://debug-page-guide-result", { opened }).catch(() => undefined);
+    }).then((off) => {
+      if (disposed) off();
+      else stop = off;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [openPageGuide, pageGuideView]);
+
   const showError = useCallback((value: unknown, fallback = "Something went wrong.", title?: string) => {
     const message = errorMessage(value, fallback);
     setError(message);
@@ -469,6 +488,7 @@ export default function App() {
 
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
+    if (debugPageGuide) { setDebugPageGuide(null); return; }
     if (openPageGuide) { closeGuide(); return; }
     if (moveMenuId) { setMoveMenuId(null); return; }
     if (subtaskMenuId) { setSubtaskMenuId(null); return; }
@@ -483,7 +503,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -3621,7 +3641,8 @@ export default function App() {
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
-      {openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} />}
+      {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
+      {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} />}
       {memoryOpen && <MemoryModal
         facts={memoryQuery.data?.facts ?? []}
         recent={memoryQuery.data?.recent ?? []}
