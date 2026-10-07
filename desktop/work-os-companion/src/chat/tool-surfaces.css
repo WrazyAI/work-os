@@ -556,25 +556,6 @@
   padding: 15px;
 }
 
-[data-workos-tool-surface="approval"] .approval-intent-label {
-  color: var(--tool-faint);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-[data-workos-tool-surface="approval"] .approval-flow-body .approval-statement {
-  margin-top: -4px;
-  border: 1px solid #e3e9df;
-  border-radius: 11px;
-  background: #f7faf4;
-  padding: 11px 12px;
-  color: var(--tool-ink);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
 [data-workos-tool-surface="approval"] .approval-flow-body .approval-unresolved {
   border-radius: 10px;
   background: #fff5f2;

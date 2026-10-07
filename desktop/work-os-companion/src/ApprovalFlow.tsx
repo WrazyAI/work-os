@@ -185,8 +185,6 @@ export function ApprovalFlow({
       </header>
       <div className="approval-flow-progressbar" aria-hidden="true"><span style={{ width: `${((step + 1) / pending.length) * 100}%` }} /></div>
       <div className="approval-flow-body">
-        <span className="approval-intent-label">Proposed action</span>
-        <p className="approval-statement">{current.op.statement}</p>
         {unresolvedTask ? <p className="approval-unresolved" role="status"><CircleAlert size={13} aria-hidden="true" /> This action has no task attached. Skip it, or ask again to rebuild the list.</p> : null}
         <details><summary><ChevronDown size={13} />Technical details</summary><code>{call.command}</code></details>
       </div>

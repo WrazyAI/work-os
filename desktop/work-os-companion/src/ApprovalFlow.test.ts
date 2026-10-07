@@ -20,13 +20,16 @@ describe("ApprovalFlow", () => {
     expect(markup).toContain("Action 1 of 2");
     expect(markup).toContain('data-workos-tool-surface="approval"');
     expect(markup).toContain("Mark “Review launch” done?");
-    expect(markup).toContain("Finish the review");
     expect(markup).toContain("Technical details");
     // The card is feedback, not an editor: no wording field, no task remapping.
     expect(markup).not.toContain("Proposed wording");
     expect(markup).not.toContain("Apply to task");
     expect(markup).not.toContain("<select");
     expect(markup).not.toContain("<textarea");
+    // The decision question carries the action; the card shows no separate
+    // proposed-action section, so the statement never renders.
+    expect(markup).not.toContain("Proposed action");
+    expect(markup).not.toContain("Finish the review");
     expect(markup).not.toContain("Shared the launch notes");
   });
 
