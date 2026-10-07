@@ -80,23 +80,43 @@ export async function GET(req: Request) {
     // Fourteen-day submission cadence for the review page's lead visual.
     const seriesFrom = new Date(Date.now() - 13 * 24 * 60 * 60_000).toISOString().slice(0, 10);
     const seriesQuery = withReportFilters(
-      db.from("work_reports").select("report_date,status,submitted_at")
+      db.from("work_reports").select("report_date,status,submitted_at,person_id")
         .eq("organization_id", auth.access.organizationId),
       { personIds, status: null, from: seriesFrom, to: null },
     );
     const seriesResult = await seriesQuery.limit(2000);
     if (seriesResult.error) throw new Error(`load Work OS report cadence: ${seriesResult.error.message}`);
-    const seriesBuckets = new Map<string, { date: string; submitted: number; drafted: number }>();
+    const seriesRows = (seriesResult.data ?? []) as Array<Record<string, unknown>>;
+    // The chart stacks each day by teammate, so resolve the names for the
+    // people who actually submitted in the window.
+    const seriesPersonIds = [...new Set(seriesRows.map((row) => String(row.person_id ?? "")).filter(Boolean))];
+    const seriesNames = new Map<string, string>();
+    if (seriesPersonIds.length) {
+      const peopleResult = await db.from("work_people").select("id,display_name").in("id", seriesPersonIds).limit(500);
+      if (peopleResult.error) throw new Error(`load report cadence people: ${peopleResult.error.message}`);
+      for (const person of (peopleResult.data ?? []) as Array<Record<string, unknown>>) {
+        seriesNames.set(String(person.id), String(person.display_name ?? "Unnamed"));
+      }
+    }
+    const seriesBuckets = new Map<string, { date: string; submitted: number; drafted: number; people: Array<{ personId: string; name: string; submitted: number }> }>();
     for (let index = 0; index < 14; index += 1) {
       const date = new Date(Date.now() - (13 - index) * 24 * 60 * 60_000).toISOString().slice(0, 10);
-      seriesBuckets.set(date, { date, submitted: 0, drafted: 0 });
+      seriesBuckets.set(date, { date, submitted: 0, drafted: 0, people: [] });
     }
-    for (const row of (seriesResult.data ?? []) as Array<Record<string, unknown>>) {
+    for (const row of seriesRows) {
       const bucket = seriesBuckets.get(dateOnly(row.report_date) ?? "");
       if (!bucket) continue;
-      if (["pending_review", "approved"].includes(String(row.status))) bucket.submitted += 1;
-      else if (String(row.status) === "draft") bucket.drafted += 1;
+      if (["pending_review", "approved"].includes(String(row.status))) {
+        bucket.submitted += 1;
+        const personId = String(row.person_id ?? "");
+        if (personId) {
+          const entry = bucket.people.find((person) => person.personId === personId);
+          if (entry) entry.submitted += 1;
+          else bucket.people.push({ personId, name: seriesNames.get(personId) ?? "Unmapped person", submitted: 1 });
+        }
+      } else if (String(row.status) === "draft") bucket.drafted += 1;
     }
+    for (const bucket of seriesBuckets.values()) bucket.people.sort((left, right) => right.submitted - left.submitted);
     return NextResponse.json({ reports: listResult.data ?? [], counts, series: [...seriesBuckets.values()] });
   } catch (error) {
     return jsonError(error);

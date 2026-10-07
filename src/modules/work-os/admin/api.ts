@@ -54,7 +54,7 @@ export interface ReportsResponse {
   reports: WorkOsReportRow[];
   counts: { draft: number; pending_review: number; approved: number; rejected: number; total: number };
   /** Fourteen-day submission cadence for the review page's lead visual. */
-  series?: Array<{ date: string; submitted: number; drafted: number }>;
+  series?: Array<{ date: string; submitted: number; drafted: number; people?: Array<{ personId: string; name: string; submitted: number }> }>;
 }
 
 export interface EvidenceRow {

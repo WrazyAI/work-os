@@ -249,7 +249,12 @@ function reportsFixture(state: PreviewState) {
     series: Array.from({ length: 14 }, (_, index) => {
       const date = new Date(`${TODAY}T12:00:00Z`);
       date.setUTCDate(date.getUTCDate() - (13 - index));
-      return { date: date.toISOString().slice(0, 10), submitted: empty ? 0 : [1, 0, 2, 1, 0, 1, 3, 0, 1, 1, 2, 0, 1, 1][index], drafted: empty ? 0 : [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0][index] };
+      const submitted = empty ? 0 : [1, 0, 2, 1, 0, 1, 3, 0, 1, 1, 2, 0, 1, 1][index];
+      const people = submitted === 0 ? [] : [
+        { personId: 'p-ada', name: 'Ada Okafor', submitted: Math.max(1, submitted - 1) },
+        ...(submitted > 1 ? [{ personId: 'p-luis', name: 'Luis Moreno', submitted: 1 }] : []),
+      ];
+      return { date: date.toISOString().slice(0, 10), submitted, drafted: empty ? 0 : [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0][index], people };
     }) };
 }
 

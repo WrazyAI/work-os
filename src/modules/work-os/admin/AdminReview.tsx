@@ -17,7 +17,7 @@ import {
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
-import { CHART_COLORS, TrendBars } from "./charts";
+import { StackedCountBars } from "./charts";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
 import {
   AdminCard,
@@ -92,7 +92,7 @@ export default function AdminReviewPage() {
   // report the filters returned.
   const selected = useMemo(() => {
     const list = reports.data?.reports ?? [];
-    return list.find((report) => report.id === selectedId) ?? list[0] ?? null;
+    return list.find((report) => report.id === selectedId) ?? null;
   }, [reports.data, selectedId]);
 
   const draft = useMutation({
@@ -123,20 +123,16 @@ export default function AdminReviewPage() {
           <SectionHeading
             icon={FileCheck2}
             title="Submission cadence"
-            detail="Reports submitted and drafts created per day over the last 14 days."
+            detail="Reports submitted per day over the last 14 days, split by teammate."
           />
-          <TrendBars
-            ariaLabel="Reports submitted and drafts created per day over the last 14 days"
+          <StackedCountBars
+            ariaLabel="Reports submitted per day over the last 14 days, split by teammate"
             data={(reports.data?.series ?? []).map((point) => ({
-              label: point.date.slice(5).replace("-", "/"),
-              submitted: point.submitted,
-              drafted: point.drafted,
+              date: point.date,
+              people: (point.people ?? []).map((person) => ({ personId: person.personId, name: person.name, submitted: person.submitted })),
             }))}
-            series={[
-              { key: "submitted", label: "Submitted", color: CHART_COLORS.accent },
-              { key: "drafted", label: "Drafts", color: CHART_COLORS.neutral },
-            ]}
           />
+          <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Drafts are counted in the tabs below; the chart stacks each day&apos;s submitted reports by teammate.</p>
         </AdminCard>
       ) : null}
 
@@ -165,62 +161,63 @@ export default function AdminReviewPage() {
         </div>
         {reports.error ? <div className="px-5 py-4"><Notice tone="err">{(reports.error as Error).message}</Notice></div> : null}
 
-        <div className="grid lg:grid-cols-[360px_minmax(0,1fr)]">
-          {/* Queue */}
-          <div className="border-b lg:border-b-0 lg:border-r" style={{ borderColor: "var(--border-subtle)" }}>
-            {reports.isLoading ? (
-              <div className="grid gap-2 p-4">
-                {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-16 w-full" />)}
-              </div>
-            ) : list.length ? (
-              <ul className="max-h-[75vh] overflow-y-auto">
-                {list.map((report) => {
-                  const active = report.id === selected?.id;
-                  const snippet = eodSnippet(report.submitted_markdown ?? report.markdown, 80);
-                  return (
-                    <li key={report.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(report.id)}
-                        aria-current={active ? "true" : undefined}
-                        className={cx("w-full border-b px-4 py-3 text-left transition", !active && "hover:bg-[var(--bg-secondary)]")}
-                        style={{ borderColor: "var(--border-subtle)", background: active ? "var(--bg-secondary)" : "transparent" }}
-                      >
-                        <div className="flex items-center justify-between gap-2">
+        {/* Queue — full width; a report opens in the side panel */}
+        <div>
+          {reports.isLoading ? (
+            <div className="grid gap-2 p-4">
+              {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-16 w-full" />)}
+            </div>
+          ) : list.length ? (
+            <ul className="max-h-[75vh] overflow-y-auto">
+              {list.map((report) => {
+                const active = report.id === selected?.id;
+                const snippet = eodSnippet(report.submitted_markdown ?? report.markdown, 140);
+                return (
+                  <li key={report.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(report.id)}
+                      aria-current={active ? "true" : undefined}
+                      className={cx("w-full border-b px-5 py-3.5 text-left transition", !active && "hover:bg-[var(--bg-secondary)]")}
+                      style={{ borderColor: "var(--border-subtle)", background: active ? "var(--bg-secondary)" : "transparent" }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-2.5">
                           <span className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{report.person?.display_name ?? "Unmapped person"}</span>
+                          <span className="shrink-0 text-[11.5px] text-[var(--text-tertiary)]">{formatWorkOsDate(report.report_date)}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2.5">
+                          <span className="text-[11px] text-[var(--text-tertiary)]">{report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}</span>
                           <StatusPill tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusPill>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-[var(--text-tertiary)]">
-                          <span>{formatWorkOsDate(report.report_date)}</span>
-                          <span>{report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}</span>
-                        </div>
-                        {snippet ? <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-4 text-[var(--text-secondary)]">{snippet}</p> : null}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="p-4">
-                <EmptyState
-                  icon={FileCheck2}
-                  title={status === "pending_review" ? "No reports await review" : "No reports match these filters"}
-                  body={status === "pending_review" ? "Draft an EOD for a teammate or widen the date range." : "Clear the filters or widen the date range."}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Detail */}
-          <div className="min-w-0 p-5">
-            {!selected ? (
-              <EmptyState icon={MessageSquareText} title="Select a report" body="Choose a report from the queue to read it, check its evidence, and record a decision." />
-            ) : (
-              <ReviewDetail key={selected.id} report={selected} />
-            )}
-          </div>
+                        </span>
+                      </div>
+                      {snippet ? <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-4 text-[var(--text-secondary)]">{snippet}</p> : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="p-4">
+              <EmptyState
+                icon={FileCheck2}
+                title={status === "pending_review" ? "No reports await review" : "No reports match these filters"}
+                body={status === "pending_review" ? "Draft an EOD for a teammate or widen the date range." : "Clear the filters or widen the date range."}
+              />
+            </div>
+          )}
         </div>
       </AdminCard>
+
+      <Drawer
+        open={!!selected}
+        onClose={() => setSelectedId(null)}
+        title={selected?.person?.display_name ?? "EOD report"}
+        subtitle={selected ? `${formatWorkOsDate(selected.report_date)} · ${statusLabel(selected.status)}` : undefined}
+        width={640}
+      >
+        {selected ? <ReviewDetail key={selected.id} report={selected} /> : null}
+      </Drawer>
 
       <Drawer open={draftOpen} onClose={() => setDraftOpen(false)} title="Draft an EOD report" subtitle="Generate a report from the day's recorded work. Nothing is submitted to the employee until they review it." width={460}
         footer={

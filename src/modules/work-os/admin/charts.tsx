@@ -325,3 +325,54 @@ export function PulseBars({ data, series, ariaLabel }: {
     </div>
   );
 }
+
+/** Stacked daily counts split by teammate (for example EOD submissions per
+ * day). One segment per person, sized by that person's count for the day, with
+ * a legend that maps each color to a teammate. */
+export function StackedCountBars({ data, ariaLabel }: {
+  data: Array<{ date: string; people: Array<{ personId: string; name: string; submitted: number }> }>;
+  ariaLabel: string;
+}) {
+  const reduced = useReducedMotion();
+  const people = [...new Map(data.flatMap((point) => point.people).map((person) => [person.personId, person.name])).entries()]
+    .map(([personId, name], index) => ({ personId, name, color: CHART_PALETTE[index % CHART_PALETTE.length] }));
+  if (!data.length || !people.length) return null;
+  const chartData = data.map((point) => {
+    const row: Record<string, string | number> = { label: point.date.slice(5).replace("-", "/") };
+    for (const person of people) row[person.personId] = point.people.find((entry) => entry.personId === person.personId)?.submitted ?? 0;
+    return row;
+  });
+  return (
+    <div className="flex flex-wrap items-start gap-5">
+      <div role="img" aria-label={ariaLabel} className="min-w-[240px] flex-1">
+        <ResponsiveContainer width="100%" height={190}>
+          <BarChart data={chartData} margin={{ top: 6, right: 6, bottom: 0, left: -18 }} barCategoryGap="26%">
+            <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={AXIS_TICK} interval="preserveStartEnd" />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={AXIS_TICK} width={36} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--accent-subtle)" }} isAnimationActive={false} />
+            {people.map((person) => (
+              <Bar
+                key={person.personId}
+                dataKey={person.personId}
+                name={person.name}
+                stackId="reports"
+                fill={person.color}
+                isAnimationActive={!reduced}
+                maxBarSize={26}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="grid gap-1.5 text-[11.5px]">
+        {people.map((person) => (
+          <li key={person.personId} className="flex items-center gap-2 text-[var(--text-secondary)]">
+            <span aria-hidden className="size-2.5 rounded-[3px]" style={{ background: person.color }} />
+            <span className="min-w-0 flex-1 truncate">{person.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
