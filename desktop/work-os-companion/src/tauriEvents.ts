@@ -5,6 +5,7 @@ import { isTauri } from "@tauri-apps/api/core";
 // Auth, conversation, queue and business mutation events remain native-only.
 const PREVIEW_EVENTS = new Set([
   "work-os://debug-current", "work-os://debug-scenario", "work-os://debug-request",
+  "work-os://debug-show-page-guide", "work-os://debug-page-guide-result",
   "work-os://mascot-activity", "work-os://mascot-resolved", "work-os://mascot-request",
 ]);
 const handlers = new Map<string, Set<(payload: unknown) => void>>();
