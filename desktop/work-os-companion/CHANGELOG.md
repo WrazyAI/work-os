@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Debugger can replay the current page guide without changing first-visit guide state.
+
 ## 0.4.10
 
 - EOD reports are simpler: no bottleneck reason is required to submit, and the review header is cleaner.
