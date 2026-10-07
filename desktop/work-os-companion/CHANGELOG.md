@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.8
+
+- The bell now opens a notifications panel with everything that needs you: memories to review, a ready recap, and outstanding EODs.
+- When Otto remembers something new or a recap is ready, a reminder with Otto's mark pops up — and a system notification appears if Work OS is minimized.
+- Settings has a new Suggestions waiting for review section: approve, retry, or dismiss task changes that were never decided.
+
 ## 0.4.7
 
 - The EOD review button now reads “Draft today’s EOD”.
