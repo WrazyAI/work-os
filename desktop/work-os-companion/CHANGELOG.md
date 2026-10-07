@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.5
+
 - Review cards are simpler: each one shows the action to decide, with technical details tucked away and no repeated explanation.
 
 ## 0.4.4
