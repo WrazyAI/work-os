@@ -44,6 +44,20 @@ describe("page guide modal", () => {
     expect(markup).not.toContain("show these automatically");
   });
 
+  it("renders a developer replay without changing guide preferences", () => {
+    const markup = renderToStaticMarkup(createElement(PageGuide, {
+      view: "insights",
+      autoOpen: true,
+      developerPreview: true,
+      onClose: () => undefined,
+      onDisableAutoOpen: () => undefined,
+    }));
+    expect(markup).toContain("Developer preview");
+    expect(markup).toContain("Guide state stays unchanged");
+    expect(markup).not.toContain("show these automatically");
+    expect(markup).not.toContain("Automatic guides are off.");
+  });
+
   it("renders every guided page without a fallback", () => {
     for (const view of GUIDE_VIEWS) {
       const markup = renderToStaticMarkup(createElement(PageGuide, {

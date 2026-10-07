@@ -308,6 +308,19 @@ for (const event of ["work-os://debug-request", "work-os://debug-current", "work
   assert.match(debugWindow, new RegExp(event.replaceAll("/", "\\/")));
 }
 assert.match(debugWindow, /\.\.\.DEFAULT_DEBUG_SCENARIO, \.\.\.preset/);
+assert.match(debugWindow, /Show current page guide/);
+assert.match(debugWindow, /emit\("work-os:\/\/debug-show-page-guide"\)/);
+assert.match(debugWindow, /work-os:\/\/debug-page-guide-result/);
+assert.match(debugWindow, /No guide for this page/);
+const tauriEventsSource = read("src/tauriEvents.ts");
+assert.match(tauriEventsSource, /work-os:\/\/debug-show-page-guide/);
+assert.match(tauriEventsSource, /work-os:\/\/debug-page-guide-result/);
+assert.match(app, /listen\("work-os:\/\/debug-show-page-guide"/);
+assert.match(app, /setDebugPageGuide\(pageGuideView\)/);
+assert.match(app, /emit\("work-os:\/\/debug-page-guide-result"/);
+assert.match(app, /debugPageGuide && <PageGuide[\s\S]*developerPreview/);
+assert.match(app, /onClose=\{\(\) => setDebugPageGuide\(null\)\}/);
+
 const main = read("src/main.tsx");
 const debug = read("src/debug.tsx");
 const debugHtml = read("debug.html");
