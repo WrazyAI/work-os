@@ -4,7 +4,7 @@
  * side-effect free so the whole cadence is unit-testable.
  */
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
-import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
+import type { RecapNextStepState, RecapNextStepsMoment } from "./RecapNextStepsCard";
 
 export interface CompanionDayFacts {
   shiftDate: string;
@@ -477,11 +477,59 @@ export function mergeAvatarChatEntries(current: AvatarChatEntryState[], incoming
       operations: turn.operations ?? local?.operations,
       toolResults: turn.toolResults ?? local?.toolResults,
       taskOptions: local?.taskOptions ?? [],
-      // Another window's save may predate the moment; the local card wins so a
-      // cross-window sync can never wipe a pending decision.
-      nextSteps: turn.nextSteps ?? local?.nextSteps,
+      // Another window's save may predate the moment; the merge is monotonic so
+      // a stale snapshot can never overwrite a decision that already landed.
+      nextSteps: turn.nextSteps && local?.nextSteps
+        ? mergeNextStepsMoment(local.nextSteps, turn.nextSteps)
+        : turn.nextSteps ?? local?.nextSteps,
     };
   });
+}
+
+const NEXT_STEP_STATE_RANK: Record<RecapNextStepState, number> = { pending: 0, processing: 1, failed: 2, skipped: 2, applied: 2 };
+const NEXT_STEP_STATUS_RANK: Record<RecapNextStepsMoment["status"], number> = { drafting: 0, ready: 1, failed: 2, empty: 2, done: 3 };
+
+/** Merges two snapshots of the same next-steps moment without ever regressing
+ * it: a stale cross-window save (still "processing") can never overwrite a
+ * decision that already landed ("applied"), and a moment that reached "done"
+ * stays done. Terminal item states win over in-flight ones. */
+export function mergeNextStepsMoment(local: RecapNextStepsMoment, incoming: RecapNextStepsMoment): RecapNextStepsMoment {
+  const base = incoming.items.length >= local.items.length ? incoming : local;
+  const states: Record<string, RecapNextStepState> = {};
+  const failures: Record<string, string> = {};
+  for (const item of base.items) {
+    const localState = local.states[item.proposalId];
+    const incomingState = incoming.states[item.proposalId];
+    const localRank = NEXT_STEP_STATE_RANK[localState ?? "pending"] ?? 0;
+    const incomingRank = NEXT_STEP_STATE_RANK[incomingState ?? "pending"] ?? 0;
+    const state = localRank >= incomingRank
+      ? (localState ?? incomingState ?? "pending")
+      : (incomingState ?? localState ?? "pending");
+    states[item.proposalId] = state;
+    if (state === "failed") {
+      const failure = localState === "failed" ? local.failures[item.proposalId] : incoming.failures[item.proposalId];
+      if (failure) failures[item.proposalId] = failure;
+    }
+  }
+  return {
+    ...base,
+    intervalId: local.intervalId || incoming.intervalId,
+    label: incoming.label ?? local.label,
+    status: NEXT_STEP_STATUS_RANK[local.status] >= NEXT_STEP_STATUS_RANK[incoming.status] ? local.status : incoming.status,
+    states,
+    failures,
+    error: incoming.error ?? local.error,
+  };
+}
+
+/** Maps a proposal decision and its response outcome to the card's item state.
+ * A decision whose apply is still running stays "processing"; the caller then
+ * reconciles it against the server instead of leaving the card on Saving. */
+export function nextStepState(decision: "accept" | "skip", outcome: string | null | undefined): RecapNextStepState {
+  if (decision === "skip" || outcome === "rejected") return "skipped";
+  if (outcome === "applied") return "applied";
+  if (outcome === "applying") return "processing";
+  return "failed";
 }
 
 /** Additive conversation merge for the shared window store: incoming turns win

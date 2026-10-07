@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
   type CompanionDayFacts,
 } from "./avatarLogic";
+import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 
 const NOW = new Date("2026-08-31T10:00:00Z").getTime();
 const base: CompanionDayFacts = {
@@ -358,6 +359,48 @@ describe("bubbleAction", () => {
 
   it("offers the SOD planning shortcut only for the agenda prompt", () => {
     expect(bubbleAction("agenda")).toEqual({ kind: "open_plan", label: "Set today's goal" });
+  });
+});
+
+describe("nextStepState", () => {
+  it("maps proposal outcomes without leaving a settled decision in flight", () => {
+    expect(nextStepState("accept", "applied")).toBe("applied");
+    expect(nextStepState("accept", "applying")).toBe("processing");
+    expect(nextStepState("accept", "failed")).toBe("failed");
+    expect(nextStepState("accept", "stale")).toBe("failed");
+    expect(nextStepState("skip", "rejected")).toBe("skipped");
+    expect(nextStepState("skip", undefined)).toBe("skipped");
+    expect(nextStepState("accept", undefined)).toBe("failed");
+  });
+});
+
+describe("mergeNextStepsMoment", () => {
+  const item = { proposalId: "p-1", operation: "create_task" as const, status: "pending", title: "Document CI", rationale: "Evidence.", taskId: null, editable: true };
+  const moment = (overrides: Partial<RecapNextStepsMoment>): RecapNextStepsMoment => ({
+    intervalId: "i-1", label: "8:02–8:12 PM", status: "ready", items: [item], states: {}, failures: {}, ...overrides,
+  });
+
+  it("never lets a stale snapshot regress a landed decision", () => {
+    const applied = moment({ states: { "p-1": "applied" } });
+    const staleProcessing = moment({ states: { "p-1": "processing" } });
+    expect(mergeNextStepsMoment(applied, staleProcessing).states["p-1"]).toBe("applied");
+    expect(mergeNextStepsMoment(staleProcessing, applied).states["p-1"]).toBe("applied");
+  });
+
+  it("keeps a done moment done and the richer snapshot's items", () => {
+    const done = moment({ status: "done", states: { "p-1": "skipped" } });
+    const ready = moment({ status: "ready" });
+    expect(mergeNextStepsMoment(done, ready).status).toBe("done");
+    const drafting = moment({ status: "drafting", items: [] });
+    expect(mergeNextStepsMoment(drafting, ready).items).toHaveLength(1);
+    expect(mergeNextStepsMoment(ready, drafting).items).toHaveLength(1);
+  });
+
+  it("carries a failure reason across the merge", () => {
+    const failed = moment({ states: { "p-1": "failed" }, failures: { "p-1": "The task changed." } });
+    const stale = moment({ states: { "p-1": "processing" } });
+    expect(mergeNextStepsMoment(failed, stale).failures["p-1"]).toBe("The task changed.");
+    expect(mergeNextStepsMoment(stale, failed).failures["p-1"]).toBe("The task changed.");
   });
 });
 

@@ -272,6 +272,14 @@ export function fetchRecapNextSteps(intervalId: string) {
   });
 }
 
+/** Owner-scoped proposal readback: reconciles a next-step decision whose accept
+ * response did not settle (the apply may still be running server-side). */
+export function readRecapNextStep(proposalId: string) {
+  return apiRequest<{ proposal: { status?: string; failure_reason?: string | null } }>(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, {
+    signal: AbortSignal.timeout(30_000),
+  });
+}
+
 /** Ends the chat moment: every still-undecided suggestion is dismissed so it
  * never re-appears and nothing lingers in a queue. */
 export function dismissRecapNextSteps(intervalId: string) {

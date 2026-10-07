@@ -11,7 +11,7 @@ import { useAttendanceWatch } from "./useAttendanceWatch";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance } from "./appearance";
 import { apiRequest, ApiRequestError } from "./api";
 import { DAY_STALE_MS, ONBOARDING_STALE_MS, workOsKeys, workOsQueryClient } from "./queryClient";
-import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails } from "./workOsQueries";
+import { decideActivityIntervalReview, decideRecapNextStep, dismissRecapNextSteps, ensureActivityIntervalReview, fetchDay, fetchOnboarding, fetchRecapNextSteps, fetchTaskDetails, readRecapNextStep } from "./workOsQueries";
 import { resolveDashboardShift } from "./dashboardModel";
 import { type FiledProposalRow, type NavigatePage, type PendingToolReview, type ProposedOperation, type ToolCallResult, attachFiledProposals, disableDecidedOperations, fileApprovedOperations, filedProposalGroups, isBatchToolOp, isPlanImportOp, isDisplayToolOp, isMutatingToolOp, mergeToolResults, normalizeInterpretation, partialFilingMessage, sameToolCall, skipBatchOperation, toolCallKey } from "./interpretation";
 import { NavigateButton } from "./NavigateButton";
@@ -42,7 +42,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -790,6 +790,37 @@ export default function AvatarApp(): React.ReactElement {
       : entry));
   }, []);
 
+  /** Settles an in-flight next-step decision against the server: used when the
+   * accept response was lost, when the apply is still running, and when a
+   * reload restores a card that was left on Saving. Always ends with a real
+   * state so the card can never stay in flight forever. */
+  const reconcileNextStepDecision = useCallback(async (entryId: string, item: RecapNextStepItem, note?: string | null): Promise<RecapNextStepState> => {
+    let state: RecapNextStepState | null = null;
+    let failure: string | null = note ?? null;
+    for (let attempt = 0; attempt < 5 && !state; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1_200));
+      try {
+        const read = await readRecapNextStep(item.proposalId);
+        const status = read?.proposal?.status;
+        state = status === "applied" ? "applied"
+          : status === "rejected" ? "skipped"
+            : status === "failed" || status === "needs_review" || status === "stale" ? "failed"
+              : null;
+        if (state) failure = read?.proposal?.failure_reason ?? failure;
+      } catch { /* keep reconciling */ }
+    }
+    const settled: RecapNextStepState = state ?? "failed";
+    updateNextStepsEntry(entryId, (moment) => ({
+      ...moment,
+      states: { ...moment.states, [item.proposalId]: settled },
+      failures: settled === "failed"
+        ? { ...moment.failures, [item.proposalId]: failure ?? "The change is still processing. Retry when the connection is steady." }
+        : moment.failures,
+    }));
+    if (settled === "applied" || settled === "skipped") void loadDay();
+    return settled;
+  }, [loadDay, updateNextStepsEntry]);
+
   /** Ends the next-steps moment: still-undecided suggestions are dismissed on
    * the server and shown as skipped, so nothing lingers in any queue. A
    * decision already in flight keeps its state and reports truthfully. */
@@ -950,33 +981,52 @@ export default function AvatarApp(): React.ReactElement {
       if (!intervalId) continue;
       void startNextStepsMoment(intervalId, null, entry.id);
     }
-  }, [avatarConversationScope, avatarFixture, avatarNextStepsRecoveryLike, loadedChatConversation, startNextStepsMoment]);
+    // A decision left in flight by a previous session is settled against the
+    // server, so a restored card can never stay on Saving.
+    const inFlight = chatRef.current.flatMap((entry) => entry.nextSteps
+      ? entry.nextSteps.items
+        .filter((item) => (entry.nextSteps!.states[item.proposalId] ?? "pending") === "processing")
+        .map((item) => ({ entryId: entry.id, item }))
+      : []);
+    for (const { entryId, item } of inFlight) void reconcileNextStepDecision(entryId, item);
+  }, [avatarConversationScope, avatarFixture, avatarNextStepsRecoveryLike, loadedChatConversation, reconcileNextStepDecision, startNextStepsMoment]);
 
   /** One inline decision on a next-step suggestion, filed through the same
-   * owner-scoped proposal endpoint as any other review card. */
+   * owner-scoped proposal endpoint as any other review card. A decision whose
+   * apply is still running — or whose accept response was lost — is reconciled
+   * against the server so the card can never sit on Saving forever. */
   const decideNextStep = useCallback(async (entryId: string, item: RecapNextStepItem, decision: "accept" | "skip", edits?: { name?: string }): Promise<void> => {
     setNextStepsBusyId(entryId);
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: "processing" } }));
+    let state: RecapNextStepState = "failed";
+    let failure: string | null = null;
     try {
       if (avatarNextStepsFixture || avatarNextStepsRecoveryLike) {
         // DEV-only fixture: the decision is simulated so the card's states can
         // be exercised without a live session.
         await new Promise((resolve) => window.setTimeout(resolve, 250));
-        const state: RecapNextStepState = decision === "skip" ? "skipped" : "applied";
-        updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: state } }));
+        const fixtureState: RecapNextStepState = decision === "skip" ? "skipped" : "applied";
+        updateNextStepsEntry(entryId, (moment) => ({ ...moment, states: { ...moment.states, [item.proposalId]: fixtureState } }));
         return;
       }
-      const row = await decideRecapNextStep(item.proposalId, decision === "accept" ? "accept" : "reject", edits);
-      const outcome = row?.outcome ?? "";
-      const state: RecapNextStepState = decision === "skip" || outcome === "rejected" ? "skipped"
-        : outcome === "applied" ? "applied"
-          : outcome === "applying" ? "processing"
-            : "failed";
+      try {
+        const row = await decideRecapNextStep(item.proposalId, decision === "accept" ? "accept" : "reject", edits);
+        state = nextStepState(decision, row?.outcome);
+        failure = row?.failure_reason ?? null;
+      } catch (value) {
+        // The apply may still have landed; reconcile instead of failing.
+        state = "processing";
+        failure = value instanceof Error ? value.message : null;
+      }
+      if (state === "processing") {
+        await reconcileNextStepDecision(entryId, item, failure);
+        return;
+      }
       updateNextStepsEntry(entryId, (moment) => ({
         ...moment,
         states: { ...moment.states, [item.proposalId]: state },
         failures: state === "failed"
-          ? { ...moment.failures, [item.proposalId]: row?.failure_reason ?? "The change could not be applied." }
+          ? { ...moment.failures, [item.proposalId]: failure ?? "The change could not be applied." }
           : moment.failures,
       }));
       if (state === "applied" || state === "skipped") void loadDay();
@@ -989,7 +1039,7 @@ export default function AvatarApp(): React.ReactElement {
     } finally {
       setNextStepsBusyId(null);
     }
-  }, [avatarNextStepsFixture, avatarNextStepsRecoveryLike, loadDay, updateNextStepsEntry]);
+  }, [avatarNextStepsFixture, avatarNextStepsRecoveryLike, loadDay, reconcileNextStepDecision, updateNextStepsEntry]);
 
   // Which moments still have undecided items (for dismissal on close) and
   // which fully settled moments already scheduled their settle beat.
