@@ -141,3 +141,14 @@ test("packaged startup gate accepts a live process and rejects an early crash", 
   assert.equal(crash.code, 1);
   assert.match(crash.output, /startup-crash/);
 });
+
+
+test("root CI still reports lint failure while executing independent verification", () => {
+  const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+  assert.match(ci, /name: Install dependencies\n        id: install/);
+  for (const name of ["Typecheck (work-os)", "Tests"]) {
+    assert(ci.includes(`- name: ${name}\n        if: \${{ !cancelled() && steps.install.outcome == 'success' }}`));
+  }
+  assert.match(ci, /name: Lint\n        run: npm run lint/);
+  assert.doesNotMatch(ci, /continue-on-error/);
+});

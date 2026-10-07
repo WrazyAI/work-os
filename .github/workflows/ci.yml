@@ -27,15 +27,18 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        id: install
         run: npm ci --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
 
       - name: Typecheck (work-os)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run work-os:typecheck
 
       - name: Tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run work-os:test
 
 
