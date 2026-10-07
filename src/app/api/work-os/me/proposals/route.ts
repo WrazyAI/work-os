@@ -14,11 +14,19 @@ async function access(req: Request) {
   });
 }
 
+/** Statuses the owner's review surfaces may ask for. The overnight sweep and
+ * provider-recovery states (applying and beyond) are deliberately excluded. */
+const REVIEWABLE_PROPOSAL_STATUSES = new Set(["pending", "failed", "needs_review", "stale"]);
+
 export async function GET(req: Request) {
   try {
     const auth = await access(req);
     if (auth.response) return auth.response;
-    return NextResponse.json({ proposals: await listWorkOsProposals(auth.access, auth.access.personId as string, "pending") });
+    const requested = new URL(req.url).searchParams.get("status");
+    const statuses = requested
+      ? requested.split(",").map((value) => value.trim()).filter((value) => REVIEWABLE_PROPOSAL_STATUSES.has(value))
+      : ["pending"];
+    return NextResponse.json({ proposals: await listWorkOsProposals(auth.access, auth.access.personId as string, statuses.length ? statuses : ["pending"]) });
   } catch (error) {
     return jsonError(error);
   }

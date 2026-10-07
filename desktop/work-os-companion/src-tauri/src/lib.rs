@@ -83,14 +83,15 @@ fn open_https_url_windows(url: &str) -> Result<(), String> {
 
 
 /// Windows toast with click-to-focus: activating the notification focuses the
-/// target window (avatar -> also emits the expand event; EOD -> opens review).
-/// Other platforms keep the JS notification plugin, which handles clicks there.
+/// target window (avatar -> also emits the expand event; EOD -> opens review;
+/// memory -> opens the memory review modal). Other platforms keep the JS
+/// notification plugin, which handles clicks there.
 #[tauri::command]
 fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: String) -> Result<(), String> {
     #[cfg(windows)]
     {
         let app_handle = app.clone();
-        let window_target = if target == "eod" { "main".to_string() } else { target.clone() };
+        let window_target = if target == "eod" || target == "memory" { "main".to_string() } else { target.clone() };
         tauri_winrt_notification::Toast::new("com.wrazy.workos.pilot")
             .title(&title)
             .text1(&body)
@@ -106,6 +107,9 @@ fn notify_focus(app: tauri::AppHandle, title: String, body: String, target: Stri
                 }
                 if target == "eod" {
                     let _ = app_handle.emit_to("main", "work-os://avatar-open-eod", ());
+                }
+                if target == "memory" {
+                    let _ = app_handle.emit_to("main", "work-os://open-memory", ());
                 }
                 Ok(())
             })

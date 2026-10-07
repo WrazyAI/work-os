@@ -841,6 +841,41 @@ there is never more than one guide per page.
 - **Opt-out** — Settings → Page guides switches automatic guides; the modal's
   quiet action writes the same account flag. The `?` keeps working either way.
 
+### 8.12 Review notifications, the notifications panel, and suggestion review
+
+The masthead bell is the notifications panel: one detached surface (§8.3) that
+lists what needs the employee right now, and the badge counts all of it —
+memories awaiting review, one recap slot, and outstanding EOD days — in the
+amber recoverable-attention tone.
+
+- **Rows** — agent-authored reminders wear the configured mascot mark, the
+  same identity the chat window uses, never a generic tone glyph. The memory
+  row reads `This is what Otto remembers about you so far` with its proposed
+  fact count and opens the memory modal (§8.5) on its review tab; the recap row
+  reads `Your recap is ready` with the interval label and opens the dock's
+  Focus tab where the recap is confirmed or corrected. The outstanding EOD
+  section keeps its day rows, observed-time meta, and status pills.
+- **Arrival** — a new memory candidate or a ready undecided recap announces
+  itself exactly once per item: an in-app flyout carrying the mascot mark and
+  one `Review` action, a standing panel row until it is decided, and a system
+  notification when the window is hidden. The floating companion keeps owning
+  recap system delivery so one recap never fires two system toasts. The seen
+  registries are best-effort local memory: losing them may re-announce once,
+  never lose a reminder, and the panel always reflects live data.
+- **States** — loading reserves geometry with skeleton rows; an error keeps the
+  last list and offers an inline retry; the empty state says the employee is
+  caught up. Escape, outside press, and the close control dismiss the panel,
+  focus lands on the first row (or the close control) on open and returns to
+  the bell, and arrow keys move between rows.
+- **Suggestions waiting for review** — a second settings band below What Otto
+  remembers, with `Waiting` and `Need attention` counts and one `Review`
+  action. It opens the decision modal: `Waiting for your decision` items offer
+  `Approve` and `Reject`; `Couldn't be applied` items keep their failure reason
+  and offer `Try again` and `Dismiss`; outdated items dismiss only because the
+  task moved on. Approving or dismissing refreshes the task surfaces the change
+  could touch. Recap-sourced next steps never appear here — they belong to the
+  mascot chat moment (§9.1) — and nothing is written back until an approval.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:

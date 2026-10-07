@@ -464,3 +464,42 @@ export interface RecapNextStepsView {
   label: string | null;
   items: RecapNextStepItem[];
 }
+
+/** One fact Otto proposed or kept. Nothing is remembered until it is kept. */
+export interface MemoryFact {
+  id: string;
+  content: string;
+  review_status: "candidate" | "confirmed" | "rejected";
+  fact_key: string | null;
+  local_date: string | null;
+  occurred_at: string;
+}
+
+/** One dated context entry Otto drew on (never proof of completed work). */
+export interface MemoryRecent {
+  id: string;
+  kind: string;
+  content: string;
+  summary: string | null;
+  local_date: string | null;
+  occurred_at: string;
+}
+
+export interface MemoryView {
+  facts: MemoryFact[];
+  recent: MemoryRecent[];
+}
+
+/** One task-change proposal the employee has not decided or that never
+ * applied. Owner-scoped; recap-sourced rows stay in the chat moment. */
+export interface PendingSuggestion {
+  id: string;
+  operation: string;
+  status: "pending" | "failed" | "stale" | "needs_review" | string;
+  input_text: string | null;
+  proposed_change: Record<string, any> | null;
+  failure_reason: string | null;
+  created_at: string;
+  source_interval_id: string | null;
+  task?: { id: string; title: string | null; provider_task_id: string | null } | null;
+}

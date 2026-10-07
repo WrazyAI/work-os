@@ -6433,14 +6433,16 @@ button:not(:disabled):active {
   }
 }
 
-/* ── Outstanding EODs: masthead bell and detached day list ─────────────
-   Amber is the recoverable-attention tone (design §13.3); the card is a
-   detached surface (§25.5) anchored beneath the masthead trigger. */
-.eod-bell {
+/* ── Notifications: masthead bell and the detached review panel ─────────
+   One list of what needs the employee right now: what Otto remembers awaiting
+   review, a ready recap awaiting a decision, and outstanding EOD days. Amber
+   is the recoverable-attention tone (design §13.3); the card is a detached
+   surface (§25.5) anchored beneath the masthead trigger. */
+.notifications-bell {
   position: relative;
 }
 
-.eod-bell-count {
+.notifications-bell-count {
   position: absolute;
   top: -4px;
   right: -4px;
@@ -6458,9 +6460,9 @@ button:not(:disabled):active {
   text-align: center;
 }
 
-.eod-outstanding-card {
-  width: min(380px, calc(100vw - 24px));
-  max-height: min(520px, calc(100vh - 96px));
+.notifications-card {
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 96px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -6471,7 +6473,7 @@ button:not(:disabled):active {
   z-index: 60;
 }
 
-.eod-outstanding-head {
+.notifications-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -6480,13 +6482,13 @@ button:not(:disabled):active {
   border-bottom: 1px solid var(--line);
 }
 
-.eod-outstanding-head strong {
+.notifications-head strong {
   display: block;
   font-size: 13px;
   letter-spacing: -0.01em;
 }
 
-.eod-outstanding-head small {
+.notifications-head small {
   display: block;
   margin-top: 2px;
   color: var(--muted);
@@ -6494,26 +6496,40 @@ button:not(:disabled):active {
   line-height: 1.4;
 }
 
-.eod-outstanding-head .icon {
+.notifications-head .icon {
   flex: 0 0 auto;
 }
 
-.eod-outstanding-body {
+.notifications-body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.eod-outstanding-list {
+.notifications-section + .notifications-section {
+  border-top: 1px solid var(--line);
+}
+
+.notifications-section-title {
+  display: block;
+  padding: 11px 16px 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.notifications-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.eod-outstanding-list > li + li {
+.notifications-list > li + li {
   border-top: 1px solid #e8ebe4;
 }
 
-.eod-outstanding-row {
+.notifications-row {
   width: 100%;
   min-height: 58px;
   display: grid;
@@ -6528,45 +6544,80 @@ button:not(:disabled):active {
   cursor: pointer;
 }
 
-.eod-outstanding-row:hover {
+.notifications-row.review {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 64px;
+}
+
+.notifications-row:hover {
   background: #f4f6f1;
 }
 
-.eod-outstanding-row:focus-visible {
+.notifications-row:focus-visible {
   outline: 2px solid var(--signal-strong, #7cc936);
   outline-offset: -2px;
 }
 
-.eod-outstanding-row-main {
+.notifications-row-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.eod-outstanding-row-title {
+.notifications-row-title {
   font-size: 12px;
   font-weight: 700;
   color: var(--ink);
 }
 
-.eod-outstanding-row-meta {
+.notifications-row-meta {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.35;
 }
 
-.eod-outstanding-row > svg {
+.notifications-row > svg {
   color: #97a094;
 }
 
-.eod-outstanding-row.is-skeleton {
+.notifications-row-action {
+  color: #5c8a2e;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.notifications-row.review:hover .notifications-row-action {
+  color: #3f6b1c;
+}
+
+.notifications-mascot {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe6d6;
+  border-radius: 10px;
+  background: radial-gradient(120% 120% at 30% 20%, #f4f9ec 0%, #e8f0dd 100%);
+}
+
+.notifications-mascot .chat-mascot-mark,
+.notifications-mascot .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.notifications-row.is-skeleton {
   grid-template-columns: 1fr;
   gap: 8px;
   cursor: default;
 }
 
-.eod-outstanding-row.is-skeleton:hover {
+.notifications-row.is-skeleton:hover {
   background: transparent;
 }
 
@@ -6595,8 +6646,8 @@ button:not(:disabled):active {
   color: #a03a30;
 }
 
-.eod-outstanding-empty,
-.eod-outstanding-notice {
+.notifications-empty,
+.notifications-notice {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6605,7 +6656,7 @@ button:not(:disabled):active {
   text-align: center;
 }
 
-.eod-outstanding-notice.is-inline {
+.notifications-notice.is-inline {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -6616,23 +6667,23 @@ button:not(:disabled):active {
   text-align: left;
 }
 
-.eod-outstanding-notice.is-inline button {
+.notifications-notice.is-inline button {
   margin-top: 0;
   flex: 0 0 auto;
 }
 
-.eod-outstanding-empty strong {
+.notifications-empty strong {
   font-size: 12px;
 }
 
-.eod-outstanding-empty span,
-.eod-outstanding-notice span {
+.notifications-empty span,
+.notifications-notice span {
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
 }
 
-.eod-outstanding-notice button {
+.notifications-notice button {
   margin-top: 4px;
   display: inline-flex;
   align-items: center;
@@ -6665,8 +6716,8 @@ button:not(:disabled):active {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eod-outstanding-row,
-  .eod-bell-count {
+  .notifications-row,
+  .notifications-bell-count {
     transition: none;
   }
 }
@@ -7104,6 +7155,340 @@ button:not(:disabled):active {
 
   .memory-forget span {
     display: none;
+  }
+}
+
+/* ── Suggestions waiting for review: settings band and decision modal ─────
+   The band mirrors the memory band; the modal lists what still needs a
+   decision — undecided proposals and the ones that never applied — as flat
+   bordered cards with one action each. */
+.suggestion-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
+}
+
+.suggestion-summary-identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 420px;
+  align-items: center;
+  gap: 14px;
+}
+
+.suggestion-summary-figure {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe6d6;
+  border-radius: 16px;
+  background: radial-gradient(120% 120% at 30% 20%, #f4f9ec 0%, #e8f0dd 100%);
+}
+
+.suggestion-summary-figure .chat-mascot-mark,
+.suggestion-summary-figure .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.suggestion-summary-copy { display: grid; min-width: 0; gap: 3px; }
+
+.suggestion-summary-copy h3 {
+  margin: 0;
+  color: var(--ink);
+  font: 750 14px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.suggestion-summary-copy p {
+  margin: 0;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.suggestion-summary-side { display: flex; flex: none; align-items: center; gap: 22px; }
+.suggestion-summary-stats { display: flex; align-items: center; gap: 18px; }
+.suggestion-summary-stats > span { display: grid; justify-items: end; gap: 1px; }
+.suggestion-summary-stats b { color: var(--ink); font-size: 19px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.suggestion-summary-stats small { color: var(--muted); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.suggestion-summary-stats > span.attention b { color: #7a5312; }
+.suggestion-summary-stats > span.attention small { color: #8a6417; }
+.suggestion-summary-loading { color: var(--muted); font-size: 11.5px; }
+.suggestion-summary-error { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--danger); font-size: 11.5px; }
+.suggestion-summary-error button { min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #f7f6ef; color: var(--ink); font-size: 11px; font-weight: 650; }
+.suggestion-summary-view {
+  min-height: 36px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #263026;
+  color: #f7fbf5;
+  font: 750 12px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.suggestion-summary-view:hover { background: #31402f; }
+.suggestion-summary-view:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 2px; }
+
+.suggestion-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 20, 16, 0.68);
+  backdrop-filter: blur(9px);
+  overscroll-behavior: none;
+  animation: modalFade 0.18s ease both;
+}
+
+.suggestion-modal-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(680px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  background: #f7f5ed;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+  animation: modalRise 0.24s ease both;
+}
+
+.suggestion-modal-panel:focus { outline: none; }
+
+.suggestion-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.suggestion-modal-head h2 { margin: 0; color: var(--ink); font: 800 15px/1.25 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif; letter-spacing: -0.015em; }
+.suggestion-modal-head p { margin: 4px 0 0; max-width: 520px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+.suggestion-modal-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.suggestion-modal-close:hover { background: #ecebe4; color: var(--ink); }
+.suggestion-modal-close:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
+
+.suggestion-modal-body {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 20px;
+}
+
+.suggestion-modal-error { margin: 0; color: var(--danger); font-size: 12px; }
+
+.suggestion-modal-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.suggestion-modal-empty strong { color: var(--ink); font-size: 13px; }
+.suggestion-modal-empty span { font-size: 11.5px; }
+
+.suggestion-group { display: grid; gap: 10px; }
+
+.suggestion-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.suggestion-group-head h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.suggestion-group-head span {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ecebe4;
+  color: #5f6358;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.suggestion-group-list { display: grid; gap: 10px; }
+
+.suggestion-card {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fffdf6;
+  box-shadow: 0 6px 20px rgba(23, 25, 20, 0.04);
+}
+
+.suggestion-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+
+.suggestion-card-identity { display: flex; min-width: 0; align-items: flex-start; gap: 10px; }
+
+.suggestion-card-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: #eef3e7;
+  color: #5c8a2e;
+}
+
+.suggestion-card-kind {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.suggestion-card h4 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font: 700 13px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.suggestion-status {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.suggestion-status.waiting { background: #fff3d1; color: #8a5a00; }
+.suggestion-status.failed { background: #fbe7e3; color: #a03a30; }
+.suggestion-status.stale { background: #edf0ea; color: #687166; }
+
+.suggestion-quote {
+  margin: 0 16px;
+  padding: 9px 12px;
+  border-left: 3px solid #d8e6c6;
+  border-radius: 0 8px 8px 0;
+  background: #f8faf4;
+  color: #4e5149;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.suggestion-fields { display: grid; gap: 4px; margin: 10px 16px 0; }
+.suggestion-fields div { display: flex; justify-content: space-between; gap: 12px; padding-top: 4px; border-top: 1px solid #edf0e8; font-size: 11px; }
+.suggestion-fields dt { color: var(--muted); }
+.suggestion-fields dd { margin: 0; color: var(--ink); font-weight: 650; text-align: right; }
+
+.suggestion-reason {
+  margin: 10px 16px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fdf1ee;
+  color: #8c4a41;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.suggestion-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 14px;
+}
+
+.suggestion-card-foot small { color: var(--muted); font-size: 10px; }
+.suggestion-card-actions { display: flex; gap: 8px; }
+.suggestion-card-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggestion-card-actions button:hover { background: #f4f6f1; }
+.suggestion-card-actions button:focus-visible { outline: 2px solid var(--signal-strong, #7cc936); outline-offset: 1px; }
+.suggestion-card-actions button.primary { display: inline-flex; align-items: center; gap: 6px; border-color: #263026; background: #263026; color: #f7fbf5; }
+.suggestion-card-actions button.primary:hover { background: #31402f; }
+.suggestion-card-actions button:disabled { opacity: 0.55; cursor: default; }
+
+@media (max-width: 640px) {
+  .suggestion-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  .suggestion-summary-identity { flex: 0 0 auto; }
+
+  .suggestion-summary-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .suggestion-modal { padding: 12px; }
+
+  .suggestion-modal-panel {
+    max-height: calc(100dvh - 24px);
+    border-radius: 16px;
+  }
+
+  .suggestion-card-foot {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

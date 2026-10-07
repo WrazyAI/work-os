@@ -354,6 +354,15 @@ select:focus-visible {
   background: color-mix(in srgb, var(--notification-accent) 13%, transparent);
   color: var(--notification-accent);
 }
+/* Reviewer reminders wear the agent's own mark — the same identity the chat
+   window uses — instead of a tone glyph. */
+.notification-icon.is-mascot {
+  overflow: hidden;
+  border: 1px solid #dfe6d6;
+  background: radial-gradient(120% 120% at 30% 20%, #f4f9ec 0%, #e8f0dd 100%);
+}
+.notification-icon.is-mascot .chat-mascot-mark,
+.notification-icon.is-mascot .chat-mascot-art { display: block; width: 100%; height: 100%; }
 .notification-flyout > div { min-width: 0; padding-top: 1px; }
 .notification-flyout strong { display: block; font-size: 12px; line-height: 1.35; }
 .notification-flyout p { margin: 3px 0 0; color: #545b58; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }

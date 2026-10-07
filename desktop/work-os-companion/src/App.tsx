@@ -51,11 +51,13 @@ import { prefersReducedMotion, useListShift } from "./listShift";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, type WorkOsConversationTurn } from "./vault";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
-import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
+import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
-import { EodOutstandingBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./EodOutstanding";
+import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
+import { MEMORY_SEEN_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeSeenIds, readyRecap, recapNotifyKey, unseenMemoryIds } from "./notificationsLogic";
+import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
@@ -64,7 +66,8 @@ import { buildPlanItemsFromInterpretation } from "./planItems";
 import { WorktivityControlNotice } from "./WorktivityControlNotice";
 import { isMacOS } from "./platform";
 import { retryWorktivityConfirmation, runWorktivityControl, type WorktivityControlAction, type WorktivityControlPhase, type WorktivityControlResult, type WorktivityControlTransport, type WorktivityDesktopResult, type WorktivityPreflight } from "./worktivityControl";
-import { MemorySettings } from "./MemorySettings";
+import { MemoryModal, MemorySummary } from "./MemorySettings";
+import { SuggestionReview } from "./SuggestionReview";
 import { SettingsSwitch } from "./SettingsSwitch";
 import PageGuide from "./PageGuide";
 import { usePageGuides } from "./usePageGuides";
@@ -192,6 +195,28 @@ function proposalFilingTransport() {
 }
 
 
+/** How often the review-notification sources (memory, activity intervals) are
+ * re-read while the app is open. Matches the day poll cadence. */
+const NOTIFICATION_POLL_MS = 60_000;
+
+/** The seen registries are best-effort local memory: losing them only means a
+ * reminder may be announced once more, never that one is lost. */
+function readSeenIds(key: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeenIds(key: string, ids: string[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch { /* best effort */ }
+}
+
 /** Main companion shell: coordinates cached workday data, task history, and routed workspaces. */
 export default function App() {
   const notifications = useNotifications();
@@ -264,7 +289,10 @@ export default function App() {
   const [eodQueued, setEodQueued] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
-  const [eodListOpen, setEodListOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [eodDate, setEodDate] = useState<string | null>(null);
   const interpretationTaskOptions = () => {
     const rows = uniqueTasks([...(visibleDay?.tasks ?? []), ...taskHistory]).filter((task) => task.completed !== true && !task.pending_status);
@@ -771,6 +799,13 @@ export default function App() {
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
   const outstandingQuery = useOutstandingEodsQuery({ enabled: signedIn && !syncBypass });
+  // Review-notification sources: what Otto remembers waiting for review, and a
+  // recap waiting to be confirmed. Both poll only while the app is open.
+  const memoryQuery = useMemoryQuery({ enabled: signedIn && !syncBypass, pollMs: NOTIFICATION_POLL_MS });
+  const notificationIntervalsQuery = useActivityIntervalsQuery({ enabled: signedIn && !syncBypass, date: visibleDay?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
+  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
+  const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
+  const memoryCandidateCount = useMemo(() => memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0, [memoryQuery.data]);
   const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
   const screenshotGalleryQuery = useEodScreenshotsQuery({
     enabled: signedIn && !syncBypass,
@@ -1051,6 +1086,93 @@ export default function App() {
     }).then((fn) => { unlisten = fn; }).catch(() => undefined);
     return () => unlisten?.();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
+
+  // A Windows toast click on the memory reminder lands on the same review
+  // modal the notifications panel opens.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen("work-os://open-memory", () => { setMemoryOpen(true); }).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
+
+  // Memory arrivals announce themselves once per proposal: a flyout with the
+  // agent's own mark, a system toast when the window is hidden, and a standing
+  // row in the notifications panel until they are reviewed. The registry keeps
+  // a reload from re-announcing what the employee already saw.
+  const memorySeenRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    const facts = memoryQuery.data?.facts;
+    if (!facts) return;
+    const ids = memoryCandidateIds(facts);
+    const seen = memorySeenRef.current ?? readSeenIds(MEMORY_SEEN_KEY);
+    const unseen = unseenMemoryIds(ids, seen);
+    if (unseen.length > 0) {
+      notifications.info(
+        `${unseen.length} proposed fact${unseen.length === 1 ? "" : "s"} waiting for your review.`,
+        `This is what ${MASCOT.name} remembers about you so far`,
+        { label: "Review", onClick: () => setMemoryOpen(true) },
+        { icon: "otto" },
+      );
+      if (document.hidden) {
+        void fireCompanionToast({
+          title: `This is what ${MASCOT.name} remembers so far`,
+          body: `${unseen.length} new memor${unseen.length === 1 ? "y" : "ies"} waiting for your review.`,
+          target: "memory",
+        });
+      }
+    }
+    const merged = mergeSeenIds(seen, ids);
+    memorySeenRef.current = merged;
+    writeSeenIds(MEMORY_SEEN_KEY, merged);
+  }, [memoryQuery.data, notifications]);
+
+  // A ready recap announces itself once per interval: the panel row stands
+  // until the recap is confirmed, while the floating companion keeps owning
+  // system-level delivery so one recap never fires two system toasts.
+  const recapNotifiedRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!readyRecapInterval) return;
+    const key = recapNotifyKey(readyRecapInterval.id);
+    const seen = recapNotifiedRef.current ?? readSeenIds(RECAP_NOTIFIED_KEY);
+    if (seen.includes(key)) return;
+    notifications.info(
+      "Confirm or correct what Otto saw during your last interval.",
+      "Your recap is ready",
+      { label: "Review", onClick: openGoalComposer },
+      { icon: "otto" },
+    );
+    const next = [...seen, key].slice(-120);
+    recapNotifiedRef.current = next;
+    writeSeenIds(RECAP_NOTIFIED_KEY, next);
+  }, [readyRecapInterval, notifications]); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
+
+  /** Keep, reject, or forget a memory fact, then refresh every surface that
+   * shows the same list (panel badge, settings band, modal). */
+  const reviewMemory = async (id: string, status: "confirmed" | "rejected") => {
+    setMemoryBusy(true);
+    setMemoryError(null);
+    try {
+      await reviewMemoryFact(id, status);
+      await queryClient.invalidateQueries({ queryKey: workOsKeys.memory() });
+    } catch (value) {
+      setMemoryError(errorMessage(value, "That fact could not be updated."));
+    } finally {
+      setMemoryBusy(false);
+    }
+  };
+  const forgetMemory = async (id: string) => {
+    setMemoryBusy(true);
+    setMemoryError(null);
+    try {
+      await forgetMemoryFact(id);
+      await queryClient.invalidateQueries({ queryKey: workOsKeys.memory() });
+    } catch (value) {
+      setMemoryError(errorMessage(value, "That memory could not be forgotten."));
+    } finally {
+      setMemoryBusy(false);
+    }
+  };
 
   // "Set today's goal" on the floating agenda bubble lands on the SOD planning
   // modal, ready for the day's focus.
@@ -3169,14 +3291,18 @@ export default function App() {
       onSignOut={() => { void logout(); }}
     />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setEodListOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{view !== "tasks" && visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <EodOutstandingBell
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{view !== "tasks" && visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <NotificationsBell
+        memoryCandidates={memoryCandidateCount}
+        recap={recapSummary}
         days={outstandingQuery.data?.days ?? []}
         loading={outstandingQuery.isFetching && !outstandingQuery.data}
         error={outstandingQuery.error ? errorMessage(outstandingQuery.error, "Outstanding EODs could not be loaded.") : null}
-        open={eodListOpen}
-        onToggle={() => { const next = !eodListOpen; setEodListOpen(next); if (next) void outstandingQuery.refetch(); }}
-        onClose={() => setEodListOpen(false)}
-        onSelect={(day: OutstandingEodDay) => { setEodListOpen(false); setEodLanding(false); setEodDate(day.date); setView("review"); }}
+        open={notificationsOpen}
+        onToggle={() => { const next = !notificationsOpen; setNotificationsOpen(next); if (next) void outstandingQuery.refetch(); }}
+        onClose={() => setNotificationsOpen(false)}
+        onSelect={(day: OutstandingEodDay) => { setNotificationsOpen(false); setEodLanding(false); setEodDate(day.date); setView("review"); }}
+        onOpenMemory={() => { setNotificationsOpen(false); setMemoryOpen(true); }}
+        onOpenRecap={() => { setNotificationsOpen(false); openGoalComposer(); }}
         onRetry={() => void outstandingQuery.refetch()}
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
@@ -3347,7 +3473,7 @@ export default function App() {
                               <ChevronRight size={14} />
                             </button></li>;
                           })}</ul>
-                          {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setEodListOpen(true)}>Show all {outstandingDays.length} days</button> : null}
+                          {outstandingDays.length > 5 ? <button type="button" className="eod-start-more" onClick={() => setNotificationsOpen(true)}>Show all {outstandingDays.length} days</button> : null}
                         </section> : null}
                         <div className="eod-start-actions">
                           {!eodDate && <button type="button" className="quiet-action" onClick={() => setView("day")}>Return to today <ChevronRight size={14} /></button>}
@@ -3426,7 +3552,15 @@ export default function App() {
             </section>
            </section>
 
-           <MemorySettings />
+           <MemorySummary
+             facts={memoryQuery.data?.facts ?? []}
+             loading={memoryQuery.isPending && !memoryQuery.data}
+             error={!memoryQuery.data && memoryQuery.error ? errorMessage(memoryQuery.error, "Memory could not be loaded.") : null}
+             onOpen={() => setMemoryOpen(true)}
+             onRetry={() => void memoryQuery.refetch()}
+           />
+
+           <SuggestionReview />
 
            <section className="settings-group" aria-labelledby="settings-diagnostics-title">
              <header className="settings-group-head"><h3 id="settings-diagnostics-title">Diagnostics</h3></header>
@@ -3492,6 +3626,15 @@ export default function App() {
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
       {openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} />}
+      {memoryOpen && <MemoryModal
+        facts={memoryQuery.data?.facts ?? []}
+        recent={memoryQuery.data?.recent ?? []}
+        busy={memoryBusy}
+        error={memoryError}
+        onReview={(id, status) => void reviewMemory(id, status)}
+        onForget={(id) => void forgetMemory(id)}
+        onClose={() => { setMemoryOpen(false); setMemoryError(null); }}
+      />}
       {profileOpen && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Workspace settings</span><h2 id="profile-settings-title">Profile settings</h2><p id="profile-settings-description">Identity, schedule, privacy, notifications, and work context.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}

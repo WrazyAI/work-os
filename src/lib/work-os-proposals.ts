@@ -380,7 +380,7 @@ export function prepareProposals(operations: InterpretedOperationEntry[]): Prepa
   return prepared;
 }
 
-export async function listWorkOsProposals(access: WorkOsAccess, personId: string, status?: string | null) {
+export async function listWorkOsProposals(access: WorkOsAccess, personId: string, status?: string | string[] | null) {
   let query = db()
     .from("work_task_proposals")
     .select("*, task:work_tasks(id, title, provider_task_id)")
@@ -388,7 +388,11 @@ export async function listWorkOsProposals(access: WorkOsAccess, personId: string
     .eq("person_id", personId)
     .order("created_at", { ascending: false })
     .limit(100);
-  if (status) query = query.eq("status", status);
+  if (Array.isArray(status)) {
+    if (status.length) query = query.in("status", status);
+  } else if (status) {
+    query = query.eq("status", status);
+  }
   const { data, error } = await query;
   if (error) throw new Error(`load Work OS proposals: ${error.message}`);
   return data ?? [];

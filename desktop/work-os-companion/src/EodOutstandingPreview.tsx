@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
-import { EodOutstandingBell } from "./EodOutstanding";
+import { NotificationsBell } from "./NotificationsBell";
 import { EodComposer } from "./taskSurfaces";
 import type { OutstandingEodDay } from "./types";
 
@@ -42,14 +42,18 @@ export default function EodOutstandingPreview() {
     <div><p>September 11</p><div className="masthead-title-row"><h1>{state === "selected" ? "EOD Review" : "My Day"}</h1>{days.length > 0 && <button type="button" className="eod-attention-pill"><AlertTriangle size={12} />{days.length} prior EOD{days.length === 1 ? "" : "s"} need attention</button>}</div></div>
     <div className="mast-actions">
       <span className="provider nifty-state fresh">Nifty current</span>
-      <EodOutstandingBell
+      <NotificationsBell
+        memoryCandidates={0}
+        recap={null}
         days={days}
         loading={state === "loading"}
         error={state === "error" ? "Outstanding EODs could not be loaded." : null}
         open={open}
-        onToggle={() => setOpen((current) => !current)}
+        onToggle={() => setOpen((current) => !open)}
         onClose={() => setOpen(false)}
         onSelect={() => setOpen(false)}
+        onOpenMemory={() => undefined}
+        onOpenRecap={() => undefined}
         onRetry={() => undefined}
       />
       <button className="icon" title="Refresh this page" disabled><span /></button>

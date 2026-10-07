@@ -1,4 +1,5 @@
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { invoke } from "@tauri-apps/api/core";
 import { diagnostics } from "./diagnostics";
 import type { DayData } from "./types";
 
@@ -17,6 +18,18 @@ export async function sendOSNotification(title: string, body: string, cause: str
     // Outside Tauri (or before the plugin is ready) OS delivery is simply
     // unavailable — the in-app persistent flyout remains the surface.
     diagnostics.warn("notification.unavailable", error instanceof Error ? error.message : "OS notification unavailable", { cause });
+  }
+}
+
+/** Shows a companion notification that can deep-link when clicked. Windows
+ * toasts go through the click-to-focus command ("memory" opens the review
+ * modal); other platforms fall back to the notification plugin. */
+export async function fireCompanionToast(input: { title: string; body: string; target: "main" | "avatar" | "eod" | "memory" }): Promise<void> {
+  try {
+    await invoke("notify_focus", { title: input.title, body: input.body, target: input.target });
+    diagnostics.info("notification.sent", "Showing companion notification", { cause: `companion:${input.target}` });
+  } catch {
+    await sendOSNotification(input.title, input.body, `companion:${input.target}`);
   }
 }
 

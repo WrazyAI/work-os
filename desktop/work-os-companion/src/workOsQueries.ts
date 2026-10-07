@@ -6,14 +6,16 @@ import {
   DAY_STALE_MS,
   HISTORICAL_STALE_MS,
   INSIGHTS_STALE_MS,
+  MEMORY_STALE_MS,
   ONBOARDING_STALE_MS,
+  SUGGESTIONS_STALE_MS,
   TASK_BACKLOG_STALE_MS,
   TASK_DETAILS_STALE_MS,
   TASK_HISTORY_STALE_MS,
   TASK_OPTIONS_STALE_MS,
   workOsKeys,
 } from "./queryClient";
-import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, OnboardingData, OutstandingEodsData, RecapNextStepsView } from "./types";
+import type { ActivityIntervalCard, ActivityIntervalEnsureResult, ActivityIntervalsData, DailyPlan, DayData, EodScreenshotGallery, EodScreenshotPreparation, InsightsData, MemoryView, OnboardingData, OutstandingEodsData, PendingSuggestion, RecapNextStepsView } from "./types";
 import type { TaskSort } from "./taskWorkspace";
 
 export type TaskDetails = {
@@ -289,5 +291,66 @@ export function decideRecapNextStep(proposalId: string, decision: "accept" | "re
     headers: { "Idempotency-Key": crypto.randomUUID() },
     signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({ decision, ...(edits ? { edits } : {}) }),
+  });
+}
+
+/** What Otto proposed or kept, plus the dated context it drew on. Polled while
+ * the app is open so a new proposal can announce itself through the
+ * notifications panel. */
+export function useMemoryQuery(options: { enabled: boolean; pollMs?: number }) {
+  return useQuery({
+    queryKey: workOsKeys.memory(),
+    enabled: options.enabled,
+    staleTime: MEMORY_STALE_MS,
+    refetchInterval: options.pollMs ?? false,
+    queryFn: () => apiRequest<MemoryView>("/api/work-os/me/memory"),
+  });
+}
+
+/** Keep (confirm) or reject a proposed fact. Nothing is remembered without a
+ * keep, and a rejection prevents the same fact from being re-proposed. */
+export function reviewMemoryFact(id: string, status: "confirmed" | "rejected") {
+  return apiRequest(`/api/work-os/me/memory/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    signal: AbortSignal.timeout(30_000),
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** Forget a kept fact or one dated activity entry. */
+export function forgetMemoryFact(id: string) {
+  return apiRequest(`/api/work-os/me/memory/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    signal: AbortSignal.timeout(30_000),
+  });
+}
+
+/** Owner-scoped proposals that still need the employee: undecided, failed to
+ * apply, or outdated. Recap-sourced rows are excluded here — they belong to
+ * the mascot chat moment, never to this review surface. */
+export async function fetchPendingSuggestions(): Promise<PendingSuggestion[]> {
+  const data = await apiRequest<{ proposals: PendingSuggestion[] }>("/api/work-os/me/proposals?status=pending,failed,stale", {
+    signal: AbortSignal.timeout(35_000),
+  });
+  return (data.proposals ?? []).filter((proposal) => !proposal.source_interval_id);
+}
+
+export function usePendingSuggestionsQuery(options: { enabled: boolean; pollMs?: number }) {
+  return useQuery({
+    queryKey: workOsKeys.suggestions(),
+    enabled: options.enabled,
+    staleTime: SUGGESTIONS_STALE_MS,
+    refetchInterval: options.pollMs ?? false,
+    queryFn: fetchPendingSuggestions,
+  });
+}
+
+/** Approve (apply, or retry a failed apply) or dismiss one suggestion. */
+export function decideSuggestion(proposalId: string, decision: "accept" | "reject") {
+  return apiRequest<{ outcome?: string; failure_reason?: string | null }>(`/api/work-os/proposals/${encodeURIComponent(proposalId)}`, {
+    method: "PATCH",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({ decision }),
   });
 }

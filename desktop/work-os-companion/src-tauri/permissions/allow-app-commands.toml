@@ -4,6 +4,7 @@ description = "Allow the main companion window to use local IPC commands."
 commands.allow = [
   "get_vault_password",
   "app_heartbeat",
+  "notify_focus",
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
   "open_work_os_auth",

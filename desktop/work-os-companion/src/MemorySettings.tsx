@@ -1,34 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Check, Trash2, X } from "lucide-react";
-import { apiRequest } from "./api";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { useModalScrollLock } from "./modalScrollLock";
 import { renderViewportSurface } from "./viewportSurface";
 import { formatWorkOsDate } from "./dateFormat";
+import type { MemoryFact, MemoryRecent } from "./types";
 
-export interface MemoryFact {
-  id: string;
-  content: string;
-  review_status: "candidate" | "confirmed" | "rejected";
-  fact_key: string | null;
-  local_date: string | null;
-  occurred_at: string;
-}
-
-export interface MemoryRecent {
-  id: string;
-  kind: string;
-  content: string;
-  summary: string | null;
-  local_date: string | null;
-  occurred_at: string;
-}
-
-export interface MemoryView {
-  facts: MemoryFact[];
-  recent: MemoryRecent[];
-}
+export type { MemoryFact, MemoryRecent, MemoryView } from "./types";
 
 /** The activity feed shows this many rows before the Show all control. */
 const ACTIVITY_PAGE_SIZE = 8;
@@ -289,68 +268,3 @@ export function MemoryModal({ facts, recent, busy, error, onReview, onForget, on
   );
 }
 
-export function MemorySettings() {
-  const [data, setData] = useState<MemoryView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  const load = async () => {
-    try {
-      setData(await apiRequest<MemoryView>("/api/work-os/me/memory"));
-      setError(null);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Memory could not be loaded.");
-    }
-  };
-
-  useEffect(() => { void load(); }, []);
-
-  const review = async (id: string, status: "confirmed" | "rejected") => {
-    setBusy(true);
-    try {
-      await apiRequest(`/api/work-os/me/memory/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) });
-      setData((current) => current ? { ...current, facts: current.facts.map((fact) => fact.id === id ? { ...fact, review_status: status } : fact) } : current);
-      setError(null);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "That fact could not be updated.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const forget = async (id: string) => {
-    setBusy(true);
-    try {
-      await apiRequest(`/api/work-os/me/memory/${encodeURIComponent(id)}`, { method: "DELETE" });
-      setData((current) => current ? {
-        facts: current.facts.filter((fact) => fact.id !== id),
-        recent: current.recent.filter((entry) => entry.id !== id),
-      } : current);
-      setError(null);
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "That memory could not be forgotten.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <>
-    <MemorySummary
-      facts={data?.facts ?? []}
-      loading={!data && !error}
-      error={data ? null : error}
-      onOpen={() => setOpen(true)}
-      onRetry={() => void load()}
-    />
-    {open && <MemoryModal
-      facts={data?.facts ?? []}
-      recent={data?.recent ?? []}
-      busy={busy}
-      error={error}
-      onReview={(id, status) => void review(id, status)}
-      onForget={(id) => void forget(id)}
-      onClose={() => setOpen(false)}
-    />}
-  </>;
-}

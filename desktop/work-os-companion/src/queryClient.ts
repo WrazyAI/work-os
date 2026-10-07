@@ -13,6 +13,8 @@ export const ONBOARDING_STALE_MS = 30 * 60_000;
 export const TASK_OPTIONS_STALE_MS = 10 * 60_000;
 export const HISTORICAL_STALE_MS = 10 * 60_000;
 export const ACTIVITY_INTERVALS_STALE_MS = 60_000;
+export const MEMORY_STALE_MS = 60_000;
+export const SUGGESTIONS_STALE_MS = 60_000;
 
 export const workOsKeys = {
   day: (variant: "compact" | "details") => ["work-os", "day", variant] as const,
@@ -27,6 +29,8 @@ export const workOsKeys = {
   onboarding: () => ["work-os", "onboarding"] as const,
   taskOptions: () => ["work-os", "task-options"] as const,
   activityIntervals: (date: string) => ["work-os", "activity-intervals", date] as const,
+  memory: () => ["work-os", "memory"] as const,
+  suggestions: () => ["work-os", "suggestions"] as const,
 };
 
 const PERSISTED_ROOT = "work-os";

@@ -1,8 +1,7 @@
 [[permission]]
 identifier = "allow-avatar-commands"
-description = "Allow the floating companion window to fire click-to-focus notifications."
+description = "Allow the floating companion window to manage its own visibility and focus the main window."
 commands.allow = [
-  "notify_focus",
   "focus_main",
   "hide_avatar",
   "show_avatar"

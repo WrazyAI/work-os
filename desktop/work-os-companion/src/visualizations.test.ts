@@ -401,10 +401,12 @@ describe("operational visualizations", () => {
     expect(styles).toContain(".status-chip.attention");
     expect(styles).toContain(".settings-group.danger");
     expect(styles).not.toContain(".settings-panel .status-dot");
-    const memoryIndex = app.indexOf("<MemorySettings />");
+    const memoryIndex = app.indexOf("<MemorySummary");
+    const suggestionsIndex = app.indexOf("<SuggestionReview />");
     const diagnosticsIndex = app.indexOf('aria-labelledby="settings-diagnostics-title"');
     expect(memoryIndex).toBeGreaterThan(-1);
-    expect(memoryIndex).toBeLessThan(diagnosticsIndex);
+    expect(suggestionsIndex).toBeGreaterThan(memoryIndex);
+    expect(suggestionsIndex).toBeLessThan(diagnosticsIndex);
     expect(styles).toMatch(/@media \(max-width: 850px\) \{[\s\S]*?\.settings-group \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
     expect(styles).toMatch(/@media \(max-width: 640px\) \{[\s\S]*?\.setting \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   });

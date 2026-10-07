@@ -1,8 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, Check, Info, Pin, X } from "lucide-react";
+import { MASCOT } from "./mascot";
+import { MascotMark } from "./chat/MascotMark";
 
 export type NotificationTone = "success" | "error" | "warning" | "info";
 export type NotificationPersistence = "transient" | "persistent";
+/** Identity for the card's leading tile: the agent's own mark for reminders it
+ * authors, the tone icon otherwise. */
+export type NotificationIcon = "otto";
 
 export type NotificationAction = { label: string; onClick: () => void; kind?: "primary" | "quiet" };
 export type NotificationProgress = { value: number | null; max: number; valueText: string };
@@ -17,22 +22,26 @@ export type AppNotification = {
   action?: { label: string; onClick: () => void };
   actions?: NotificationAction[];
   progress?: NotificationProgress;
+  /** When set, the leading tile renders the agent mark for reviewer reminders. */
+  icon?: NotificationIcon;
   /** Locks the card while work is in flight: no dismiss control. */
   locked?: boolean;
 };
 
+type NotificationOptions = { icon?: NotificationIcon };
 type NotificationInput = Omit<AppNotification, "id">;
 type PersistentOptions = {
   action?: AppNotification["action"];
   actions?: NotificationAction[];
   progress?: NotificationProgress;
+  icon?: NotificationIcon;
   locked?: boolean;
 };
 type NotificationContextValue = {
-  notify: (tone: NotificationTone, message: string, title?: string, action?: AppNotification["action"]) => void;
-  success: (message: string, title?: string, action?: AppNotification["action"]) => void;
-  error: (message: string, title?: string, action?: AppNotification["action"]) => void;
-  info: (message: string, title?: string, action?: AppNotification["action"]) => void;
+  notify: (tone: NotificationTone, message: string, title?: string, action?: AppNotification["action"], options?: NotificationOptions) => void;
+  success: (message: string, title?: string, action?: AppNotification["action"], options?: NotificationOptions) => void;
+  error: (message: string, title?: string, action?: AppNotification["action"], options?: NotificationOptions) => void;
+  info: (message: string, title?: string, action?: AppNotification["action"], options?: NotificationOptions) => void;
   persistent: (key: string, message: string, title?: string, tone?: NotificationTone, options?: PersistentOptions) => void;
   clearPersistent: (key: string) => void;
 };
@@ -77,10 +86,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const dismiss = useCallback((id: string) => setNotifications((current) => current.filter((item) => item.id !== id)), []);
   const clearPersistent = useCallback((key: string) => setNotifications((current) => current.filter((item) => item.persistenceKey !== key)), []);
-  const notify = useCallback((tone: NotificationTone, message: string, title = DEFAULT_TITLES[tone], action?: AppNotification["action"]) => {
+  const notify = useCallback((tone: NotificationTone, message: string, title = DEFAULT_TITLES[tone], action?: AppNotification["action"], options?: NotificationOptions) => {
     const cleanMessage = message.trim();
     if (!cleanMessage) return;
-    setNotifications((current) => appendNotification(current, { tone, title, message: cleanMessage, action }));
+    setNotifications((current) => appendNotification(current, { tone, title, message: cleanMessage, action, icon: options?.icon }));
   }, []);
   const persistent = useCallback((key: string, message: string, title = "Needs attention", tone: NotificationTone = "info", options?: PersistentOptions) => {
     const cleanKey = key.trim();
@@ -93,6 +102,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       action: options?.action,
       actions: options?.actions,
       progress: options?.progress,
+      icon: options?.icon,
       locked: options?.locked,
       persistence: "persistent",
       persistenceKey: cleanKey,
@@ -100,9 +110,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo<NotificationContextValue>(() => ({
     notify,
-    success: (message, title, action) => notify("success", message, title, action),
-    error: (message, title, action) => notify("error", message, title, action),
-    info: (message, title, action) => notify("info", message, title, action),
+    success: (message, title, action, options) => notify("success", message, title, action, options),
+    error: (message, title, action, options) => notify("error", message, title, action, options),
+    info: (message, title, action, options) => notify("info", message, title, action, options),
     persistent,
     clearPersistent,
   }), [clearPersistent, notify, persistent]);
@@ -150,7 +160,7 @@ function NotificationCard({ notification, onDismiss }: { notification: AppNotifi
     aria-atomic="true"
     style={duration === null ? undefined : { "--notification-duration": `${duration}ms` } as CSSProperties}
   >
-    <span className="notification-icon"><Icon size={18} /></span>
+    <span className={`notification-icon${notification.icon === "otto" ? " is-mascot" : ""}`}>{notification.icon === "otto" ? <MascotMark className="notification-mascot" /> : <Icon size={18} />}</span>
     <div>
       <strong>{notification.title}</strong>
       <p>{notification.message}</p>
