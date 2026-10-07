@@ -33,6 +33,7 @@ export default function DebugWindow() {
   const [autoscroll, setAutoscroll] = useState(true);
   const [flash, setFlash] = useState<"scenario" | "event" | "path" | null>(null);
   const [exportResult, setExportResult] = useState<null | { tone: "ok" | "error"; title: string; detail: string; path?: string }>(null);
+  const [guideReplayStatus, setGuideReplayStatus] = useState<"opened" | "unavailable" | null>(null);
   const traceEndRef = useRef<HTMLDivElement | null>(null);
   const previewTrace = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-trace");
 
@@ -49,6 +50,10 @@ export default function DebugWindow() {
       register(off);
       if (!disposed) void emit("work-os://debug-request");
     }).catch(() => undefined);
+    void listen<{ opened: boolean }>("work-os://debug-page-guide-result", (event) => {
+      if (disposed) return;
+      setGuideReplayStatus(event.payload?.opened ? "opened" : "unavailable");
+    }).then(register).catch(() => undefined);
     void listen<DiagnosticEvent>("work-os://diagnostics", (event) => {
       if (disposed || pausedRef.current) return;
       setEvents((current) => [...current.slice(-1999), event.payload]);
@@ -190,6 +195,17 @@ export default function DebugWindow() {
         <div className="debug-action-row">
           <button type="button" className="debug-invalidate" onClick={() => update({ enabled: true, authState: "real", onboardingState: "missing", invalidateOnboardingData: true, missingDetails: ALL_ONBOARDING_DETAILS.filter((item) => item.owner === "employee").map((item) => item.key) })}>Invalidate employee onboarding</button>
           <p className="debug-help">Clears the local form fixture and requires the employee-owned details again. Server data is unchanged.</p>
+        </div>
+        <div className="debug-action-row">
+          <button type="button" className="debug-invalidate" onClick={() => {
+            setGuideReplayStatus(null);
+            void emit("work-os://debug-show-page-guide").catch(() => setGuideReplayStatus("unavailable"));
+          }}>Show current page guide</button>
+          <p className="debug-help" aria-live="polite">{guideReplayStatus === "opened"
+            ? "Guide opened in the main window. Its seen/unseen state will not change."
+            : guideReplayStatus === "unavailable"
+              ? "No guide for this page."
+              : "Replay the guide modal for the page open in the main window without changing its first-visit state."}</p>
         </div>
       </section>
       <section className="debug-group">
