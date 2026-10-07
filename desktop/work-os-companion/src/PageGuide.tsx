@@ -13,11 +13,13 @@ import type { GuideView } from "./guideState";
 export default function PageGuide({
   view,
   autoOpen,
+  developerPreview = false,
   onClose,
   onDisableAutoOpen,
 }: {
   view: GuideView;
   autoOpen: boolean;
+  developerPreview?: boolean;
   onClose: () => void;
   onDisableAutoOpen: () => void;
 }) {
@@ -53,7 +55,7 @@ export default function PageGuide({
       >
         <header>
           <div>
-            <span>Page guide</span>
+            <span>{developerPreview ? "Developer preview" : "Page guide"}</span>
             <h2 id="page-guide-title">{guide.title}</h2>
             <p id="page-guide-promise">{guide.promise}</p>
           </div>
@@ -87,7 +89,9 @@ export default function PageGuide({
           </ol>
         </div>
         <footer className="guide-modal-footer">
-          {autoOpen ? (
+          {developerPreview ? (
+            <small className="guide-auto-note">Guide state stays unchanged. Close this replay when you are done testing it.</small>
+          ) : autoOpen ? (
             <button type="button" className="guide-quiet-action" onClick={onDisableAutoOpen}>
               Don't show these automatically
             </button>
