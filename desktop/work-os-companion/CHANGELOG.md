@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.9
+
+- A suggested next step now always finishes: if the change applied, the card shows Added instead of staying on Saving.
+
 ## 0.4.8
 
 - The bell now opens a notifications panel with everything that needs you: memories to review, a ready recap, and outstanding EODs.
