@@ -1,7 +1,7 @@
 {
   "people": {
     "david@maigreeks.com": {
-      "checkInIntervalMinutes": 10,
+      "checkInIntervalMinutes": 30,
       "firstFollowUpMinutes": 10
     }
   }
