@@ -22,6 +22,8 @@ export async function POST(req: Request) {
     const auth = await requireWorkOsAccess({
       organizationId: req.headers.get("x-work-os-organization-id"),
       authorization: req.headers.get("authorization"),
+cadenceMinutes: req.headers.get("x-work-os-cadence-minutes"),
+firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
       requirePerson: true,
       feature: "employee_companion",
     });

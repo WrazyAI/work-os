@@ -164,17 +164,27 @@ export function personCadenceOverride(config: WorkOsLocalConfig, identity: WorkO
   return null;
 }
 
-/** Effective cadence for one person. Precedence: local config entry > deployment
- * environment override > built-in default (60 minutes / 75 minutes). */
+/** A cadence the installed app reported from its own local config file. It
+ * beats every deployment source because the employee edited that machine. */
+export interface WorkOsMachineCadence {
+  checkInIntervalMinutes?: number;
+  firstFollowUpMinutes?: number;
+}
+
+/** Effective cadence for one person. Precedence: the machine's own local config
+ * file (reported by the installed app) > the deployment's local config entry >
+ * the deployment environment > built-in defaults (60 minutes / 75 minutes). */
 export function resolveWorkOsCadence(
   identity: WorkOsCadenceIdentity,
   env: NodeJS.ProcessEnv = process.env,
   config: WorkOsLocalConfig = loadWorkOsLocalConfig(),
+  machine?: WorkOsMachineCadence | null,
 ): ResolvedWorkOsCadence {
   const override = personCadenceOverride(config, identity);
+  const fromMachine = machine && (machine.checkInIntervalMinutes != null || machine.firstFollowUpMinutes != null) ? machine : null;
   return {
-    checkInIntervalMinutes: override?.checkInIntervalMinutes ?? checkInIntervalOption(env.WORK_OS_CHECK_IN_INTERVAL_MINUTES) ?? DEFAULT_CHECK_IN_INTERVAL_MINUTES,
-    firstFollowUpMinutes: override?.firstFollowUpMinutes ?? firstFollowUpOption(env.WORK_OS_FIRST_FOLLOW_UP_MINUTES) ?? FIRST_FOLLOW_UP_MINUTES,
-    personOverride: Boolean(override),
+    checkInIntervalMinutes: fromMachine?.checkInIntervalMinutes ?? override?.checkInIntervalMinutes ?? checkInIntervalOption(env.WORK_OS_CHECK_IN_INTERVAL_MINUTES) ?? DEFAULT_CHECK_IN_INTERVAL_MINUTES,
+    firstFollowUpMinutes: fromMachine?.firstFollowUpMinutes ?? override?.firstFollowUpMinutes ?? firstFollowUpOption(env.WORK_OS_FIRST_FOLLOW_UP_MINUTES) ?? FIRST_FOLLOW_UP_MINUTES,
+    personOverride: Boolean(fromMachine) || Boolean(override),
   };
 }

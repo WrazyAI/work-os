@@ -4,6 +4,7 @@ import { requireUserProfile, type AppProfile } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminDbRole } from "@/lib/userRoles";
 import { isWorkOsMigrationRequired } from "@/lib/work-os";
+import { checkInIntervalOption, firstFollowUpOption } from "@/modules/work-os/workday";
 
 export type WorkOsOrgRole = "employee" | "manager" | "admin";
 
@@ -20,6 +21,13 @@ export interface WorkOsAccess {
   personId: string | null;
   membershipId: string;
   featureFlags: Record<string, boolean>;
+  /** Cadence the installed app reports from its own local config file, so an
+   * edit on one machine applies to that machine only. Validated against the
+   * same bounds as every other cadence source; absent when unset or invalid. */
+  localCadence?: {
+    checkInIntervalMinutes?: number;
+    firstFollowUpMinutes?: number;
+  };
 }
 
 export class WorkOsConflictError extends Error {
@@ -147,7 +155,22 @@ export async function requireWorkOsAccess(options: {
   requirePerson?: boolean;
   authorization?: string | null;
   feature?: string;
+  /** Raw `x-work-os-cadence-minutes` header from the installed app. */
+  cadenceMinutes?: string | null;
+  /** Raw `x-work-os-first-follow-up-minutes` header from the installed app. */
+  firstFollowUpMinutes?: string | null;
 } = {}): Promise<WorkOsAccessResult> {
+  // A machine-local override only counts when it is a valid, in-bounds cadence:
+  // a bad local edit must never storm or silence a workday. An absent or
+  // rejected value simply leaves the deployment's own resolution in charge.
+  const localCheckIn = checkInIntervalOption(options.cadenceMinutes);
+  const localFirstFollowUp = firstFollowUpOption(options.firstFollowUpMinutes);
+  const localCadence = localCheckIn !== null || localFirstFollowUp !== null
+    ? {
+        ...(localCheckIn !== null ? { checkInIntervalMinutes: localCheckIn } : {}),
+        ...(localFirstFollowUp !== null ? { firstFollowUpMinutes: localFirstFollowUp } : {}),
+      }
+    : undefined;
   const desktop = options.authorization ? await resolveDesktopContext(options.authorization) : null;
   if (options.authorization && !desktop) {
     return { response: NextResponse.json({ error: "invalid or expired desktop session" }, { status: 401 }) };
@@ -206,6 +229,7 @@ export async function requireWorkOsAccess(options: {
       personId: membership.person_id as string | null,
       membershipId: membership.id as string,
       featureFlags,
+      ...(localCadence ? { localCadence } : {}),
     } satisfies WorkOsAccess,
   };
 }

@@ -232,7 +232,12 @@ export async function ensureDailyPlanForDate(access: WorkOsAccess, shiftDate: st
 /** Effective cadence for one person's workday: checkout-local config override,
  * then the deployment environment, then the built-in defaults. */
 export function workOsCadenceFor(access: WorkOsAccess): ResolvedWorkOsCadence {
-  return resolveWorkOsCadence({ personId: access.personId, email: access.ctx.profile.email });
+  return resolveWorkOsCadence(
+    { personId: access.personId, email: access.ctx.profile.email },
+    process.env,
+    undefined,
+    access.localCadence ?? null,
+  );
 }
 
 export async function getWorkday(access: WorkOsAccess, at = new Date()) {

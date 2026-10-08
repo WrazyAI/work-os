@@ -11,6 +11,7 @@ import {
   resolveWorkOsCadence,
   workOsLocalConfigPath,
 } from "../src/lib/work-os-local-config";
+import { checkInIntervalOption, firstFollowUpOption } from "../src/modules/work-os/workday";
 
 test("local config parsing keeps only bounded cadence entries", () => {
   const config = parseWorkOsLocalConfig(JSON.stringify({
@@ -175,4 +176,59 @@ test("the override path resolves the same way on macOS, Linux, and Windows", () 
     workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~/override.json" } as NodeJS.ProcessEnv, posix),
     "/Users/david/override.json",
   );
+});
+
+test("the installed app's own config file wins over every deployment source", () => {
+  const identity = { email: "david@maigreeks.com" };
+  const config = parseWorkOsLocalConfig(JSON.stringify({ people: { "david@maigreeks.com": { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10 } } }));
+  const env = { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "45", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" } as NodeJS.ProcessEnv;
+
+  // The machine's file is what an employee edited, so it is the most specific
+  // source there is.
+  assert.deepEqual(
+    resolveWorkOsCadence(identity, env, config, { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 }),
+    { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10, personOverride: true },
+  );
+
+  // A file that names only one value leaves the other to the deployment.
+  assert.deepEqual(
+    resolveWorkOsCadence(identity, env, config, { checkInIntervalMinutes: 15 }),
+    { checkInIntervalMinutes: 15, firstFollowUpMinutes: 10, personOverride: true },
+  );
+
+  // Without a machine value the deployment entry still applies.
+  assert.deepEqual(
+    resolveWorkOsCadence(identity, env, config, null),
+    { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10, personOverride: true },
+  );
+
+  // An empty machine object is not an override.
+  assert.deepEqual(
+    resolveWorkOsCadence(identity, env, config, {}),
+    { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10, personOverride: true },
+  );
+
+  // Someone with no entry anywhere still lands on the environment, then defaults.
+  assert.deepEqual(
+    resolveWorkOsCadence({ email: "someone-else@example.com" }, env, config, null),
+    { checkInIntervalMinutes: 45, firstFollowUpMinutes: 45, personOverride: false },
+  );
+  assert.deepEqual(
+    resolveWorkOsCadence({ email: "someone-else@example.com" }, {} as NodeJS.ProcessEnv, config, null),
+    { checkInIntervalMinutes: 60, firstFollowUpMinutes: 75, personOverride: false },
+  );
+});
+
+test("a machine cadence outside the bounds is ignored by the request layer", () => {
+  // Bounds live next to the cadence contract and are shared by every source, so
+  // an over-eager local edit cannot storm or silence a workday.
+  assert.equal(checkInIntervalOption("240"), 240);
+  assert.equal(checkInIntervalOption("241"), null);
+  assert.equal(checkInIntervalOption("4"), null);
+  assert.equal(checkInIntervalOption("not-a-number"), null);
+  assert.equal(firstFollowUpOption("240"), 240);
+  assert.equal(firstFollowUpOption("241"), null);
+  // Absent headers resolve to nothing rather than a bogus cadence.
+  assert.equal(checkInIntervalOption(null), null);
+  assert.equal(firstFollowUpOption(null), null);
 });
