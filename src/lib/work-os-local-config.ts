@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { homedir } from "node:os";
+import { posix, sep, win32 } from "node:path";
 import {
   DEFAULT_CHECK_IN_INTERVAL_MINUTES,
   FIRST_FOLLOW_UP_MINUTES,
@@ -32,13 +33,60 @@ export interface ResolvedWorkOsCadence {
 
 const DEFAULT_CONFIG_PATH = "config/work-os.local.json";
 
+/** Injected for deterministic cross-platform tests: the runtime's own path
+ * flavor, plus the home and working directories to resolve against. */
+export interface WorkOsConfigPathOptions {
+  cwd?: string;
+  home?: string;
+  flavor?: "posix" | "win32";
+}
+
+/** A Windows drive path (`C:\…`, `C:/…`) or UNC share (`\\server\share`). These
+ * are absolute on Windows; on macOS and Linux they are still not something to
+ * glue onto the working directory, or a configured override would resolve to a
+ * path that cannot exist and the override would silently stop applying. */
+function isWindowsAbsolute(value: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith("\\\\");
+}
+
+/**
+ * Resolves one configured path so the same value works on macOS, Linux, and
+ * Windows:
+ *
+ * - a leading `~` means the user's home directory (`~/.work-os.local.json` is
+ *   how an operator naturally points at a file in their own account);
+ * - separators follow the runtime, so a value written with backslashes still
+ *   resolves on macOS and Linux;
+ * - a Windows drive or UNC path stays absolute even on macOS/Linux rather than
+ *   being joined to the working directory;
+ * - everything else resolves against the working directory, which is the
+ *   checkout for the bundled server.
+ */
+export function resolveLocalConfigPath(configured: string, options: WorkOsConfigPathOptions = {}): string {
+  // `sep` is the runtime's own separator: Windows is the only flavor that uses
+  // a backslash. (Checking `win32.sep` would be true everywhere.)
+  const flavor = options.flavor ?? (sep === "\\" ? "win32" : "posix");
+  const paths = flavor === "win32" ? win32 : posix;
+  const home = options.home ?? homedir();
+  const cwd = options.cwd ?? process.cwd();
+
+  let value = configured.trim();
+  if (value === "~") value = home;
+  else if (/^~[\\/]/.test(value)) value = paths.join(home, value.slice(2).replace(/\\/g, "/"));
+
+  if (flavor === "posix" && isWindowsAbsolute(value)) return value.replace(/\\/g, "/");
+  if (flavor === "posix" && value.includes("\\") && !paths.isAbsolute(value)) value = value.replace(/\\/g, "/");
+
+  return paths.isAbsolute(value) ? value : paths.resolve(cwd, value);
+}
+
 /** The config file lives with the checkout by default so an operator can edit
  * it in place; `WORK_OS_LOCAL_CONFIG_PATH` can point somewhere else. */
-export function workOsLocalConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+export function workOsLocalConfigPath(env: NodeJS.ProcessEnv = process.env, options: WorkOsConfigPathOptions = {}): string {
   const configured = typeof env.WORK_OS_LOCAL_CONFIG_PATH === "string" && env.WORK_OS_LOCAL_CONFIG_PATH.trim()
     ? env.WORK_OS_LOCAL_CONFIG_PATH.trim()
     : DEFAULT_CONFIG_PATH;
-  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+  return resolveLocalConfigPath(configured, options);
 }
 
 /** Parse and validate the file defensively: malformed JSON, unknown keys, and
@@ -75,6 +123,8 @@ export function parseWorkOsLocalConfig(text: string): WorkOsLocalConfig {
 }
 
 let configCache: { path: string; mtimeMs: number; size: number; config: WorkOsLocalConfig } | null = null;
+/** Last path already reported as unreadable, so a missing override logs once. */
+let warnedUnreadablePath: string | null = null;
 
 /** Reads the checkout-local config, refreshing when the file changes so an
  * edit applies without a rebuild. A missing or unreadable file is empty. */
@@ -88,6 +138,16 @@ export function loadWorkOsLocalConfig(path = workOsLocalConfigPath()): WorkOsLoc
     configCache = { path, mtimeMs: stat.mtimeMs, size: stat.size, config };
     return config;
   } catch {
+    // An explicitly configured override that cannot be read would otherwise
+    // disappear in silence: the cadence quietly falls back to the environment
+    // and the operator sees their setting simply "not apply". Say so once, and
+    // only for an override that was actually pointed at, so the default path
+    // staying absent is not noise.
+    const configured = typeof process.env.WORK_OS_LOCAL_CONFIG_PATH === "string" ? process.env.WORK_OS_LOCAL_CONFIG_PATH.trim() : "";
+    if (configured && warnedUnreadablePath !== path) {
+      warnedUnreadablePath = path;
+      console.warn(`[work-os] WORK_OS_LOCAL_CONFIG_PATH points at ${path}, which cannot be read; per-person cadence overrides are inactive.`);
+    }
     return { people: {} };
   }
 }

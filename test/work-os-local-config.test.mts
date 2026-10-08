@@ -7,6 +7,7 @@ import {
   loadWorkOsLocalConfig,
   parseWorkOsLocalConfig,
   personCadenceOverride,
+  resolveLocalConfigPath,
   resolveWorkOsCadence,
   workOsLocalConfigPath,
 } from "../src/lib/work-os-local-config";
@@ -92,4 +93,86 @@ test("the config file is read from the checkout and refreshes when it changes", 
   assert.deepEqual(loadWorkOsLocalConfig(join(dir, "missing.json")), { people: {} });
   // A configured path resolves relative to the checkout.
   assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "custom/local.json" } as NodeJS.ProcessEnv), join(process.cwd(), "custom/local.json"));
+});
+
+test("the local config path resolves the same value on macOS, Linux, and Windows", () => {
+  const mac = { cwd: "/Users/david/work-os", home: "/Users/david", flavor: "posix" } as const;
+  const win = { cwd: "C:\\work\\work-os", home: "C:\\Users\\David", flavor: "win32" } as const;
+
+  // The default lives with the checkout, so it resolves against the working
+  // directory on every platform.
+  assert.equal(workOsLocalConfigPath({} as NodeJS.ProcessEnv, mac), "/Users/david/work-os/config/work-os.local.json");
+  assert.equal(workOsLocalConfigPath({} as NodeJS.ProcessEnv, win), "C:\\work\\work-os\\config\\work-os.local.json");
+
+  // `~` is how an operator points at a file in their own account.
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~/.work-os.local.json" } as NodeJS.ProcessEnv, mac), "/Users/david/.work-os.local.json");
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~" } as NodeJS.ProcessEnv, mac), "/Users/david");
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~\\work-os.local.json" } as NodeJS.ProcessEnv, win), "C:\\Users\\David\\work-os.local.json");
+
+  // A relative path follows the platform's separator either way.
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "config\\work-os.local.json" } as NodeJS.ProcessEnv, mac), "/Users/david/work-os/config/work-os.local.json");
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "config/work-os.local.json" } as NodeJS.ProcessEnv, win), "C:\\work\\work-os\\config\\work-os.local.json");
+
+  // A Windows path stays rooted on macOS/Linux instead of being joined to the
+  // working directory — a value that cannot exist must not look like a real one.
+  assert.equal(resolveLocalConfigPath("C:\\Users\\David\\work-os.local.json", mac), "C:/Users/David/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("\\\\server\\share\\work-os.local.json", mac), "//server/share/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("C:\\Users\\David\\work-os.local.json", win), "C:\\Users\\David\\work-os.local.json");
+
+  // A POSIX absolute path is left alone wherever it is honored.
+  assert.equal(resolveLocalConfigPath("/etc/work-os.local.json", mac), "/etc/work-os.local.json");
+  assert.equal(workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "  /etc/work-os.local.json  " } as NodeJS.ProcessEnv, mac), "/etc/work-os.local.json");
+});
+
+test("an unreadable configured override is reported instead of disappearing", () => {
+  const previous = process.env.WORK_OS_LOCAL_CONFIG_PATH;
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (message?: unknown) => { warnings.push(String(message)); };
+  process.env.WORK_OS_LOCAL_CONFIG_PATH = "configured/nowhere.json";
+  try {
+    const missing = join(tmpdir(), "work-os-config-missing", "work-os.local.json");
+    assert.deepEqual(loadWorkOsLocalConfig(missing), { people: {} });
+    // A second read does not repeat itself.
+    assert.deepEqual(loadWorkOsLocalConfig(missing), { people: {} });
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /cannot be read/);
+    assert.match(warnings[0]!, /WORK_OS_LOCAL_CONFIG_PATH/);
+  } finally {
+    console.warn = originalWarn;
+    if (previous === undefined) delete process.env.WORK_OS_LOCAL_CONFIG_PATH;
+    else process.env.WORK_OS_LOCAL_CONFIG_PATH = previous;
+  }
+});
+
+test("the override path resolves the same way on macOS, Linux, and Windows", () => {
+  const posix = { flavor: "posix" as const, cwd: "/srv/work-os", home: "/Users/david" };
+  const win = { flavor: "win32" as const, cwd: "C:\\work-os", home: "C:\\Users\\david" };
+
+  // Default: relative to the checkout, on either runtime.
+  assert.equal(resolveLocalConfigPath("config/work-os.local.json", posix), "/srv/work-os/config/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("config/work-os.local.json", win), "C:\\work-os\\config\\work-os.local.json");
+
+  // Backslashes typed on macOS/Linux are still separators, not literal name text.
+  assert.equal(resolveLocalConfigPath("config\\work-os.local.json", posix), "/srv/work-os/config/work-os.local.json");
+
+  // Absolute paths are used as given.
+  assert.equal(resolveLocalConfigPath("/etc/work-os.local.json", posix), "/etc/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("D:\\config\\work-os.local.json", win), "D:\\config\\work-os.local.json");
+
+  // `~` means the operator's home directory on every runtime.
+  assert.equal(resolveLocalConfigPath("~/work-os.local.json", posix), "/Users/david/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("~", posix), "/Users/david");
+  assert.equal(resolveLocalConfigPath("~\\work-os.local.json", win), "C:\\Users\\david\\work-os.local.json");
+
+  // A Windows path must never be glued onto a macOS/Linux working directory:
+  // that produced a path which could not exist and silently dropped the override.
+  assert.equal(resolveLocalConfigPath("C:\\Users\\david\\work-os.local.json", posix), "C:/Users/david/work-os.local.json");
+  assert.equal(resolveLocalConfigPath("\\\\server\\share\\work-os.local.json", posix), "//server/share/work-os.local.json");
+
+  // The environment override flows through the same resolution.
+  assert.equal(
+    workOsLocalConfigPath({ WORK_OS_LOCAL_CONFIG_PATH: "~/override.json" } as NodeJS.ProcessEnv, posix),
+    "/Users/david/override.json",
+  );
 });
