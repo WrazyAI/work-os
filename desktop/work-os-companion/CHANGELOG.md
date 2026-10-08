@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.12
+
+- Work OS now keeps a settings file on your computer, so you can change your check-in timing for that machine only.
+- It is created the first time you run this version from your workspace settings; edit it and the change applies next time you open the app.
+
 ## 0.4.11
 
 - Debugger can replay the current page guide without changing first-visit guide state.
