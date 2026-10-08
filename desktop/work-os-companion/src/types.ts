@@ -172,6 +172,8 @@ export interface DayData {
     cursor: { next: string | null };
   };
   tasks: Array<Record<string, any>>;
+  /** The effective check-in cadence the workspace reports for this person. */
+  cadence?: { checkInIntervalMinutes: number; firstFollowUpMinutes: number; personOverride: boolean };
   taskHistory?: Array<Record<string, any>>;
   evidence: Array<Record<string, any>>;
   proposals: Array<Record<string, any>>;

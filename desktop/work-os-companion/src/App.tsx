@@ -20,6 +20,7 @@ import { beginAuthentication, errorMessage, listenForAuthentication } from "./au
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
 import { markBootPhase, markCleanExit } from "./bootTrace";
 import { startInstanceHeartbeat } from "./instanceHeartbeat";
+import { loadMachineCadence } from "./localSettings";
 import { openDebuggerWindow } from "./openDebugger";
 import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
@@ -3278,6 +3279,18 @@ export default function App() {
     if (!isTauri()) return;
     return startInstanceHeartbeat(() => { void invoke("app_heartbeat").catch(() => undefined); });
   }, []);
+
+  // The app's own config file: created the first time from the cadence the
+  // workspace reports for this person, then read back. An edit there wins over
+  // the workspace on this machine, which is what the API layer reports.
+  const workspaceCadence = visibleDay?.cadence;
+  useEffect(() => {
+    if (!isTauri() || !workspaceCadence) return;
+    void loadMachineCadence({
+      checkInIntervalMinutes: workspaceCadence.checkInIntervalMinutes,
+      firstFollowUpMinutes: workspaceCadence.firstFollowUpMinutes,
+    });
+  }, [workspaceCadence?.checkInIntervalMinutes, workspaceCadence?.firstFollowUpMinutes]);
 
   if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;

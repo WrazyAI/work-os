@@ -1,5 +1,6 @@
 import { secureState } from "./vault";
 import { diagnostics } from "./diagnostics";
+import { machineCadenceHeaders } from "./localSettings";
 import type { OfflineAction } from "./types";
 
 const MAX_QUEUE_ATTEMPTS = 6;
@@ -106,6 +107,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
         headers: {
           Authorization: `Bearer ${session.token}`,
           "X-Work-OS-Organization-Id": session.organizationId,
+          // This machine's own config file, when it names a cadence.
+          ...machineCadenceHeaders(),
           ...(init.body && !(typeof FormData !== "undefined" && init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
           ...init.headers,
         },

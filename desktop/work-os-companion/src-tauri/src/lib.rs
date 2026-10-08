@@ -1,5 +1,6 @@
 mod debug_window;
 mod diagnostics;
+mod local_settings;
 mod session_guard;
 
 use base64::Engine;
@@ -590,6 +591,7 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             get_vault_password,
+            local_settings::ensure_local_settings,
             session_guard::app_heartbeat,
             arm_update_exit_watchdog,
             disarm_update_exit_watchdog,
