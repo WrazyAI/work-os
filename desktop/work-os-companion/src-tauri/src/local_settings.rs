@@ -32,7 +32,7 @@ pub fn ensure_local_settings(app: tauri::AppHandle, seed: String) -> Result<Stri
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    std::fs::write(&path, seed).map_err(|error| error.to_string())?;
+    std::fs::write(&path, &seed).map_err(|error| error.to_string())?;
     diagnostics::host_event(
         &app,
         "settings.local.created",
