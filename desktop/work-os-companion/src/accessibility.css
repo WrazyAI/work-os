@@ -32,13 +32,13 @@ html[data-mascot-size="small"] .avatar-compact .avatar-drag-surface {
   top: 47px;
 }
 html[data-mascot-size="small"] .avatar-compact .avatar-prompt-bubble + .avatar-drag-surface {
-  top: 97px;
+  top: 58px;
 }
 html[data-mascot-size="small"] .avatar-compact .avatar-hide {
   top: 45px;
 }
 html[data-mascot-size="small"] .avatar-compact .avatar-prompt-bubble ~ .avatar-hide {
-  top: 97px;
+  top: 58px;
 }
 
 /* The elapsed label sits just under the mascot's feet, so it follows the art:

@@ -156,18 +156,25 @@ describe("floating companion integration", () => {
     expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, \.9\);/);
     expect(avatarStyles).toMatch(/\.avatar-hide\s*\{[^}]*top:\s*20px;[^}]*right:\s*9px;[^}]*width:\s*21px;[^}]*height:\s*21px;/);
-    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*72px;/);
+    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*58px;/);
     const conversationStyles = readFileSync(resolve(root, "src/chat/conversation.css"), "utf8");
     expect(conversationStyles).toMatch(/\.avatar-compact\s*\{[^}]*width:\s*200px;[^}]*height:\s*276px;/);
     expect(conversationStyles).toMatch(/\.avatar-orb\s*\{[^}]*width:\s*144px;[^}]*height:\s*154px;[^}]*margin:\s*76px 28px 0;/);
     expect(conversationStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(conversationStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, 0\.9\);/);
-    expect(conversationStyles).toMatch(/\.avatar-prompt-bubble ~ \.avatar-orb\s*\{[^}]*margin-top:\s*108px;/);
+    // A bubble floats above the figure and never moves it, so the elapsed
+    // pill can never land on the mascot.
+    expect(conversationStyles).not.toContain(".avatar-prompt-bubble ~ .avatar-orb");
+    expect(avatarStyles).not.toContain(".avatar-prompt-bubble ~ .avatar-orb");
+    expect(avatarStyles).toMatch(/\.avatar-recap-bubble\s*\{[^}]*top:\s*2px;[^}]*max-height:\s*92px;/);
+    expect(avatarStyles).toMatch(/\.avatar-recap-bubble > span\s*\{[^}]*line-clamp:\s*1;/);
+    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*line-clamp:\s*1;/);
+    expect(avatarStyles).toMatch(/\.avatar-prompt-open strong\s*\{[^}]*line-clamp:\s*1;/);
     const accessibilityStyles = readFileSync(resolve(root, "src/accessibility.css"), "utf8");
     expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-drag-surface\s*\{[^}]*top:\s*47px;/);
-    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble \+ \.avatar-drag-surface\s*\{[^}]*top:\s*97px;/);
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble \+ \.avatar-drag-surface\s*\{[^}]*top:\s*58px;/);
     expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-hide\s*\{[^}]*top:\s*45px;/);
-    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*97px;/);
+    expect(accessibilityStyles).toMatch(/html\[data-mascot-size="small"\] \.avatar-compact \.avatar-prompt-bubble ~ \.avatar-hide\s*\{[^}]*top:\s*58px;/);
     expect(avatar).toContain("/api/work-os/me/proposals");
     expect(avatar).toContain('decision: "reject"');
     expect(avatar).toContain("TaskSelectionCard");

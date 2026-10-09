@@ -131,6 +131,22 @@ body.avatar-window {
 .avatar-prompt-bubble strong, .avatar-prompt-bubble span { position: relative; z-index: 1; display: block; }
 .avatar-prompt-bubble strong { font-size: 12px; line-height: 1.3; letter-spacing: -.01em; }
 .avatar-prompt-bubble span { margin-top: 4px; color: #c8cec4; font-size: 10.5px; line-height: 1.4; }
+/* Every compact bubble clamps to the space above a figure that never moves, so
+   the mascot and the elapsed pill keep their default positions and the bubble
+   never reaches the head. The headline keeps two lines where it has room (the
+   recap); supporting copy stays a single line; the action stays reachable. */
+.avatar-prompt-bubble span {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.avatar-prompt-open strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* The copy area stays the tap target that opens the chat; the action button at
    the bottom is the shortcut straight to the prompt's destination. */
 .avatar-prompt-open {
@@ -163,21 +179,27 @@ body.avatar-window {
   cursor: pointer;
 }
 .avatar-prompt-action:hover { filter: brightness(1.03); }
-/* A ready recap hugs the mascot's head at any configured mascot size: the
-   bubble's bottom edge sits just above the visible head, its tail points down
-   at the head's center, and the copy clamps so the bubble always fits the
-   space reserved above the figure. */
+/* A ready recap floats above the figure like every other bubble. The figure
+   never moves, so the copy clamps to the space above the visible head: the
+   headline keeps two lines, the detail one, and View more stays reachable. */
 .avatar-recap-bubble {
-  top: auto;
-  bottom: var(--avatar-bubble-anchor, 160px);
-  padding: 8px 10px;
+  top: 2px;
+  bottom: auto;
+  padding: 7px 10px;
+  max-height: 92px;
+  overflow: hidden;
   cursor: default;
 }
 .avatar-recap-bubble::after { left: 50%; margin-left: -6px; }
-.avatar-recap-bubble strong,
-.avatar-recap-bubble > span {
+.avatar-recap-bubble strong {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.avatar-recap-bubble > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -765,8 +787,7 @@ body.avatar-window {
 }
 .avatar-pet .signal-spirit-shadow { fill: rgba(24, 32, 24, .14); }
 .avatar-drag-surface { top: 5px; left: 55px; width: 54px; height: 23px; border-color: rgba(83, 100, 81, .22); border-radius: 999px; background: rgba(251, 252, 248, .92); color: #778174; font: 800 8px/1 Manrope, Inter, sans-serif; letter-spacing: .12em; box-shadow: 0 4px 12px rgba(13, 18, 12, .12); }
-.avatar-prompt-bubble + .avatar-drag-surface { top: 63px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, .25); background: rgba(32, 36, 33, .9); color: rgba(255, 252, 246, .82); font-size: 12px; }
-.avatar-prompt-bubble ~ .avatar-orb { margin-top: 68px; }
+.avatar-prompt-bubble + .avatar-drag-surface { top: 58px; left: 50%; width: 78px; height: 30px; transform: translateX(-50%); border: 1px solid rgba(213, 255, 84, .25); background: rgba(32, 36, 33, .9); color: rgba(255, 252, 246, .82); font-size: 12px; }
 .avatar-day-time { bottom: 1px; border-color: rgba(83, 100, 81, .7); border-radius: 999px; background: rgba(251, 252, 248, .96); color: #344333; font: 750 9px/1 Manrope, Inter, sans-serif; letter-spacing: .01em; box-shadow: 0 3px 9px rgba(13, 18, 12, .13); }
 .avatar-badge { top: 7px; right: 7px; z-index: 3; width: 20px; height: 20px; border: 2px solid #1b241b; background: #ff8a55; box-shadow: 0 0 0 2px rgba(255, 138, 85, .24); }
 .avatar-badge.avatar-badge-progress {
@@ -774,7 +795,7 @@ body.avatar-window {
 }
 .avatar-badge.avatar-badge-progress-unavailable { background: rgba(255, 138, 85, .16); }
 .avatar-hide { top: 20px; right: 9px; width: 21px; height: 21px; background: rgba(24, 32, 24, .88); box-shadow: 0 4px 10px rgba(13, 18, 12, .18); }
-.avatar-prompt-bubble ~ .avatar-hide { top: 72px; }
+.avatar-prompt-bubble ~ .avatar-hide { top: 58px; }
 
 @media (prefers-reduced-motion: reduce) {
   .avatar-orb, .avatar-panel,
@@ -789,17 +810,12 @@ body.avatar-window {
 .avatar-compact {
   width: 200px;
   height: 276px;
-  /* Where a recap bubble's bottom edge sits, measured from the window bottom:
-   * just above the visible head for each configured mascot size. */
-  --avatar-bubble-anchor: 160px;
 }
-html[data-mascot-size="small"] .avatar-compact { --avatar-bubble-anchor: 128px; }
 .avatar-orb {
   width: 144px;
   height: 154px;
   margin: 76px 28px 0;
 }
-.avatar-prompt-bubble ~ .avatar-orb { margin-top: 116px; }
 .avatar-pet {
   width: 118px;
   height: 133px;
@@ -850,7 +866,7 @@ html[data-mascot-size="small"] .avatar-compact { --avatar-bubble-anchor: 128px; 
   pointer-events: none;
 }
 .avatar-prompt-bubble + .avatar-drag-surface {
-  top: 72px;
+  top: 58px;
   left: 50%;
   width: 52px;
   height: 28px;

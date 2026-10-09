@@ -824,8 +824,7 @@
 .avatar-day-time { bottom: -1px; border: 0; background: var(--conversation-surface); color: var(--conversation-ink); box-shadow: 0 5px 14px rgba(0, 0, 0, 0.16); }
 .avatar-drag-surface { top: 22px; left: 50%; width: 52px; height: 28px; transform: translateX(-50%); border: 0; background: transparent; color: rgba(255, 252, 246, 0.82); font-size: 7px; letter-spacing: .08em; box-shadow: none; }
 .avatar-drag-surface::before { content: ""; position: absolute; top: 50%; left: 50%; width: 36px; height: 15px; transform: translate(-50%, -50%); border: 1px solid rgba(213, 255, 84, 0.25); border-radius: 999px; background: rgba(32, 36, 33, 0.9); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18); pointer-events: none; }
-.avatar-prompt-bubble + .avatar-drag-surface { top: 72px; left: 50%; width: 52px; height: 28px; transform: translateX(-50%); }
-.avatar-prompt-bubble ~ .avatar-orb { margin-top: 108px; }
+.avatar-prompt-bubble + .avatar-drag-surface { top: 58px; left: 50%; width: 52px; height: 28px; transform: translateX(-50%); }
 .avatar-prompt-bubble { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
 .avatar-prompt-bubble::after { background: var(--conversation-graphite); border-color: rgba(213, 255, 84, 0.25); }
 
