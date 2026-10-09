@@ -106,8 +106,9 @@ describe("debug window contract", () => {
     expect(debugStyles).not.toContain(".debug-overlay");
     expect(debugEntry).toContain('import "./debug.css"');
     // Presets explain themselves and the trace names an empty result.
+    const debugTrace = readFileSync(resolve(root, "src/DebugTrace.tsx"), "utf8");
     expect(debugWindow).toContain("preset.description");
-    expect(debugWindow).toContain("No events match these filters.");
+    expect(debugTrace).toContain("No events match these filters.");
     expect(debugStyles).toContain(".trace-row.error");
   });
 
@@ -131,12 +132,13 @@ describe("debug window contract", () => {
     expect(scenarios).toContain("export function activePresetId");
     expect(scenarios).toContain("export function presetScenarioMatches");
     expect(debugStyles).toContain(".debug-presets button.active");
-    // Operator conveniences: copy the scenario, follow the trace, copy what is shown.
+    // Operator conveniences: copy the scenario, copy the loaded trace, and return to newest.
     expect(debugWindow).toContain("Copy scenario JSON");
-    expect(debugWindow).toContain("copyVisible");
-    expect(debugWindow).toContain("Follow new events");
-    expect(debugWindow).toContain("traceEndRef");
-    expect(debugWindow).toContain('window.matchMedia("(prefers-reduced-motion: reduce)")');
+    const debugTrace = readFileSync(resolve(root, "src/DebugTrace.tsx"), "utf8");
+    expect(debugTrace).toContain("copyLoaded");
+    expect(debugTrace).toContain("Jump to newest");
+    // Arrivals never move a scrolled-away view; they are counted instead.
+    expect(debugTrace).not.toContain("Follow newest");
     // The export reports its result in the panel, not only in a flyout.
     expect(debugWindow).toContain("exportResult");
     expect(debugWindow).toContain("Copy path");

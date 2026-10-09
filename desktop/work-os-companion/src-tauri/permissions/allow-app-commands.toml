@@ -13,7 +13,6 @@ commands.allow = [
   "finish_worktivity_control",
   "open_debug_window",
   "diagnostics_emit",
-  "diagnostics_snapshot",
   "diagnostics_export",
   "open_logs_dir"
 ]

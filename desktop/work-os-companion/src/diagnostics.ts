@@ -57,11 +57,6 @@ export function installDiagnosticErrorHandlers() {
   });
 }
 
-export async function diagnosticsSnapshot() {
-  if (!isTauri()) return [] as DiagnosticEvent[];
-  return invoke<DiagnosticEvent[]>("diagnostics_snapshot");
-}
-
 export async function exportDiagnostics(extras?: { runtimeHealth?: Record<string, unknown>; queueSummary?: Record<string, unknown>; sanitizedConfig?: Record<string, unknown> }) {
   return invoke<string>("diagnostics_export", { extras: extras ?? {} });
 }
@@ -69,4 +64,3 @@ export async function exportDiagnostics(extras?: { runtimeHealth?: Record<string
 export async function openLogsDir() {
   return invoke<string>("open_logs_dir");
 }
-

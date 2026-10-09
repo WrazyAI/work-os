@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { emit, listen } from "./tauriEvents";
 import { MascotDebugControls } from "./MascotDebugControls";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, Bug, Check, Copy, Download, RotateCcw, X } from "lucide-react";
-import { diagnosticsSnapshot, exportDiagnostics, openLogsDir, type DiagnosticEvent, type DiagnosticLevel, type DiagnosticSource } from "./diagnostics";
-import { startTraceFixtureStream, traceFixtureEvents } from "./debugTraceFixture";
+import { exportDiagnostics, openLogsDir } from "./diagnostics";
+import { DebugTrace, type TraceFilters } from "./DebugTrace";
+import { createTraceFixture, type DebugTraceFixture } from "./debugTraceFixture";
 import { useNotifications } from "./NotificationFlyouts";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { ALL_ONBOARDING_DETAILS, DEBUG_PRESETS, DEFAULT_DEBUG_SCENARIO, activePresetId } from "./scenarios";
 import type { DebugDayState, DebugScenario } from "./types";
 
 type Tab = "scenarios" | "trace" | "export";
+
+const TABS: Tab[] = ["scenarios", "trace", "export"];
 
 const TAB_LABELS: Record<Tab, string> = { scenarios: "Scenarios", trace: "Live trace", export: "Export" };
 
@@ -21,21 +24,17 @@ export default function DebugWindow() {
   const [scenario, setScenario] = useState<DebugScenario>(DEFAULT_DEBUG_SCENARIO);
   const scenarioRef = useRef(scenario);
   scenarioRef.current = scenario;
-  const [events, setEvents] = useState<DiagnosticEvent[]>([]);
+  // Trace filters and pause live here so they survive switching tabs. The trace
+  // itself unmounts with its tab, which releases its rows.
+  const [traceFilters, setTraceFilters] = useState<TraceFilters>({ query: "", level: "all", source: "all" });
+  const [traceClearFloor, setTraceClearFloor] = useState<number | null>(null);
+  const previewTrace = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-trace");
+  const [traceFixture] = useState<DebugTraceFixture | null>(() => previewTrace ? createTraceFixture() : null);
   const [paused, setPaused] = useState(false);
-  const pausedRef = useRef(paused);
-  pausedRef.current = paused;
-  const [query, setQuery] = useState("");
-  const [level, setLevel] = useState<DiagnosticLevel | "all">("all");
-  const [source, setSource] = useState<DiagnosticSource | "all">("all");
-  const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmLiveWrites, setConfirmLiveWrites] = useState(false);
-  const [autoscroll, setAutoscroll] = useState(true);
-  const [flash, setFlash] = useState<"scenario" | "event" | "path" | null>(null);
+  const [flash, setFlash] = useState<"scenario" | "path" | null>(null);
   const [exportResult, setExportResult] = useState<null | { tone: "ok" | "error"; title: string; detail: string; path?: string }>(null);
   const [guideReplayStatus, setGuideReplayStatus] = useState<"opened" | "unavailable" | null>(null);
-  const traceEndRef = useRef<HTMLDivElement | null>(null);
-  const previewTrace = import.meta.env.DEV && new URLSearchParams(window.location.search).has("preview-trace");
 
   useEffect(() => {
     let disposed = false;
@@ -54,31 +53,8 @@ export default function DebugWindow() {
       if (disposed) return;
       setGuideReplayStatus(event.payload?.opened ? "opened" : "unavailable");
     }).then(register).catch(() => undefined);
-    void listen<DiagnosticEvent>("work-os://diagnostics", (event) => {
-      if (disposed || pausedRef.current) return;
-      setEvents((current) => [...current.slice(-1999), event.payload]);
-    }).then(register).catch(() => undefined);
-    if (isTauri()) void diagnosticsSnapshot().then((value) => { if (!disposed) setEvents(value); }).catch(() => undefined);
     return () => { disposed = true; cleaners.forEach((off) => off()); };
   }, []);
-
-  const visible = useMemo(() => events.filter((event) => {
-    if (level !== "all" && event.level !== level) return false;
-    if (source !== "all" && event.source !== source) return false;
-    if (!query.trim()) return true;
-    const haystack = `${event.category} ${event.message} ${event.correlationId ?? ""}`.toLowerCase();
-    return haystack.includes(query.trim().toLowerCase());
-  }), [events, level, query, source]);
-
-  // Dev-only fixture stream so the trace tail can be developed and exercised in a browser.
-  useEffect(() => {
-    if (!previewTrace) return;
-    setEvents(traceFixtureEvents());
-    return startTraceFixtureStream((event) => {
-      if (pausedRef.current) return;
-      setEvents((current) => [...current.slice(-1999), event]);
-    });
-  }, [previewTrace]);
 
   const currentPresetId = useMemo(() => activePresetId(scenario), [scenario]);
 
@@ -88,16 +64,24 @@ export default function DebugWindow() {
     return () => window.clearTimeout(timer);
   }, [flash]);
 
-  // Follow the newest event while the operator is watching the tail of the trace.
-  useEffect(() => {
-    if (tab !== "trace" || !autoscroll || expanded) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    traceEndRef.current?.scrollIntoView({ block: "end", behavior: reduced ? "auto" : "smooth" });
-  }, [autoscroll, expanded, tab, visible.length]);
-
+  // Closing destroys the window; `open_debug_window` recreates it on demand, and the
+  // scenario is re-requested from the host on mount.
   function closeWindow() {
     if (!isTauri()) { window.close(); return; }
-    void getCurrentWindow().hide().catch(() => undefined);
+    void getCurrentWindow().close().catch(() => undefined);
+  }
+
+  function onTabKey(event: KeyboardEvent<HTMLElement>) {
+    const index = TABS.indexOf(tab);
+    const next = event.key === "ArrowRight" ? (index + 1) % TABS.length
+      : event.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? TABS.length - 1
+      : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    setTab(TABS[next]);
+    document.getElementById(`debug-tab-${TABS[next]}`)?.focus();
   }
 
   function update(patch: Partial<DebugScenario>) {
@@ -107,19 +91,9 @@ export default function DebugWindow() {
     void emit("work-os://debug-scenario", next).catch(() => undefined);
   }
 
-  async function copyEvent(event: DiagnosticEvent) {
-    await navigator.clipboard.writeText(JSON.stringify(event, null, 2));
-    setFlash("event");
-  }
-
   async function copyScenario() {
     await navigator.clipboard.writeText(JSON.stringify(scenario, null, 2));
     setFlash("scenario");
-  }
-
-  async function copyVisible() {
-    await navigator.clipboard.writeText(visible.map((event) => JSON.stringify(event)).join("\n"));
-    notifications.info(`${visible.length} event${visible.length === 1 ? "" : "s"} copied as JSON lines.`, "Trace copied");
   }
 
   async function copyExportPath() {
@@ -161,16 +135,17 @@ export default function DebugWindow() {
         <button className="debug-close" title="Close" aria-label="Close" onClick={closeWindow}><X size={16} /></button>
       </div>
     </header>
-    <nav className="debug-tabs" role="tablist" aria-label="Debugger views">
-      {(["scenarios", "trace", "export"] as Tab[]).map((id) => <button
+    <nav className="debug-tabs" role="tablist" aria-label="Debugger views" onKeyDown={onTabKey}>
+      {TABS.map((id) => <button
         key={id}
+        id={`debug-tab-${id}`}
         role="tab"
         aria-selected={tab === id}
+        tabIndex={tab === id ? 0 : -1}
         className={tab === id ? "active" : ""}
         onClick={() => setTab(id)}
       >
         {TAB_LABELS[id]}
-        {id === "trace" && <em>{events.length}</em>}
       </button>)}
     </nav>
 
@@ -262,33 +237,15 @@ export default function DebugWindow() {
       </div>
     </div>}
 
-    {tab === "trace" && <div className="debug-content">
-      <div className="trace-toolbar">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search category, message, correlation" aria-label="Search events" />
-        <select value={level} onChange={(event) => setLevel(event.target.value as DiagnosticLevel | "all")} aria-label="Filter by level"><option value="all">All levels</option><option value="trace">trace</option><option value="debug">debug</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
-        <select value={source} onChange={(event) => setSource(event.target.value as DiagnosticSource | "all")} aria-label="Filter by source"><option value="all">All sources</option><option value="frontend">frontend</option><option value="rust">rust</option><option value="ipc">ipc</option><option value="sync">sync</option><option value="storage">storage</option></select>
-        <button type="button" onClick={() => setPaused((value) => !value)}>{paused ? "Resume" : "Pause"}</button>
-        <button type="button" onClick={() => setEvents([])}>Clear view</button>
-      </div>
-      <div className="trace-options">
-        <label className="trace-follow"><span>Follow new events</span><SettingsSwitch label="Follow new events" checked={autoscroll} onChange={setAutoscroll} /></label>
-        <button type="button" disabled={visible.length === 0} onClick={() => void copyVisible()}>Copy shown ({visible.length})</button>
-      </div>
-      <p className="debug-help">Clearing the view does not delete disk logs. {visible.length} shown / {events.length} buffered.</p>
-      {visible.length > 0 ? <ol className="trace-list">
-        {visible.map((event) => <li key={event.id}>
-          <button className={`trace-row ${event.level}`} onClick={() => setExpanded(expanded === event.id ? null : event.id)}>
-            <time>{event.timestamp.slice(11, 23)}</time>
-            <b>{event.level}</b>
-            <span>{event.source}</span>
-            <strong>{event.category}</strong>
-            <em>{event.message}</em>
-          </button>
-          {expanded === event.id && <pre>{JSON.stringify(event, null, 2)}<button type="button" onClick={() => void copyEvent(event)}>{flash === "event" ? "Copied" : "Copy event"}</button></pre>}
-        </li>)}
-      </ol> : <p className="debug-empty">No events match these filters. Widen the level or source filter, or clear the search.</p>}
-      <div ref={traceEndRef} />
-    </div>}
+    {tab === "trace" && <DebugTrace
+      filters={traceFilters}
+      onFiltersChange={setTraceFilters}
+      fixture={traceFixture}
+      clearFloor={traceClearFloor}
+      onClear={setTraceClearFloor}
+      paused={paused}
+      onPausedChange={setPaused}
+    />}
 
     {tab === "export" && <div className="debug-content">
       <div className="debug-warning">The bundle excludes tokens, cookies, Stronghold contents, transcripts, screenshots, and raw task or update text.</div>

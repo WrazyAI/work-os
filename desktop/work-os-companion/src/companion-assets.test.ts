@@ -234,4 +234,26 @@ describe("floating companion integration", () => {
     expect(app).not.toContain('"Drafts today’s EOD"');
     expect(app).not.toContain('"Create EOD draft"');
   });
+
+  it("pages the debugger trace from a 1,000-event ring and destroys the debugger on close", () => {
+    const debugWindow = readFileSync(resolve(root, "src/DebugWindow.tsx"), "utf8");
+    expect(debugWindow).toContain("getCurrentWindow().close()");
+    expect(debugWindow).not.toContain("getCurrentWindow().hide()");
+    const trace = readFileSync(resolve(root, "src/DebugTrace.tsx"), "utf8");
+    expect(trace).toContain('"work-os://diagnostics-changed"');
+    expect(trace).not.toContain('"work-os://diagnostics"');
+    const host = readFileSync(resolve(root, "src-tauri/src/diagnostics.rs"), "utf8");
+    expect(host).toContain("pub fn diagnostics_page(");
+    expect(host).not.toContain("diagnostics_snapshot");
+    expect(host).toContain("schedule_debug_notice(app, seq)");
+    expect(host).toContain('"work-os://diagnostics-changed"');
+    expect(host).toContain("Duration::from_millis(250)");
+    const core = readFileSync(resolve(root, "src-tauri/diagnostics-core/src/lib.rs"), "utf8");
+    expect(core).toContain("pub const RING_LIMIT: usize = 1000;");
+    const debugPermissions = readFileSync(resolve(root, "src-tauri/permissions/allow-debug-commands.toml"), "utf8");
+    expect(debugPermissions).toContain('"diagnostics_page"');
+    expect(debugPermissions).not.toContain("diagnostics_snapshot");
+    const appPermissions = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");
+    expect(appPermissions).not.toContain("diagnostics_snapshot");
+  });
 });

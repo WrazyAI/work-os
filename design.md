@@ -2,16 +2,14 @@
 
 This is the canonical visual and interaction blueprint for Work OS. It applies
 to the web platform, the installed companion, the in-app Otto sheet, floating
-Otter chat, employee workflows, manager review, administration, and future
+Otto chat, employee workflows, manager review, administration, and future
 operational surfaces.
 
-This revision is an intentional art-direction reset. The previous specification
-accumulated good state and accessibility contracts but allowed too many
-competing visual patterns: generic card grids, oversized status treatments,
-colored row rails, and dashboards that read like decorated forms. This blueprint
-sets a more premium reference: quiet editorial command centers, strong
-typographic hierarchy, precise data layouts, generous but purposeful whitespace,
-and one unmistakable action per decision area.
+This blueprint sets the standard for Work OS surfaces: quiet editorial command
+centers, strong typographic hierarchy, precise data layouts, generous but
+purposeful whitespace, and one unmistakable action per decision area. It rejects
+generic card grids, oversized status treatments, colored row rails, and
+dashboards that read like decorated forms.
 
 The visual references are:
 
@@ -137,6 +135,13 @@ Do not use signal green to mean “good” in general. It means action, progress
 current state, or an explicitly confirmed result whose label says what was
 confirmed. Observation remains blue/cool-neutral even when activity is present.
 
+Known gaps: `--color-faint` (2.7:1 on paper) must not carry text. `--color-danger`
+(4.3:1 on paper) and `--color-warning` (3.0:1 on white) fail AA as text on light
+surfaces, and the signal focus outline is 1.3:1 on paper. `--color-muted` passes
+on paper (4.8:1) and is borderline on inset (4.47:1). Until a palette decision
+adds text-safe variants and a focus color, these tokens are for icons, borders,
+and fills, and text uses `--color-ink-soft` or a darker muted value.
+
 ### 3.2 Geometry and elevation
 
 | Role | Value |
@@ -212,13 +217,12 @@ the title baseline.
 
 ### 4.2 Navigation states
 
-Navigation is a stable noun: Today, Tasks, Review, Insights, Evidence, Settings.
+Navigation is a stable noun: My Day, Tasks, EOD Review, Insights, Evidence, Settings.
 The active destination uses a quiet inset surface, ink/signal icon treatment,
 and a visible focus ring. A narrow marker is allowed only for the primary
 navigation rail itself; it is not allowed beside content rows, task rows, cards,
-or selected records. Settings opens from either window with `Ctrl + ,`
-(`Cmd + ,` on macOS) — a window-focused shortcut, never a system-wide capture —
-and the Settings destination names it in its tooltip.
+or selected records. The Settings destination names its shortcut in its tooltip;
+§8.13 defines the shortcut inventory.
 
 The companion sidebar intentionally does not render a persistent Chats section
 or an empty recent-chat placeholder. Chat remains available through New chat and
@@ -231,7 +235,7 @@ any production chat rows must be backed by real conversation history rather than
 invented threads or workspace actions. Settings lives in a quiet footer
 separated by a rule; connection/session status is intentionally not repeated in
 the sidebar. Evidence remains a routed view but its sidebar destination is
-temporarily hidden until that surface is ready for daily use.
+hidden until that surface is ready for daily use.
 
 When the companion sidebar is collapsed, the workspace mark is the expand
 control. Hovering the mark or any non-navigation surface reveals the expand
@@ -283,8 +287,37 @@ scheduled-window progress, remaining time), optimistic task adds with
 surface/defer, per-day screenshot evidence, and the deterministic insights
 record with exact-value charts. Surfaces that stay companion-only by design:
 Worktivity attendance mutations, the system-wide hold-to-talk shortcut, the
+window-focused Ctrl + , Settings shortcut, the
 floating window and orb chat, OS notifications and sounds, the offline queue,
 appearance settings, and device sessions.
+
+### 4.4 Developer diagnostics window
+
+The companion debugger (Scenarios, Live trace, Export) is an opt-in developer
+window. It is destroyed when closed and recreated on demand, so it holds no
+history and no subscriptions while closed. The Live trace tab releases its rows
+and listener when another tab is selected. Its tabs follow the peer-view contract
+in §8.13.
+
+Rows are intentionally dense at 34px. This desktop-only developer surface is an
+exception to touch-sized controls; every action remains keyboard accessible and
+has a visible focus state.
+
+The live trace reads the host's diagnostics history: 1,000 events in memory,
+newest first, read in pages of 50 with at most 100 rows loaded at once (§9.2).
+Method and path appear inline on request spans, and duration appears inline on
+completed and failed spans. The category is the row's title, and the message
+appears only when it adds something the category does not. The source value and
+full JSON appear only in the expanded row. Spans at or above one second are
+marked slow. Search, level, and source filters apply to the whole history, not
+just the loaded rows. Pause freezes the view and resumes with a refresh. Clear
+view sets a sequence floor for the lifetime of that debugger window: later events
+remain visible, earlier events do not reappear, and disk logs remain untouched
+and available to Export.
+
+This is the one place where a dense diagnostic list is intended. The §2.3 rule
+against a permanently visible diagnostic wall applies to product surfaces, not to
+this opt-in developer window.
 
 ## 5. Dashboard blueprint
 
@@ -435,9 +468,9 @@ selection must not be communicated by color alone.
 ### 6.4 Views and ordering
 
 My day is strictly day-scoped. Unfinished is open backlog, with overdue work
-first. Completed is historical record. All tasks is the complete inspectable
-set. Counts describe the rendered list, or state Showing N of M when
-pagination is involved.
+first; the default order applies within each group. Completed is historical
+record. All tasks is the complete inspectable set. Counts describe the rendered
+list, or state Showing N of M when pagination is involved.
 
 The default order is due date latest-first, with open work above completed and
 undated items last. The Tasks column row exposes Name, Date due, and Status
@@ -502,7 +535,8 @@ behind or consumes task-list space.
 The open state is a bounded white sheet, approximately 480px wide and 680px
 tall at desktop, with safe insets on narrow screens. Header, thread, and
 auto-growing composer are one coherent surface. The thread is the only scrolling
-region. The sheet closes on Escape and returns focus to the launcher.
+region on the chat tab. The sheet closes on Escape and returns focus to the
+launcher.
 
 #### 7.2.1 Focus panel goal card
 
@@ -525,9 +559,9 @@ stream as the floating Tasks tab — recaps newest first, each with one evidence
 disclosure that reports screenshot and GitHub event counts, then separate
 Screenshots and GitHub activity disclosures, plus confirm/amend actions — so the
 day's goal and its interval check-ins read as one record. The stream is
-separated by a hairline and scrolls with the rest of the sheet.
+separated by a hairline. Each sheet tab scrolls as its own region.
 
-### 7.3 Floating Otter chat
+### 7.3 Floating Otto chat
 
 The floating companion uses the same white window border/header treatment and
 the same composer anatomy. The window remains inside the viewport, grows the
@@ -643,7 +677,7 @@ with roving tabindex and the count as part of each tab's accessible name).
 The modal body is the only scroll region and uses the shared edge dissolve;
 Escape, backdrop press, and the close control all dismiss it, and focus returns
 to `View`. Below 720px the summary stacks with its counts and action in one row
-beneath the copy, and below 640px the modal takes the viewport inset. Keep,
+beneath the copy, and below 560px the modal takes the viewport inset. Keep,
 reject, and forget keep their exact existing behavior and states; nothing is
 remembered without a keep.
 
@@ -653,12 +687,12 @@ Reading & display sits with the Settings groups and holds exactly two
 preferences. Both are per-device, apply instantly in every window, and are
 remembered locally rather than synced to the workspace:
 
-- **Text size** — `Small` (default, the historical rendering) or `Medium`,
+- **Text size** — `Small` (default) or `Medium`,
   which scales text 15% through one root custom property (`--text-scale`).
   Every px `font-size`, `font` shorthand size, and fixed `line-height` is
   compiled to `calc(px * var(--text-scale))` by the companion's build seam, so
   text scales without moving layout, icons, or spacing.
-- **Mascot size** — `Large` (default, the historical rendering) or `Small`
+- **Mascot size** — `Large` (default) or `Small`
   (62% of current). One scale rule over the shared art class follows
   `--mascot-scale`, so every surface — chat marks, the thinking trace, hero
   and EOD art, the connect screen, the dashboard, the memory tile, and the
@@ -668,7 +702,7 @@ remembered locally rather than synced to the workspace:
 Both preferences render as a two-option segmented radio group
 (`role="radiogroup"` with `role="radio"`, roving tabindex, and arrow keys),
 state the current value, and normalize unknown or missing stored values back to
-the historical default — never to the larger setting. The main window applies
+the default — never to the larger setting. The main window applies
 and persists a change (rolling the visible state back if the save fails) and
 broadcasts it with `work-os://appearance-changed`; the floating companion
 window reads the stored value on boot and follows the broadcast live.
@@ -876,6 +910,26 @@ amber recoverable-attention tone.
   could touch. Recap-sourced next steps never appear here — they belong to the
   mascot chat moment (§9.1) — and nothing is written back until an approval.
 
+### 8.13 Keyboard and focus
+
+Shortcut inventory:
+
+| Shortcut | Action | Scope |
+|---|---|---|
+| `Ctrl + ,` (`Cmd + ,` on macOS) | Open Settings | Either companion window while it is focused; never system-wide |
+| Hold `Ctrl + M` | Hold-to-talk | System-wide in the companion; in the browser while the page has focus (§8.8) |
+| `Escape` | Dismiss the topmost menu, drawer, sheet, or modal and return focus to its trigger | Every detached surface (§8.3) |
+
+Peer views (tabs, the memory modal's tabs, the debugger's tabs) share one
+contract. The tablist is reachable through its selected tab. ←/→ move and
+activate, Home and End jump to the ends, and each tab's accessible name includes
+its count when it has one. Lists of rows use ↑/↓ and Home/End to move focus
+between rows, and Enter expands. Radio groups use ←/→ with roving tabindex (§8.6).
+
+Focus is visible on every interactive element. A focus outline must reach 3:1
+against its surroundings; the current signal-lime outline does not (§3.1).
+Dismissal never leaves focus on removed content.
+
 ## 9. Data truth, provenance, and state
 
 The visual system must keep these evidence classes distinct:
@@ -914,6 +968,7 @@ Every asynchronous surface defines:
 | Optimistic mutation | pending until authoritative confirmation |
 | Confirmed success | receipt naming the persisted outcome |
 | Read-only history | mutation controls removed, provenance retained |
+| More available | a load control on the open edge, `Showing N of M`, and contiguous pages (§9.2) |
 
 Dates, instants, timezone identifiers, durations, and range endpoints are
 validated before formatting. Invalid values render —, Unavailable, or specific
@@ -1071,6 +1126,24 @@ task completion. Recap text outlives raw images under the report-retention
 policy, and raw preview access keeps its existing own-frame or flagged/dispute
 rule and audit.
 
+### 9.2 Paged and streaming lists
+
+A list that can grow in either direction loads contiguous pages on demand.
+
+- Pages are 50 rows. A list keeps at most 100 rows mounted. Overflow is dropped
+  from the edge away from the viewport, and that edge gets a load control.
+- Loading is driven by a sentinel near the viewport, with a visible button as the
+  fallback. Every page is contiguous with the rows already loaded, so the list
+  never shows a gap.
+- Arrivals at the top of a list that is already at the top appear in place. When
+  the viewer is scrolled away, arrivals never move the view. One polite status
+  line and one jump control report the count instead.
+- Changing a filter or sort discards pages already in flight, so stale rows
+  cannot land in the new result.
+- The count states what is rendered. Use `Showing N of M` whenever more history
+  exists.
+- Counts are announced through one polite status region, never row by row.
+
 ## 10. Motion
 
 Motion explains a state change:
@@ -1134,7 +1207,9 @@ Accessibility is part of each module's interface:
 - Focus management and restoration for drawers, sheets, and menus.
 - Minimum WCAG AA contrast for text and essential controls.
 - State communicated with text/icon/shape in addition to color.
-- Touch targets generally at least 40px.
+- Touch targets are at least 40px. Compact desktop-only controls may be 34–36px
+  when the surface is keyboard accessible and has visible focus; this exception
+  does not apply to touch surfaces.
 - Meaningful async receipts announced without raw payloads.
 - No essential information available only on hover.
 - Text zoom and narrow-width resilience.
@@ -1175,10 +1250,10 @@ illustration. Do not create a new raster asset where the configured original
 asset can be referenced. Mascot motion is removed under reduced motion.
 
 The compact companion's drag handle is a visible, subtle dark capsule centered
-above the mascot with a generous grab area. Keep it about 50% larger than the
-previous 48×20px ordinary handle (72×30px) and 52×20px due-prompt handle
-(78×30px), without covering the separate hide control. The due-prompt mascot
-starts below the handle, including during its 6px attention gesture.
+above the mascot with a generous grab area. The ordinary handle is 72×30px and
+the due-prompt handle is 78×30px, without covering the separate hide control.
+The due-prompt mascot starts below the handle, including during its 6px attention
+gesture.
 
 A recap or due-prompt bubble floats in the strip above the figure. The mascot and
 the elapsed-time pill keep their default positions whether or not a bubble is
@@ -1208,6 +1283,20 @@ The interface includes semantic contracts, focus behavior, responsive behavior,
 error modes, provenance, and performance expectations, not just TypeScript
 props.
 
+### 14.1 Performance budgets
+
+Each surface states its budgets, and visual QA checks them.
+
+- Bounded history: the developer trace holds 1,000 events in the host and at most
+  100 rows in the DOM.
+- Page size: one request returns at most 100 rows.
+- A closed debugger window holds no subscriptions and no rows. Selecting another
+  tab releases the trace rows and its event listener.
+- Diagnostic change notices target only the debugger window, never the main or
+  avatar windows. Bursts coalesce to the latest sequence at most every 250ms; the
+  trace pulls the rows it shows instead of receiving whole events.
+- Polling cadence follows §8.7. No surface polls faster than its contract states.
+
 ## 15. Visual QA and release acceptance
 
 A UI change is incomplete until the rendered result is inspected. The required
@@ -1227,7 +1316,7 @@ A voice input change adds the capture states to that list: idle with an empty
 draft (the record control in the send slot), idle with text (the send back),
 requesting, recording, transcribing, the transcribed receipt, and the
 permission-denied and no-speech failures — at wide and narrow widths, in both
-themes, and under reduced motion.
+themes where a dark variant exists (§3.1), and under reduced motion.
 
 The selected-row review specifically asks:
 
@@ -1342,10 +1431,8 @@ During editing:
 Before handoff:
 
 - Run build, typecheck, and relevant tests.
-- Run the existing TestSprite smoke test against a local preview.
 - Review screenshots, not only DOM assertions.
-- Run one CodeRabbit pass for the completed batch when required by the repo
-  workflow.
+- Follow the verification and review steps in `AGENTS.md`.
 - Report branch/commit, rendered states, interaction checks, and anything not
   deployed.
 

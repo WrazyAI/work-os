@@ -2,10 +2,14 @@ use serde_json::{Map, Value};
 use std::fs;
 use std::path::Path;
 
+pub mod ring;
+
+pub use ring::{Anchor, Entry, EventRing, Page, PAGE_DEFAULT, PAGE_MAX};
+
 pub const EVENT_FILE: &str = "app-events.jsonl";
 pub const ROTATED_FILE: &str = "app-events.1.jsonl";
 pub const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
-pub const RING_LIMIT: usize = 2000;
+pub const RING_LIMIT: usize = 1000;
 
 const SENSITIVE_KEYS: &[&str] = &[
     "token",

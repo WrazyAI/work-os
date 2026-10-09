@@ -3,7 +3,7 @@ identifier = "allow-debug-commands"
 description = "Allow the diagnostics window to read and export redacted diagnostics."
 commands.allow = [
   "diagnostics_emit",
-  "diagnostics_snapshot",
+  "diagnostics_page",
   "diagnostics_export",
   "open_logs_dir"
 ]

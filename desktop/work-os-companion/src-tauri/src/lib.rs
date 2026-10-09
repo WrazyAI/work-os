@@ -606,7 +606,7 @@ pub fn run() {
             set_voice_hotkey,
             debug_window::open_debug_window,
             diagnostics::diagnostics_emit,
-            diagnostics::diagnostics_snapshot,
+            diagnostics::diagnostics_page,
             diagnostics::diagnostics_export,
             diagnostics::open_logs_dir
         ])

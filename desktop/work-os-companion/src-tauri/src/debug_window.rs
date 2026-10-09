@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::diagnostics::{self, DiagnosticLevel};
 
-const DEBUG_LABEL: &str = "debug";
+pub const DEBUG_LABEL: &str = "debug";
 
 #[tauri::command]
 pub fn open_debug_window(app: AppHandle) -> Result<(), String> {

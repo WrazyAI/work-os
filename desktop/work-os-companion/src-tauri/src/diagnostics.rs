@@ -1,23 +1,28 @@
-use std::collections::VecDeque;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::debug_window::DEBUG_LABEL;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 use work_os_diagnostics_core::{
-    redact_string, redact_value, rotate_if_needed, EVENT_FILE, RING_LIMIT, ROTATED_FILE,
+    redact_string, redact_value, rotate_if_needed, Anchor, EventRing, EVENT_FILE, PAGE_DEFAULT,
+    RING_LIMIT, ROTATED_FILE,
 };
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
 static STATE: OnceLock<Mutex<DiagnosticsState>> = OnceLock::new();
 static SESSION_ID: OnceLock<String> = OnceLock::new();
+static DEBUG_NOTICE_PENDING_SEQ: AtomicU64 = AtomicU64::new(0);
+static DEBUG_NOTICE_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -85,7 +90,7 @@ pub struct ExportInput {
 
 struct DiagnosticsState {
     dir: PathBuf,
-    ring: VecDeque<DiagnosticEvent>,
+    ring: EventRing<DiagnosticEvent>,
 }
 
 fn session_id() -> String {
@@ -169,7 +174,7 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
     STATE.get_or_init(|| {
         Mutex::new(DiagnosticsState {
             dir: dir.clone(),
-            ring: VecDeque::new(),
+            ring: EventRing::new(RING_LIMIT),
         })
     });
     install_panic_hook();
@@ -205,7 +210,7 @@ fn install_panic_hook() {
     }));
 }
 
-fn persist_locked(state: &mut DiagnosticsState, event: &DiagnosticEvent) -> Result<(), String> {
+fn persist_locked(state: &mut DiagnosticsState, event: &DiagnosticEvent) -> Result<u64, String> {
     rotate_if_needed(&state.dir)?;
     let path = state.dir.join(EVENT_FILE);
     let mut file = OpenOptions::new()
@@ -216,22 +221,69 @@ fn persist_locked(state: &mut DiagnosticsState, event: &DiagnosticEvent) -> Resu
     let line = serde_json::to_string(event).map_err(|error| error.to_string())?;
     writeln!(file, "{line}").map_err(|error| error.to_string())?;
     let _ = file.flush();
-    if state.ring.len() >= RING_LIMIT {
-        state.ring.pop_front();
-    }
-    state.ring.push_back(event.clone());
-    Ok(())
+    Ok(state.ring.push(event.clone()))
 }
 
 fn record(app: &AppHandle, incoming: IncomingEvent) -> DiagnosticEvent {
     let event = normalize_event(incoming);
+    let mut seq = None;
     if let Some(state) = STATE.get() {
         if let Ok(mut inner) = state.lock() {
-            let _ = persist_locked(&mut inner, &event);
+            seq = persist_locked(&mut inner, &event).ok();
         }
     }
-    let _ = app.emit("work-os://diagnostics", &event);
+    // Only the debugger reads the trace, and it pulls pages itself. While it is
+    // closed nothing is sent, and other windows never receive diagnostics.
+    if let Some(seq) = seq {
+        schedule_debug_notice(app, seq);
+    }
     event
+}
+
+/// Coalesce diagnostic bursts into one latest-sequence notice per 250ms window.
+/// The payload stays small; the debugger pulls only the filtered page it needs.
+fn schedule_debug_notice(app: &AppHandle, seq: u64) {
+    if app.get_webview_window(DEBUG_LABEL).is_none() {
+        return;
+    }
+    DEBUG_NOTICE_PENDING_SEQ.fetch_max(seq, Ordering::AcqRel);
+    if DEBUG_NOTICE_SCHEDULED.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
+    let app_for_thread = app.clone();
+    let spawn = thread::Builder::new()
+        .name("work-os-diagnostics-notice".into())
+        .spawn(move || loop {
+            thread::sleep(Duration::from_millis(250));
+            let latest_seq = DEBUG_NOTICE_PENDING_SEQ.swap(0, Ordering::AcqRel);
+            if latest_seq > 0 && app_for_thread.get_webview_window(DEBUG_LABEL).is_some() {
+                let _ = app_for_thread.emit_to(
+                    DEBUG_LABEL,
+                    "work-os://diagnostics-changed",
+                    json!({ "seq": latest_seq }),
+                );
+            }
+
+            DEBUG_NOTICE_SCHEDULED.store(false, Ordering::Release);
+            if DEBUG_NOTICE_PENDING_SEQ.load(Ordering::Acquire) == 0
+                || DEBUG_NOTICE_SCHEDULED.swap(true, Ordering::AcqRel)
+            {
+                break;
+            }
+        });
+
+    if spawn.is_err() {
+        DEBUG_NOTICE_SCHEDULED.store(false, Ordering::Release);
+        let latest_seq = DEBUG_NOTICE_PENDING_SEQ.swap(0, Ordering::AcqRel);
+        if latest_seq > 0 && app.get_webview_window(DEBUG_LABEL).is_some() {
+            let _ = app.emit_to(
+                DEBUG_LABEL,
+                "work-os://diagnostics-changed",
+                json!({ "seq": latest_seq }),
+            );
+        }
+    }
 }
 
 pub fn host_event(app: &AppHandle, category: &str, message: &str, level: DiagnosticLevel) {
@@ -252,13 +304,116 @@ pub fn diagnostics_emit(app: AppHandle, event: IncomingEvent) -> Result<Diagnost
     Ok(record(&app, event))
 }
 
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PageInput {
+    pub before: Option<u64>,
+    pub after: Option<u64>,
+    pub since: Option<u64>,
+    pub limit: Option<usize>,
+    pub level: Option<DiagnosticLevel>,
+    pub source: Option<DiagnosticSource>,
+    pub query: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PagedEvent {
+    pub seq: u64,
+    #[serde(flatten)]
+    pub event: DiagnosticEvent,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsPage {
+    pub events: Vec<PagedEvent>,
+    pub head_seq: u64,
+    pub has_newer: bool,
+    pub has_older: bool,
+    pub matching_total: usize,
+    pub matching_after: Option<usize>,
+}
+
 #[tauri::command]
-pub fn diagnostics_snapshot() -> Result<Vec<DiagnosticEvent>, String> {
+pub fn diagnostics_page(input: PageInput) -> Result<DiagnosticsPage, String> {
     let Some(state) = STATE.get() else {
-        return Ok(Vec::new());
+        return Ok(DiagnosticsPage {
+            events: Vec::new(),
+            head_seq: 0,
+            has_newer: false,
+            has_older: false,
+            matching_total: 0,
+            matching_after: None,
+        });
     };
+    let anchor = match (input.after, input.before) {
+        (Some(after), _) => Anchor::After(after),
+        (None, Some(before)) => Anchor::Before(before),
+        (None, None) => Anchor::Newest,
+    };
+    let needle = input
+        .query
+        .as_deref()
+        .map(|text| text.trim().to_lowercase())
+        .filter(|text| !text.is_empty());
     let inner = state.lock().map_err(|error| error.to_string())?;
-    Ok(inner.ring.iter().cloned().collect())
+    let page = inner.ring.page(anchor, input.limit.unwrap_or(PAGE_DEFAULT), |seq, event| {
+        input.since.map_or(true, |since| seq > since)
+            && matches_filter(event, input.level.as_ref(), input.source.as_ref(), needle.as_deref())
+    });
+    Ok(DiagnosticsPage {
+        events: page
+            .entries
+            .into_iter()
+            .map(|entry| PagedEvent { seq: entry.seq, event: entry.value })
+            .collect(),
+        head_seq: inner.ring.head_seq().unwrap_or(0),
+        has_newer: page.has_newer,
+        has_older: page.has_older,
+        matching_total: page.matching_total,
+        matching_after: page.matching_after,
+    })
+}
+
+fn matches_filter(
+    event: &DiagnosticEvent,
+    level: Option<&DiagnosticLevel>,
+    source: Option<&DiagnosticSource>,
+    needle: Option<&str>,
+) -> bool {
+    if level.is_some_and(|wanted| &event.level != wanted) {
+        return false;
+    }
+    if source.is_some_and(|wanted| &event.source != wanted) {
+        return false;
+    }
+    match needle {
+        None => true,
+        Some(needle) => {
+            let metadata_text = event
+                .metadata
+                .as_ref()
+                .map(|metadata| {
+                    [metadata.get("method"), metadata.get("path")]
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
+            format!(
+                "{} {} {} {}",
+                event.category,
+                event.message,
+                event.correlation_id.as_deref().unwrap_or(""),
+                metadata_text
+            )
+            .to_lowercase()
+            .contains(needle)
+        }
+    }
 }
 
 #[tauri::command]
