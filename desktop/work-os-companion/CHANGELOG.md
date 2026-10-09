@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.15
+
+- The debugger's live trace shows the newest events first and loads older ones as you scroll.
+- Requests in the live trace show their method, path, and duration on the same row.
+- Closing the debugger now frees its memory.
+
 ## 0.4.14
 
 - A recap or prompt bubble no longer pushes the mascot down or covers the elapsed-time label — the figure now keeps its place.
