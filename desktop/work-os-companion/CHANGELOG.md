@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.14
+
+- A recap or prompt bubble no longer pushes the mascot down or covers the elapsed-time label — the figure now keeps its place.
+
 ## 0.4.13
 
 - Work OS now keeps a settings file on your computer, so you can change your check-in timing for that machine only.
