@@ -1180,6 +1180,13 @@ previous 48×20px ordinary handle (72×30px) and 52×20px due-prompt handle
 (78×30px), without covering the separate hide control. The due-prompt mascot
 starts below the handle, including during its 6px attention gesture.
 
+A recap or due-prompt bubble floats in the strip above the figure. The mascot and
+the elapsed-time pill keep their default positions whether or not a bubble is
+showing: a bubble never pushes the figure down, so the pill can never land on
+it. The bubble's copy clamps to the space above the head — headline and
+supporting line stay legible, the action stays reachable — so a tall bubble may
+temporarily cover the drag handle and progress marker until it is resolved.
+
 ## 14. Deep module and seam rules
 
 UI modules should be deep: a small interface should own the behavior,
