@@ -24,7 +24,9 @@ they change what the employee sees or does.
 
 ## Unreleased
 
-- Tasks now load 50 at a time, and Load more appends the next set.
+## 0.4.16
+
+- Tasks load 50 at a time now, and Load more brings in the next set.
 
 ## 0.4.15
 
