@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.24
+
+- The EOD reminder now stays with you after clock-out instead of disappearing when your shift ends.
+- Fixed a schedule problem that stopped shift times from applying on some accounts.
+
 ## 0.4.23
 
 - Recap panels open and close reliably even when the same recap appears in the chat and the Tasks stream at once.
