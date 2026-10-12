@@ -4,7 +4,7 @@ import {
   syncNifty,
   syncNiftyPersonTasks,
 } from "@/lib/work-os";
-import { localDateForTimezone, resolveShiftWindow } from "@/modules/work-os/companion";
+import { localDateForTimezone, resolveShiftWindow, resolveShiftWindowForDate } from "@/modules/work-os/companion";
 import { getWorkday } from "@/lib/work-os-workday";
 import { loadPersistedWorktivityAttendance, observeWorktivityAttendance } from "@/lib/work-os-attendance";
 import { worktivityAuthoritativeBreaks } from "@/lib/work-os-policy";
@@ -71,6 +71,14 @@ export async function getWorkOsDay(
   // Upcoming-shift display must not advance task/history attribution into the
   // next day after the current shift ends.
   const shiftDate = options.localDate ?? localDateForTimezone(at, timezone);
+  // The EOD wrap-up window is anchored to the shift's scheduled end, which
+  // must survive clock-out and the roll to tomorrow's shift. Resolve it for the
+  // day itself; an overnight shift that ends on this date is covered by the
+  // previous local date.
+  const previousShiftDate = new Date(`${shiftDate}T12:00:00Z`);
+  previousShiftDate.setUTCDate(previousShiftDate.getUTCDate() - 1);
+  const dayShift = resolveShiftWindowForDate(rules, exceptions, shiftDate)
+    ?? resolveShiftWindowForDate(rules, exceptions, previousShiftDate.toISOString().slice(0, 10));
   const ownerId = await ownerIdPromise;
   const [latestTaskResult, latestProjectResult, organizationSyncResult] = await Promise.all([
     db().from("work_tasks").select("synced_at").eq("organization_id", access.organizationId).order("synced_at", { ascending: false }).limit(1).maybeSingle(),
@@ -123,5 +131,5 @@ export async function getWorkOsDay(
     openTasks: taskRows.filter((item) => item.completed !== true).length,
   };
   const workdayPrompt = suppressPromptForSubmittedEod(workday.prompt, reportResult.data?.submitted_at as string | null | undefined);
-  return { at: at.toISOString(), shiftDate, shift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
+  return { at: at.toISOString(), shiftDate, shift, dayShift, prompt: workdayPrompt, session: workday.session, plan: workday.plan, attendance: attendance.attendance, breakPolicy: { worktivityAuthoritative: authoritativeBreaks }, niftySync, signals, tasks: workspace.tasks, taskHistory: taskHistory ?? [], workspaceSummary: workspace, evidence: evidenceRows, proposals: proposalsResult.data ?? [], report: reportResult.data };
 }

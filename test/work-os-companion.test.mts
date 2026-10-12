@@ -4,6 +4,7 @@ import {
   isTaskOutcomeEvidence,
   resolveStartableShiftWindow,
   resolveShiftWindow,
+  resolveShiftWindowForDate,
   zonedDateTimeToUtc,
   type WorkOsScheduleRule,
 } from "../src/modules/work-os/companion";
@@ -63,6 +64,31 @@ assert.equal(overnight?.endsAt, "2026-07-11T06:00:00.000Z");
 
 const leave = resolveShiftWindow([baseRule], [{ exception_date: "2026-07-10", kind: "leave" }], firstHour);
 assert.equal(leave, null);
+
+// Postgres date columns arrive as Date objects: comparing them to "YYYY-MM-DD"
+// strings silently disabled every schedule rule (no shift windows, unscheduled
+// Worktivity clock-ins, no EOD state). The resolver must normalize both forms.
+const datedRule = { ...baseRule, effective_from: new Date("2026-01-01T00:00:00.000Z") as unknown as string };
+assert.equal(resolveStartableShiftWindow([datedRule], [], beforeShift)?.shiftDate, "2026-07-10", "a Date-valued effective_from must not disable the rule");
+assert.equal(resolveShiftWindow([datedRule], [], beforeShift)?.startsAt, "2026-07-10T16:00:00.000Z", "the upcoming window resolves for Date-valued rules");
+const endedRule = { ...baseRule, effective_from: new Date("2026-01-01T00:00:00.000Z") as unknown as string, effective_to: new Date("2026-06-30T00:00:00.000Z") as unknown as string };
+assert.equal(resolveShiftWindow([endedRule], [], beforeShift), null, "a Date-valued effective_to still ends the rule");
+
+// The day window is the EOD anchor: it must resolve for its own date even
+// after it ended, and stay null for leave days or unscheduled dates.
+assert.equal(resolveShiftWindowForDate([baseRule], [], "2026-07-10")?.endsAt, "2026-07-10T20:00:00.000Z", "the day window survives past its end");
+assert.equal(resolveShiftWindowForDate([baseRule], [], "2026-07-11"), null, "an unscheduled weekday has no window");
+assert.equal(resolveShiftWindowForDate([baseRule], [{ exception_date: "2026-07-10", kind: "leave" }], "2026-07-10"), null, "leave days have no window");
+assert.equal(
+  resolveShiftWindowForDate([baseRule], [{ exception_date: "2026-07-10", kind: "changed_shift", shift_start: "15:00", shift_end: "19:00" }], "2026-07-10")?.endsAt,
+  "2026-07-10T19:00:00.000Z",
+  "a changed-shift exception overrides the day window",
+);
+assert.equal(
+  resolveShiftWindowForDate([baseRule], [{ exception_date: "2026-07-11", kind: "working_day" }], "2026-07-11")?.endsAt,
+  "2026-07-11T20:00:00.000Z",
+  "a working-day exception adds the window",
+);
 
 assert.equal(isTaskOutcomeEvidence({ source: "worktivity", url: "https://example.test/screenshot" }), false);
 assert.equal(isTaskOutcomeEvidence({ source: "manual", metrics: { evidenceClass: "work_claim" } }), false);

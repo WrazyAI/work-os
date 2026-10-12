@@ -123,9 +123,14 @@ export function zonedDateTimeToUtc(date: string, time: string, timezone: string)
 }
 
 function ruleApplies(rule: WorkOsScheduleRule, date: string, weekday: number) {
+  // `effective_from`/`effective_to` are Postgres date columns, and the client
+  // can hand them back as Date objects: `Date <= "YYYY-MM-DD"` is always
+  // false, which silently disables every rule. Compare normalized date keys.
+  const from = dateKey(rule.effective_from);
+  const to = dateKey(rule.effective_to);
   return rule.days_of_week.includes(weekday) &&
-    rule.effective_from <= date &&
-    (!rule.effective_to || rule.effective_to >= date);
+    from !== null && from <= date &&
+    (to === null || to >= date);
 }
 
 function buildWindow(
@@ -208,6 +213,29 @@ export function resolveStartableShiftWindow(
   return candidateShiftWindows(rules, exceptions, at).find((window) =>
     now >= Date.parse(window.startsAt) - grace && now < Date.parse(window.endsAt)
   ) ?? null;
+}
+
+function weekdayForLocalDate(date: string, timezone: string) {
+  return localParts(zonedDateTimeToUtc(date, "12:00", timezone), timezone).weekday;
+}
+
+/** The schedule window for one employee-local date, independent of where the
+ * clock sits relative to it. The EOD wrap-up window is anchored to this value,
+ * which must survive clock-out and the roll to tomorrow's shift. */
+export function resolveShiftWindowForDate(
+  rules: WorkOsScheduleRule[],
+  exceptions: WorkOsScheduleException[],
+  date: string,
+): WorkOsShiftWindow | null {
+  const exception = exceptions.find((item) => dateKey(item.exception_date) === date);
+  if (exception?.kind === "leave") return null;
+  for (const rule of rules) {
+    const weekday = weekdayForLocalDate(date, rule.timezone);
+    if (!ruleApplies(rule, date, weekday) && exception?.kind !== "working_day") continue;
+    const window = buildWindow(rule, date, exception);
+    if (window) return window;
+  }
+  return null;
 }
 
 // Compatibility for existing display/check-in callers. New lifecycle code must
