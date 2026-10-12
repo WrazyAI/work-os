@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, StickyNote, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
@@ -171,6 +171,9 @@ export function ActivityIntervalCard({
   const [feedback, setFeedback] = useState("");
   const [amending, setAmending] = useState(false);
   const [openPanel, setOpenPanel] = useState<"notes" | "evidence" | null>(defaultPanel);
+  // The same interval can render in the chat card and the Tasks stream at once,
+  // so panel ids are scoped per card instance instead of per interval.
+  const panelScope = useId();
   const [lightbox, setLightbox] = useState<ActivityIntervalEvidence | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   useModalScrollLock(lightbox !== null);
@@ -327,7 +330,7 @@ export function ActivityIntervalCard({
               type="button"
               className={`chat-activity-panel-button${openPanel === "notes" ? " is-active" : ""}`}
               aria-expanded={openPanel === "notes"}
-              aria-controls={`activity-notes-${interval.id}`}
+              aria-controls={`activity-notes-${panelScope}`}
               onClick={() => setOpenPanel(openPanel === "notes" ? null : "notes")}
             >
               <StickyNote size={12} aria-hidden="true" />
@@ -339,7 +342,7 @@ export function ActivityIntervalCard({
               type="button"
               className={`chat-activity-panel-button is-evidence${openPanel === "evidence" ? " is-active" : ""}`}
               aria-expanded={openPanel === "evidence"}
-              aria-controls={`activity-evidence-${interval.id}`}
+              aria-controls={`activity-evidence-${panelScope}`}
               aria-label={evidenceParts.length ? `Evidence: ${evidenceParts.join(", ")}` : "Evidence"}
               onClick={() => setOpenPanel(openPanel === "evidence" ? null : "evidence")}
             >
@@ -357,7 +360,7 @@ export function ActivityIntervalCard({
         </div>
 
       {showNotes ? (
-        <AnimatedPanel open={openPanel === "notes"} id={`activity-notes-${interval.id}`}>
+        <AnimatedPanel open={openPanel === "notes"} id={`activity-notes-${panelScope}`}>
           {interval.reviewStatus === "inferred" ? (
             <p className="chat-activity-provenance">Inferred from your screenshots — add or correct anything missing.</p>
           ) : null}
@@ -370,7 +373,7 @@ export function ActivityIntervalCard({
       ) : null}
 
       {showEvidence ? (
-        <AnimatedPanel open={openPanel === "evidence"} id={`activity-evidence-${interval.id}`}>
+        <AnimatedPanel open={openPanel === "evidence"} id={`activity-evidence-${panelScope}`}>
           {showScreenshotGroup ? (
             <section className="chat-activity-panel-section">
               <header className="chat-activity-panel-head">

@@ -198,7 +198,7 @@ describe("ActivityIntervalCard", () => {
   it("lists the exact analyzed frames in a hidden evidence panel", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
     expect(markup).toContain("3 screenshots");
-    expect(markup).toContain('id="activity-evidence-interval-1"');
+    expect(markup).toMatch(/id="activity-evidence-[^"]+"/);
     expect(markup).not.toContain("is-open");
     expect(markup).toContain("Editing the activity interval engine.");
     expect(markup).toContain("Companion Tasks tab open.");
