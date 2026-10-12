@@ -104,6 +104,9 @@ export interface CollapsibleTurn {
   text: string;
   operations?: unknown;
   toolResults?: unknown;
+  /** The recap next-steps moment a turn carries. Two moments share the same
+   * lead sentence but are different cards, so the signature must include it. */
+  nextSteps?: unknown;
 }
 
 /** Stable serialization for JSON-shaped chat payloads. Object keys do not
@@ -123,9 +126,11 @@ function stableValueSignature(value: unknown): string {
 }
 
 /** Stable identity of the cards a turn rendered. Include the full JSON-shaped
- * payload so different task lists are never collapsed as duplicate prose. */
+ * payload so different task lists are never collapsed as duplicate prose — and
+ * the next-steps moment, because two moments share the same lead sentence but
+ * are different cards (a newer moment must never vanish behind an older one). */
 function cardSignature(turn: CollapsibleTurn): string {
-  return `${stableValueSignature(turn.operations ?? [])}::${stableValueSignature(turn.toolResults ?? [])}`;
+  return `${stableValueSignature(turn.operations ?? [])}::${stableValueSignature(turn.toolResults ?? [])}::${stableValueSignature(turn.nextSteps ?? null)}`;
 }
 
 /** Collapse consecutive duplicate assistant turns at render. Dupes reach the

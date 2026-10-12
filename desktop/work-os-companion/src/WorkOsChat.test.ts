@@ -119,6 +119,41 @@ describe("collapseConsecutiveAssistantDuplicates", () => {
     expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(1);
   });
 
+  it("keeps two different next-steps moments visible even with the same lead sentence", () => {
+    const moment = (intervalId: string, status: "ready" | "done") => ({
+      intervalId,
+      label: "2:05–2:10 PM",
+      status,
+      items: [{ proposalId: `${intervalId}-1`, operation: "create_task", status: "applied", title: "Verify Console MCP enablement", rationale: "Reviewed.", taskId: null, editable: true }],
+      states: status === "done" ? { [`${intervalId}-1`]: "applied" } : {},
+      failures: {},
+    });
+    const lead = "Recap confirmed — while it's fresh, here's what could come next:";
+    const turns = [
+      { role: "assistant", text: lead, nextSteps: moment("interval-old", "done") },
+      { role: "assistant", text: lead, nextSteps: moment("interval-new", "ready") },
+    ];
+    // The newer moment must never vanish behind the older card: the same lead
+    // sentence is not a duplicate when the moment payload differs.
+    expect(collapseConsecutiveAssistantDuplicates(turns)).toHaveLength(2);
+  });
+
+  it("still collapses the identical moment saved twice", () => {
+    const moment = {
+      intervalId: "interval-1",
+      label: "2:05–2:10 PM",
+      status: "ready" as const,
+      items: [{ proposalId: "p-1", operation: "create_task" as const, status: "pending", title: "Verify Console MCP enablement", rationale: "Reviewed.", taskId: null, editable: true }],
+      states: {},
+      failures: {},
+    };
+    const lead = "Recap confirmed — while it's fresh, here's what could come next:";
+    expect(collapseConsecutiveAssistantDuplicates([
+      { role: "assistant", text: lead, nextSteps: moment },
+      { role: "assistant", text: lead, nextSteps: moment },
+    ])).toHaveLength(1);
+  });
+
   it("keeps same prose when the rendered card payload differs", () => {
     const operations = [{ op: "display_pending_tasks", statement: "Show." }];
     const makeResult = (id: string) => [{

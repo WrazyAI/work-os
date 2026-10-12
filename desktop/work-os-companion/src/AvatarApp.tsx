@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -184,7 +184,8 @@ export default function AvatarApp(): React.ReactElement {
   const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
   const avatarNextStepsRecoveryFixture = avatarNextStepsRecoveryFixtureRequested(window.location.search);
   const avatarNextStepsEmptyFixture = avatarNextStepsEmptyFixtureRequested(window.location.search);
-  const avatarNextStepsRecoveryLike = avatarNextStepsRecoveryFixture || avatarNextStepsEmptyFixture;
+  const avatarNextStepsPairFixture = avatarNextStepsPairFixtureRequested(window.location.search);
+  const avatarNextStepsRecoveryLike = avatarNextStepsRecoveryFixture || avatarNextStepsEmptyFixture || avatarNextStepsPairFixture;
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
@@ -207,12 +208,14 @@ export default function AvatarApp(): React.ReactElement {
   const [daySyncState, setDaySyncState] = useState<DaySyncState>(avatarFixture ? "ready" : "loading");
   const [desktopSession, setDesktopSession] = useState<SessionInfo | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [chat, setChat] = useState<ChatEntry[]>(() => avatarNextStepsEmptyFixture
-    ? avatarNextStepsRecoveryFixtureChat("fixture-empty")
-    : avatarNextStepsRecoveryFixture
-      ? avatarNextStepsRecoveryFixtureChat()
-      : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
-      : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+  const [chat, setChat] = useState<ChatEntry[]>(() => avatarNextStepsPairFixture
+    ? avatarNextStepsPairFixtureChat()
+    : avatarNextStepsEmptyFixture
+      ? avatarNextStepsRecoveryFixtureChat("fixture-empty")
+      : avatarNextStepsRecoveryFixture
+        ? avatarNextStepsRecoveryFixtureChat()
+        : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
+        : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
@@ -896,6 +899,10 @@ export default function AvatarApp(): React.ReactElement {
     // Whichever path attached this moment, its success beat waits for the
     // panel to close so the animation is actually seen.
     pendingRecapCelebration.current = true;
+    // A new moment takes over: a settle timer left by an earlier, already
+    // finished moment must never collapse the panel and dismiss the fresh
+    // suggestions before the employee can act on them.
+    clearRecapAutoCollapse();
     if (existingEntryId) {
       // A recovered entry has the lead text but no moment yet: attach it
       // instead of updating a card that was never there.
@@ -965,7 +972,7 @@ export default function AvatarApp(): React.ReactElement {
     updateNextStepsEntry(entryId, (moment) => ({ ...moment, status: "empty" }));
     setScrollToLatest((signal) => signal + 1);
     scheduleNextStepsSettle();
-  }, [avatarNextStepsEmptyFixture, avatarNextStepsFixture, avatarNextStepsRecoveryLike, scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
+  }, [avatarNextStepsEmptyFixture, avatarNextStepsFixture, avatarNextStepsRecoveryLike, clearRecapAutoCollapse, scheduleNextStepsSettle, toggleExpanded, updateNextStepsEntry]);
 
   // A moment whose card was lost to an older sync (or an older build) still has
   // its entry id — `next-steps-<intervalId>` — so its suggestions can be

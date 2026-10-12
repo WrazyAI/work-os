@@ -35,6 +35,7 @@ export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
 export const AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE = "recap-next-steps-empty";
+export const AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE = "recap-next-steps-pair";
 export const AVATAR_EOD_BUBBLE_FIXTURE = "eod-bubble";
 export const AVATAR_AGENDA_BUBBLE_FIXTURE = "agenda-bubble";
 
@@ -71,13 +72,15 @@ export interface AvatarFixtureTurn {
   taskOptions?: Array<{ id: string; title: string }>;
   receipt?: string | null;
   createdAt?: string;
+  /** A next-steps moment attached to the turn, for the pair fixture. */
+  nextSteps?: RecapNextStepsMoment;
 }
 
 export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_MULTI_SELECT_SCROLL_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarMultiSelectScrollFixtureRequested(search: string): boolean {
@@ -103,6 +106,39 @@ export function avatarNextStepsFixtureRequested(search: string): boolean {
 export function avatarNextStepsRecoveryFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE;
+}
+
+/** DEV-only fixture for the vanished-card bug: an older moment is already on
+ * screen and a newer one is re-attached right after it, so the render must
+ * keep both cards. */
+export function avatarNextStepsPairFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE;
+}
+
+export function avatarNextStepsPairFixtureChat(): AvatarFixtureTurn[] {
+  const lead = "Recap confirmed — while it's fresh, here's what could come next:";
+  const oldMoment: RecapNextStepsMoment = {
+    intervalId: "fixture-pair-old",
+    label: "2:05–2:10 PM",
+    status: "ready",
+    items: [{
+      proposalId: "fixture-pair-old-1",
+      operation: "create_task",
+      status: "pending",
+      title: "Verify Console MCP enablement and workspace settings",
+      rationale: "The Console MCP information dialog and workspace General/Integrations views were inspected.",
+      taskId: null,
+      editable: true,
+    }],
+    states: {},
+    failures: {},
+    error: null,
+  };
+  return [...avatarRecapFixtureChat(),
+    { id: "next-steps-fixture-pair-old", role: "assistant", text: lead, nextSteps: oldMoment },
+    { id: "next-steps-fixture-pair-new", role: "assistant", text: lead },
+  ];
 }
 
 /** DEV-only fixture for the empty path: the recovered moment has nothing to
