@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.21
+
+- The recap card's bottom row is now two buttons — Extra notes and an evidence button showing its screenshot and GitHub counts as icons — that slide their panel open.
+- Recap review actions are now a round check and pencil, and the "inferred from your screenshots" note lives inside Extra notes.
+
 ## 0.4.20
 
 - The EOD reminder now appears 10 minutes before your shift ends, instead of waiting for the clock-out.
