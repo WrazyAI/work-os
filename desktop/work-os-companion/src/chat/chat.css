@@ -1152,8 +1152,17 @@ body {
 .chat-activity-next-steps { display: inline-flex; align-items: center; gap: 5px; margin: 2px 0 0; padding: 3px 9px; border: 1px solid var(--line, #e2e6df); border-radius: 999px; background: var(--inset, #edf0ea); color: var(--ink, #182018); font: inherit; font-size: 10.5px; font-weight: 650; cursor: pointer; }
 .chat-activity-next-steps:hover:not(:disabled) { border-color: var(--ink-3, #7b8278); }
 .chat-activity-next-steps:disabled { cursor: default; opacity: .75; }
-.chat-activity-uncertainty { margin: 0; color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.45; }
-.chat-activity-uncertainty strong { color: var(--ink-2, #626a61); font-weight: 650; }
+.chat-activity-extra { border-top: 1px solid var(--line, #e2e6df); padding-top: 6px; }
+.chat-activity-extra > summary {
+  color: var(--ink-2, #626a61);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.chat-activity-extra[open] > summary { margin-bottom: 4px; }
+.chat-activity-extra ul { display: grid; gap: 3px; margin: 0; padding: 0 0 0 14px; color: var(--ink-3, #7b8278); font-size: 10.5px; line-height: 1.45; }
+.chat-activity-extra li::marker { color: var(--ink-3, #7b8278); }
 .chat-activity-provenance { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
 .chat-activity-lead { margin: 0; color: var(--ink-2, #626a61); font-size: 10.5px; font-weight: 700; letter-spacing: 0.01em; }
 .chat-activity-ask { margin: 2px 0 0; color: var(--ink, #182018); font-size: 11.5px; font-weight: 650; }
@@ -1188,7 +1197,8 @@ body {
 .chat-activity-quiet:disabled { opacity: .55; cursor: default; }
 .chat-activity-actions button:focus-visible,
 .chat-activity-frame:focus-visible,
-.chat-activity-evidence summary:focus-visible {
+.chat-activity-evidence summary:focus-visible,
+.chat-activity-extra summary:focus-visible {
   outline: 2px solid var(--signal-strong, #7cc936);
   outline-offset: 1px;
 }
@@ -1217,6 +1227,7 @@ body {
 .chat-activity-evidence-group[open] > summary { margin-bottom: 4px; }
 .chat-activity-evidence ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .chat-activity-evidence-note { margin: 0; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
+.chat-activity-coverage { display: block; margin-top: 4px; color: var(--ink-3, #7b8278); font-size: 10px; line-height: 1.4; }
 .chat-activity-frame {
   display: flex;
   width: 100%;

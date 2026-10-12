@@ -5,9 +5,9 @@ import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
 
-/** The Tasks stream sends the full record; the prompt turn sends the compact
- * card from `/ensure` (no evidence list). One component renders both. */
-type ActivityIntervalModel = ActivityIntervalCardData & Partial<Pick<ActivityInterval, "evidence" | "evidenceExpired" | "evidenceCount">>;
+/** The Tasks stream and the prompt turn both send the full disclosure now;
+ * older compact payloads without the evidence fields still render. */
+type ActivityIntervalModel = ActivityIntervalCardData;
 
 const STATUS_LABEL: Record<ActivityInterval["reviewStatus"], string> = {
   inferred: "Not reviewed",
@@ -71,6 +71,16 @@ function unavailableCopy(interval: ActivityIntervalModel): string {
   return "This interval recap could not be produced. Your next check-in still works normally.";
 }
 
+/** Quiet coverage summary for the evidence disclosure: "8 of 28 frames
+ * analyzed", or just "8 frames analyzed" when nothing was left out. */
+function coverageLabel(coverage: ActivityIntervalModel["coverage"]): string | null {
+  const analyzed = coverage?.framesAnalyzed;
+  if (analyzed == null || analyzed < 0) return null;
+  const recorded = coverage?.framesRecorded;
+  if (recorded != null && recorded > analyzed) return `${analyzed} of ${recorded} frames analyzed`;
+  return `${analyzed} frame${analyzed === 1 ? "" : "s"} analyzed`;
+}
+
 interface ActivityIntervalCardProps {
   interval: ActivityIntervalModel;
   timezone?: string | null;
@@ -111,7 +121,17 @@ export function ActivityIntervalCard({
   const recordedActivity = interval.recordedActivity ?? [];
   const retained = evidence.filter((entry) => entry.summaryId && entry.retained);
   const evidenceExpired = interval.evidenceExpired === true || retained.length < evidence.length;
+  // Only claim a screenshot count when the payload actually carries evidence
+  // info; a legacy compact card must not render a false "0 screenshots".
+  const evidenceKnown = interval.evidenceCount != null || interval.evidence != null;
   const screenshotCount = interval.evidenceCount ?? evidence.length;
+  const coverage = coverageLabel(interval.coverage);
+  const evidenceParts = [
+    ...(evidenceKnown ? [`${screenshotCount} screenshot${screenshotCount === 1 ? "" : "s"}`] : []),
+    ...(recordedActivity.length > 0 ? [`${recordedActivity.length} GitHub event${recordedActivity.length === 1 ? "" : "s"}`] : []),
+  ];
+  const showScreenshotGroup = evidenceKnown && (screenshotCount > 0 || evidenceExpired);
+  const showEvidence = showScreenshotGroup || recordedActivity.length > 0;
   const showDate = !!currentDate && localDateKey(interval.windowStart, timezone) !== currentDate;
 
   const closeLightbox = useCallback(() => {
@@ -170,9 +190,6 @@ export function ActivityIntervalCard({
         </ul>
       ) : null}
       {interval.workflow && interval.workflow.length > 1 ? <p className="chat-activity-flow"><strong>Flow:</strong> {interval.workflow.join(" → ")}</p> : null}
-      {interval.uncertainties?.length ? (
-        <p className="chat-activity-uncertainty"><strong>Not established:</strong> {interval.uncertainties.join("; ")}</p>
-      ) : null}
       {interval.reviewStatus === "amended" && interval.employeeFeedback ? (
         <p className="chat-activity-note"><strong>Your note:</strong> {interval.employeeFeedback}</p>
       ) : null}
@@ -220,11 +237,20 @@ export function ActivityIntervalCard({
         )
       ) : null}
 
-      {screenshotCount > 0 || evidenceExpired || recordedActivity.length > 0 ? (
+      {interval.uncertainties?.length ? (
+        <details className="chat-activity-extra">
+          <summary>Extra notes</summary>
+          <ul>
+            {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
+          </ul>
+        </details>
+      ) : null}
+
+      {showEvidence ? (
         <details className="chat-activity-evidence" open={defaultEvidenceOpen}>
-          <summary>Evidence · {screenshotCount} screenshot{screenshotCount === 1 ? "" : "s"} · {recordedActivity.length} GitHub event{recordedActivity.length === 1 ? "" : "s"}</summary>
+          <summary>Evidence{evidenceParts.length ? ` · ${evidenceParts.join(" · ")}` : ""}</summary>
           <div className="chat-activity-evidence-groups">
-            {screenshotCount > 0 || evidenceExpired ? (
+            {showScreenshotGroup ? (
               <details className="chat-activity-evidence-group">
                 <summary>Screenshots · {screenshotCount}</summary>
                 {evidence.length > 0 ? (
@@ -301,6 +327,7 @@ export function ActivityIntervalCard({
               </details>
             ) : null}
           </div>
+          {coverage ? <small className="chat-activity-coverage">{coverage}</small> : null}
         </details>
       ) : null}
 

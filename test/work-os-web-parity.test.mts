@@ -1,6 +1,8 @@
 // Web/companion parity helpers: the shift-time instrument, the planning merge,
 // and the insights port are pure modules; pin their behavior here.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { test } from "node:test";
 import { remainingShiftLabel, shiftPulse, untilShiftLabel } from "../src/modules/work-os/employee/shiftPulse";
 import { applyCommitmentEdits, buildPlanItemsFromInterpretation, type PlanningInterpretation } from "../src/modules/work-os/employee/planning";
@@ -205,4 +207,17 @@ test("assistant draft notices name what grounded the draft", () => {
   assert.match(assistantDraftNotice({ markdown: "x", model: "m", screenshotSyncUnavailable: true }), /Screenshot context was unavailable/);
   assert.match(assistantDraftFallbackNotice(false, "assistant down"), /standard draft/);
   assert.equal(assistantDraftFallbackNotice(true, "gated"), "gated");
+});
+
+test("recap gaps collapse into Extra notes and coverage stays in evidence on both surfaces", () => {
+  const companion = readFileSync(resolve(import.meta.dirname, "../desktop/work-os-companion/src/ActivityIntervalCard.tsx"), "utf8");
+  const web = readFileSync(resolve(import.meta.dirname, "../src/modules/work-os/employee/EmployeeActivityRecaps.tsx"), "utf8");
+  for (const source of [companion, web]) {
+    assert.match(source, /Extra notes/, "gaps live behind a quiet Extra notes disclosure");
+    assert.match(source, /coverageLabel/, "the frame coverage summary is shared vocabulary");
+    assert.doesNotMatch(source, /Not established/, "the old inline gap line is gone");
+  }
+  const engine = readFileSync(resolve(import.meta.dirname, "../src/lib/work-os-activity-intervals.ts"), "utf8");
+  assert.match(engine, /framesRecorded/, "the interval view carries the coverage snapshot");
+  assert.match(engine, /maxItems: 3/, "the synthesis schema caps generated gaps");
 });

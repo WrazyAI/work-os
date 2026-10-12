@@ -183,6 +183,9 @@ export interface ActivityInterval {
   evidenceExpired: boolean;
   evidenceCount: number;
   evidence: ActivityIntervalEvidence[];
+  /** Generation-time frame coverage for the evidence disclosure's quiet line;
+   * older payloads omit it and the line is simply not rendered. */
+  coverage?: { framesRecorded: number | null; framesAnalyzed: number | null } | null;
 }
 
 export interface ActivityIntervalsResponse {

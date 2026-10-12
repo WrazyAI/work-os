@@ -292,8 +292,9 @@ export function avatarRecapFixtureFacts(now = Date.now()): AvatarFixtureFacts {
   return avatarShiftProgressFixtureFacts(now);
 }
 
-/** A ready, undecided recap shaped exactly like `/ensure` returns (no evidence
- * list; the Tasks stream carries the full record). */
+/** A ready, undecided recap shaped exactly like `/ensure` returns: the full
+ * disclosure with its exact analyzed evidence, a collapsed Extra notes list,
+ * and the quiet coverage line. */
 export function avatarRecapFixtureCard(): ActivityIntervalCard {
   return {
     id: "fixture-recap",
@@ -304,11 +305,35 @@ export function avatarRecapFixtureCard(): ActivityIntervalCard {
     generationStatus: "ready",
     reviewStatus: "inferred",
     headline: "Reviewed the recap bubble and chat scroll behavior",
-    detail: "Worked in the companion chat and the Tasks stream, checked the recap card actions, and verified the composer routing while the plan was pending. The screenshots do not establish whether the change was released.",
+    detail: "Worked in the companion chat and the Tasks stream, checked the recap card actions, and verified the composer routing while the plan was pending.",
+    activities: [
+      "2:20 PM — Edited the recap card in VS Code",
+      "2:41 PM — Ran the render tests in Windows Terminal",
+      "2:58 PM — Checked the companion Tasks stream in Chrome",
+      "3:10 PM — Verified the composer routing in the companion",
+    ],
+    workflow: ["implementation", "verification", "UI inspection"],
+    uncertainties: [
+      "The exact deployment state after the last test run is unclear.",
+      "Whether the scroll fix shipped to the pilot build is not established.",
+    ],
+    recordedActivity: [
+      { description: "Pushed 3 commits to WrazyAI/work-os", relation: "performed", url: "https://github.com/WrazyAI/work-os/compare/fixture" },
+      { description: "CI for your commit on main: Work OS CI", relation: "triggered", url: "https://github.com/WrazyAI/work-os/actions/runs/1" },
+    ],
     employeeFeedback: null,
     failureReason: null,
     generatedAt: "2026-09-29T15:18:00.000Z",
     reviewedAt: null,
+    evidenceExpired: false,
+    evidenceCount: 4,
+    evidence: [
+      { summaryId: "fixture-frame-1", capturedAt: "2026-09-29T14:20:00.000Z", visibleApp: "VS Code", frameSummary: "Editing the recap card's evidence disclosure.", usedInModel: true, rawImageShown: true, selectionReason: "first+raw", retained: true },
+      { summaryId: "fixture-frame-2", capturedAt: "2026-09-29T14:41:00.000Z", visibleApp: "Windows Terminal", frameSummary: "Render tests passing in the terminal.", usedInModel: true, rawImageShown: false, selectionReason: "app_transition", retained: true },
+      { summaryId: "fixture-frame-3", capturedAt: "2026-09-29T14:58:00.000Z", visibleApp: "Google Chrome", frameSummary: "Companion Tasks stream open in the browser.", usedInModel: true, rawImageShown: false, selectionReason: "app_transition", retained: true },
+      { summaryId: "fixture-frame-4", capturedAt: "2026-09-29T15:10:00.000Z", visibleApp: "Work OS", frameSummary: "Composer routing verified in the companion window.", usedInModel: true, rawImageShown: true, selectionReason: "last+raw", retained: true },
+    ],
+    coverage: { framesRecorded: 12, framesAnalyzed: 4 },
   };
 }
 

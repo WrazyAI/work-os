@@ -64,8 +64,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(activityIntervals, /requirePerson: true/);
   assert.match(activityEnsure, /ensureActivityInterval/);
   assert.match(activityEnsure, /prompt_due_at/);
+  assert.match(activityEnsure, /activityIntervalFullView/, "the prompt turn carries the full evidence disclosure");
   assert.match(activityDecision, /decideActivityInterval/);
   assert.match(activityDecision, /action must be confirm or amend/);
+  assert.match(activityDecision, /activityIntervalFullView/, "the decision response keeps the full disclosure");
   assert.match(activityEngine, /export function resolveActivityIntervalWindow/);
   assert.match(activityEngine, /export function selectIntervalEvidence/);
   assert.match(activityEngine, /export function parseIntervalSynthesis/);

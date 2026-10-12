@@ -138,6 +138,19 @@ test("synthesis parsing clamps indexes and rejects fabricated prose", () => {
   assert.throws(() => parseIntervalSynthesis({ headline: "", detail: "" }, 3), /headline or detail/);
 });
 
+test("synthesis gaps stay short and bounded", () => {
+  const long = "x".repeat(200);
+  const parsed = parseIntervalSynthesis({
+    headline: "Reviewed the recap formatting",
+    detail: "Short lead.",
+    uncertainties: [long, "two", "three", "four"],
+  }, 3);
+  assert.equal(parsed.uncertainties.length, 3, "at most three gaps are kept");
+  assert.equal(parsed.uncertainties[0].length, 140, "a gap is truncated to its bound");
+  const structured = intervalStructure({ structured_summary: { uncertainties: ["a", "b", "c", "d"] } });
+  assert.deepEqual(structured.uncertainties, ["a", "b", "c"], "older payloads render at most three gaps");
+});
+
 test("interval ranges read in plain 12-hour language", () => {
   assert.equal(formatIntervalRange("2026-09-28T14:17:00.000Z", "2026-09-28T15:17:00.000Z", "UTC"), "2:17–3:17 PM");
   assert.equal(formatIntervalRange("2026-09-28T11:30:00.000Z", "2026-09-28T12:30:00.000Z", "UTC"), "11:30 AM–12:30 PM");

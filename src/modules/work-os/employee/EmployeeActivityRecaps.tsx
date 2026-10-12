@@ -13,6 +13,16 @@ const REVIEW_LABELS: Record<ActivityInterval["reviewStatus"], string> = {
   amended: "Updated by you",
 };
 
+/** Quiet coverage summary for the evidence disclosure: "8 of 28 frames
+ * analyzed", or just "8 frames analyzed" when nothing was left out. */
+function coverageLabel(coverage: ActivityInterval["coverage"]): string | null {
+  const analyzed = coverage?.framesAnalyzed;
+  if (analyzed == null || analyzed < 0) return null;
+  const recorded = coverage?.framesRecorded;
+  if (recorded != null && recorded > analyzed) return `${analyzed} of ${recorded} frames analyzed`;
+  return `${analyzed} frame${analyzed === 1 ? "" : "s"} analyzed`;
+}
+
 /** One ensure per prompt slot per app session (the server call is idempotent
  * per slot; this keeps a navigation-heavy session from repeating it). */
 const ensuredRecapSlots = new Set<string>();
@@ -133,6 +143,7 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
   });
 
   const evidence = interval.evidence ?? [];
+  const coverage = coverageLabel(interval.coverage);
   const preparing = interval.generationStatus === "preparing";
   const unavailable = interval.generationStatus === "unavailable" || interval.generationStatus === "failed";
 
@@ -168,9 +179,6 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
           {interval.workflow && interval.workflow.length > 1 ? (
             <p className="mt-1.5 text-[11px] leading-5 text-[var(--text-secondary)]"><strong className="text-[var(--text-primary)]">Flow:</strong> {interval.workflow.join(" → ")}</p>
           ) : null}
-          {interval.uncertainties?.length ? (
-            <p className="mt-1.5 text-[11px] leading-5 text-[var(--text-tertiary)]"><strong className="text-[var(--text-secondary)]">Not established:</strong> {interval.uncertainties.join("; ")}</p>
-          ) : null}
         </>
       )}
 
@@ -178,6 +186,17 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
         <p className="mt-2 rounded-lg border px-3 py-2 text-[12px] leading-5 text-[var(--text-secondary)]" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
           Your note: {interval.employeeFeedback}
         </p>
+      ) : null}
+
+      {interval.uncertainties?.length ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-tertiary)]">Extra notes</summary>
+          <ul className="mt-1.5 grid gap-0.5">
+            {interval.uncertainties.map((note) => (
+              <li key={note} className="text-[11px] leading-5 text-[var(--text-tertiary)]">· {note}</li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {evidence.length ? (
@@ -195,6 +214,7 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
               </li>
             ))}
           </ul>
+          {coverage ? <p className="mt-2 text-[10px] leading-5 text-[var(--text-tertiary)]">{coverage}</p> : null}
         </details>
       ) : interval.evidenceExpired ? (
         <p className="mt-2 text-[11px] leading-5 text-[var(--text-tertiary)]">

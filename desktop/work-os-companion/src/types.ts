@@ -427,6 +427,9 @@ export interface ActivityInterval {
   evidenceExpired: boolean;
   evidenceCount: number;
   evidence: ActivityIntervalEvidence[];
+  /** Generation-time frame coverage for the evidence disclosure's quiet line;
+   * older payloads omit it and the line is simply not rendered. */
+  coverage?: { framesRecorded: number | null; framesAnalyzed: number | null } | null;
 }
 
 export interface ActivityIntervalsData {
@@ -434,13 +437,14 @@ export interface ActivityIntervalsData {
   intervals: ActivityInterval[];
 }
 
-/** Card shape returned by `/activity-intervals/ensure` and the decision route
- * (no evidence list; the Tasks stream carries the full record). */
+/** Card shape returned by the activity-interval routes. The prompt turn and
+ * decision responses now carry the full evidence disclosure; the optional
+ * fields keep older compact payloads renderable. */
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
   "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
   | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
->;
+> & Partial<Pick<ActivityInterval, "evidence" | "evidenceExpired" | "evidenceCount" | "coverage">>;
 
 export interface ActivityIntervalEnsureResult {
   status: "ready" | "preparing" | "unavailable" | "failed" | "no_prompt";

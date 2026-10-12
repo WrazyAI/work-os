@@ -994,18 +994,21 @@ Worktivity screenshot pipeline. The interval is the server-resolved prompt slot
 drift cannot split or repeat the same window.
 
 The recap is descriptive and evidence-bounded. It may describe visible apps,
-tools, artifacts, and an apparent work sequence, and it must state what the
-evidence does not establish. It may not claim productivity, effort, pay
-eligibility, completion, deployment, or quality; the synthesizer always
-receives the ordered per-frame observations and only a bounded representative
-subset of raw frames.
+tools, artifacts, and an apparent work sequence, and it must keep what the
+evidence does not establish available without crowding the summary. It may not
+claim productivity, effort, pay eligibility, completion, deployment, or
+quality; the synthesizer always receives the ordered per-frame observations and
+only a bounded representative subset of raw frames.
 
 Read the recap, don't wade through it. It presents as one short lead sentence,
 then short activity bullets (one observable activity each, with its clock time
 when known), an ordered `Flow:` line only when the evidence supports a sequence,
-and an explicit `Not established:` line for the evidence gaps. A dense
-multi-sentence paragraph is a contract violation, never a rendering fallback
-for new intervals.
+and a collapsed `Extra notes` disclosure holding at most three short,
+interval-specific gaps the employee could clarify. Analysis coverage (frames
+analyzed of frames recorded) is a quiet line inside the `Evidence` disclosure,
+never in the summary, and the recap never restates generic caveats such as
+screenshots not establishing completion. A dense multi-sentence paragraph is a
+contract violation, never a rendering fallback for new intervals.
 
 A recap summary delivered as a chat turn is still a conversation message:
 hovering it offers `Copy` plus one short destination action — `All recaps` —

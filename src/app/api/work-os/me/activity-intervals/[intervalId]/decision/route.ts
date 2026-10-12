@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { activityIntervalCardView, decideActivityInterval, type ActivityIntervalDecision } from "@/lib/work-os-activity-intervals";
+import { activityIntervalFullView, decideActivityInterval, type ActivityIntervalDecision } from "@/lib/work-os-activity-intervals";
 import { ensureRecapNextStepsForInterval } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
@@ -33,7 +33,7 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
       feedback: typeof body.feedback === "string" ? body.feedback : undefined,
     });
     after(() => ensureRecapNextStepsForInterval(auth.access, intervalId).catch(() => undefined));
-    return NextResponse.json({ interval: activityIntervalCardView(interval) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ interval: await activityIntervalFullView(interval) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error);
   }

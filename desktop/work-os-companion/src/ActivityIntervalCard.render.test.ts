@@ -47,7 +47,7 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("Inferred from your screenshots");
   });
 
-  it("renders scannable bullets, the ordered flow, and explicit gaps when the payload carries structure", () => {
+  it("renders scannable bullets, the ordered flow, and a collapsed Extra notes disclosure", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: {
         ...baseInterval,
@@ -63,8 +63,39 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("2:45 PM — Terminal: ran the render tests.");
     expect(markup).toContain("Flow:");
     expect(markup).toContain("implementation → verification");
-    expect(markup).toContain("Not established:");
+    expect(markup).toContain("chat-activity-extra");
+    expect(markup).toContain("Extra notes");
     expect(markup).toContain("whether the change was pushed");
+    expect(markup).not.toContain("Not established:");
+    const extraPosition = markup.indexOf("Extra notes");
+    const extraDisclosure = markup.lastIndexOf("<details", extraPosition);
+    expect(markup.slice(extraDisclosure, extraPosition)).not.toContain(" open");
+  });
+
+  it("summarizes frame coverage inside the evidence disclosure", () => {
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: { ...baseInterval, coverage: { framesRecorded: 28, framesAnalyzed: 8 } },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("8 of 28 frames analyzed");
+    const complete = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: { ...baseInterval, coverage: { framesRecorded: 8, framesAnalyzed: 8 } },
+      timezone: "UTC",
+    }));
+    expect(complete).toContain("8 frames analyzed");
+  });
+
+  it("never claims a screenshot count from a compact payload", () => {
+    const { evidence, evidenceCount, evidenceExpired, coverage, ...compact } = baseInterval;
+    const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
+      interval: {
+        ...compact,
+        recordedActivity: [{ description: "Pushed a commit to main", relation: "performed", url: null }],
+      },
+      timezone: "UTC",
+    }));
+    expect(markup).toContain("Evidence · 1 GitHub event");
+    expect(markup).not.toContain("0 screenshots");
   });
 
   it("keeps the lead-only fallback for older payloads without structure", () => {

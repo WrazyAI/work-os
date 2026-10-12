@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { activityIntervalCardView, ensureActivityInterval } from "@/lib/work-os-activity-intervals";
+import { activityIntervalFullView, ensureActivityInterval } from "@/lib/work-os-activity-intervals";
 import { ensureRecapNextSteps } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
 
@@ -33,7 +33,10 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     return NextResponse.json({
       status: result.status,
       reason: result.reason ?? null,
-      interval: result.interval ? activityIntervalCardView(result.interval) : null,
+      // The prompt turn renders the full recap card in the chat, so it carries
+      // the exact evidence list, its true count, and the coverage line — not a
+      // compact placeholder that reads "0 screenshots".
+      interval: result.interval ? await activityIntervalFullView(result.interval) : null,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error);

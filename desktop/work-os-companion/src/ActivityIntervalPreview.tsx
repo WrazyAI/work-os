@@ -57,6 +57,7 @@ const fixtures: ActivityInterval[] = [
     evidenceExpired: false,
     evidenceCount: 4,
     evidence,
+    coverage: { framesRecorded: 28, framesAnalyzed: 8 },
   },
   {
     ...base,
