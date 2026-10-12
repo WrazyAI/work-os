@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.17
+
+- Approving a new recap no longer hides its suggestions behind an older card — every moment stays visible and actionable.
+
 ## 0.4.16
 
 - Tasks load 50 at a time now, and Load more brings in the next set.
