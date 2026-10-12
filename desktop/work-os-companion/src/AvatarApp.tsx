@@ -2036,7 +2036,6 @@ export default function AvatarApp(): React.ReactElement {
                           <ActivityIntervalCard
                             interval={entry.activityInterval}
                             timezone={facts.timezone}
-                            leadIn={activityPrompt?.id === entry.activityInterval.id ? "This is what we got from your last hour" : undefined}
                             onEdit={activityPrompt?.id === entry.activityInterval.id ? startRecapEdit : undefined}
                             onDecide={decideActivityPrompt}
                             deciding={decidingIntervalId === entry.activityInterval.id}

@@ -1019,13 +1019,18 @@ only a bounded representative subset of raw frames.
 
 Read the recap, don't wade through it. It presents as one short lead sentence,
 then short activity bullets (one observable activity each, with its clock time
-when known), an ordered `Flow:` line only when the evidence supports a sequence,
-and a collapsed `Extra notes` disclosure holding at most three short,
-interval-specific gaps the employee could clarify. Analysis coverage (frames
-analyzed of frames recorded) is a quiet line inside the `Evidence` disclosure,
-never in the summary, and the recap never restates generic caveats such as
-screenshots not establishing completion. A dense multi-sentence paragraph is a
-contract violation, never a rendering fallback for new intervals.
+when known, set as a quiet time pill), an ordered `Flow` track of phase chips
+only when the evidence supports a sequence, and a collapsed `Extra notes`
+disclosure holding at most three short, interval-specific gaps the employee
+could clarify. Analysis
+coverage (frames analyzed of frames recorded) is a quiet line inside the
+`Evidence` disclosure, never in the summary, and the recap never restates
+generic caveats such as screenshots not establishing completion. Both
+disclosures are full-width rows in the card's own language — a leading glyph,
+the label, the right-aligned count, and a trailing chevron that turns as the
+row opens — so the card reads as one composed record instead of stacked
+paragraphs. A dense multi-sentence paragraph is a contract violation, never a
+rendering fallback for new intervals.
 
 A recap summary delivered as a chat turn is still a conversation message:
 hovering it offers `Copy` plus one short destination action — `All recaps` —
@@ -1130,11 +1135,12 @@ daily goal. Expired images say
 so honestly without deleting the recap; there are no charts, scores, or hours
 totals.
 
-The chat bubble for a due recap is a short conversational card: a `This is what
-we got from your last hour` lead-in, the interval label, the headline and the
-evidence-bounded detail (tall enough to carry the brief summary of the observed
-window), and the inferred provenance line. It asks `Sounds good?` with two
-actions: `Looks good` confirms the recap in place, and `Edit` hands editing to
+The chat bubble for a due recap is a short conversational card: the interval
+label (the window itself already says it covers the last hour, so no lead-in
+line repeats it), the headline and the evidence-bounded detail (tall enough to
+carry the brief summary of the observed window), and the inferred provenance
+line. It asks `Sounds good?` with two actions in the card's own pill language:
+`Looks good` confirms the recap in place, and `Edit` hands editing to
 the composer, which switches to recap-edit mode (an `Editing your recap` strip
 with `Cancel` and an `Update recap` send label) so the employee writes the
 correction themselves. Sending that note records it as the employee amendment.

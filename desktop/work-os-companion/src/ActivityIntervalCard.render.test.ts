@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { ActivityIntervalCard, localDateKey } from "./ActivityIntervalCard";
+import { ActivityIntervalCard, localDateKey, splitActivityTime } from "./ActivityIntervalCard";
 import { ActivityIntervalList } from "./ActivityIntervalList";
 import { workOsKeys } from "./queryClient";
 import type { ActivityInterval } from "./types";
@@ -59,12 +59,20 @@ describe("ActivityIntervalCard", () => {
       timezone: "UTC",
     }));
     expect(markup).toContain("chat-activity-bullets");
-    expect(markup).toContain("2:20 PM — VS Code: edited the recap card.");
-    expect(markup).toContain("2:45 PM — Terminal: ran the render tests.");
-    expect(markup).toContain("Flow:");
-    expect(markup).toContain("implementation → verification");
+    expect(markup).toContain("chat-activity-time-pill");
+    expect(markup).toContain(">2:20 PM<");
+    expect(markup).toContain("VS Code: edited the recap card.");
+    expect(markup).toContain(">2:45 PM<");
+    expect(markup).toContain("Terminal: ran the render tests.");
+    expect(markup).not.toContain("2:20 PM — VS Code");
+    expect(markup).toContain("chat-activity-flow");
+    expect(markup).toContain(">Flow<");
+    expect(markup).toContain("chat-activity-flow-chip");
+    expect(markup).toContain(">implementation<");
+    expect(markup).toContain(">verification<");
     expect(markup).toContain("chat-activity-extra");
     expect(markup).toContain("Extra notes");
+    expect(markup).toContain("chat-activity-chevron");
     expect(markup).toContain("whether the change was pushed");
     expect(markup).not.toContain("Not established:");
     const extraPosition = markup.indexOf("Extra notes");
@@ -94,7 +102,7 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
-    expect(markup).toContain("Evidence · 1 GitHub event");
+    expect(markup).toContain("1 GitHub event");
     expect(markup).not.toContain("0 screenshots");
   });
 
@@ -115,10 +123,12 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
-    expect(markup).toContain("Evidence · 3 screenshots · 2 GitHub events");
-    expect(markup).toContain("Screenshots · 3");
-    expect(markup).toContain("GitHub activity · 2");
-    expect(markup).toContain("Recorded in GitHub");
+    expect(markup).toContain("Evidence</span>");
+    expect(markup).toContain("3 screenshots · 2 GitHub events");
+    expect(markup).toContain("Screenshots</span>");
+    expect(markup).toContain("chat-activity-disclosure-meta\">3</span>");
+    expect(markup).toContain("GitHub activity</span>");
+    expect(markup).toContain("chat-activity-disclosure-meta\">2</span>");
     expect(markup).toContain("Pushed 3 commits to WrazyAI/work-os");
     expect(markup).toContain("CI for your commit on main: Work OS CI");
     expect(markup).toContain("chat-activity-github-tag is-performed");
@@ -129,7 +139,7 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/actions/runs/1"');
     const githubEventPosition = markup.indexOf("Pushed 3 commits to WrazyAI/work-os");
     const enclosingDisclosure = markup.lastIndexOf("<details", githubEventPosition);
-    expect(markup.slice(enclosingDisclosure, githubEventPosition)).toContain("GitHub activity · 2");
+    expect(markup.slice(enclosingDisclosure, githubEventPosition)).toContain("GitHub activity");
   });
 
   it("keeps GitHub evidence available when the recap has no screenshots", () => {
@@ -143,32 +153,31 @@ describe("ActivityIntervalCard", () => {
         ],
       },
     }));
-    expect(markup).toContain("Evidence · 0 screenshots · 1 GitHub event");
-    expect(markup).toContain("GitHub activity · 1");
-    expect(markup).not.toContain("Screenshots ·");
+    expect(markup).toContain("0 screenshots · 1 GitHub event");
+    expect(markup).toContain("GitHub activity</span>");
+    expect(markup).not.toContain("Screenshots</span>");
     const eventPosition = markup.indexOf("Opened pull request #42");
     const enclosingDisclosure = markup.lastIndexOf("<details", eventPosition);
-    expect(markup.slice(enclosingDisclosure, eventPosition)).toContain("GitHub activity · 1");
+    expect(markup.slice(enclosingDisclosure, eventPosition)).toContain("GitHub activity");
   });
 
   it("omits the GitHub section when no recorded activity is present", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
-    expect(markup).not.toContain("Recorded in GitHub");
+    expect(markup).not.toContain("GitHub activity");
   });
 
-  it("renders the chat bubble with a lead-in and Looks good / Edit actions", () => {
+  it("renders the chat bubble with Looks good / Edit actions", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, {
       interval: baseInterval,
       timezone: "UTC",
-      leadIn: "This is what we got from your last hour",
       onDecide: async () => undefined,
       onEdit: () => undefined,
     }));
-    expect(markup).toContain("This is what we got from your last hour");
     expect(markup).toContain("Sounds good?");
     expect(markup).toContain("Looks good");
     expect(markup).toContain(">Edit<");
     expect(markup).toContain("Inferred from your screenshots");
+    expect(markup).not.toContain("This is what we got from your last hour");
     expect(markup).not.toContain("Looks right");
     expect(markup).not.toContain("Add or correct");
     expect(markup).not.toContain("<textarea");
@@ -176,7 +185,8 @@ describe("ActivityIntervalCard", () => {
 
   it("lists the exact analyzed frames in a collapsed evidence disclosure", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
-    expect(markup).toContain("Evidence · 3 screenshots");
+    expect(markup).toContain("Evidence</span>");
+    expect(markup).toContain("3 screenshots");
     expect(markup).toContain("<details");
     expect(markup).not.toContain("<details class=\"chat-activity-evidence\" open");
     expect(markup).toContain("Editing the activity interval engine.");
@@ -231,6 +241,23 @@ describe("localDateKey", () => {
     expect(localDateKey("2026-09-28T23:30:00.000Z", "America/New_York")).toBe("2026-09-28");
     expect(localDateKey("2026-09-29T02:30:00.000Z", "America/New_York")).toBe("2026-09-28");
     expect(localDateKey("not-a-date", "UTC")).toBeNull();
+  });
+});
+
+describe("splitActivityTime", () => {
+  it("splits the leading clock time from the activity", () => {
+    expect(splitActivityTime("2:20 PM — Edited the recap card in VS Code")).toEqual({ time: "2:20 PM", text: "Edited the recap card in VS Code" });
+    expect(splitActivityTime("16:48 — Viewed the billing report")).toEqual({ time: "16:48", text: "Viewed the billing report" });
+    expect(splitActivityTime("2:20–2:41 PM — VS Code: editing the engine.")).toEqual({ time: "2:20–2:41 PM", text: "VS Code: editing the engine." });
+    expect(splitActivityTime("2:20 PM–2:41 PM: VS Code")).toEqual({ time: "2:20 PM–2:41 PM", text: "VS Code" });
+  });
+
+  it("keeps phrases without a leading time whole", () => {
+    expect(splitActivityTime("Reviewed the billing report and the queue")).toEqual({ time: null, text: "Reviewed the billing report and the queue" });
+    expect(splitActivityTime("30 minutes on the dossier")).toEqual({ time: null, text: "30 minutes on the dossier" });
+    expect(splitActivityTime("2:20 PM")).toEqual({ time: null, text: "2:20 PM" });
+    expect(splitActivityTime("2:20 PM — ")).toEqual({ time: null, text: "2:20 PM —" });
+    expect(splitActivityTime("2:20 PM: ")).toEqual({ time: null, text: "2:20 PM:" });
   });
 });
 

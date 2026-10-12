@@ -157,7 +157,6 @@ export default function ActivityIntervalPreview() {
         <ActivityIntervalCard
           interval={intervals[0]}
           timezone="UTC"
-          leadIn="This is what we got from your last hour"
           onDecide={decide}
           onEdit={() => setEditRequested(true)}
           resolveSrc={resolveSrc}

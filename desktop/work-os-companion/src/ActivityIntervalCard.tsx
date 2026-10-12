@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Github, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, Github, Image as ImageIcon, StickyNote, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -81,6 +81,22 @@ function coverageLabel(coverage: ActivityIntervalModel["coverage"]): string | nu
   return `${analyzed} frame${analyzed === 1 ? "" : "s"} analyzed`;
 }
 
+/** Splits a model-written activity phrase into its leading clock time and the
+ * activity itself, so the card can set the time as a quiet pill. The time
+ * token is captured greedily first, then a separator (or space) followed by
+ * real activity text is required, so a time-only phrase is never split into a
+ * pill plus a stray fragment like "PM". */
+export function splitActivityTime(activity: string): { time: string | null; text: string } {
+  const whole = { time: null as string | null, text: activity.trim() };
+  const prefix = activity.trim().match(/^(\d{1,2}:\d{2}(?:\s*[AP]M)?(?:\s*[–—-]\s*\d{1,2}:\d{2}(?:\s*[AP]M)?)?)(.*)$/i);
+  if (!prefix) return whole;
+  const rest = prefix[2].match(/^\s*(?:[–—:-]\s*|\s+)([\p{L}\p{N}].*)$/iu);
+  if (!rest) return whole;
+  const time = prefix[1].replace(/\s+/g, " ").trim();
+  const text = rest[1].trim();
+  return time && text ? { time, text } : whole;
+}
+
 interface ActivityIntervalCardProps {
   interval: ActivityIntervalModel;
   timezone?: string | null;
@@ -89,10 +105,8 @@ interface ActivityIntervalCardProps {
   deciding?: boolean;
   defaultEvidenceOpen?: boolean;
   resolveSrc?: PreviewResolver;
-  /** Chat-bubble presentation: a lead-in line ("This is what we got from your
-   * last hour") and an Edit action that hands editing to the composer instead
-   * of expanding an inline field. */
-  leadIn?: string;
+  /** Chat-bubble presentation: an Edit action that hands editing to the
+   * composer instead of expanding an inline field. */
   onEdit?: () => void;
 }
 
@@ -108,7 +122,6 @@ export function ActivityIntervalCard({
   deciding = false,
   defaultEvidenceOpen = false,
   resolveSrc,
-  leadIn,
   onEdit,
 }: ActivityIntervalCardProps) {
   const [feedback, setFeedback] = useState("");
@@ -181,15 +194,34 @@ export function ActivityIntervalCard({
         </span>
         <span className={`chat-activity-status is-${interval.reviewStatus}`}>{STATUS_LABEL[interval.reviewStatus]}</span>
       </header>
-      {leadIn ? <p className="chat-activity-lead">{leadIn}</p> : null}
       {interval.headline ? <p className="chat-activity-headline">{interval.headline}</p> : null}
       {interval.detail ? <p className="chat-activity-detail">{interval.detail}</p> : null}
       {interval.activities?.length ? (
         <ul className="chat-activity-bullets">
-          {interval.activities.map((activity, index) => <li key={`${index}-${activity.slice(0, 24)}`}>{activity}</li>)}
+          {interval.activities.map((activity, index) => {
+            const { time, text } = splitActivityTime(activity);
+            return (
+              <li key={`${index}-${activity.slice(0, 24)}`} className={time ? "has-time" : undefined}>
+                {time ? <time className="chat-activity-time-pill">{time}</time> : null}
+                <span className="chat-activity-activity-text">{text}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
-      {interval.workflow && interval.workflow.length > 1 ? <p className="chat-activity-flow"><strong>Flow:</strong> {interval.workflow.join(" → ")}</p> : null}
+      {interval.workflow && interval.workflow.length > 1 ? (
+        <div className="chat-activity-flow">
+          <span className="chat-activity-flow-label">Flow</span>
+          <span className="chat-activity-flow-track">
+            {interval.workflow.map((phase, index) => (
+              <Fragment key={`${index}-${phase}`}>
+                {index > 0 ? <span className="chat-activity-flow-sep" aria-hidden="true">→</span> : null}
+                <span className="chat-activity-flow-chip">{phase}</span>
+              </Fragment>
+            ))}
+          </span>
+        </div>
+      ) : null}
       {interval.reviewStatus === "amended" && interval.employeeFeedback ? (
         <p className="chat-activity-note"><strong>Your note:</strong> {interval.employeeFeedback}</p>
       ) : null}
@@ -199,7 +231,7 @@ export function ActivityIntervalCard({
 
       {interval.reviewStatus === "inferred" && onDecide ? (
         onEdit ? (
-          <>
+          <div className="chat-activity-decide">
             <p className="chat-activity-ask">Sounds good?</p>
             <div className="chat-activity-actions">
               <button type="button" className="chat-activity-confirm" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
@@ -207,7 +239,7 @@ export function ActivityIntervalCard({
               </button>
               <button type="button" className="chat-activity-quiet" disabled={deciding} onClick={onEdit}>Edit</button>
             </div>
-          </>
+          </div>
         ) : amending ? (
           <div className="chat-activity-amend">
             <label className="sr-only" htmlFor={`activity-note-${interval.id}`}>Add or correct this recap</label>
@@ -239,7 +271,11 @@ export function ActivityIntervalCard({
 
       {interval.uncertainties?.length ? (
         <details className="chat-activity-extra">
-          <summary>Extra notes</summary>
+          <summary>
+            <span className="chat-activity-disclosure-title"><StickyNote size={12} aria-hidden="true" /> Extra notes</span>
+            <span className="chat-activity-disclosure-meta">{interval.uncertainties.length}</span>
+            <ChevronRight className="chat-activity-chevron" size={13} aria-hidden="true" />
+          </summary>
           <ul>
             {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
           </ul>
@@ -248,11 +284,19 @@ export function ActivityIntervalCard({
 
       {showEvidence ? (
         <details className="chat-activity-evidence" open={defaultEvidenceOpen}>
-          <summary>Evidence{evidenceParts.length ? ` · ${evidenceParts.join(" · ")}` : ""}</summary>
+          <summary>
+            <span className="chat-activity-disclosure-title"><Camera size={12} aria-hidden="true" /> Evidence</span>
+            {evidenceParts.length ? <span className="chat-activity-disclosure-meta">{evidenceParts.join(" · ")}</span> : null}
+            <ChevronRight className="chat-activity-chevron" size={13} aria-hidden="true" />
+          </summary>
           <div className="chat-activity-evidence-groups">
             {showScreenshotGroup ? (
               <details className="chat-activity-evidence-group">
-                <summary>Screenshots · {screenshotCount}</summary>
+                <summary>
+                  <span className="chat-activity-disclosure-title"><ImageIcon size={11} aria-hidden="true" /> Screenshots</span>
+                  <span className="chat-activity-disclosure-meta">{screenshotCount}</span>
+                  <ChevronRight className="chat-activity-chevron" size={12} aria-hidden="true" />
+                </summary>
                 {evidence.length > 0 ? (
                   <ul>
                     {evidence.map((entry, index) => {
@@ -305,9 +349,12 @@ export function ActivityIntervalCard({
             ) : null}
             {recordedActivity.length > 0 ? (
               <details className="chat-activity-evidence-group">
-                <summary>GitHub activity · {recordedActivity.length}</summary>
+                <summary>
+                  <span className="chat-activity-disclosure-title"><Github size={11} aria-hidden="true" /> GitHub activity</span>
+                  <span className="chat-activity-disclosure-meta">{recordedActivity.length}</span>
+                  <ChevronRight className="chat-activity-chevron" size={12} aria-hidden="true" />
+                </summary>
                 <div className="chat-activity-github">
-                  <p className="chat-activity-github-head"><Github size={12} aria-hidden="true" /> Recorded in GitHub</p>
                   <ul>
                     {recordedActivity.map((item, index) => (
                       <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
