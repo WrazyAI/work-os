@@ -1152,7 +1152,8 @@ The inferred provenance line — `Inferred from your screenshots — add or corr
 anything missing.` — lives inside the `Extra notes` panel, never on the card
 face. Sending that note records it as the employee amendment.
 Neither action mutates anything other than the recap, and the Tasks-tab stream
-keeps its inline `Looks right` / `Add or correct` review.
+keeps its inline review as the same round check (`Looks right`) and pencil
+(`Add or correct`) actions.
 
 The collapsed companion's prompt bubble carries the day's current demand
 (check-in, agenda, or EOD). Tapping the copy opens the chat; when the demand

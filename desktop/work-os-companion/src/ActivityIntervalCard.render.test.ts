@@ -42,8 +42,10 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("Not reviewed");
     expect(markup).toContain("Implementation and verification in the Work OS codebase");
     expect(markup).toContain("do not establish whether the change was pushed");
-    expect(markup).toContain("Looks right");
-    expect(markup).toContain("Add or correct");
+    expect(markup).toContain('aria-label="Looks right"');
+    expect(markup).toContain('aria-label="Add or correct"');
+    expect(markup).toContain("lucide-check");
+    expect(markup).toContain("lucide-pencil");
     expect(markup).toContain("Inferred from your screenshots");
   });
 
@@ -208,11 +210,13 @@ describe("ActivityIntervalCard", () => {
     expect(closed).not.toContain("is-open");
     expect(closed).toContain('aria-hidden="true"');
     expect(closed).toContain('inert=""');
+    expect(closed).toContain('style="height:0px"');
     const evidenceOpen = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC", defaultPanel: "evidence" }));
-    expect(evidenceOpen).toMatch(/is-open" aria-hidden="false"><div class="chat-activity-panel" id="activity-evidence-/);
+    expect(evidenceOpen).toContain('style="height:auto"');
+    expect(evidenceOpen).toMatch(/is-open"[^>]*aria-hidden="false"><div class="chat-activity-panel" id="activity-evidence-/);
     const withNotes = { ...baseInterval, uncertainties: ["whether the change was pushed"] };
     const notesOpen = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: withNotes, timezone: "UTC", defaultPanel: "notes" }));
-    expect(notesOpen).toMatch(/is-open" aria-hidden="false"><div class="chat-activity-panel" id="activity-notes-/);
+    expect(notesOpen).toMatch(/is-open"[^>]*aria-hidden="false"><div class="chat-activity-panel" id="activity-notes-/);
   });
 
   it("renders a confirmed recap as an employee-accepted record without actions", () => {

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, StickyNote, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
@@ -79,6 +79,50 @@ function coverageLabel(coverage: ActivityIntervalModel["coverage"]): string | nu
   const recorded = coverage?.framesRecorded;
   if (recorded != null && recorded > analyzed) return `${analyzed} of ${recorded} frames analyzed`;
   return `${analyzed} frame${analyzed === 1 ? "" : "s"} analyzed`;
+}
+
+/** Animates a recap panel open and closed by its measured height. The CSS
+ * grid-rows trick proved unreliable inside the nested card grid (the row never
+ * re-measured its content), so the panel owns its height: it animates to the
+ * measured content height, settles to auto, and animates back to zero. */
+function AnimatedPanel({ open, id, children }: { open: boolean; id: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const mounted = useRef(false);
+  const [height, setHeight] = useState<number | "auto">(open ? "auto" : 0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // The first render already matches the requested state; only a later
+    // toggle should animate, so a closed panel never flashes its content.
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (open) {
+      setHeight(el.scrollHeight);
+      const timer = window.setTimeout(() => setHeight("auto"), 240);
+      return () => window.clearTimeout(timer);
+    }
+    setHeight(el.scrollHeight);
+    const timer = window.setTimeout(() => {
+      // Force the pixel height to be the computed style before collapsing, so
+      // the transition always has a start value (auto cannot interpolate).
+      void el.offsetHeight;
+      setHeight(0);
+    }, 20);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+  return (
+    <div
+      ref={ref}
+      className={`chat-activity-panel-clip${open ? " is-open" : ""}`}
+      style={{ height: height === "auto" ? "auto" : `${height}px` }}
+      aria-hidden={!open}
+      inert={!open}
+    >
+      <div className="chat-activity-panel" id={id}>{children}</div>
+    </div>
+  );
 }
 
 /** Splits a model-written activity phrase into its leading clock time and the
@@ -264,10 +308,13 @@ export function ActivityIntervalCard({
           </div>
         ) : (
           <div className="chat-activity-actions">
-            <button type="button" className="chat-activity-confirm" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
-              {deciding ? "Saving…" : "Looks right"}
+            {deciding ? <span className="chat-activity-saving" role="status">Saving…</span> : null}
+            <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks right" title="Looks right" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
+              <Check size={16} aria-hidden="true" />
             </button>
-            <button type="button" className="chat-activity-quiet" disabled={deciding} onClick={() => setAmending(true)}>Add or correct</button>
+            <button type="button" className="chat-activity-quiet is-icon" aria-label="Add or correct" title="Add or correct" disabled={deciding} onClick={() => setAmending(true)}>
+              <Pencil size={14} aria-hidden="true" />
+            </button>
           </div>
         )
       ) : null}
@@ -310,31 +357,20 @@ export function ActivityIntervalCard({
         </div>
 
       {showNotes ? (
-        <div
-          className={`chat-activity-panel-clip${openPanel === "notes" ? " is-open" : ""}`}
-          aria-hidden={openPanel !== "notes"}
-          inert={openPanel !== "notes"}
-        >
-          <div className="chat-activity-panel" id={`activity-notes-${interval.id}`}>
-            {interval.reviewStatus === "inferred" ? (
-              <p className="chat-activity-provenance">Inferred from your screenshots — add or correct anything missing.</p>
-            ) : null}
-            {interval.uncertainties?.length ? (
-              <ul className="chat-activity-panel-notes">
-                {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
-              </ul>
-            ) : null}
-          </div>
-        </div>
+        <AnimatedPanel open={openPanel === "notes"} id={`activity-notes-${interval.id}`}>
+          {interval.reviewStatus === "inferred" ? (
+            <p className="chat-activity-provenance">Inferred from your screenshots — add or correct anything missing.</p>
+          ) : null}
+          {interval.uncertainties?.length ? (
+            <ul className="chat-activity-panel-notes">
+              {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
+            </ul>
+          ) : null}
+        </AnimatedPanel>
       ) : null}
 
       {showEvidence ? (
-        <div
-          className={`chat-activity-panel-clip${openPanel === "evidence" ? " is-open" : ""}`}
-          aria-hidden={openPanel !== "evidence"}
-          inert={openPanel !== "evidence"}
-        >
-          <div className="chat-activity-panel" id={`activity-evidence-${interval.id}`}>
+        <AnimatedPanel open={openPanel === "evidence"} id={`activity-evidence-${interval.id}`}>
           {showScreenshotGroup ? (
             <section className="chat-activity-panel-section">
               <header className="chat-activity-panel-head">
@@ -419,8 +455,7 @@ export function ActivityIntervalCard({
             </section>
           ) : null}
           {coverage ? <small className="chat-activity-coverage">{coverage}</small> : null}
-          </div>
-        </div>
+        </AnimatedPanel>
       ) : null}
         </div>
       ) : null}
