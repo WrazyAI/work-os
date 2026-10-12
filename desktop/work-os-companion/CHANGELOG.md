@@ -24,6 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.22
+
+- The Tasks and Focus recap cards now use the same round check and pencil actions as the chat card.
+- Recap panels slide open and closed smoothly, with no stray divider under the buttons.
+
 ## 0.4.21
 
 - The recap card now ends in two buttons — Extra notes and an evidence button with icon counts — that slide their panel open.
