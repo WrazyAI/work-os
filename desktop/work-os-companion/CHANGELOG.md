@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- The app icon and the in-app logo now use the new Work OS mark.
+
 ## 0.4.24
 
 - The EOD reminder now stays with you after clock-out instead of disappearing when your shift ends.
