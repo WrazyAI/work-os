@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Camera, ChevronLeft, ChevronRight, Github, Image as ImageIcon, StickyNote, X } from "lucide-react";
+import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, StickyNote, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -103,7 +103,7 @@ interface ActivityIntervalCardProps {
   currentDate?: string | null;
   onDecide?: (id: string, action: "confirm" | "amend", feedback?: string) => Promise<void>;
   deciding?: boolean;
-  defaultEvidenceOpen?: boolean;
+  defaultPanel?: "notes" | "evidence" | null;
   resolveSrc?: PreviewResolver;
   /** Chat-bubble presentation: an Edit action that hands editing to the
    * composer instead of expanding an inline field. */
@@ -120,12 +120,13 @@ export function ActivityIntervalCard({
   currentDate,
   onDecide,
   deciding = false,
-  defaultEvidenceOpen = false,
+  defaultPanel = null,
   resolveSrc,
   onEdit,
 }: ActivityIntervalCardProps) {
   const [feedback, setFeedback] = useState("");
   const [amending, setAmending] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"notes" | "evidence" | null>(defaultPanel);
   const [lightbox, setLightbox] = useState<ActivityIntervalEvidence | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   useModalScrollLock(lightbox !== null);
@@ -145,6 +146,9 @@ export function ActivityIntervalCard({
   ];
   const showScreenshotGroup = evidenceKnown && (screenshotCount > 0 || evidenceExpired);
   const showEvidence = showScreenshotGroup || recordedActivity.length > 0;
+  // The notes panel is also the home of the inferred provenance line, so an
+  // inferred recap keeps the button even when it has no gaps to list.
+  const showNotes = (interval.uncertainties?.length ?? 0) > 0 || interval.reviewStatus === "inferred";
   const showDate = !!currentDate && localDateKey(interval.windowStart, timezone) !== currentDate;
 
   const closeLightbox = useCallback(() => {
@@ -225,19 +229,18 @@ export function ActivityIntervalCard({
       {interval.reviewStatus === "amended" && interval.employeeFeedback ? (
         <p className="chat-activity-note"><strong>Your note:</strong> {interval.employeeFeedback}</p>
       ) : null}
-      {interval.reviewStatus === "inferred" ? (
-        <p className="chat-activity-provenance">Inferred from your screenshots — add or correct anything missing.</p>
-      ) : null}
 
       {interval.reviewStatus === "inferred" && onDecide ? (
         onEdit ? (
           <div className="chat-activity-decide">
-            <p className="chat-activity-ask">Sounds good?</p>
+            <p className="chat-activity-ask">{deciding ? "Saving…" : "Sounds good?"}</p>
             <div className="chat-activity-actions">
-              <button type="button" className="chat-activity-confirm" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
-                {deciding ? "Saving…" : "Looks good"}
+              <button type="button" className="chat-activity-confirm is-icon" aria-label="Looks good" title="Looks good" disabled={deciding} onClick={() => void onDecide(interval.id, "confirm")}>
+                <Check size={16} aria-hidden="true" />
               </button>
-              <button type="button" className="chat-activity-quiet" disabled={deciding} onClick={onEdit}>Edit</button>
+              <button type="button" className="chat-activity-quiet is-icon" aria-label="Edit" title="Edit" disabled={deciding} onClick={onEdit}>
+                <Pencil size={14} aria-hidden="true" />
+              </button>
             </div>
           </div>
         ) : amending ? (
@@ -269,113 +272,157 @@ export function ActivityIntervalCard({
         )
       ) : null}
 
-      {interval.uncertainties?.length ? (
-        <details className="chat-activity-extra">
-          <summary>
-            <span className="chat-activity-disclosure-title"><StickyNote size={12} aria-hidden="true" /> Extra notes</span>
-            <span className="chat-activity-disclosure-meta">{interval.uncertainties.length}</span>
-            <ChevronRight className="chat-activity-chevron" size={13} aria-hidden="true" />
-          </summary>
-          <ul>
-            {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
-          </ul>
-        </details>
+      {showNotes || showEvidence ? (
+        <div className="chat-activity-panels-area">
+        <div className="chat-activity-panels">
+          {showNotes ? (
+            <button
+              type="button"
+              className={`chat-activity-panel-button${openPanel === "notes" ? " is-active" : ""}`}
+              aria-expanded={openPanel === "notes"}
+              aria-controls={`activity-notes-${interval.id}`}
+              onClick={() => setOpenPanel(openPanel === "notes" ? null : "notes")}
+            >
+              <StickyNote size={12} aria-hidden="true" />
+              Extra notes
+            </button>
+          ) : null}
+          {showEvidence ? (
+            <button
+              type="button"
+              className={`chat-activity-panel-button is-evidence${openPanel === "evidence" ? " is-active" : ""}`}
+              aria-expanded={openPanel === "evidence"}
+              aria-controls={`activity-evidence-${interval.id}`}
+              aria-label={evidenceParts.length ? `Evidence: ${evidenceParts.join(", ")}` : "Evidence"}
+              onClick={() => setOpenPanel(openPanel === "evidence" ? null : "evidence")}
+            >
+              {evidenceKnown ? (
+                <span className="chat-activity-panel-metric"><Camera size={12} aria-hidden="true" /> {screenshotCount}</span>
+              ) : null}
+              {recordedActivity.length > 0 ? (
+                <span className="chat-activity-panel-metric"><Github size={12} aria-hidden="true" /> {recordedActivity.length}</span>
+              ) : null}
+              {evidenceParts.length ? (
+                <span className="chat-activity-panel-tooltip" aria-hidden="true">{evidenceParts.join(" · ")}</span>
+              ) : null}
+            </button>
+          ) : null}
+        </div>
+
+      {showNotes ? (
+        <div
+          className={`chat-activity-panel-clip${openPanel === "notes" ? " is-open" : ""}`}
+          aria-hidden={openPanel !== "notes"}
+          inert={openPanel !== "notes"}
+        >
+          <div className="chat-activity-panel" id={`activity-notes-${interval.id}`}>
+            {interval.reviewStatus === "inferred" ? (
+              <p className="chat-activity-provenance">Inferred from your screenshots — add or correct anything missing.</p>
+            ) : null}
+            {interval.uncertainties?.length ? (
+              <ul className="chat-activity-panel-notes">
+                {interval.uncertainties.map((note) => <li key={note}>{note}</li>)}
+              </ul>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {showEvidence ? (
-        <details className="chat-activity-evidence" open={defaultEvidenceOpen}>
-          <summary>
-            <span className="chat-activity-disclosure-title"><Camera size={12} aria-hidden="true" /> Evidence</span>
-            {evidenceParts.length ? <span className="chat-activity-disclosure-meta">{evidenceParts.join(" · ")}</span> : null}
-            <ChevronRight className="chat-activity-chevron" size={13} aria-hidden="true" />
-          </summary>
-          <div className="chat-activity-evidence-groups">
-            {showScreenshotGroup ? (
-              <details className="chat-activity-evidence-group">
-                <summary>
-                  <span className="chat-activity-disclosure-title"><ImageIcon size={11} aria-hidden="true" /> Screenshots</span>
-                  <span className="chat-activity-disclosure-meta">{screenshotCount}</span>
-                  <ChevronRight className="chat-activity-chevron" size={12} aria-hidden="true" />
-                </summary>
-                {evidence.length > 0 ? (
-                  <ul>
-                    {evidence.map((entry, index) => {
-                      const viewable = !!(entry.summaryId && entry.retained);
-                      const copy = (
-                        <>
-                          <time>{clockLabel(entry.capturedAt, timezone)}</time>
-                          <span className="chat-activity-frame-copy">
-                            {entry.frameSummary || "No frame summary was recorded."}
-                            {entry.visibleApp ? <small>{entry.visibleApp}</small> : null}
-                          </span>
-                        </>
-                      );
-                      return (
-                        <li key={entry.summaryId ?? `${entry.capturedAt}-${index}`}>
-                          {viewable ? (
-                            <button
-                              type="button"
-                              className="chat-activity-frame"
-                              onClick={(event) => { restoreFocusRef.current = event.currentTarget; setLightbox(entry); }}
-                              aria-label={`Open screenshot captured at ${clockLabel(entry.capturedAt, timezone)}`}
-                            >
-                              <ScreenshotImage
-                                summaryId={entry.summaryId as string}
-                                size="thumb"
-                                srcOverride={resolveSrc?.(entry.summaryId as string, "thumb")}
-                                alt={`Screenshot captured at ${clockLabel(entry.capturedAt, timezone)}${entry.visibleApp ? ` in ${entry.visibleApp}` : ""}`}
-                                className="eod-shot-thumb"
-                              />
-                              {copy}
-                            </button>
-                          ) : (
-                            <span className="chat-activity-frame is-static eod-shot-hour-row no-thumb">{copy}</span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="chat-activity-evidence-note">Screenshot details are not available in this recap view.</p>
-                )}
-                {evidenceExpired ? (
-                  <small className="chat-activity-expired">
-                    {retained.length > 0
-                      ? "Some screenshots expired under the 30-day retention policy."
-                      : "Screenshots expired under the 30-day retention policy. The recap text is kept."}
-                  </small>
-                ) : null}
-              </details>
-            ) : null}
-            {recordedActivity.length > 0 ? (
-              <details className="chat-activity-evidence-group">
-                <summary>
-                  <span className="chat-activity-disclosure-title"><Github size={11} aria-hidden="true" /> GitHub activity</span>
-                  <span className="chat-activity-disclosure-meta">{recordedActivity.length}</span>
-                  <ChevronRight className="chat-activity-chevron" size={12} aria-hidden="true" />
-                </summary>
-                <div className="chat-activity-github">
-                  <ul>
-                    {recordedActivity.map((item, index) => (
-                      <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
-                        <span
-                          className={`chat-activity-github-tag is-${item.relation}`}
-                          title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
-                        >
-                          {item.relation === "performed" ? "You" : "Your work"}
+        <div
+          className={`chat-activity-panel-clip${openPanel === "evidence" ? " is-open" : ""}`}
+          aria-hidden={openPanel !== "evidence"}
+          inert={openPanel !== "evidence"}
+        >
+          <div className="chat-activity-panel" id={`activity-evidence-${interval.id}`}>
+          {showScreenshotGroup ? (
+            <section className="chat-activity-panel-section">
+              <header className="chat-activity-panel-head">
+                <ImageIcon size={11} aria-hidden="true" />
+                <span>Screenshots</span>
+                <span className="chat-activity-panel-count">{screenshotCount}</span>
+              </header>
+              {evidence.length > 0 ? (
+                <ul>
+                  {evidence.map((entry, index) => {
+                    const viewable = !!(entry.summaryId && entry.retained);
+                    const copy = (
+                      <>
+                        <time>{clockLabel(entry.capturedAt, timezone)}</time>
+                        <span className="chat-activity-frame-copy">
+                          {entry.frameSummary || "No frame summary was recorded."}
+                          {entry.visibleApp ? <small>{entry.visibleApp}</small> : null}
                         </span>
-                        {item.url
-                          ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
-                          : <span>{item.description}</span>}
+                      </>
+                    );
+                    return (
+                      <li key={entry.summaryId ?? `${entry.capturedAt}-${index}`}>
+                        {viewable ? (
+                          <button
+                            type="button"
+                            className="chat-activity-frame"
+                            onClick={(event) => { restoreFocusRef.current = event.currentTarget; setLightbox(entry); }}
+                            aria-label={`Open screenshot captured at ${clockLabel(entry.capturedAt, timezone)}`}
+                          >
+                            <ScreenshotImage
+                              summaryId={entry.summaryId as string}
+                              size="thumb"
+                              srcOverride={resolveSrc?.(entry.summaryId as string, "thumb")}
+                              alt={`Screenshot captured at ${clockLabel(entry.capturedAt, timezone)}${entry.visibleApp ? ` in ${entry.visibleApp}` : ""}`}
+                              className="eod-shot-thumb"
+                            />
+                            {copy}
+                          </button>
+                        ) : (
+                          <span className="chat-activity-frame is-static eod-shot-hour-row no-thumb">{copy}</span>
+                        )}
                       </li>
-                    ))}
-                  </ul>
-                </div>
-              </details>
-            ) : null}
-          </div>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="chat-activity-evidence-note">Screenshot details are not available in this recap view.</p>
+              )}
+              {evidenceExpired ? (
+                <small className="chat-activity-expired">
+                  {retained.length > 0
+                    ? "Some screenshots expired under the 30-day retention policy."
+                    : "Screenshots expired under the 30-day retention policy. The recap text is kept."}
+                </small>
+              ) : null}
+            </section>
+          ) : null}
+          {recordedActivity.length > 0 ? (
+            <section className="chat-activity-panel-section">
+              <header className="chat-activity-panel-head">
+                <Github size={11} aria-hidden="true" />
+                <span>GitHub activity</span>
+                <span className="chat-activity-panel-count">{recordedActivity.length}</span>
+              </header>
+              <div className="chat-activity-github">
+                <ul>
+                  {recordedActivity.map((item, index) => (
+                    <li key={`${item.relation}-${index}-${item.description.slice(0, 24)}`}>
+                      <span
+                        className={`chat-activity-github-tag is-${item.relation}`}
+                        title={item.relation === "performed" ? "Performed by your GitHub accounts" : "Triggered by your work (CI, deployments, reviews on your pull requests)"}
+                      >
+                        {item.relation === "performed" ? "You" : "Your work"}
+                      </span>
+                      {item.url
+                        ? <a href={item.url} target="_blank" rel="noreferrer">{item.description}</a>
+                        : <span>{item.description}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          ) : null}
           {coverage ? <small className="chat-activity-coverage">{coverage}</small> : null}
-        </details>
+          </div>
+        </div>
+      ) : null}
+        </div>
       ) : null}
 
       {lightbox && createPortal(

@@ -566,11 +566,13 @@ The card keeps the provenance and save-state line, with an inline retry when a
 save is queued offline or conflicted.
 
 Beneath the goal, the Focus tab carries the same Recent activity interval
-stream as the floating Tasks tab — recaps newest first, each with one evidence
-disclosure that reports screenshot and GitHub event counts, then separate
-Screenshots and GitHub activity disclosures, plus confirm/amend actions — so the
-day's goal and its interval check-ins read as one record. The stream is
-separated by a hairline. Each sheet tab scrolls as its own region.
+stream as the floating Tasks tab — recaps newest first, each with the same
+bottom row of two buttons that animate open the notes panel (which holds the
+inferred provenance line and any gaps) or the evidence panel (its button
+reporting screenshot and GitHub event counts as icon metrics, revealing
+separate Screenshots and GitHub activity sections) — plus confirm/amend
+actions, so the day's goal and its interval check-ins read as one record. The
+stream is separated by a hairline. Each sheet tab scrolls as its own region.
 
 ### 7.3 Floating Otto chat
 
@@ -1020,17 +1022,18 @@ only a bounded representative subset of raw frames.
 Read the recap, don't wade through it. It presents as one short lead sentence,
 then short activity bullets (one observable activity each, with its clock time
 when known, set as a quiet time pill), an ordered `Flow` track of phase chips
-only when the evidence supports a sequence, and a collapsed `Extra notes`
-disclosure holding at most three short, interval-specific gaps the employee
-could clarify. Analysis
-coverage (frames analyzed of frames recorded) is a quiet line inside the
-`Evidence` disclosure, never in the summary, and the recap never restates
-generic caveats such as screenshots not establishing completion. Both
-disclosures are full-width rows in the card's own language — a leading glyph,
-the label, the right-aligned count, and a trailing chevron that turns as the
-row opens — so the card reads as one composed record instead of stacked
-paragraphs. A dense multi-sentence paragraph is a contract violation, never a
-rendering fallback for new intervals.
+only when the evidence supports a sequence, and a bottom row of two buttons:
+`Extra notes` (holding at most three short, interval-specific gaps the employee
+could clarify) and an evidence button whose label is its screenshot and GitHub
+event counts as icon metrics — never the word "Evidence". Nothing is expanded
+by default, so the row reads as buttons rather than an accordion; toggling a
+button animates its panel open beneath the row, only one panel is open at a
+time, and the evidence button's hover label reads the same counts in words.
+Analysis coverage (frames analyzed of frames recorded) is a quiet line inside
+the evidence panel, never in the summary, and the recap never restates generic
+caveats such as screenshots not establishing completion. A dense multi-sentence
+paragraph is a contract violation, never a rendering fallback for new
+intervals.
 
 A recap summary delivered as a chat turn is still a conversation message:
 hovering it offers `Copy` plus one short destination action — `All recaps` —
@@ -1062,13 +1065,13 @@ pull requests). Recorded activity is provider fact, so the recap may state it
 exactly as recorded and leads with it when present — but a merged pull request,
 a passing workflow, or a deployment is never Nifty task completion, and
 triggered items are never described as the employee's own action. GitHub events
-stay inside the recap's collapsed `Evidence` disclosure beside the screenshot
-count. Expanding it reveals separate `Screenshots` and `GitHub activity`
-disclosures; each GitHub item retains its `You` / `Your work` tag and artifact
-link. The model's structured `recorded_activity` output is kept only when it
-matches the recorded list, so it cannot fabricate an item. A GitHub read
-failure degrades silently to a Worktivity-only recap, and coverage records
-whether GitHub context was used.
+stay inside the recap's evidence panel: its button shows the screenshot and
+GitHub counts as icon metrics, and opening it reveals separate `Screenshots`
+and `GitHub activity` sections; each GitHub item retains its `You` / `Your
+work` tag and artifact link. The model's structured `recorded_activity` output
+is kept only when it matches the recorded list, so it cannot fabricate an item.
+A GitHub read failure degrades silently to a Worktivity-only recap, and
+coverage records whether GitHub context was used.
 
 Review adds provenance without creating employee-authored truth:
 
@@ -1124,26 +1127,30 @@ and its outcome (`next_steps_status`) is recorded on the interval.
 The floating companion's Tasks tab renders these as a Recent activity stream in
 the chat card language, newest interval first: interval label, quiet provenance
 chip (`Not reviewed`, `Confirmed`, `Updated by you`), a concise headline, the
-detail, and a collapsed `Evidence · N screenshots · M GitHub events`
-disclosure. Expanding it reveals separate screenshot and GitHub activity
-disclosures: screenshots show the exact analyzed frames with capture time and
-neutral frame summary, while GitHub shows provider-recorded events with their
-relation tags and links. The floating
-stream's header carries a dark `View in app` action on the right that opens the
-dock's Focus tab in the main window, where the same stream sits beneath the
-daily goal. Expired images say
+detail, and the same bottom row of two buttons — `Extra notes`, which holds the
+inferred provenance line and any gaps, and the evidence button, whose label is
+its screenshot and GitHub counts as icon metrics. Opening the evidence panel
+reveals separate `Screenshots` and `GitHub activity` sections: screenshots show
+the exact analyzed frames with capture time and neutral frame summary, while
+GitHub shows provider-recorded events with their relation tags and links. The
+floating stream's header carries a dark `View in app` action on the right that
+opens the dock's Focus tab in the main window, where the same stream sits
+beneath the daily goal. Expired images say
 so honestly without deleting the recap; there are no charts, scores, or hours
 totals.
 
 The chat bubble for a due recap is a short conversational card: the interval
 label (the window itself already says it covers the last hour, so no lead-in
 line repeats it), the headline and the evidence-bounded detail (tall enough to
-carry the brief summary of the observed window), and the inferred provenance
-line. It asks `Sounds good?` with two actions in the card's own pill language:
-`Looks good` confirms the recap in place, and `Edit` hands editing to
-the composer, which switches to recap-edit mode (an `Editing your recap` strip
-with `Cancel` and an `Update recap` send label) so the employee writes the
-correction themselves. Sending that note records it as the employee amendment.
+carry the brief summary of the observed window). It asks `Sounds good?` with
+two round icon actions: the check confirms the recap in place (accessible name
+`Looks good`, with the ask line reading `Saving…` while the decision files),
+and the pencil (`Edit`) hands editing to the composer, which switches to
+recap-edit mode (an `Editing your recap` strip with `Cancel` and an
+`Update recap` send label) so the employee writes the correction themselves.
+The inferred provenance line — `Inferred from your screenshots — add or correct
+anything missing.` — lives inside the `Extra notes` panel, never on the card
+face. Sending that note records it as the employee amendment.
 Neither action mutates anything other than the recap, and the Tasks-tab stream
 keeps its inline `Looks right` / `Add or correct` review.
 

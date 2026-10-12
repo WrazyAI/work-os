@@ -70,14 +70,14 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain("chat-activity-flow-chip");
     expect(markup).toContain(">implementation<");
     expect(markup).toContain(">verification<");
-    expect(markup).toContain("chat-activity-extra");
+    expect(markup).toContain("chat-activity-panels");
+    expect(markup).toContain("chat-activity-panel-button");
     expect(markup).toContain("Extra notes");
-    expect(markup).toContain("chat-activity-chevron");
     expect(markup).toContain("whether the change was pushed");
     expect(markup).not.toContain("Not established:");
-    const extraPosition = markup.indexOf("Extra notes");
-    const extraDisclosure = markup.lastIndexOf("<details", extraPosition);
-    expect(markup.slice(extraDisclosure, extraPosition)).not.toContain(" open");
+    expect(markup).toContain("chat-activity-panel-clip");
+    expect(markup).not.toContain("is-open");
+    expect(markup).toContain('aria-expanded="false"');
   });
 
   it("summarizes frame coverage inside the evidence disclosure", () => {
@@ -123,12 +123,16 @@ describe("ActivityIntervalCard", () => {
       },
       timezone: "UTC",
     }));
-    expect(markup).toContain("Evidence</span>");
+    expect(markup).toContain('aria-label="Evidence: 3 screenshots, 2 GitHub events"');
+    expect(markup).toContain("chat-activity-panel-metric");
+    expect(markup).toContain("chat-activity-panel-tooltip");
     expect(markup).toContain("3 screenshots · 2 GitHub events");
+    expect(markup).toContain("lucide-camera");
+    expect(markup).toContain("lucide-github");
     expect(markup).toContain("Screenshots</span>");
-    expect(markup).toContain("chat-activity-disclosure-meta\">3</span>");
+    expect(markup).toContain("chat-activity-panel-count\">3</span>");
     expect(markup).toContain("GitHub activity</span>");
-    expect(markup).toContain("chat-activity-disclosure-meta\">2</span>");
+    expect(markup).toContain("chat-activity-panel-count\">2</span>");
     expect(markup).toContain("Pushed 3 commits to WrazyAI/work-os");
     expect(markup).toContain("CI for your commit on main: Work OS CI");
     expect(markup).toContain("chat-activity-github-tag is-performed");
@@ -138,8 +142,8 @@ describe("ActivityIntervalCard", () => {
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/compare/abc123"');
     expect(markup).toContain('href="https://github.com/WrazyAI/work-os/actions/runs/1"');
     const githubEventPosition = markup.indexOf("Pushed 3 commits to WrazyAI/work-os");
-    const enclosingDisclosure = markup.lastIndexOf("<details", githubEventPosition);
-    expect(markup.slice(enclosingDisclosure, githubEventPosition)).toContain("GitHub activity");
+    const enclosingSection = markup.lastIndexOf("<section", githubEventPosition);
+    expect(markup.slice(enclosingSection, githubEventPosition)).toContain("GitHub activity");
   });
 
   it("keeps GitHub evidence available when the recap has no screenshots", () => {
@@ -153,12 +157,12 @@ describe("ActivityIntervalCard", () => {
         ],
       },
     }));
-    expect(markup).toContain("0 screenshots · 1 GitHub event");
+    expect(markup).toContain("0 screenshots, 1 GitHub event");
     expect(markup).toContain("GitHub activity</span>");
     expect(markup).not.toContain("Screenshots</span>");
     const eventPosition = markup.indexOf("Opened pull request #42");
-    const enclosingDisclosure = markup.lastIndexOf("<details", eventPosition);
-    expect(markup.slice(enclosingDisclosure, eventPosition)).toContain("GitHub activity");
+    const enclosingSection = markup.lastIndexOf("<section", eventPosition);
+    expect(markup.slice(enclosingSection, eventPosition)).toContain("GitHub activity");
   });
 
   it("omits the GitHub section when no recorded activity is present", () => {
@@ -174,24 +178,41 @@ describe("ActivityIntervalCard", () => {
       onEdit: () => undefined,
     }));
     expect(markup).toContain("Sounds good?");
-    expect(markup).toContain("Looks good");
-    expect(markup).toContain(">Edit<");
+    expect(markup).toContain('aria-label="Looks good"');
+    expect(markup).toContain('aria-label="Edit"');
+    expect(markup).toContain("lucide-check");
+    expect(markup).toContain("lucide-pencil");
     expect(markup).toContain("Inferred from your screenshots");
+    const notesPanelPosition = markup.indexOf('id="activity-notes-');
+    const provenancePosition = markup.indexOf("Inferred from your screenshots");
+    expect(notesPanelPosition).toBeGreaterThan(-1);
+    expect(provenancePosition).toBeGreaterThan(notesPanelPosition);
     expect(markup).not.toContain("This is what we got from your last hour");
     expect(markup).not.toContain("Looks right");
     expect(markup).not.toContain("Add or correct");
     expect(markup).not.toContain("<textarea");
   });
 
-  it("lists the exact analyzed frames in a collapsed evidence disclosure", () => {
+  it("lists the exact analyzed frames in a hidden evidence panel", () => {
     const markup = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
-    expect(markup).toContain("Evidence</span>");
     expect(markup).toContain("3 screenshots");
-    expect(markup).toContain("<details");
-    expect(markup).not.toContain("<details class=\"chat-activity-evidence\" open");
+    expect(markup).toContain('id="activity-evidence-interval-1"');
+    expect(markup).not.toContain("is-open");
     expect(markup).toContain("Editing the activity interval engine.");
     expect(markup).toContain("Companion Tasks tab open.");
     expect(markup).not.toContain("Looks right");
+  });
+
+  it("opens a panel only when its button asks for it", () => {
+    const closed = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC" }));
+    expect(closed).not.toContain("is-open");
+    expect(closed).toContain('aria-hidden="true"');
+    expect(closed).toContain('inert=""');
+    const evidenceOpen = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: baseInterval, timezone: "UTC", defaultPanel: "evidence" }));
+    expect(evidenceOpen).toMatch(/is-open" aria-hidden="false"><div class="chat-activity-panel" id="activity-evidence-/);
+    const withNotes = { ...baseInterval, uncertainties: ["whether the change was pushed"] };
+    const notesOpen = renderToStaticMarkup(createElement(ActivityIntervalCard, { interval: withNotes, timezone: "UTC", defaultPanel: "notes" }));
+    expect(notesOpen).toMatch(/is-open" aria-hidden="false"><div class="chat-activity-panel" id="activity-notes-/);
   });
 
   it("renders a confirmed recap as an employee-accepted record without actions", () => {
