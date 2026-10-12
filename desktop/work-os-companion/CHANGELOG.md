@@ -24,7 +24,11 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.18
+
 - Agent replies now show their local time when you hover them, and longer pauses between messages get a centered time marker.
+- Recap evidence now shows the real screenshot count and thumbnails instead of always reading zero.
+- Recap gaps moved behind a collapsed Extra notes row, with frame coverage kept inside Evidence.
 
 ## 0.4.17
 
