@@ -1,5 +1,5 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { emit, listen } from "./tauriEvents";
@@ -32,7 +32,7 @@ import { shiftPulse } from "./shiftPulse";
 import { AssigneeTags, EllipsisMenu, moveMenuFocus, SyncChip, TaskComposerModal, TaskCarryOverFlyout, TaskDetailsModal, TaskEditModal, EodComposer, EodLoadingState, TaskRemovalConfirmation } from "./taskSurfaces";
 import { ChatSectionBoundary } from "./ErrorBoundary";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { ChatTabs, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationLauncher, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { HistoryTurn, type HistoryTurnData } from "./chat/HistoryTurn";
 import type { RecapNextStepItem } from "./types";
 import type { RecapNextStepState } from "./RecapNextStepsCard";
@@ -137,7 +137,7 @@ function isWorktivityControlResult(value: unknown): value is WorktivityControlRe
 }
 type MissedClockOutCorrection = { sessionId: string; date: string; clockedInAt: string | null };
 type ProgressUpdateKind = "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
-type ProgressReceipt = { text: string; message: string; kind: ProgressUpdateKind; queued?: boolean };
+type ProgressReceipt = { text: string; message: string; kind: ProgressUpdateKind; queued?: boolean; createdAt: string };
 type ProgressPanel = "update" | "goal";
 /** Update delivery flow shared by the flyout and the Settings row. The
  * plugin's Update object stays referenced while it holds native resources
@@ -3012,7 +3012,7 @@ export default function App() {
         ? `Recorded your update: “${enabled[0]!.statement.slice(0, 140)}”`
         : `Recorded ${enabled.length} updates on your behalf.`);
       if (results) setProgressReceipt(null);
-      else setProgressReceipt({ kind: dominant, text, queued: false, message });
+      else setProgressReceipt({ kind: dominant, text, queued: false, message, createdAt: new Date().toISOString() });
       setComposerHistory((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: message, meta: results ? "reviewed" : "recorded", createdAt: new Date().toISOString() }]);
       setInterpretation((current) => current ? { ...current, operations: current.operations.map((op) => ({ ...op, enabled: false })), results: mergeToolResults(current.results ?? [], results ?? []) } : current);
       setPendingProgressUpdate(results ? "tool calls reviewed" : "");
@@ -3260,7 +3260,7 @@ export default function App() {
     if (syncBypassRef.current) {
       const label = kind === "completion_claim" ? "completed work" : kind === "priority_change" ? "a priority change" : kind === "blocked" ? "a blocker" : kind === "new_task" ? "a new task" : "progress";
       setProgressReceipt({
-        kind, text, queued: false,
+        kind, text, queued: false, createdAt: new Date().toISOString(),
         message: kind === "new_task" ? `Added “${text}” to today’s tasks.` : `Recorded “${text}” as ${label} for today.`,
       });
       setPendingProgressUpdate("");
@@ -3286,6 +3286,7 @@ export default function App() {
           kind,
           text,
           queued,
+          createdAt: new Date().toISOString(),
           message: queued
             ? `“${title}” is queued as a task and workday update. It will be confirmed after reconnection.`
              : taskResult.providerStatus === "work_os_confirmed"
@@ -3306,6 +3307,7 @@ export default function App() {
           kind,
           text,
           queued: result.queued === true,
+          createdAt: new Date().toISOString(),
           message: result.queued === true ? `“${text}” is queued as ${label} and will sync after reconnection.` : `Recorded “${text}” as ${label} for today.`,
         });
       }
@@ -4063,7 +4065,7 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   goalProvenance: "employee" | "accepted_suggestion" | "ai_draft" | null; goalSuggestion: ReturnType<typeof suggestDailyGoal>; saveState: "saved" | "saving" | "offline" | "conflict";
   activityDate?: string | null; activityTimezone?: string | null; activityPollMs?: number;
   onInput: (value: string) => void; onOpen: () => void; onOpenGoal: () => void; onClose: () => void; onSubmit: () => void; onClassify: (kind: ProgressUpdateKind) => void; onApplyGoal: (value: string, fromSuggestion: boolean) => void; onRetryGoalSave?: () => void;
-  interpretation?: { status: "loading" | "ready"; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
+  interpretation?: { status: "loading" | "ready"; reviewId?: string; operations: Array<import("./interpretation").ProposedOperation>; taskOptions: Array<{ id: string; title: string }>; reply?: string; results?: ToolCallResult[] } | null;
   thinking?: { stages: AvatarThinkingStage[]; active: number; startedAt: number } | null;
   toolContext?: import("./interpretation").ApprovedOpContext;
   aiUnavailable?: string | null;
@@ -4149,6 +4151,12 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   const showLiveAssistantMark = visibleHistory.at(-1)?.role !== "assistant";
   const lastAssistantText = [...visibleHistory].reverse().find((turn) => turn.role === "assistant")?.text.trim() ?? null;
   const echoReply = interpretation?.status === "ready" && !interpretation.operations.length && interpretation.reply && interpretation.reply.trim() !== lastAssistantText ? interpretation.reply : null;
+  // A live turn's clock is the moment it first appeared; once it lands in
+  // history, the persisted turn's own createdAt takes over.
+  const echoReplyAt = useMemo(() => new Date().toISOString(), [echoReply]);
+  // One live reply keeps one arrival time: key on the review identity and
+  // status, not the object, so result merges never reset the clock.
+  const interpretationAt = useMemo(() => new Date().toISOString(), [interpretation?.reviewId, interpretation?.status]);
   const receiptTitle = receipt?.kind === "new_task"
     ? receipt.queued ? "Task queued" : "Task added"
     : receipt?.queued ? "Update queued" : "Update recorded";
@@ -4169,8 +4177,9 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
          <div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goalDraft} onChange={(event) => { setGoalDraft(event.target.value); setGoalFromSuggestion(false); }} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>
          <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
          {!cardGoal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button type="button" onClick={() => { setGoalDraft(goalSuggestion.text); setGoalFromSuggestion(true); }}>Use suggestion</button></div>}
-               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <HistoryTurn
-  key={turn.id ?? index}
+               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
+  {shouldShowChatDivider(visibleHistory, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
+  <HistoryTurn
   turn={{
     ...turn,
     meta: turn.meta === "recorded" ? "Recorded" : turn.meta ? `${turn.meta} · Review below` : null,
@@ -4187,9 +4196,10 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   onNavigateView={onNavigateView}
   onDecideNextStep={(item, decision, edits) => onDecideNextStep?.(turn.id, item, decision, edits)}
   onRetryOperation={(result) => onRetryHistoryOperation?.(turn.id, result)}
-/>)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" showMark={showLiveAssistantMark}>{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
-   : echoReply ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} text={echoReply} stream onSettled={bumpSweep} />
-       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
+  />
+</Fragment>)}</div>}{receipt ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} receipt meta={receiptTitle} text={receipt.message} copySource={{ role: "assistant", receipt: receipt.message }} timestamp={receipt.createdAt} /> : pending ? <>{interpretation?.status === "loading" ? <ChatTurn role="assistant" showMark={showLiveAssistantMark}>{thinking ? <AvatarThinking stages={thinking.stages} active={thinking.active} startedAt={thinking.startedAt} activeLabel="Thinking" /> : <><strong>Reading your update…</strong><p>Matching it to today's tasks.</p></>}</ChatTurn>
+   : echoReply ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} text={echoReply} stream onSettled={bumpSweep} timestamp={echoReplyAt} />
+       : interpretation?.status === "ready" && interpretation.operations.length ? <ChatTurn role="assistant" showMark={showLiveAssistantMark} copySource={{ role: "assistant", text: interpretation.reply, operations: interpretation.operations, toolResults: interpretation.results }} timestamp={interpretationAt}><AssistantOperations interpretation={interpretation} busy={busy} toolContext={toolContext} onReviewOperations={onReviewOperations} onMarkSelectedDone={onMarkSelectedDone} onLoadSubtasks={onLoadSubtasks} onNavigateView={onNavigateView} onRetryOperation={onRetryOperation} /></ChatTurn>
 
   : interpretation?.status === "ready" ? null
    : <ChatTurn role="assistant" showMark={showLiveAssistantMark}><strong>{aiUnavailable ?? "What kind of update is this?"}</strong><p>Choose one so Work OS records it correctly.{aiUnavailable ? "" : " Nothing is inferred yet."}</p><div className="chat-kind-options">{options.map((option) => <button disabled={busy} key={option.kind} onClick={() => onClassify(option.kind)}>{option.label}</button>)}</div></ChatTurn>}</> : history.length ? null : <ChatWelcome displayName={displayName} mode={agendaMode ? "agenda" : "update"} seed={`in-app:${toolContext.shiftDate ?? "today"}`} />}</div></div>}

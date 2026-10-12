@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ChatSection, StreamingText } from "./chat/StreamingText";
 import { GlideMenu } from "./chat/GlideMenu";
 import { ChatTabs } from "./chat/ChatTabs";
-import { ChatTurn } from "./chat/ChatTurn";
+import { ChatTimeDivider, ChatTurn } from "./chat/ChatTurn";
 import { HistoryTurn } from "./chat/HistoryTurn";
 
 const noop = () => undefined;
@@ -160,12 +160,47 @@ describe("ChatTurn copy and mascot", () => {
   });
 });
 
+describe("ChatTurn timing", () => {
+  it("reveals the agent's local time rightmost in the hover row", () => {
+    const markup = renderToStaticMarkup(createElement(ChatTurn, {
+      role: "assistant",
+      text: "Here you go.",
+      actions: createElement("button", { type: "button", className: "chat-turn-action" }, "All recaps"),
+      timestamp: "2026-10-12T17:48:00Z",
+    }));
+    expect(markup).toContain('class="chat-turn-time"');
+    expect(markup).toContain('dateTime="2026-10-12T17:48:00Z"');
+    expect(markup.indexOf("chat-turn-time")).toBeGreaterThan(markup.indexOf("chat-turn-action"));
+    expect(markup).toMatch(/>(?:1[0-2]|[1-9]):[0-5]\d(?: |\u202f)(?:AM|PM)</);
+  });
+
+  it("never times an employee bubble, even when it carries a recorded time", () => {
+    const markup = renderToStaticMarkup(createElement(ChatTurn, { role: "user", text: "Show my tasks", timestamp: "2026-10-12T17:48:00Z" }));
+    expect(markup).toContain("chat-copy-row");
+    expect(markup).not.toContain("chat-turn-time");
+  });
+
+  it("shows no clock when the turn has no recorded time", () => {
+    const markup = renderToStaticMarkup(createElement(ChatTurn, { role: "assistant", text: "Settled copy." }));
+    expect(markup).not.toContain("chat-turn-time");
+  });
+
+  it("renders the centered session divider from the recorded time", () => {
+    const markup = renderToStaticMarkup(createElement(ChatTimeDivider, { at: "2026-10-12T17:48:00Z", now: new Date("2026-10-12T20:00:00Z") }));
+    expect(markup).toContain('class="chat-time-divider"');
+    expect(markup).toContain('dateTime="2026-10-12T17:48:00Z"');
+    expect(markup).toMatch(/(?:AM|PM)</);
+    expect(renderToStaticMarkup(createElement(ChatTimeDivider, { at: null }))).toBe("");
+  });
+});
+
 describe("HistoryTurn", () => {
   it("renders persisted cards, approvals, and a copy payload", () => {
     const turn = {
       id: "a-1",
       role: "assistant" as const,
       text: "Review these before anything changes.",
+      createdAt: "2026-10-12T17:48:00Z",
       operations: [{ op: "complete_task" as const, statement: "Done.", taskTitle: "Repair provider sync", proposalId: "p-1", enabled: false }],
       toolResults: [{
         op: { op: "display_pending_tasks" as const, statement: "Show.", enabled: false },
@@ -183,6 +218,8 @@ describe("HistoryTurn", () => {
     // And the copy control carries prose plus the card summary.
     expect(markup).toContain("chat-copy-row");
     expect(markup).toContain("Review these before anything changes.");
+    // The persisted createdAt feeds the hover clock.
+    expect(markup).toContain("chat-turn-time");
   });
 
   it("never renders a task card for a recorded result's provider row", () => {

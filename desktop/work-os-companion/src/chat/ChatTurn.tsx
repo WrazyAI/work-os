@@ -5,6 +5,7 @@ import { CopyMessageButton } from "./CopyMessageButton";
 import { MascotMark } from "./MascotMark";
 import { cx } from "./cx";
 import { StreamingText } from "./StreamingText";
+import { formatChatClock, formatChatDividerLabel, formatChatTimeTitle } from "./timeNotes";
 import { turnCopyText, type CopyableTurn } from "./turnCopy";
 
 export type ChatTurnRole = "user" | "assistant" | "system";
@@ -23,6 +24,7 @@ export function ChatTurn({
   children,
   copySource,
   actions,
+  timestamp,
 }: {
   role: ChatTurnRole;
   text?: string;
@@ -40,14 +42,22 @@ export function ChatTurn({
   /** Extra hover actions beside Copy, for turn-specific destinations such as the
    * recap stream behind a recap summary. */
   actions?: ReactNode;
+  /** The turn's recorded creation time. Agent turns reveal it rightmost in their
+   * hover row; employee bubbles never do (their sent time is the session
+   * divider's job), and a missing value shows nothing rather than a guess. */
+  timestamp?: string | null;
 }) {
   const copyText = turnCopyText(copySource ?? { role, text });
+  // The hover clock follows the actions, so the row reads `Copy`, any
+  // destination action, then the local time — and never shifts the thread.
+  const clock = role === "assistant" ? formatChatClock(timestamp) : null;
   // The row reserves its strip and reveals on hover, so adding an action never
   // shifts the thread and never requires the copy control to be present.
   const actionRow = copyText || actions ? (
     <div className="chat-copy-row">
       {copyText ? <CopyMessageButton text={copyText} /> : null}
       {actions}
+      {clock ? <time className="chat-turn-time" dateTime={timestamp ?? undefined} title={formatChatTimeTitle(timestamp) ?? undefined}>{clock}</time> : null}
     </div>
   ) : null;
   if (role === "user") {
@@ -90,4 +100,13 @@ export function ChatTurn({
       {actionRow}
     </div>
   );
+}
+
+/** The centered session marker above an employee message: the conversation's
+ * opening and every pause longer than twenty minutes. It is part of the thread —
+ * not a hover affordance — and stays for the life of the conversation. */
+export function ChatTimeDivider({ at, now }: { at?: string | null; now?: Date }) {
+  const label = formatChatDividerLabel(at, now);
+  if (!label) return null;
+  return <div className="chat-time-divider"><time dateTime={at ?? undefined}>{label}</time></div>;
 }

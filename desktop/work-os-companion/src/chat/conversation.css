@@ -529,6 +529,32 @@
   color: #456d18;
 }
 
+/* The hover clock closes the action row: quiet, numeric, and never a pill. */
+.conversation-surface .chat-turn-time {
+  margin-left: 2px;
+  color: var(--conversation-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The session marker sits in the thread, centered: a conversation's opening
+   and every pause longer than twenty minutes. Not hover- or motion-driven. */
+.conversation-surface .chat-time-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0 10px;
+  color: var(--conversation-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.conversation-surface .chat-time-divider time {
+  font-variant-numeric: tabular-nums;
+}
+
 .conversation-surface .chat-system-notice {
   border: 1px solid rgba(185, 67, 67, 0.22);
   border-radius: 16px;

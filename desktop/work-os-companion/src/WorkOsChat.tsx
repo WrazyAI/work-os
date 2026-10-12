@@ -10,7 +10,8 @@ export { ChatComposer as WorkOsPromptBar } from "./chat/ChatComposer";
 export { ChatWelcome, firstNameFromDisplayName, getChatWelcomeCopy, type ChatWelcomeMode } from "./chat/ChatWelcome";
 export { ConversationLauncher, type ConversationLauncherMode } from "./chat/ConversationLauncher";
 export { ChatSection, StreamingText } from "./chat/StreamingText";
-export { ChatTurn, type ChatTurnRole } from "./chat/ChatTurn";
+export { ChatTurn, ChatTimeDivider, type ChatTurnRole } from "./chat/ChatTurn";
+export { CHAT_DIVIDER_GAP_MS, shouldShowChatDivider } from "./chat/timeNotes";
 export { ConversationSurface, type ConversationSurfaceKind } from "./chat/ConversationSurface";
 export { GlideMenu, type GlideRow } from "./chat/GlideMenu";
 export {

@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+- Agent replies now show their local time when you hover them, and longer pauses between messages get a centered time marker.
+
 ## 0.4.17
 
 - Approving a new recap no longer hides its suggestions behind an older card — every moment stays visible and actionable.

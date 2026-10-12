@@ -255,15 +255,23 @@ function InAppSection() {
   const goalSuggestion = focusParam === "empty"
     ? { text: "From today’s tasks: ship the focus card and verify the flow.", taskIds: ["preview-task-1"] }
     : null;
-  const [history, setHistory] = useState<WorkOsConversationTurn[]>(() => empty ? [] : [
-    { id: "preview-1", role: "user", text: "Finished the chat revamp draft and started verification.", createdAt: "2026-09-08T00:30:00Z" },
-    { id: "preview-2", role: "assistant", text: "Nice — share what is left and I will turn it into records.", meta: "recorded", createdAt: "2026-09-08T00:31:00Z" },
-  ]);
+  const [history, setHistory] = useState<WorkOsConversationTurn[]>(() => empty ? [] : (() => {
+    // Relative times so the preview always demonstrates the session divider:
+    // the opening marker plus a pause longer than twenty minutes.
+    const base = Date.now() - 3 * 60 * 60 * 1000;
+    return [
+      { id: "preview-1", role: "user", text: "Finished the chat revamp draft and started verification.", createdAt: new Date(base).toISOString() },
+      { id: "preview-2", role: "assistant", text: "Nice — share what is left and I will turn it into records.", meta: "recorded", createdAt: new Date(base + 60_000).toISOString() },
+      { id: "preview-3", role: "user", text: "Picking this back up after the review call.", createdAt: new Date(base + 2 * 60 * 60 * 1000).toISOString() },
+      { id: "preview-4", role: "assistant", text: "Welcome back — I kept your place.", createdAt: new Date(base + 2 * 60 * 60 * 1000 + 60_000).toISOString() },
+    ];
+  })());
   const [pending, setPending] = useState("");
   const [receipt, setReceipt] = useState<{
     text: string;
     message: string;
     kind: "material_progress" | "completion_claim" | "blocked" | "priority_change" | "new_task";
+    createdAt: string;
   } | null>(null);
   return (
     <QueryClientProvider client={fixtureClient}>
@@ -309,7 +317,7 @@ function InAppSection() {
           setInput("");
         }}
         onClassify={(kind) => {
-          setReceipt({ text: pending, kind, message: `Recorded “${pending}” as ${kind.replaceAll("_", " ")} for today.` });
+          setReceipt({ text: pending, kind, message: `Recorded “${pending}” as ${kind.replaceAll("_", " ")} for today.`, createdAt: new Date().toISOString() });
           setPending("");
         }}
         onApplyGoal={(value) => {

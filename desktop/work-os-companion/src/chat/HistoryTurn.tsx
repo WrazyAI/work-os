@@ -31,6 +31,9 @@ export interface HistoryTurnData extends CopyableTurn {
   text: string;
   meta?: string | null;
   receipt?: string | null;
+  /** The turn's recorded creation time. The hover clock and the session
+   * dividers derive from it; a missing value shows no time at all. */
+  createdAt?: string;
   /** Elapsed thinking trace labels, when the turn carried one. */
   trace?: { labels: string[]; elapsedMs: number; result?: string } | null;
   operations?: HistoryTurnOperation[];
@@ -195,6 +198,7 @@ export function HistoryTurn(props: {
       receipt={isReceipt}
       showMark={props.showMark}
       copySource={turn}
+      timestamp={turn.createdAt}
     >
       <HistoryTurnExtras turn={turn} {...extras} />
     </ChatTurn>

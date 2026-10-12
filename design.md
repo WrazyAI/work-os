@@ -602,6 +602,23 @@ Both chat surfaces carry the same voice input contract (§8.8): the record
 control takes the send slot only while the draft is empty, and a transcript
 lands in the draft for review.
 
+### 7.4 Message times and session dividers
+
+Both chat surfaces state when a reply arrived. Hovering or focusing an agent
+turn reveals its local 12-hour clock time at the right edge of the reveal row,
+after `Copy` and any destination action, so the row reads `Copy`, action, time.
+Employee bubbles reveal no hover time; their sent time is the session divider's
+job. A turn with no recorded timestamp shows no time and is never assigned one.
+
+A centered divider labels the conversation's opening employee message and every
+employee message that follows the previous turn by more than twenty minutes.
+The label is the relative day plus the local 12-hour time — `Today 5:48 PM`,
+`Yesterday 9:03 AM`, `Wednesday 9:03 PM`, `September 30, 5:48 PM` — derived
+from the same recorded timestamps the turns persist. Dividers live in the
+thread (not hover- or motion-driven) and stay for the life of the conversation;
+clearing the chat clears them. Both surfaces render the shared conversation, so
+the dock and the floating window always agree.
+
 ## 8. Controls and interaction contracts
 
 ### 8.1 Actions

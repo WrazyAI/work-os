@@ -1,5 +1,5 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
@@ -21,7 +21,7 @@ import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCa
 import { ActivityIntervalList } from "./ActivityIntervalList";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { ChatSectionBoundary } from "./ErrorBoundary";
-import { ChatTabs, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, isThreadNearBottom, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
+import { ChatTabs, ChatTimeDivider, ChatTurn, ChatWelcome, ConversationSurface, WorkOsPromptBar, collapseConsecutiveAssistantDuplicates, isThreadNearBottom, shouldShowChatDivider, threadScrollTarget, workOsChatCommands } from "./WorkOsChat";
 import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
@@ -646,6 +646,7 @@ export default function AvatarApp(): React.ReactElement {
           text: shared.reply ?? "Tool calls shared from the main window.",
           operations: shared.operations, taskOptions: shared.taskOptions ?? [],
           toolResults: shared.results.length ? shared.results : undefined,
+          createdAt: new Date().toISOString(),
         }];
       }
       return current.map((entry) => {
@@ -920,6 +921,7 @@ export default function AvatarApp(): React.ReactElement {
         role: "assistant",
         text: "Recap confirmed — while it's fresh, here's what could come next:",
         nextSteps: { intervalId, label, status: "drafting", items: [], states: {}, failures: {}, error: null },
+        createdAt: new Date().toISOString(),
       }]);
     }
     void toggleExpanded(true);
@@ -1133,6 +1135,7 @@ export default function AvatarApp(): React.ReactElement {
           id: "next-steps-fixture", role: "assistant",
           text: "Recap confirmed — while it's fresh, here's what could come next:",
           nextSteps: avatarNextStepsFixtureMoment(),
+          createdAt: new Date().toISOString(),
         }]);
         void toggleExpanded(true);
         return;
@@ -1237,7 +1240,7 @@ export default function AvatarApp(): React.ReactElement {
       if (!review) throw new Error("The assistant couldn't map that to work yet.");
       if (!review.operations.length) {
         const trace = settle(stages.map((stage) => stage.label), "Nothing to record");
-        setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted.", trace }]);
+        setChat((current) => [...current, { id: `a-${Date.now()}`, role: "assistant", text: review.reply ?? "Noted.", trace, createdAt: new Date().toISOString() }]);
         return;
       }
       setThinkingTrace({ stages, active: 2, startedAt });
@@ -1267,7 +1270,7 @@ export default function AvatarApp(): React.ReactElement {
       }
       const trace = settle(stages.map((stage) => stage.label), mutating.length ? `${mutating.length} proposal${mutating.length === 1 ? "" : "s"} to review` : "Shown inline");
       const reviewId = crypto.randomUUID();
-      const assistantEntry: ChatEntry = { id: reviewId, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined };
+      const assistantEntry: ChatEntry = { id: reviewId, role: "assistant", text: review.reply ?? "Here's what I understood.", operations, taskOptions: [], trace, toolResults: displayResults.length ? displayResults : undefined, createdAt: new Date().toISOString() };
       setChat((current) => [...current, assistantEntry]);
       void shareAvatarTools({ reviewId, input: text, reply: review.reply, operations, results: displayResults, taskOptions: [] });
     } catch (value) {
@@ -1430,10 +1433,12 @@ export default function AvatarApp(): React.ReactElement {
         role: "assistant",
         text: "Review the selected task completions before anything changes.",
         operations: reviewed,
+        createdAt: new Date().toISOString(),
       }, {
         id: streamId,
         role: "assistant",
         text: "Your selected tasks are ready for review. New chat details should remain visible while this reply streams, and the task list stays independently scrollable for anything still open.",
+        createdAt: new Date().toISOString(),
       }]);
       return;
     }
@@ -1459,7 +1464,7 @@ export default function AvatarApp(): React.ReactElement {
         if (!reviewed.length) throw new Error(partialFilingMessage(0, failed));
         setProposedTaskIds((current) => new Set([...current, ...filedTaskIds]));
         const reviewId = crypto.randomUUID();
-        setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed }]);
+        setChat((current) => [...current, { id: reviewId, role: "assistant", text: "Review the selected task completions before anything changes.", operations: reviewed, createdAt: new Date().toISOString() }]);
         void shareAvatarTools({ reviewId, input: `Employee selected ${tasks.length} task${tasks.length === 1 ? "" : "s"} for completion.`, reply: "Review the selected task completions before anything changes.", operations: reviewed, results: [], taskOptions: [] });
         throw new Error(partialFilingMessage(reviewed.length, failed));
       }
@@ -1532,6 +1537,7 @@ export default function AvatarApp(): React.ReactElement {
         id: `agenda-${Date.now()}`, role: "assistant",
           text: receiptText,
         receipt: "Agenda confirmed",
+        createdAt: new Date().toISOString(),
       }]);
       await loadDay(true);
       void emit("work-os://avatar-day-changed");
@@ -1574,6 +1580,7 @@ export default function AvatarApp(): React.ReactElement {
         setChat((current) => [...current, {
           id: `agenda-review-${Date.now()}`, role: "assistant",
           text: `${interpretation.summary} Before I set this, ${interpretation.clarifications.length === 1 ? "one quick question" : "two quick questions"}.`,
+          createdAt: new Date().toISOString(),
         }]);
         return;
       }
@@ -1617,6 +1624,7 @@ export default function AvatarApp(): React.ReactElement {
         setChat((current) => [...current, {
           id: `agenda-review-${Date.now()}`, role: "assistant",
           text: `${next.summary} ${stillOpen.length === 1 ? "One more question" : "Two more questions"} before I set this.`,
+          createdAt: new Date().toISOString(),
         }]);
         return;
       }
@@ -1994,11 +2002,13 @@ export default function AvatarApp(): React.ReactElement {
               // The assistant sometimes returns the same view twice; render one card.
               const seenCards = new Set<string>();
               return (
-              <ChatSectionBoundary key={entry.id} label="avatar chat message">
+              <Fragment key={entry.id}>
+                {shouldShowChatDivider(allEntries, entryIndex) ? <ChatTimeDivider at={entry.createdAt} /> : null}
+                <ChatSectionBoundary label="avatar chat message">
                 {entry.role === "user" ? <ChatTurn role="user" text={entry.text} />
                   : entry.role === "system" ? <ChatTurn role="system" text={entry.text} />
-                    : entry.receipt ? <ChatTurn role="assistant" showMark={showAssistantMark} receipt text={entry.receipt} copySource={entry} />
-                      : <ChatTurn role="assistant" showMark={showAssistantMark} text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry}
+                    : entry.receipt ? <ChatTurn role="assistant" showMark={showAssistantMark} receipt text={entry.receipt} copySource={entry} timestamp={entry.createdAt} />
+                      : <ChatTurn role="assistant" showMark={showAssistantMark} text={entry.text} stream={streams} onSettled={bumpSweep} copySource={entry} timestamp={entry.createdAt}
                           actions={entry.activityInterval ? (
                             <button type="button" className="chat-turn-action" title="View all recaps" aria-label="View all recaps in the Tasks tab" onClick={() => setAvatarTab("tasks")}>
                               <History size={12} aria-hidden="true" />
@@ -2080,6 +2090,7 @@ export default function AvatarApp(): React.ReactElement {
                       </ChatTurn>
                 }
               </ChatSectionBoundary>
+              </Fragment>
               );
             })}
             {thinkingTrace && <ChatTurn role="assistant" showMark={chat.at(-1)?.role !== "assistant"}><AvatarThinking stages={thinkingTrace.stages} active={thinkingTrace.active} startedAt={thinkingTrace.startedAt} activeLabel={agendaDue ? "Reviewing your agenda" : "Thinking"} /></ChatTurn>}
