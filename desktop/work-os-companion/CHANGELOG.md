@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.19
+
+- The recap card is cleaner: clock times sit in small pills, the Flow phases are chips, and Extra notes and Evidence open as tidy rows.
+
 ## 0.4.18
 
 - Agent replies now show their local time when you hover them, and longer pauses between messages get a centered time marker.
