@@ -150,6 +150,10 @@ export interface DayData {
   at: string;
   shiftDate: string;
   shift: { startsAt: string; endsAt: string; timezone: string; breaks: Array<{ startsAt: string; endsAt: string }> } | null;
+  /** The schedule window for `shiftDate` itself, even after it ended: the EOD
+   * wrap-up window is anchored to this end and must survive clock-out and the
+   * roll to tomorrow's shift. Null when the day has no scheduled window. */
+  dayShift?: { startsAt: string; endsAt: string } | null;
   prompt: { kind: PromptKind; nextPromptAt: string | null; required: boolean; reason: string };
   niftySync?: { fresh: boolean; syncing?: boolean; syncedAt: string | null; error?: string };
   signals?: {

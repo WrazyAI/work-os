@@ -139,6 +139,18 @@ export const EOD_ALERT_LEAD_MS = 10 * 60_000;
  * list for follow-up. */
 export const EOD_ALERT_GRACE_MS = 60 * 60_000;
 
+/** The scheduled end that anchors the EOD wrap-up window: the session's
+ * stamped end while it is open, then the schedule window for the shift date
+ * (which survives clock-out and the roll to tomorrow's shift), then the
+ * upcoming window as a last resort. */
+export function scheduledShiftEnd(input: {
+  sessionEnd?: string | null;
+  dayShiftEnd?: string | null;
+  upcomingEnd?: string | null;
+}): string | null {
+  return input.sessionEnd ?? input.dayShiftEnd ?? input.upcomingEnd ?? null;
+}
+
 /** Whether the EOD alert is live: no submitted report, and now is inside the
  * day's wrap-up window. The server's EOD signal (prompt kind or session state)
  * can open the alert early — e.g. a manager marks the day due — but the grace

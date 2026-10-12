@@ -42,7 +42,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -447,7 +447,7 @@ export default function AvatarApp(): React.ReactElement {
         nextPromptAt: typeof prompt.nextPromptAt === "string" ? prompt.nextPromptAt : null,
         promptKind: ["plan", "follow_up", "hourly_fallback", "eod"].includes(prompt.kind) ? prompt.kind : null,
         shiftStartsAt: day?.shift?.startsAt ?? session.scheduled_starts_at ?? null,
-        shiftEndsAt: day?.shift?.endsAt ?? session.scheduled_ends_at ?? null,
+        shiftEndsAt: scheduledShiftEnd({ sessionEnd: session.scheduled_ends_at, dayShiftEnd: day?.dayShift?.endsAt, upcomingEnd: day?.shift?.endsAt }),
         sessionState: session.state ?? null,
         attendanceState: day?.attendance?.state ?? null,
         clockedInAt: session.clocked_in_at ?? null,

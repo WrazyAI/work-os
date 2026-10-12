@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { emit as emitEvent, listen } from "./tauriEvents";
 import { lateReasonRequired } from "./lateStart";
-import { eodAlertDue } from "./avatarLogic";
+import { eodAlertDue, scheduledShiftEnd } from "./avatarLogic";
 import type { DayData, DebugScenario } from "./types";
 import { DEFAULT_DEBUG_SCENARIO } from "./scenarios";
 import { acceptMascotActivity, mascotActivityFromSignals, resolveMascotRuntime, type MascotActivityMessage, type MascotPlatformFacts, type MascotSignals } from "./mascotRuntimeModel";
@@ -17,7 +17,7 @@ export function mascotFactsFromDay(day: DayData | null, connected: boolean): Mas
     promptKind: day?.prompt?.kind,
     eodOutstanding: eodAlertDue({
       eodSubmitted: typeof day?.report?.submitted_at === "string",
-      shiftEndsAt: day?.shift?.endsAt ?? day?.session?.scheduled_ends_at ?? null,
+      shiftEndsAt: scheduledShiftEnd({ sessionEnd: day?.session?.scheduled_ends_at, dayShiftEnd: day?.dayShift?.endsAt, upcomingEnd: day?.shift?.endsAt }),
       promptKind: day?.prompt?.kind ?? null,
       sessionState: day?.session?.state ?? null,
     }, Date.now()),

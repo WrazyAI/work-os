@@ -21,10 +21,23 @@ describe("shared mascot runtime", () => {
     const scenario = { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, dayState: "eod_due" as const };
     const day = applyDayScenario(null, scenario)!;
     expect(mascotFactsFromDay(day, true).eodOutstanding).toBe(true);
-    const past = { ...day, shift: { ...day.shift!, endsAt: new Date(Date.now() - 70 * 60_000).toISOString() } };
+    const pastEnd = new Date(Date.now() - 70 * 60_000).toISOString();
+    const past = { ...day, session: day.session ? { ...day.session, scheduled_ends_at: pastEnd } : null, shift: { ...day.shift!, endsAt: pastEnd } };
     expect(mascotFactsFromDay(past, true).eodOutstanding).toBe(false);
     const submitted = { ...day, report: { ...(day.report ?? {}), submitted_at: new Date().toISOString() } };
     expect(mascotFactsFromDay(submitted, true).eodOutstanding).toBe(false);
+    // The real post-shift payload: the active session is gone, the upcoming
+    // window has rolled to tomorrow, and only the day window carries today's
+    // scheduled end.
+    const rolled = {
+      ...day,
+      session: null,
+      prompt: { ...day.prompt, kind: null, required: false, nextPromptAt: null },
+      shift: { ...day.shift!, startsAt: new Date(Date.now() + 16 * 60 * 60_000).toISOString(), endsAt: new Date(Date.now() + 23 * 60 * 60_000).toISOString() },
+      dayShift: { startsAt: new Date(Date.now() - 5 * 60 * 60_000).toISOString(), endsAt: new Date(Date.now() - 20 * 60_000).toISOString() },
+    };
+    expect(mascotFactsFromDay(rolled, true).eodOutstanding).toBe(true);
+    expect(mascotFactsFromDay({ ...rolled, dayShift: null }, true).eodOutstanding).toBe(false);
   });
   it.each([null, "scheduled", "clocked_out", "unknown"])("keeps %s sessions off shift without an observed workday", (sessionState) => {
     expect(mascotWorkdayFromFacts({ connected: true, sessionState })).toBe("off-shift");

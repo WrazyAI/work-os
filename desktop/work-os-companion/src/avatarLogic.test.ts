@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
@@ -138,6 +138,17 @@ describe("eodAlertDue", () => {
     expect(eodAlertDue({ ...base, eodSubmitted: true }, new Date("2026-08-31T16:10:00Z").getTime())).toBe(false);
     const unscheduled = { ...base, shiftEndsAt: null, sessionState: "eod_due" };
     expect(eodAlertDue(unscheduled, new Date("2026-08-31T23:00:00Z").getTime())).toBe(true);
+  });
+});
+
+describe("scheduledShiftEnd", () => {
+  it("prefers the session stamp, then the day window, then the upcoming window", () => {
+    expect(scheduledShiftEnd({ sessionEnd: "2026-08-31T16:00:00Z", dayShiftEnd: "2026-08-31T16:00:00Z", upcomingEnd: "2026-09-01T16:00:00Z" })).toBe("2026-08-31T16:00:00Z");
+    // After clock-out the session is gone and the upcoming window has rolled to
+    // tomorrow; the day window is what keeps the EOD alert alive.
+    expect(scheduledShiftEnd({ dayShiftEnd: "2026-08-31T16:00:00Z", upcomingEnd: "2026-09-01T16:00:00Z" })).toBe("2026-08-31T16:00:00Z");
+    expect(scheduledShiftEnd({ upcomingEnd: "2026-09-01T16:00:00Z" })).toBe("2026-09-01T16:00:00Z");
+    expect(scheduledShiftEnd({})).toBeNull();
   });
 });
 
