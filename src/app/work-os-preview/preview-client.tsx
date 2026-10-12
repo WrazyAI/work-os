@@ -343,7 +343,8 @@ function installFetchStub() {
       const search = params.get("search")?.trim().toLowerCase() ?? "";
       const from = params.get("from") ?? "";
       const to = params.get("to") ?? "";
-      const filtered = source.filter((task) => {
+      const filtered = source.filter((raw) => {
+        const task = raw as Record<string, any>;
         if (completedOnly && task.completed !== true) return false;
         if (openOnly && task.completed === true) return false;
         if (search && !`${task.title ?? ""} ${task.description ?? ""} ${task.project?.name ?? ""}`.toLowerCase().includes(search)) return false;
