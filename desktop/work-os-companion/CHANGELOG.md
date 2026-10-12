@@ -26,7 +26,7 @@ they change what the employee sees or does.
 
 ## 0.4.21
 
-- The recap card's bottom row is now two buttons — Extra notes and an evidence button showing its screenshot and GitHub counts as icons — that slide their panel open.
+- The recap card now ends in two buttons — Extra notes and an evidence button with icon counts — that slide their panel open.
 - Recap review actions are now a round check and pencil, and the "inferred from your screenshots" note lives inside Extra notes.
 
 ## 0.4.20
