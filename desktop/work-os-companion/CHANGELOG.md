@@ -24,6 +24,12 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.20
+
+- The EOD reminder now appears 10 minutes before your shift ends, instead of waiting for the clock-out.
+- It stays with you for up to an hour after your shift ends, even after clock-out, until you submit your report.
+- While the EOD is due, the reminder takes the bubble's spot; your final recap stays in the chat and notifications.
+
 ## 0.4.19
 
 - The recap card is cleaner: clock times sit in small pills, the Flow phases are chips, and Extra notes and Evidence open as tidy rows.
