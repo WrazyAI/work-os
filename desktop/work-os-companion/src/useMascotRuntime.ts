@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { emit as emitEvent, listen } from "./tauriEvents";
 import { lateReasonRequired } from "./lateStart";
+import { eodAlertDue } from "./avatarLogic";
 import type { DayData, DebugScenario } from "./types";
 import { DEFAULT_DEBUG_SCENARIO } from "./scenarios";
 import { acceptMascotActivity, mascotActivityFromSignals, resolveMascotRuntime, type MascotActivityMessage, type MascotPlatformFacts, type MascotSignals } from "./mascotRuntimeModel";
@@ -13,7 +14,14 @@ const LEASE_MS = 20_000;
 const READY_MS = 3_600;
 export function mascotFactsFromDay(day: DayData | null, connected: boolean): MascotPlatformFacts {
   return { connected, sessionState: day?.session?.state, attendanceState: day?.attendance?.state ?? null, lateReasonRequired: lateReasonRequired(day?.session), promptRequired: day?.prompt?.required,
-    promptKind: day?.prompt?.kind, niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null };
+    promptKind: day?.prompt?.kind,
+    eodOutstanding: eodAlertDue({
+      eodSubmitted: typeof day?.report?.submitted_at === "string",
+      shiftEndsAt: day?.shift?.endsAt ?? day?.session?.scheduled_ends_at ?? null,
+      promptKind: day?.prompt?.kind ?? null,
+      sessionState: day?.session?.state ?? null,
+    }, Date.now()),
+    niftySyncError: typeof day?.niftySync?.error === "string" ? day.niftySync.error : null };
 }
 
 /** The avatar follows the main window's scenario without applying synthetic

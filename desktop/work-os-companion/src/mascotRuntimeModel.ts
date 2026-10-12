@@ -27,6 +27,10 @@ export interface MascotPlatformFacts {
   lateReasonRequired?: boolean;
   promptRequired?: boolean;
   promptKind?: string | null;
+  /** Today's EOD wrap-up window is open and no report is submitted: the mascot
+   * stays awake through clock-out, and rests again once the window closes.
+   * Callers derive this with `eodAlertDue` (design §9.1). */
+  eodOutstanding?: boolean;
   niftySyncError?: string | null;
 }
 export interface MascotSignals {
@@ -65,6 +69,14 @@ export function mergeMascotActivities(local: MascotAgentActivity, peer?: MascotA
 
 export function mascotWorkdayFromFacts(facts: MascotPlatformFacts): MascotWorkdayState {
   if (!facts.connected) return "disconnected";
+  // The EOD wrap-up is the day's required interrupt: while its window is open
+  // the mascot stays awake even after clock-out; once the window closes it
+  // rests again, and the day stays in the outstanding EOD list.
+  if (facts.eodOutstanding) return "eod-due";
+  // An eod_due session whose window has closed (the report is submitted, or
+  // the one-hour grace passed) rests instead of staying alert: the mandatory
+  // interrupt has had its time, so the mascot stops nagging for the day.
+  if (facts.sessionState === "eod_due") return "off-shift";
   // Provider observation alone is NOT a Work OS clock-in, but it is still a
   // working employee: a confirmed observation keeps the mascot awake instead
   // of sleeping through a workday Work OS has not mirrored yet.
@@ -75,7 +87,6 @@ export function mascotWorkdayFromFacts(facts: MascotPlatformFacts): MascotWorkda
   }
   if (facts.lateReasonRequired) return "late";
   if (facts.sessionState === "paused") return "paused";
-  if (facts.sessionState === "eod_due" || (facts.promptRequired && facts.promptKind === "eod")) return "eod-due";
   if (facts.promptRequired) return "check-in-due";
   return "active";
 }

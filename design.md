@@ -1156,6 +1156,14 @@ prompt offers `Set today's goal` (the SOD `Plan your day` modal). Check-in
 prompts keep the tap-to-expand behavior alone. The action never replaces the
 tap target — both are one click away.
 
+The EOD alert opens ten minutes before the scheduled shift end and outranks a
+ready recap in the compact bubble: the mandatory wrap-up never hides behind an
+undecided recap, which stays reachable in the chat and the notifications
+panel. It stays live through clock-out — the mascot keeps its wrap-up state
+instead of resting — until the report is submitted or one hour past the
+scheduled end, when the mascot rests again and the day stays in the outstanding
+EOD list. A day without a scheduled end follows the server's EOD signal alone.
+
 The EOD uses a confirmed, amended, or inferred recap as activity context for
 the hours it covers, labeled with its provenance, and falls back to the hourly
 rollups elsewhere. A confirmed recap is still activity context: it never proves

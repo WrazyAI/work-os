@@ -26,7 +26,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -179,6 +179,9 @@ export default function AvatarApp(): React.ReactElement {
   const avatarObservedFixture = avatarObservedFixtureRequested(window.location.search);
   const avatarSnoozeFixture = avatarSnoozeFixtureRequested(window.location.search);
   const avatarEodBubbleFixture = avatarEodBubbleFixtureRequested(window.location.search);
+  const avatarEodOutstandingRecapFixture = avatarEodOutstandingRecapFixtureRequested(window.location.search);
+  const avatarEodOutstandingAfterFixture = avatarEodOutstandingAfterFixtureRequested(window.location.search);
+  const avatarEodOutstandingExpiredFixture = avatarEodOutstandingExpiredFixtureRequested(window.location.search);
   const avatarAgendaBubbleFixture = avatarAgendaBubbleFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
   const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
@@ -189,7 +192,7 @@ export default function AvatarApp(): React.ReactElement {
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
@@ -197,6 +200,9 @@ export default function AvatarApp(): React.ReactElement {
     : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureFacts()
     : avatarSnoozeFixture ? avatarSnoozeFixtureFacts()
     : avatarEodBubbleFixture ? avatarEodBubbleFixtureFacts()
+    : avatarEodOutstandingRecapFixture ? avatarEodOutstandingRecapFixtureFacts()
+    : avatarEodOutstandingAfterFixture ? avatarEodOutstandingAfterFixtureFacts()
+    : avatarEodOutstandingExpiredFixture ? avatarEodOutstandingExpiredFixtureFacts()
     : avatarAgendaBubbleFixture ? avatarAgendaBubbleFixtureFacts()
     : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarNextStepsRecoveryLike) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
@@ -215,13 +221,13 @@ export default function AvatarApp(): React.ReactElement {
       : avatarNextStepsRecoveryFixture
         ? avatarNextStepsRecoveryFixtureChat()
         : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
-        : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+        : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
-  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarNextStepsFixture) ? avatarRecapFixtureCard() : null);
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
@@ -751,7 +757,7 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
       fireNotification(nudge, notificationPermission.current);
     }
-  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Snooze expiry: re-prompt when the snooze window passes ──
   useEffect(() => {
@@ -1657,6 +1663,9 @@ export default function AvatarApp(): React.ReactElement {
   // ── Derived render state ──
   const contextualPrompt = useMemo(() => avatarPrompt(facts, now), [facts, now]);
   const attentionDue = ["agenda", "check_in", "eod"].includes(contextualPrompt.kind);
+  // The EOD alert owns the compact bubble while the day's wrap-up window is
+  // open, so the mandatory report never hides behind an undecided recap.
+  const eodDue = contextualPrompt.kind === "eod";
   const promptTurnId = attentionDue ? `prompt:${facts.shiftDate}:${contextualPrompt.kind}:${facts.nextPromptAt ?? facts.sessionState ?? "now"}` : null;
   // The recap the compact bubble and the chat card treat as current: the live
   // one from the nudge, or the latest undecided recap already in the chat.
@@ -1665,7 +1674,7 @@ export default function AvatarApp(): React.ReactElement {
     const entry = [...chat].reverse().find((item) => item.activityInterval && item.activityInterval.reviewStatus === "inferred");
     return entry?.activityInterval ?? null;
   }, [activityPrompt, chat]);
-  const bubble = avatarBubble({ preparing: activityPreparing, recapReady: pendingRecap !== null, promptDue: attentionDue });
+  const bubble = avatarBubble({ preparing: activityPreparing, eodDue, recapReady: pendingRecap !== null, promptDue: attentionDue });
   useEffect(() => {
     const recap = activityPrompt;
     // A recap gets its own stable turn so it survives the prompt being claimed
@@ -1737,7 +1746,7 @@ export default function AvatarApp(): React.ReactElement {
       ? `${desktopSession.organizationId}/${facts.personId}/${facts.shiftDate}` : "",
     scenario: debugScenario,
     facts: { ...facts, connected: connected === true && facts.loaded,
-      promptKind: contextualPrompt.kind, promptRequired: attentionDue },
+      promptKind: contextualPrompt.kind, promptRequired: attentionDue, eodOutstanding: eodDue },
     working: thinking || filing || activityPreparing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
     failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),

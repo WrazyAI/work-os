@@ -7,8 +7,24 @@ import type { DebugDayState } from "./types";
 
 const active = { connected: true, sessionState: "active" };
 describe("shared mascot runtime", () => {
-  it.each(["active", "clocked_in", "paused", "eod_due"])("recognizes live %s sessions", (sessionState) => {
-    expect(mascotWorkdayFromFacts({ ...active, sessionState })).toBe(sessionState === "paused" ? "paused" : sessionState === "eod_due" ? "eod-due" : "active");
+  it.each(["active", "clocked_in", "paused"])("recognizes live %s sessions", (sessionState) => {
+    expect(mascotWorkdayFromFacts({ ...active, sessionState })).toBe(sessionState === "paused" ? "paused" : "active");
+  });
+  it("stays awake through clock-out while the EOD window is open, and rests after it", () => {
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "eod_due", eodOutstanding: true })).toBe("eod-due");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "clocked_out", eodOutstanding: true })).toBe("eod-due");
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "clocked_out", eodOutstanding: false })).toBe("off-shift");
+    // A session the server still marks eod_due after the grace rests too.
+    expect(mascotWorkdayFromFacts({ connected: true, sessionState: "eod_due", eodOutstanding: false })).toBe("off-shift");
+  });
+  it("derives the EOD window from the day payload for the dock mascot", () => {
+    const scenario = { ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, dayState: "eod_due" as const };
+    const day = applyDayScenario(null, scenario)!;
+    expect(mascotFactsFromDay(day, true).eodOutstanding).toBe(true);
+    const past = { ...day, shift: { ...day.shift!, endsAt: new Date(Date.now() - 70 * 60_000).toISOString() } };
+    expect(mascotFactsFromDay(past, true).eodOutstanding).toBe(false);
+    const submitted = { ...day, report: { ...(day.report ?? {}), submitted_at: new Date().toISOString() } };
+    expect(mascotFactsFromDay(submitted, true).eodOutstanding).toBe(false);
   });
   it.each([null, "scheduled", "clocked_out", "unknown"])("keeps %s sessions off shift without an observed workday", (sessionState) => {
     expect(mascotWorkdayFromFacts({ connected: true, sessionState })).toBe("off-shift");
@@ -26,7 +42,7 @@ describe("shared mascot runtime", () => {
     expect(mascotWorkdayFromFacts({ connected: true, sessionState: "paused", attendanceState: "active" })).toBe("paused");
   });
   it("maps required prompts, late starts and disconnected state", () => {
-    expect(mascotWorkdayFromFacts({ ...active, promptRequired: true, promptKind: "eod" })).toBe("eod-due");
+    expect(mascotWorkdayFromFacts({ ...active, eodOutstanding: true, promptRequired: true, promptKind: "eod" })).toBe("eod-due");
     expect(mascotWorkdayFromFacts({ ...active, promptRequired: true, promptKind: "plan" })).toBe("check-in-due");
     expect(mascotWorkdayFromFacts({ ...active, promptRequired: false, promptKind: "optional" })).toBe("active");
     expect(mascotWorkdayFromFacts({ ...active, lateReasonRequired: true })).toBe("late");

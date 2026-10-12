@@ -14,6 +14,10 @@
  * activity recap so the summary bubble and its View more action can be
  * exercised; `avatar-fixture=recap-processing` renders the same window while
  * the recap is still being analyzed (working state, no View more yet).
+ * `avatar-fixture=eod-outstanding-recap` (wrap-up window with a pending recap),
+ * `=eod-outstanding-after-shift` (clocked out inside the one-hour grace), and
+ * `=eod-outstanding-expired` (past the grace) exercise the EOD alert's window
+ * and its priority over the recap bubble.
  * The shapes mirror production exactly: the display result carries a real
  * `tasks` array, and the recorded mutation carries the proposal row's
  * `provider_result` object (jsonb `{}`) that must never render as a card
@@ -38,6 +42,9 @@ export const AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE = "recap-next-steps-empty";
 export const AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE = "recap-next-steps-pair";
 export const AVATAR_EOD_BUBBLE_FIXTURE = "eod-bubble";
 export const AVATAR_AGENDA_BUBBLE_FIXTURE = "agenda-bubble";
+export const AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE = "eod-outstanding-recap";
+export const AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE = "eod-outstanding-after-shift";
+export const AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE = "eod-outstanding-expired";
 
 export interface AvatarFixtureFacts extends CompanionDayFacts {
   loaded: boolean;
@@ -80,7 +87,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_MULTI_SELECT_SCROLL_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarMultiSelectScrollFixtureRequested(search: string): boolean {
@@ -231,6 +238,27 @@ export function avatarAgendaBubbleFixtureRequested(search: string): boolean {
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_AGENDA_BUBBLE_FIXTURE;
 }
 
+/** DEV-only fixture for the wrap-up window with a ready recap still pending:
+ * the EOD alert must own the collapsed bubble instead of the recap. */
+export function avatarEodOutstandingRecapFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE;
+}
+
+/** DEV-only fixture for clock-out inside the EOD grace: the mascot stays in
+ * its wrap-up state even though the session is already closed. */
+export function avatarEodOutstandingAfterFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE;
+}
+
+/** DEV-only fixture for past the one-hour grace with no report: the mascot
+ * rests again and the bubble returns to the off-shift prompt. */
+export function avatarEodOutstandingExpiredFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE;
+}
+
 /** The collapsed bubble at clock-out: the EOD prompt with its direct action
  * into the EOD review page. No due hourly prompt, so the fixture renders the
  * bubble without the delivery path a real session owns. */
@@ -249,6 +277,41 @@ export function avatarAgendaBubbleFixtureFacts(now = Date.now()): AvatarFixtureF
   return {
     ...avatarShiftProgressFixtureFacts(now),
     promptKind: "plan",
+  };
+}
+
+/** Wrap-up window (shift ends in five minutes) with a ready recap still
+ * pending: the EOD alert outranks the recap bubble. */
+export function avatarEodOutstandingRecapFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarRecapFixtureFacts(now),
+    shiftEndsAt: new Date(now + 5 * 60_000).toISOString(),
+    sessionState: "eod_due",
+    promptKind: "eod",
+  };
+}
+
+/** Clocked out twenty minutes ago with today's report still unsubmitted,
+ * inside the one-hour grace: the mascot stays awake in its wrap-up state. */
+export function avatarEodOutstandingAfterFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarShiftProgressFixtureFacts(now),
+    shiftEndsAt: new Date(now - 20 * 60_000).toISOString(),
+    sessionState: "clocked_out",
+    clockedOutAt: new Date(now - 15 * 60_000).toISOString(),
+    promptKind: null,
+  };
+}
+
+/** Seventy minutes past the scheduled end with no report: the grace is over,
+ * so the mascot rests and no EOD alert is due. */
+export function avatarEodOutstandingExpiredFixtureFacts(now = Date.now()): AvatarFixtureFacts {
+  return {
+    ...avatarShiftProgressFixtureFacts(now),
+    shiftEndsAt: new Date(now - 70 * 60_000).toISOString(),
+    sessionState: "clocked_out",
+    clockedOutAt: new Date(now - 65 * 60_000).toISOString(),
+    promptKind: null,
   };
 }
 

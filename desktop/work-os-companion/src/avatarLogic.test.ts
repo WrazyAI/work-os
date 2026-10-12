@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
@@ -108,6 +108,37 @@ describe("eod nudge", () => {
     const at = new Date("2026-08-31T15:50:00Z").getTime();
     expect(eodNudge(facts, at, new Set())?.title).toBe("EOD review is due");
   });
+  it("still fires inside the grace after clock-out, and stops once the grace ends", () => {
+    const clockedOut = { ...base, sessionState: "clocked_out", clockedOutAt: "2026-08-31T16:05:00Z" };
+    const withinGrace = new Date("2026-08-31T16:40:00Z").getTime();
+    expect(eodNudge(clockedOut, withinGrace, new Set())?.kind).toBe("eod");
+    const pastGrace = new Date("2026-08-31T17:05:00Z").getTime();
+    expect(eodNudge(clockedOut, pastGrace, new Set())).toBeNull();
+  });
+});
+
+describe("eodAlertDue", () => {
+  it("opens ten minutes before the scheduled end", () => {
+    const facts = { ...base };
+    expect(eodAlertDue(facts, new Date("2026-08-31T15:49:59Z").getTime())).toBe(false);
+    expect(eodAlertDue(facts, new Date("2026-08-31T15:50:00Z").getTime())).toBe(true);
+  });
+  it("stays live through clock-out and closes one hour after the scheduled end", () => {
+    const facts = { ...base, sessionState: "clocked_out", clockedOutAt: "2026-08-31T16:05:00Z" };
+    expect(eodAlertDue(facts, new Date("2026-08-31T16:20:00Z").getTime())).toBe(true);
+    expect(eodAlertDue(facts, new Date("2026-08-31T16:59:59Z").getTime())).toBe(true);
+    expect(eodAlertDue(facts, new Date("2026-08-31T17:00:01Z").getTime())).toBe(false);
+  });
+  it("lets a server EOD signal open the alert early, but never past the grace", () => {
+    const facts = { ...base, promptKind: "eod" as const, sessionState: "eod_due" };
+    expect(eodAlertDue(facts, new Date("2026-08-31T15:00:00Z").getTime())).toBe(true);
+    expect(eodAlertDue(facts, new Date("2026-08-31T17:00:01Z").getTime())).toBe(false);
+  });
+  it("clears on submission and follows the server signal without a scheduled end", () => {
+    expect(eodAlertDue({ ...base, eodSubmitted: true }, new Date("2026-08-31T16:10:00Z").getTime())).toBe(false);
+    const unscheduled = { ...base, shiftEndsAt: null, sessionState: "eod_due" };
+    expect(eodAlertDue(unscheduled, new Date("2026-08-31T23:00:00Z").getTime())).toBe(true);
+  });
 });
 
 describe("avatar prompt", () => {
@@ -117,6 +148,14 @@ describe("avatar prompt", () => {
     expect(prompt.body).toContain("4:00 PM");
     expect(prompt.body).toContain("3 completed and 1 open task");
     expect(prompt.body).toContain("submit your EOD");
+  });
+  it("keeps asking after clock-out inside the grace, then returns to off shift", () => {
+    const clockedOut = { ...base, sessionState: "clocked_out", clockedOutAt: "2026-08-31T16:05:00Z", timezone: "UTC" };
+    const withinGrace = avatarPrompt(clockedOut, new Date("2026-08-31T16:30:00Z").getTime());
+    expect(withinGrace.action).toBe("open_eod");
+    expect(withinGrace.body).toContain("ended at 4:00 PM");
+    const pastGrace = avatarPrompt(clockedOut, new Date("2026-08-31T17:05:00Z").getTime());
+    expect(pastGrace.heading).toBe("Off shift");
   });
   it("stops EOD reminders after the report is submitted", () => {
     const facts = { ...base, promptKind: "eod" as const, eodSubmitted: true };
@@ -406,18 +445,24 @@ describe("mergeNextStepsMoment", () => {
 
 describe("avatarBubble", () => {
   it("shows processing while the recap is being analyzed, even with a due prompt", () => {
-    expect(avatarBubble({ preparing: true, recapReady: false, promptDue: true })).toBe("processing");
-    expect(avatarBubble({ preparing: true, recapReady: true, promptDue: true })).toBe("processing");
+    expect(avatarBubble({ preparing: true, eodDue: false, recapReady: false, promptDue: true })).toBe("processing");
+    expect(avatarBubble({ preparing: true, eodDue: false, recapReady: true, promptDue: true })).toBe("processing");
   });
 
   it("shows the ready recap ahead of the prompt it came from", () => {
-    expect(avatarBubble({ preparing: false, recapReady: true, promptDue: true })).toBe("recap");
-    expect(avatarBubble({ preparing: false, recapReady: true, promptDue: false })).toBe("recap");
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: true, promptDue: true })).toBe("recap");
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: true, promptDue: false })).toBe("recap");
+  });
+
+  it("shows the EOD alert ahead of a ready recap and in-flight analysis", () => {
+    expect(avatarBubble({ preparing: false, eodDue: true, recapReady: true, promptDue: true })).toBe("prompt");
+    expect(avatarBubble({ preparing: true, eodDue: true, recapReady: true, promptDue: true })).toBe("prompt");
+    expect(avatarBubble({ preparing: false, eodDue: true, recapReady: false, promptDue: true })).toBe("prompt");
   });
 
   it("falls back to the prompt, then to nothing", () => {
-    expect(avatarBubble({ preparing: false, recapReady: false, promptDue: true })).toBe("prompt");
-    expect(avatarBubble({ preparing: false, recapReady: false, promptDue: false })).toBe(null);
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: true })).toBe("prompt");
+    expect(avatarBubble({ preparing: false, eodDue: false, recapReady: false, promptDue: false })).toBe(null);
   });
 });
 

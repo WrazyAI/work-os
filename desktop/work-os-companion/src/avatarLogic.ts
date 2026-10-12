@@ -132,6 +132,32 @@ function taskContext(facts: CompanionDayFacts): string | null {
   return `${open} open task${open === 1 ? "" : "s"}`;
 }
 
+/** The EOD alert opens this long before the scheduled shift end… */
+export const EOD_ALERT_LEAD_MS = 10 * 60_000;
+/** …and closes this long after it. Past the grace the mascot rests again even
+ * when the report is still unsubmitted; the day stays in the outstanding EOD
+ * list for follow-up. */
+export const EOD_ALERT_GRACE_MS = 60 * 60_000;
+
+/** Whether the EOD alert is live: no submitted report, and now is inside the
+ * day's wrap-up window. The server's EOD signal (prompt kind or session state)
+ * can open the alert early — e.g. a manager marks the day due — but the grace
+ * cap still closes it, so the mascot cannot stay awake indefinitely. A day
+ * without a scheduled end has no window and follows the server signal. */
+export function eodAlertDue(input: {
+  eodSubmitted?: boolean;
+  shiftEndsAt?: string | null;
+  promptKind?: string | null;
+  sessionState?: string | null;
+}, now: number): boolean {
+  if (input.eodSubmitted) return false;
+  const serverDue = input.promptKind === "eod" || input.sessionState === "eod_due";
+  const end = input.shiftEndsAt ? Date.parse(input.shiftEndsAt) : Number.NaN;
+  if (!Number.isFinite(end)) return serverDue;
+  if (now > end + EOD_ALERT_GRACE_MS) return false;
+  return serverDue || now >= end - EOD_ALERT_LEAD_MS;
+}
+
 /** Builds one truthful, action-specific companion message from the current day.
  * It intentionally describes employee-authored updates and task state separately. */
 export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPrompt {
@@ -140,12 +166,18 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
   const lastUpdate = timeLabel(facts.lastSubstantiveUpdateAt, facts.timezone);
   const tasks = taskContext(facts);
 
-  if (!facts.eodSubmitted && (facts.promptKind === "eod" || facts.sessionState === "eod_due")) {
-    const end = timeLabel(facts.shiftEndsAt, facts.timezone);
+  if (eodAlertDue(facts, now)) {
+    const endLabel = timeLabel(facts.shiftEndsAt, facts.timezone);
+    const endAt = facts.shiftEndsAt ? Date.parse(facts.shiftEndsAt) : Number.NaN;
+    const endText = endLabel
+      ? Number.isFinite(endAt) && endAt < now
+        ? `Your scheduled shift ended at ${endLabel}.`
+        : `Your scheduled shift ends at ${endLabel}.`
+      : "Your shift is ready to wrap up.";
     return {
       kind: "eod",
       heading: "EOD review is due",
-      body: [end ? `Your scheduled shift ends at ${end}.` : "Your shift is ready to wrap up.", tasks ? `Today has ${tasks}.` : null, "Review the record and submit your EOD when it is accurate."].filter(Boolean).join(" "),
+      body: [endText, tasks ? `Today has ${tasks}.` : null, "Review the record and submit your EOD when it is accurate."].filter(Boolean).join(" "),
       compact: "Open EOD review to prepare and submit your report.",
       action: "open_eod",
     };
@@ -242,11 +274,15 @@ export function composerSendTarget(input: { agendaDue: boolean; recapEditing: bo
   return "update";
 }
 
-/** The collapsed companion shows exactly one bubble: processing while the
- * recap is being generated, the generated recap with its View more action once
- * ready, otherwise the current prompt. A ready recap outranks the prompt it
- * came from, so the employee sees what was produced. */
-export function avatarBubble(input: { preparing: boolean; recapReady: boolean; promptDue: boolean }): "processing" | "recap" | "prompt" | null {
+/** The collapsed companion shows exactly one bubble: the live EOD alert while
+ * the day's wrap-up window is open, processing while the recap is being
+ * generated, the generated recap with its View more action once ready,
+ * otherwise the current prompt. A ready recap outranks the prompt it came
+ * from, so the employee sees what was produced — but the EOD alert outranks
+ * everything: the mandatory wrap-up must never hide behind an undecided recap
+ * or an in-flight analysis. */
+export function avatarBubble(input: { preparing: boolean; eodDue: boolean; recapReady: boolean; promptDue: boolean }): "processing" | "recap" | "prompt" | null {
+  if (input.eodDue) return "prompt";
   if (input.preparing) return "processing";
   if (input.recapReady) return "recap";
   if (input.promptDue) return "prompt";
@@ -286,16 +322,10 @@ export function clockInNudge(facts: CompanionDayFacts, now: number, notifiedKeys
   };
 }
 
-/** EOD nudge: on shift and the scheduled end time passed within the last
- * 30 minutes, or the session state explicitly says eod_due. */
+/** EOD nudge: the EOD alert is live and today has not been announced yet. It
+ * fires once per day; the alert itself stays visible for the whole window. */
 export function eodNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {
-  if (facts.eodSubmitted) return null;
-  if (!isOnShift(facts, now) && facts.sessionState !== "eod_due") return null;
-  const sinceEnd = minutesSince(facts.shiftEndsAt, now);
-  const dueByState = facts.sessionState === "eod_due";
-  const dueByPrompt = facts.promptKind === "eod" && (!facts.nextPromptAt || Date.parse(facts.nextPromptAt) <= now);
-  const dueByTime = sinceEnd !== null && sinceEnd >= 0 && sinceEnd <= 30;
-  if (!dueByState && !dueByPrompt && !dueByTime) return null;
+  if (!eodAlertDue(facts, now)) return null;
   const key = `eod:${facts.shiftDate}`;
   if (notifiedKeys.has(key)) return null;
   const prompt = avatarPrompt(facts, now);
