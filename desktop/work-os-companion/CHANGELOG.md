@@ -24,6 +24,10 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.23
+
+- Recap panels open and close reliably even when the same recap appears in the chat and the Tasks stream at once.
+
 ## 0.4.22
 
 - The Tasks and Focus recap cards now use the same round check and pencil actions as the chat card.
