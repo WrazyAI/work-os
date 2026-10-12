@@ -25,13 +25,20 @@ export type TaskDetails = {
   subtaskSync?: { tasks: number | null; syncedAt: string | null; error: string | null };
 };
 
-export type TaskHistoryPage = { tasks: Array<Record<string, any>>; nextOffset: number | null };
+export type TaskHistoryPage = {
+  tasks: Array<Record<string, any>>;
+  nextCursor: string | null;
+  totalCount: number;
+  counts?: { total: number; open: number; completed: number; overdue?: number };
+  cursor?: { next: string | null };
+};
 
 /** The complete open backlog plus exact parent counts, returned whole so both
  * the dashboard carry-over tabs and the Tasks Unfinished view are complete. */
 export type TaskBacklog = {
   tasks: Array<Record<string, any>>;
-  counts: { total: number; open: number; completed: number } | null;
+  counts: { total: number; open: number; completed: number; overdue?: number } | null;
+  nextCursor?: string | null;
 };
 
 /** Provider sync can return a partial but otherwise usable day. Keep that
@@ -88,52 +95,87 @@ export function useOnboardingQuery(options: { enabled: boolean }) {
 }
 
 /** Load shared task history or a workspace-specific, globally sorted stream. */
-export function useTaskHistoryQuery(options: { enabled: boolean; workspace?: boolean; sort?: TaskSort; currentDate?: string; completedOnly?: boolean }) {
+export function useTaskHistoryQuery(options: {
+  enabled: boolean;
+  workspace?: boolean;
+  view?: "history" | "open" | "day";
+  sort?: TaskSort;
+  currentDate?: string;
+  completedOnly?: boolean;
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+  excludeToday?: boolean;
+}) {
   const workspace = options.workspace === true;
+  const view = options.view ?? "history";
   return useInfiniteQuery({
-    // Keep the unsorted key stable for Today, carry-over, interpretation, and
-    // Stronghold snapshots. Sorted pages are separate workspace-only queries.
     queryKey: workspace
-      ? [...workOsKeys.taskHistory(), options.completedOnly ? "completed" : "all", options.currentDate ?? "", options.sort?.key ?? "due", options.sort?.direction ?? "desc"]
+      ? [...workOsKeys.taskHistory(), options.completedOnly ? "completed" : "all", view, options.currentDate ?? "", options.sort?.key ?? "due", options.sort?.direction ?? "desc", options.search ?? "", options.fromDate ?? "", options.toDate ?? "", options.excludeToday === true]
       : workOsKeys.taskHistory(),
     enabled: options.enabled,
     staleTime: TASK_HISTORY_STALE_MS,
-    initialPageParam: 0,
-    getNextPageParam: (lastPage: TaskHistoryPage) => lastPage.nextOffset ?? undefined,
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage: TaskHistoryPage) => lastPage.nextCursor ?? lastPage.cursor?.next ?? undefined,
     queryFn: ({ pageParam, signal }) => {
       const params = new URLSearchParams({
-        view: "history",
-        offset: String(pageParam),
-        limit: "100",
+        view,
+        limit: "50",
       });
+      if (pageParam) params.set("cursor", pageParam);
+      if (view === "day" && options.currentDate) params.set("date", options.currentDate);
+      if (view === "open" && options.excludeToday) {
+        params.set("excludeToday", "true");
+        if (options.currentDate) params.set("date", options.currentDate);
+      }
       if (workspace) {
-        params.set("sort", options.sort?.key ?? "due");
+        params.set("sort", options.sort?.key === "title" ? "title" : options.sort?.key ?? "due");
         params.set("direction", options.sort?.direction ?? "desc");
         if (options.currentDate) params.set("sortDate", options.currentDate);
-        if (options.completedOnly) params.set("completed", "true");
+        if (options.completedOnly && view === "history") params.set("completed", "true");
+        if (options.search) params.set("search", options.search);
+        if (options.fromDate) params.set("from", options.fromDate);
+        if (options.toDate) params.set("to", options.toDate);
       }
       return apiRequest<TaskHistoryPage>(`/api/work-os/me/tasks?${params}`, { signal });
     },
   });
 }
 
-/** The open backlog. Servers that predate `view=open` answer it with a
- * windowed row set and no counts, so the response is capability-checked and
- * rebuilt from the assistant's pending selection instead of rendered wrong. */
-export async function fetchTaskBacklog(): Promise<TaskBacklog> {
-  const open = await apiRequest<TaskBacklog & { counts?: unknown }>("/api/work-os/me/tasks?view=open");
-  if (open && open.counts) return open;
+/** The open backlog, paged through the cursor endpoint so callers still receive
+ * the complete set without a single unbounded query. Servers that predate
+ * `view=open` answer it with a windowed row set and no counts, so the response
+ * is capability-checked and rebuilt from the assistant's pending selection
+ * instead of rendered wrong. */
+export async function fetchTaskBacklog(sortDate?: string): Promise<TaskBacklog> {
+  const tasks: Array<Record<string, any>> = [];
+  let counts: TaskBacklog["counts"] = null;
+  let cursor: string | null = null;
+  // A bounded safety cap: 40 pages of 50 keeps an unlucky server from pinning
+  // the query forever while still covering deep backlogs.
+  for (let page = 0; page < 40; page += 1) {
+    const params = new URLSearchParams({ view: "open", limit: "50" });
+    if (sortDate) params.set("sortDate", sortDate);
+    if (cursor) params.set("cursor", cursor);
+    const open = await apiRequest<TaskHistoryPage & { counts?: TaskBacklog["counts"] }>(`/api/work-os/me/tasks?${params}`);
+    if (!open || !open.counts || !Array.isArray(open.tasks)) break;
+    counts ??= open.counts;
+    tasks.push(...open.tasks);
+    cursor = open.nextCursor ?? open.cursor?.next ?? null;
+    if (!cursor) break;
+  }
+  if (counts) return { tasks, counts };
   const pending = await apiRequest<{ tasks?: Array<Record<string, any>> }>("/api/work-os/me/tasks?view=pending&limit=100");
-  const tasks = Array.isArray(pending?.tasks) ? pending.tasks.filter((task) => task.completed !== true) : [];
-  return { tasks, counts: null };
+  const fallback = Array.isArray(pending?.tasks) ? pending.tasks.filter((task) => task.completed !== true) : [];
+  return { tasks: fallback, counts: null };
 }
 
-export function useTaskBacklogQuery(options: { enabled: boolean }) {
+export function useTaskBacklogQuery(options: { enabled: boolean; sortDate?: string }) {
   return useQuery({
     queryKey: workOsKeys.taskBacklog(),
-    enabled: options.enabled,
+    enabled: options.enabled && !!options.sortDate,
     staleTime: TASK_BACKLOG_STALE_MS,
-    queryFn: () => fetchTaskBacklog(),
+    queryFn: () => fetchTaskBacklog(options.sortDate),
   });
 }
 
@@ -160,11 +202,8 @@ export function useInsightsQuery(options: { enabled: boolean; range: "day" | "7d
 }
 
 export async function fetchHistoricalDay(date: string): Promise<{ plan: DailyPlan | null; tasks: Array<Record<string, any>> }> {
-  const [planResult, taskResult] = await Promise.all([
-    apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`),
-    apiRequest<{ tasks: Array<Record<string, any>> }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`),
-  ]);
-  return { plan: planResult.plan, tasks: taskResult.tasks };
+  const planResult = await apiRequest<{ plan: DailyPlan | null }>(`/api/work-os/me/plan?date=${encodeURIComponent(date)}`);
+  return { plan: planResult.plan, tasks: [] };
 }
 
 export function useHistoricalDayQuery(options: { date: string; currentDate: string }) {

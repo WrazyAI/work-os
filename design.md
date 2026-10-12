@@ -274,6 +274,8 @@ page:
   utilities), one content axis, one panel family with hairline dividers, and at
   most one primary action per decision area. Task rows stay flat; task details
   open in a right-side drawer and menus are detached surfaces.
+- At narrow widths, masthead utilities move below the title and wrap without
+  extending the page horizontally; the primary action remains visible.
 - The web surface is status-only for attendance: it names the Worktivity state
   and freshness, keeps the activity watch truthful, and points to the Windows
   Companion for Clock in, Pause/Resume, and Clock out.
@@ -469,17 +471,26 @@ selection must not be communicated by color alone.
 
 My day is strictly day-scoped. Unfinished is open backlog, with overdue work
 first; the default order applies within each group. Completed is historical
-record. All tasks is the complete inspectable set. Counts describe the rendered
-list, or state Showing N of M when pagination is involved.
+record. All tasks is the complete inspectable set. Every view loads 50 parent
+tasks at a time from the authorized server-side result set. `Load more` appends
+the next cursor page and keeps prior rows in place; it is explicit rather than
+automatic. Search, date filters, and sort apply before pagination and reset the
+cursor to the first page. Counts describe the complete filtered result set, or
+state `Showing N of M` while pages remain. This is a deliberate exception to the
+streaming-list contract (§9.2): the Tasks list loads only on the explicit
+control, keeps every appended page mounted so the employee's full working
+context stays in place, and states the complete filtered total in each view
+chip while `Showing N of M` reports the loaded window. The streaming contract's
+sentinel loading and mounted-row window belong to live, unbounded feeds such as
+the debugger trace.
 
 The default order is due date latest-first, with open work above completed and
 undated items last. The Tasks column row exposes Name, Date due, and Status
 sorting. Activating a column starts in its natural direction, toggles on the
 second activation, and restores the default on the third. The choice persists
-for the Tasks workspace, and paginated All tasks / Completed results must be
-sorted before pagination so the visible order represents the complete result
-set rather than only the loaded page. The active-day dashboard keeps its own
-sort preference.
+for the Tasks workspace, and paginated results must be sorted before pagination
+so the visible order represents the complete filtered result set rather than
+only the loaded page. The active-day dashboard keeps its own sort preference.
 
 Overdue means an open task with a valid due date before the current workday.
 Undated old work is carryover, not overdue. All surfaces use the same selector

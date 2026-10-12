@@ -26,6 +26,7 @@ import {
 } from "@/lib/work-os-internal";
 import { syncNifty, upsertNiftyTask } from "@/lib/work-os-nifty";
 import { removePlanItemsForTombstonedTask } from "@/lib/work-os-plan-ghosts";
+import { createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 
 function structuredDescription(description: string | null, expectedOutcome: unknown, definitionOfDone: unknown) {
   const base = (description || "")
@@ -100,10 +101,16 @@ export interface TaskListOptions {
   limit?: number;
   includeCompleted?: boolean;
   includeLedgerHistory?: boolean;
+  cursor?: string | null;
+  search?: string | null;
+  organizationId?: string | null;
+  excludeTaskIds?: string[];
   /** SQL-side attribution filters used to mirror Nifty creator/subscriber metadata. */
   rawCreatedBy?: string | null;
   rawSubscriber?: string | null;
   providerAssignee?: string | null;
+  /** Group overdue work first, ahead of the selected sort (design §6.4). */
+  overdueFirst?: boolean;
   order?: TaskListOrder;
   sortDate?: string | null;
 }
@@ -392,6 +399,114 @@ export async function listPersonTasks(userId: string, personId: string, opts: Om
     return { ...task, subtask_total: counts.total, subtask_completed: counts.completed };
   });
   return hydrateTaskAssignees(userId, withProgress);
+}
+
+export type PersonTaskPage = {
+  tasks: Record<string, any>[];
+  totalCount: number;
+  counts: { total: number; open: number; completed: number; overdue: number };
+  nextCursor: string | null;
+};
+
+/** Load one bounded, globally sorted page of parent tasks for an employee. */
+export async function listPersonTaskPage(
+  userId: string,
+  organizationId: string,
+  personId: string,
+  opts: Omit<TaskListOptions, "personId" | "offset"> = {},
+): Promise<PersonTaskPage> {
+  const limit = Math.min(50, Math.max(1, Math.trunc(opts.limit ?? 50)));
+  const order = (opts.order && opts.order !== "due" ? opts.order : "due_desc") as WorkspaceTaskOrder;
+  const sortDate = opts.sortDate ? validateWorkOsDate(opts.sortDate, "sortDate") : today();
+  const search = opts.search?.trim() || null;
+  const excludedTaskIds = [...new Set((opts.excludeTaskIds ?? []).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))].sort();
+  const overdueFirst = opts.overdueFirst === true;
+  const scope = taskPageScope({
+    userId,
+    organizationId,
+    personId,
+    completed: opts.completed ?? null,
+    projectId: opts.projectId ?? null,
+    order,
+    sortDate,
+    search,
+    fromDate: opts.fromDate ?? null,
+    toDate: opts.toDate ?? null,
+    overdueFirst,
+  });
+  const after = parseWorkspaceTaskCursor(opts.cursor, scope);
+  if (after && (after.order !== order || after.sortDate !== sortDate)) {
+    throw new Error("Task cursor must be valid and match the current filters");
+  }
+  const person = await ensureNoError(
+    db().from("work_people").select("nifty_member_id")
+      .eq("organization_id", organizationId).eq("user_id", userId).eq("id", personId).maybeSingle(),
+    "load task person mapping",
+  );
+  if (!person) throw new Error("Task person must belong to the authorized organization");
+  const rows = await ensureNoError(db().rpc("work_list_person_task_page", {
+    p_user_id: userId,
+    p_organization_id: organizationId,
+    p_person_id: personId,
+    p_nifty_member_id: person.nifty_member_id ?? null,
+    p_completed: opts.completed === "true" ? true : opts.completed === "false" ? false : null,
+    p_project_id: opts.projectId ?? null,
+    p_order: order,
+    p_sort_date: sortDate,
+    p_search: search,
+    p_from: opts.fromDate ?? null,
+    p_to: opts.toDate ?? null,
+    p_excluded_task_ids: excludedTaskIds.length ? excludedTaskIds : null,
+    p_after: after,
+    p_limit: limit,
+    p_overdue_first: overdueFirst,
+  }), "load employee task page") as Array<Record<string, any>> | null;
+  const first = rows?.[0] ?? {};
+  const selected = (rows ?? []).flatMap((row) => row.task && typeof row.task === "object" && !Array.isArray(row.task)
+    ? [row.task as Record<string, any>]
+    : []);
+  const totalCount = Math.max(0, Number(first.total_count) || 0);
+  const counts = {
+    total: Math.max(0, Number(first.total_all) || 0),
+    open: Math.max(0, Number(first.total_open) || 0),
+    completed: Math.max(0, Number(first.total_completed) || 0),
+    overdue: Math.max(0, Number(first.total_overdue) || 0),
+  };
+  const position = after?.position ?? 0;
+  const nextCursor = selected.length === limit && first.has_more === true
+    ? createWorkspaceTaskCursor(selected[selected.length - 1]!, { scope, order, sortDate, position: position + selected.length, overdueFirst })
+    : null;
+
+  const providerIds = selected.filter((task) => task.provider_task_id).map((task) => String(task.provider_task_id));
+  const localIds = selected.filter((task) => task.provider === "local").map((task) => String(task.id));
+  const [providerChildren, localChildren] = await Promise.all([
+    providerIds.length
+      ? db().from("work_tasks").select("parent_provider_task_id,completed")
+        .eq("organization_id", organizationId).eq("user_id", userId)
+        .not("status", "in", "(archived,deleted)").in("parent_provider_task_id", providerIds)
+      : Promise.resolve({ data: [], error: null }),
+    localIds.length
+      ? db().from("work_tasks").select("parent_task_id,completed")
+        .eq("organization_id", organizationId).eq("user_id", userId)
+        .not("status", "in", "(archived,deleted)").in("parent_task_id", localIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (providerChildren.error) throw new Error(`load task subtask progress: ${providerChildren.error.message}`);
+  if (localChildren.error) throw new Error(`load local task subtask progress: ${localChildren.error.message}`);
+  const progress = new Map<string, { total: number; completed: number }>();
+  for (const child of [...(providerChildren.data ?? []), ...(localChildren.data ?? [])]) {
+    const parentId = String(child.parent_provider_task_id ?? child.parent_task_id);
+    const count = progress.get(parentId) ?? { total: 0, completed: 0 };
+    count.total += 1;
+    if (child.completed === true) count.completed += 1;
+    progress.set(parentId, count);
+  }
+  const withProgress = selected.map((task) => {
+    const count = progress.get(String(task.provider_task_id)) ?? progress.get(String(task.id)) ?? { total: 0, completed: 0 };
+    return { ...task, subtask_total: count.total, subtask_completed: count.completed };
+  });
+  const hydrated = await hydrateTaskAssignees(userId, await hydrateTaskProjects(userId, withProgress));
+  return { tasks: hydrated, totalCount, counts, nextCursor };
 }
 
 /**

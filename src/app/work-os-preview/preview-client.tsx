@@ -79,6 +79,23 @@ const dayTasks = [
   }),
 ];
 
+const manyTaskRows = Array.from({ length: 125 }, (_, index) => {
+  const ordinal = index + 1;
+  const day = String(ordinal % 28 + 1).padStart(2, "0");
+  return taskFixture({
+    id: `page-task-${String(ordinal).padStart(3, "0")}`,
+    provider_task_id: `page-provider-${ordinal}`,
+    title: `Paginated task ${String(ordinal).padStart(3, "0")}`,
+    description: ordinal === 119 ? "A searchable record beyond the first two pages." : "Preview row for cursor pagination.",
+    completed: ordinal % 5 === 0,
+    completed_at: ordinal % 5 === 0 ? `2026-09-${day}T12:00:00.000Z` : null,
+    due_date: `2026-09-${day}`,
+    provider_created_at: `2026-09-${day}T08:00:00.000Z`,
+    subtasks: [],
+    subtaskProgress: { completed: 0, total: 0, percentage: 0 },
+  });
+});
+
 const historyFixture = (date: string, goal: string) => ({
   shiftDate: date,
   shift: { startsAt: `${date}T09:00:00.000Z`, endsAt: `${date}T17:00:00.000Z`, timezone: "Atlantic/Reykjavik", breaks: [] },
@@ -315,9 +332,38 @@ function installFetchStub() {
     if (url.includes("/api/work-os/me/day?date=2026-09-03")) return respond(rejectedFixture("2026-09-03"));
     if (url.includes("/api/work-os/me/day?date=2026-09-10")) return respond(historyFixture("2026-09-10", "Finish the settlement reconciliation."));
     if (url.includes("/api/work-os/me/day")) return respond(todayFixture());
-    if (url.includes("/api/work-os/me/tasks?view=day")) return respond({ tasks: dayTasks, workspace: workspace(TODAY, "Ship the outstanding EOD flow."), cursor: { next: null } });
-    if (url.includes("/api/work-os/me/tasks?view=open")) return respond({ tasks: dayTasks.filter((task) => !task.completed), counts: { total: 2, open: 2, completed: 0 } });
-    if (url.includes("/api/work-os/me/tasks?view=history")) return respond({ tasks: [dayTasks[2]], nextOffset: null });
+    if (url.includes("/api/work-os/me/tasks?view=day") || url.includes("/api/work-os/me/tasks?view=open") || url.includes("/api/work-os/me/tasks?view=history")) {
+      const requestUrl = new URL(url, window.location.origin);
+      const params = requestUrl.searchParams;
+      const many = new URLSearchParams(window.location.search).has("many-tasks");
+      const view = params.get("view");
+      const source = many ? manyTaskRows : dayTasks;
+      const completedOnly = params.get("completed") === "true";
+      const openOnly = view === "open" || params.get("completed") === "false";
+      const search = params.get("search")?.trim().toLowerCase() ?? "";
+      const from = params.get("from") ?? "";
+      const to = params.get("to") ?? "";
+      const filtered = source.filter((task) => {
+        if (completedOnly && task.completed !== true) return false;
+        if (openOnly && task.completed === true) return false;
+        if (search && !`${task.title ?? ""} ${task.description ?? ""} ${task.project?.name ?? ""}`.toLowerCase().includes(search)) return false;
+        const taskDate = String(task.due_date ?? task.provider_created_at ?? "").slice(0, 10);
+        if (from && (!taskDate || taskDate < from)) return false;
+        if (to && (!taskDate || taskDate > to)) return false;
+        return true;
+      });
+      const limit = Math.min(50, Math.max(1, Number(params.get("limit") ?? "50") || 50));
+      const offset = Number(params.get("cursor") ?? "0") || 0;
+      const tasks = filtered.slice(offset, offset + limit);
+      const nextCursor = offset + tasks.length < filtered.length ? String(offset + tasks.length) : null;
+      const counts = {
+        total: filtered.length,
+        open: filtered.filter((task) => task.completed !== true).length,
+        completed: filtered.filter((task) => task.completed === true).length,
+      };
+      if (view === "day") return respond({ tasks, totalCount: filtered.length, counts, workspace: workspace(params.get("date") || TODAY, "Ship the outstanding EOD flow."), cursor: { next: nextCursor }, nextCursor });
+      return respond({ tasks, totalCount: filtered.length, counts, cursor: { next: nextCursor }, nextCursor });
+    }
     if (url.includes("/api/work-os/me/insights/synthesize")) return respond({ synthesis: "The range closed six outcomes and carried three items forward.\n\nPlan reliability stayed steady, and the intake queue moved on three of the recorded days.", mode: "ai" });
     if (url.includes("/api/work-os/me/insights")) return respond(insightsFixture);
     if (url.includes("/api/work-os/attendance/observe")) return respond({ changed: false });
@@ -384,7 +430,7 @@ function PreviewBody() {
   return (
     <div data-work-os-workspace="" style={{ background: "var(--bg-primary)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1240, margin: "0 auto", padding: "24px 24px 64px" }}>
-        <nav aria-label="Preview destination" style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+        <nav aria-label="Preview destination" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
           {DESTINATIONS.map((item) => (
             <button
               key={item.id}

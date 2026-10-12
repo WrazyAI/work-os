@@ -307,14 +307,16 @@ describe("Tasks workspace backlog reconciliation", () => {
     expect(markup).toContain('role="toolbar"');
   });
 
-it("discloses a backlog failure instead of silently using the loaded window", () => {
+it("keeps paged Unfinished rows visible if the dashboard summary is unavailable", () => {
     const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
       ...props,
       taskView: "unfinished",
       backlogError: true,
+      unfinishedHistory: [{ id: "paged", title: "Paged unfinished task", due_date: "2026-08-20", completed: false }],
       taskHistory: [props.taskHistory[0]],
     }));
-    expect(markup).toContain("The full backlog could not be loaded");
+    expect(markup).toContain("Paged unfinished task");
+    expect(markup).not.toContain("The full backlog could not be loaded");
   });
 
   it("shows a retryable history failure without presenting an empty result", () => {
@@ -350,5 +352,48 @@ it("discloses a backlog failure instead of silently using the loaded window", ()
     expect(markup).toContain("All tasks<em>12</em>");
     expect(markup).toContain("Completed<em>10</em>");
     expect(markup).toContain("Showing 3 of 12");
+  });
+});
+
+describe("Tasks workspace cursor paging", () => {
+  it("shows an append-only Load more action and exact loaded-versus-total count", () => {
+    const markup = renderToStaticMarkup(createElement(TasksWorkspace, {
+      currentDate: "2026-08-26",
+      historyDate: "2026-08-26",
+      currentPlan: null,
+      historicalPlan: null,
+      historicalTasks: [],
+      goal: "",
+      goalProvenance: null,
+      suggestion: null,
+      saveState: "saved",
+      taskView: "all",
+      taskSort: DEFAULT_TASK_SORT,
+      todayTasks: [],
+      taskHistory: [{ id: "page-1", title: "First page task", completed: false }],
+      workspaceHistory: [{ id: "page-1", title: "First page task", completed: false }],
+      pageTotal: 51,
+      pageCounts: { total: 51, open: 41, completed: 10 },
+      carryOver: [],
+      carryOverOpen: false,
+      loadingMore: false,
+      hasMore: true,
+      busy: false,
+      onTaskView: () => undefined,
+      onTaskSort: () => undefined,
+      onDate: async () => undefined,
+      onEditFocus: () => undefined,
+      onAddTask: () => undefined,
+      onOpenTask: () => undefined,
+      onEditTask: () => undefined,
+      onArchiveTask: () => undefined,
+      onSurfaceTask: () => undefined,
+      onTaskCompletion: () => undefined,
+      onCarryOverOpen: () => undefined,
+      onLoadMore: () => undefined,
+    }));
+    expect(markup).toContain("Showing 1 of 51");
+    expect(markup).toContain(">Load more</button>");
+    expect(markup).not.toContain("Load older tasks");
   });
 });

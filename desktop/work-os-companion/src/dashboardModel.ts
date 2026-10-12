@@ -53,6 +53,7 @@ export interface DashboardModelInput {
   activityWatch?: AttendanceWatchExpectation;
   tasks: TaskRow[];
   carryover: TaskRow[];
+  overdueCount?: number;
   focus: string;
   focusSource: string;
   niftySync?: DayData["niftySync"];
@@ -267,7 +268,7 @@ export function buildWorkdayDashboardModel(input: DashboardModelInput, now = Dat
       open,
       completed,
       carryover: carryover.length,
-      overdue: overdueById.size,
+      overdue: input.overdueCount ?? overdueById.size,
     },
     sync,
   };

@@ -103,11 +103,11 @@ export async function getWorkOsDay(
     ...(organizationSyncResult.data.nifty_sync_error ? { error: organizationSyncResult.data.nifty_sync_error } : {}),
   };
   const [taskHistory, evidence, proposalsResult, reportResult, workspace] = await Promise.all([
-    options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 100 }),
+    options.compact ? Promise.resolve([]) : listPersonTasks(ownerId, personId, { includeCompleted: true, includeLedgerHistory: true, limit: 50 }),
     options.compact ? Promise.resolve([]) : listEvidence(ownerId, { personId, date: shiftDate }),
     options.compact ? Promise.resolve({ data: [], error: null }) : db().from("work_task_proposals").select("*").eq("organization_id", access.organizationId).eq("person_id", personId).in("status", ["pending", "needs_review", "failed", "stale"]).order("created_at", { ascending: false }),
     db().from("work_reports").select(options.compact ? "submitted_at" : "*").eq("organization_id", access.organizationId).eq("person_id", personId).eq("report_date", shiftDate).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 100, now: at }),
+    resolveDailyWorkspace(access, shiftDate, { limit: options.compact ? 24 : 50, now: at }),
   ]);
   if (proposalsResult.error) throw new Error(`load task proposals: ${proposalsResult.error.message}`);
   if (reportResult.error) throw new Error(`load current EOD report: ${reportResult.error.message}`);

@@ -163,7 +163,11 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(tasks, /todayDate: requestedDate/);
   assert.match(tasks, /includeCompleted/);
   assert.match(tasks, /view === "open"/);
-  assert.match(tasks, /listPersonOpenTasks\(ownerId, auth\.access\.personId as string\)/);
+  assert.match(tasks, /listPersonTaskPage\(ownerId, auth\.access\.organizationId, auth\.access\.personId as string/);
+  assert.match(tasks, /cursor: params\.get\("cursor"\)/);
+  assert.match(tasks, /search,/);
+  assert.match(tasks, /const limit = Math\.min\(50, requestedLimit\)/);
+  assert.match(tasks, /excludeToday/);
   assert.match(taskDetails, /export async function GET/);
   assert.match(taskDetails, /getWorkOsEmployeeTaskDetails/);
   assert.match(taskDetails, /export async function DELETE/);

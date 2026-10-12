@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Archive,
@@ -51,6 +51,13 @@ const VIEWS: Array<{ id: TaskView; label: string }> = [
 
 type SortKey = "name" | "due" | "status";
 type Sort = { key: SortKey; direction: "asc" | "desc" } | null;
+type TaskPage = {
+  tasks: AnyRow[];
+  totalCount: number;
+  nextCursor?: string | null;
+  cursor?: { next: string | null };
+  counts?: { total: number; open: number; completed: number; overdue?: number };
+};
 
 function isOverdue(task: AnyRow, today: string | null | undefined) {
   return task.completed !== true && !!task.due_date && !!today && String(task.due_date) < today;
@@ -75,6 +82,9 @@ export default function EmployeeTasks() {
   const [view, setView] = useState<TaskView>("day");
   const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
+  const [serverSearch, setServerSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sort, setSort] = useState<Sort>(null);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [menuTaskId, setMenuTaskId] = useState<string | null>(null);
@@ -86,43 +96,51 @@ export default function EmployeeTasks() {
     if (day.data?.shiftDate) setDate((current) => current || day.data!.shiftDate);
   }, [day.data?.shiftDate]);
 
-  const scoped = useQuery<{ tasks: AnyRow[]; counts: { total: number; open: number; completed: number } | null }>({
-    queryKey: ["work-os", "employee-tasks", view, date],
+  useEffect(() => {
+    const timer = window.setTimeout(() => setServerSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const order = sort ? `${sort.key === "name" ? "title" : sort.key}_${sort.direction}` : "due_desc";
+  const scoped = useInfiniteQuery<TaskPage, Error, { pages: TaskPage[]; pageParams: Array<string | null> }, readonly unknown[], string | null>({
+    queryKey: ["work-os", "employee-tasks", view, date, serverSearch, fromDate, toDate, order],
     enabled: !!day.data && (view === "day" ? !!date : view === "open"),
-    queryFn: async () => {
-      if (view === "day") {
-        const payload = await fetchJson<{ tasks: AnyRow[]; workspace: AnyRow; cursor: { next: string | null } }>(`/api/work-os/me/tasks?view=day&date=${encodeURIComponent(date)}&limit=100`);
-        const tasks = payload.tasks ?? [];
-        return { tasks, counts: { total: tasks.length, open: tasks.filter((task) => task.completed !== true).length, completed: tasks.filter((task) => task.completed === true).length } };
-      }
-      const payload = await fetchJson<{ tasks: AnyRow[]; counts: { total: number; open: number; completed: number } }>("/api/work-os/me/tasks?view=open");
-      return { tasks: payload.tasks ?? [], counts: payload.counts ?? null };
+    initialPageParam: null,
+    getNextPageParam: (last) => last.nextCursor ?? last.cursor?.next ?? undefined,
+    queryFn: async ({ pageParam, signal }) => {
+      const params = new URLSearchParams({ view: view === "day" ? "day" : "open", limit: "50", sort: order.slice(0, order.lastIndexOf("_")), direction: order.slice(order.lastIndexOf("_") + 1) });
+      if (view === "day") params.set("date", date);
+      else params.set("sortDate", day.data?.shiftDate ?? date);
+      if (serverSearch) params.set("search", serverSearch);
+      if (fromDate) params.set("from", fromDate);
+      if (toDate) params.set("to", toDate);
+      if (pageParam) params.set("cursor", pageParam);
+      return fetchJson<TaskPage>(`/api/work-os/me/tasks?${params}`, { signal });
     },
     staleTime: 60_000,
   });
 
-  const history = useInfiniteQuery<{ tasks: AnyRow[]; nextOffset: number | null }>({
-    queryKey: ["work-os", "employee-tasks", "history", view, sort?.key ?? "default", sort?.direction ?? "default"],
+  const history = useInfiniteQuery<TaskPage, Error, { pages: TaskPage[]; pageParams: Array<string | null> }, readonly unknown[], string | null>({
+    queryKey: ["work-os", "employee-tasks", "history", view, serverSearch, fromDate, toDate, order, day.data?.shiftDate ?? ""],
     enabled: view === "completed" || view === "all",
-    queryFn: ({ pageParam }) => {
+    initialPageParam: null,
+    getNextPageParam: (last) => last.nextCursor ?? last.cursor?.next ?? undefined,
+    queryFn: ({ pageParam, signal }) => {
       const params = new URLSearchParams({
         view: "history",
         includeCompleted: "true",
         limit: "50",
-        offset: String(typeof pageParam === "number" ? pageParam : 0),
+        sort: order.slice(0, order.lastIndexOf("_")),
+        direction: order.slice(order.lastIndexOf("_") + 1),
       });
       if (view === "completed") params.set("completed", "true");
-      // History is paginated, so ordering has to happen before pagination —
-      // the server sorts the complete result set, not just the loaded pages.
-      if (sort) {
-        params.set("sort", sort.key);
-        params.set("direction", sort.direction);
-      }
       if (day.data?.shiftDate) params.set("sortDate", day.data.shiftDate);
-      return fetchJson<{ tasks: AnyRow[]; nextOffset: number | null }>(`/api/work-os/me/tasks?${params}`);
+      if (serverSearch) params.set("search", serverSearch);
+      if (fromDate) params.set("from", fromDate);
+      if (toDate) params.set("to", toDate);
+      if (pageParam) params.set("cursor", pageParam);
+      return fetchJson<TaskPage>(`/api/work-os/me/tasks?${params}`, { signal });
     },
-    initialPageParam: 0,
-    getNextPageParam: (last) => (typeof last.nextOffset === "number" ? last.nextOffset : undefined),
     staleTime: 60_000,
   });
 
@@ -194,30 +212,15 @@ export default function EmployeeTasks() {
   }, [menuTaskId, subtaskMenuId]);
 
   const isHistoryView = view === "completed" || view === "all";
-  const rawRows = useMemo(
-    () => (isHistoryView ? history.data?.pages.flatMap((page) => page.tasks) ?? [] : scoped.data?.tasks ?? []),
-    [isHistoryView, history.data, scoped.data],
-  );
-  const loading = isHistoryView ? history.isLoading : (scoped.isLoading && !scoped.data);
+  const activeQuery = isHistoryView ? history : scoped;
+  const rawRows = useMemo(() => activeQuery.data?.pages.flatMap((page) => page.tasks) ?? [], [activeQuery.data]);
+  const searchPending = search.trim() !== serverSearch;
+  const loading = searchPending || (isHistoryView ? history.isLoading : (scoped.isLoading && !scoped.data));
   const error = scoped.error || history.error || changeTask.error || day.error;
   const historical = view === "day" && !!date && !!day.data?.shiftDate && date !== day.data.shiftDate;
   const today = day.data?.shiftDate ?? null;
 
-  const visible = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const filtered = query
-      ? rawRows.filter((task) => `${String(task.title ?? "")} ${String(task.description ?? "")}`.toLowerCase().includes(query))
-      : rawRows;
-    const list = [...filtered];
-    // History views are already ordered by the server before pagination; only
-    // the fully loaded views sort locally.
-    if (!isHistoryView) {
-      if (sort?.key === "name") list.sort((a, b) => String(a.title ?? "").localeCompare(String(b.title ?? "")) * (sort.direction === "asc" ? 1 : -1));
-      if (sort?.key === "due") list.sort((a, b) => String(a.due_date ?? "9999-12-31").localeCompare(String(b.due_date ?? "9999-12-31")) * (sort.direction === "asc" ? 1 : -1));
-      if (sort?.key === "status") list.sort((a, b) => (Number(a.completed === true) - Number(b.completed === true)) * (sort.direction === "asc" ? 1 : -1));
-    }
-    return list;
-  }, [rawRows, search, sort, isHistoryView]);
+  const visible = rawRows;
 
   const activateSort = (key: SortKey) => {
     setSort((current) => {
@@ -228,12 +231,19 @@ export default function EmployeeTasks() {
   };
 
   const tabCounts: Partial<Record<TaskView, number>> = {
-    ...(scoped.data?.counts && view === "day" ? { day: scoped.data.counts.open } : {}),
-    ...(scoped.data?.counts && view === "open" ? { open: scoped.data.counts.open } : {}),
-    ...(isHistoryView && history.data ? { [view]: rawRows.length } : {}),
+    ...(scoped.data?.pages[0]?.counts && view === "day" ? { day: scoped.data.pages[0].counts.open } : {}),
+    ...(scoped.data?.pages[0]?.counts && view === "open" ? { open: scoped.data.pages[0].counts.open } : {}),
+    ...(isHistoryView && history.data?.pages[0]?.counts ? {
+      [view]: view === "completed" ? history.data.pages[0].counts.completed : history.data.pages[0].counts.total,
+    } : {}),
   };
 
   const searchActive = search.trim().length > 0;
+  const filtersActive = searchActive || !!fromDate || !!toDate;
+  const totalCount = activeQuery.data?.pages[0]?.totalCount ?? null;
+  const resultSummary = searchPending || totalCount === null ? null
+    : visible.length < totalCount ? `Showing ${visible.length} of ${totalCount}`
+      : filtersActive ? `${totalCount} result${totalCount === 1 ? "" : "s"}` : null;
 
   return (
     <div>
@@ -282,7 +292,7 @@ export default function EmployeeTasks() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => { setView(item.id); setSort(null); setSearch(""); setMenuTaskId(null); }}
+                  onClick={() => { setView(item.id); setSort(null); setSearch(""); setServerSearch(""); setFromDate(""); setToDate(""); setMenuTaskId(null); }}
                   aria-current={active ? "true" : undefined}
                   className={cx("rounded-[10px] px-3 py-1.5 text-[12px] font-semibold transition", active ? "" : "hover:bg-[var(--bg-tertiary)]")}
                   style={active
@@ -307,8 +317,18 @@ export default function EmployeeTasks() {
                 style={inputStyle}
               />
             </label>
+            <label className="grid gap-0.5 text-[10px] font-semibold text-[var(--text-tertiary)]">
+              <span>From</span>
+              <input type="date" aria-label="Filter from date" value={fromDate} max={toDate || today || undefined} onChange={(event) => setFromDate(event.target.value)} className={`${inlineInputClass} w-[142px]`} style={inputStyle} />
+            </label>
+            <label className="grid gap-0.5 text-[10px] font-semibold text-[var(--text-tertiary)]">
+              <span>To</span>
+              <input type="date" aria-label="Filter to date" value={toDate} min={fromDate || undefined} max={today || undefined} onChange={(event) => setToDate(event.target.value)} className={`${inlineInputClass} w-[142px]`} style={inputStyle} />
+            </label>
+            {(fromDate || toDate) ? <SecondaryButton className="!px-2.5 !py-1.5 !text-[11px]" onClick={() => { setFromDate(""); setToDate(""); }}>Clear dates</SecondaryButton> : null}
           </div>
         </div>
+        {resultSummary ? <p className="border-b px-5 py-2 text-[11px] tabular-nums text-[var(--text-tertiary)]" role="status" style={{ borderColor: "var(--border)" }}>{resultSummary}</p> : null}
 
         {loading ? (
           <div aria-busy="true" className="grid gap-3 px-5 py-5">
@@ -542,10 +562,10 @@ export default function EmployeeTasks() {
                 );
               })}
             </ul>
-            {isHistoryView && history.hasNextPage ? (
+            {activeQuery.hasNextPage ? (
               <div className="flex justify-center border-t px-5 py-3.5" style={{ borderColor: "var(--border)" }}>
-                <SecondaryButton disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
-                  {history.isFetchingNextPage ? "Loading…" : "Show more"}
+                <SecondaryButton disabled={activeQuery.isFetchingNextPage} onClick={() => void activeQuery.fetchNextPage()}>
+                  {activeQuery.isFetchingNextPage ? "Loading…" : activeQuery.isFetchNextPageError ? "Retry load more" : "Load more"}
                 </SecondaryButton>
               </div>
             ) : null}
@@ -553,9 +573,9 @@ export default function EmployeeTasks() {
         ) : (
           <EmptyState
             icon={<ListTodo size={20} />}
-            title={searchActive ? "No tasks match these filters" : view === "day" ? (historical ? "Nothing was recorded for this day" : "No tasks are attributed to today") : view === "open" ? "Nothing is unfinished" : view === "completed" ? "No completed tasks yet" : "No tasks yet"}
-            message={searchActive ? "Clear the search to see every task in this view." : view === "day" ? "Add a task or plan your day to get started." : undefined}
-            action={searchActive ? <SecondaryButton onClick={() => setSearch("")}>Clear search</SecondaryButton> : view === "day" && !historical ? <PrimaryButton onClick={() => setDrawer({ mode: "create" })}><Plus size={14} /> Add task</PrimaryButton> : undefined}
+            title={filtersActive ? "No tasks match these filters" : view === "day" ? (historical ? "Nothing was recorded for this day" : "No tasks are attributed to today") : view === "open" ? "Nothing is unfinished" : view === "completed" ? "No completed tasks yet" : "No tasks yet"}
+            message={filtersActive ? "Clear the search and dates to see every task in this view." : view === "day" ? "Add a task or plan your day to get started." : undefined}
+            action={filtersActive ? <SecondaryButton onClick={() => { setSearch(""); setServerSearch(""); setFromDate(""); setToDate(""); }}>Clear filters</SecondaryButton> : view === "day" && !historical ? <PrimaryButton onClick={() => setDrawer({ mode: "create" })}><Plus size={14} /> Add task</PrimaryButton> : undefined}
           />
         )}
       </Panel>

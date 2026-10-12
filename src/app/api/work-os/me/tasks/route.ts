@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listPersonOpenTasks, listPersonTasks, type TaskListOrder } from "@/lib/work-os";
+import { listPersonTaskPage, listPersonTasks, type TaskListOrder } from "@/lib/work-os";
 import { createWorkOsEmployeeTask, getWorkOsTaskCreationOptions, listWorkOsEmployeeTaskSelection } from "@/lib/work-os-companion";
 import { jsonError, requireWorkOsAccess, workOsOrganizationOwnerId } from "@/lib/work-os-api";
 import { resolveDailyWorkspace } from "@/lib/work-os-daily-workspace";
@@ -14,7 +14,7 @@ function integer(value: string | null, fallback: number, max: number) {
 }
 
 function date(value: string | null) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  return value ? validateWorkOsDate(value, "date") : null;
 }
 
 async function access(req: Request) {
@@ -33,47 +33,87 @@ export async function GET(req: Request) {
     if (auth.response) return auth.response;
     const params = new URL(req.url).searchParams;
     const ownerId = workOsOrganizationOwnerId(auth.access);
-    const limit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
+    const requestedLimit = Math.min(100, Math.max(1, integer(params.get("limit"), 50, 100)));
+    const limit = Math.min(50, requestedLimit);
     const offset = integer(params.get("offset"), 0, 100000);
     const requestedDate = date(params.get("date"));
     const sortDate = params.has("sortDate") ? validateWorkOsDate(params.get("sortDate"), "sortDate") : null;
+    const fromDate = date(params.get("from"));
+    const toDate = date(params.get("to"));
+    const search = params.get("search")?.trim() ?? "";
+    if (search.length > 200) return NextResponse.json({ error: "search must be 200 characters or fewer" }, { status: 400 });
     const view = params.get("view") ?? "today";
     if (view === "options") return NextResponse.json(await getWorkOsTaskCreationOptions(auth.access));
-    if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, limit));
-    // The exact open backlog: small enough to return whole, so both the
-    // dashboard carry-over tabs and the Tasks Unfinished view can be complete
-    // instead of counted from the paginated history window.
-    if (view === "open") return NextResponse.json(await listPersonOpenTasks(ownerId, auth.access.personId as string));
-    if (view === "today" || view === "day" || params.has("cursor")) {
+    if (view === "pending" || view === "overdue") return NextResponse.json(await listWorkOsEmployeeTaskSelection(auth.access, view, requestedLimit));
+    const sortKey = params.get("sort");
+    const sortDirection = params.get("direction");
+    const order = sortKey && ["title", "due", "status"].includes(sortKey) && (sortDirection === "asc" || sortDirection === "desc")
+      ? `${sortKey}_${sortDirection}` as TaskListOrder
+      : view === "open" ? "status_asc" : "due_desc";
+    if (view === "open") {
+      let excludeTaskIds: string[] = [];
+      if (params.get("excludeToday") === "true") {
+        const todayWorkspace = await resolveDailyWorkspace(auth.access, requestedDate, { limit: 50, includeAllTaskIds: true });
+        excludeTaskIds = todayWorkspace.taskIds ?? [];
+      }
+      const page = await listPersonTaskPage(ownerId, auth.access.organizationId, auth.access.personId as string, {
+        completed: "false",
+        order,
+        sortDate: sortDate ?? requestedDate,
+        search,
+        fromDate,
+        toDate,
+        cursor: params.get("cursor"),
+        limit,
+        excludeTaskIds,
+        overdueFirst: true,
+      });
+      return NextResponse.json({ ...page, view, cursor: { next: page.nextCursor } });
+    }
+    if (view === "today" || view === "day") {
       const workspace = await resolveDailyWorkspace(auth.access, requestedDate, {
         cursor: params.get("cursor"),
         limit,
+        search,
+        fromDate,
+        toDate,
+        order,
       });
       return NextResponse.json({
         tasks: workspace.tasks,
         view,
         date: workspace.date,
         workspace,
+        totalCount: workspace.totalCount,
+        counts: workspace.counts,
         cursor: workspace.cursor,
         nextOffset: null,
       });
     }
-    const sortKey = params.get("sort");
-    const sortDirection = params.get("direction");
-    const order = sortKey && ["title", "due", "status"].includes(sortKey) && (sortDirection === "asc" || sortDirection === "desc")
-      ? `${sortKey}_${sortDirection}` as TaskListOrder
-      : undefined;
+    if (view === "history") {
+      const page = await listPersonTaskPage(ownerId, auth.access.organizationId, auth.access.personId as string, {
+        completed: params.get("completed"),
+        projectId: params.get("projectId"),
+        fromDate,
+        toDate,
+        search,
+        cursor: params.get("cursor"),
+        limit,
+        order,
+        sortDate: sortDate ?? requestedDate,
+      });
+      return NextResponse.json({ ...page, view, date: requestedDate, cursor: { next: page.nextCursor }, nextOffset: null });
+    }
     const tasks = (await listPersonTasks(ownerId, auth.access.personId as string, {
       completed: params.get("completed"),
       projectId: params.get("projectId"),
-      todayOnly: view === "today",
+      todayOnly: false,
       todayDate: requestedDate,
-      fromDate: date(params.get("from")),
-      toDate: date(params.get("to")),
+      fromDate,
+      toDate,
       offset,
       limit,
-      includeCompleted: params.get("includeCompleted") === "true" || view === "history",
-      includeLedgerHistory: view === "history" && !params.get("from") && !params.get("to"),
+      includeCompleted: params.get("includeCompleted") === "true",
       order,
       sortDate,
     })) ?? [];

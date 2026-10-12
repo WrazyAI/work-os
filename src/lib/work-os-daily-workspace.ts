@@ -2,7 +2,8 @@ import { workOsOrganizationOwnerId, type WorkOsAccess } from "@/lib/work-os-api"
 import { addDaysIso as addDays } from "@/lib/work-os-dates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateOnly } from "@/lib/work-os-internal";
-import { hydrateTaskAssignees, isTaskAttributableToPerson } from "@/lib/work-os";
+import { hydrateTaskAssignees, isTaskAttributableToPerson, type TaskListOrder } from "@/lib/work-os";
+import { compareWorkspaceTaskCursor, compareWorkspaceTasks, createWorkspaceTaskCursor, parseWorkspaceTaskCursor, taskPageScope, type WorkspaceTaskOrder } from "@/lib/work-os-task-pagination";
 import { localDateForTimezone } from "@/modules/work-os/companion";
 import { recordWorkMemory } from "@/lib/work-memory";
 
@@ -60,6 +61,9 @@ export interface DailyWorkspaceRecord {
   carryOverGroups: Array<{ key: string; label: string; tasks: Json[] }>;
   sessionQuality: { status: "none" | "valid" | "needs_correction" | "corrected"; message: string | null; sessionId: string | null; clockedInAt: string | null };
   cursor: { next: string | null };
+  totalCount: number;
+  counts: { total: number; open: number; completed: number };
+  taskIds?: string[];
 }
 
 export async function recordTaskDayEvent(
@@ -142,6 +146,24 @@ export function resolveTaskDayAttribution(task: Json, events: Json[], date: stri
   if (dateOf(task.provider_created_at) === date) return { reason: "creation_observed" as const, event: byType("creation_observed") ?? null };
   const carried = byType("carried");
   if (carried) return { reason: "carried" as const, event: carried };
+  return null;
+}
+
+/** The per-task date a range filter uses, mirroring the SQL attributed-date
+ * rule: a completed task belongs to its completion day when that is at or
+ * before the current day, otherwise to its due date; then due, provider
+ * creation, and local creation. Null means the row has no comparable date. */
+export function taskRangeAttributionDate(task: Json, currentDate: string) {
+  const completedAt = dateOf(task.completed_at);
+  const due = dateOf(task.due_date);
+  if (task.completed === true && completedAt && completedAt <= currentDate) {
+    return due && completedAt > due ? completedAt : due ?? completedAt;
+  }
+  if (due && due <= currentDate) return due;
+  const providerCreated = dateOf(task.provider_created_at);
+  if (providerCreated && providerCreated <= currentDate) return providerCreated;
+  const created = dateOf(task.created_at);
+  if (created && created <= currentDate) return created;
   return null;
 }
 
@@ -294,7 +316,16 @@ export function projectWorkspaceDay(input: {
 export async function resolveDailyWorkspace(
   access: WorkOsAccess,
   requestedDate?: string | null,
-  options: { cursor?: string | null; limit?: number; now?: Date } = {},
+  options: {
+    cursor?: string | null;
+    limit?: number;
+    now?: Date;
+    search?: string | null;
+    fromDate?: string | null;
+    toDate?: string | null;
+    order?: TaskListOrder;
+    includeAllTaskIds?: boolean;
+  } = {},
 ): Promise<DailyWorkspaceRecord> {
   const now = options.now ?? new Date();
   const context = await employeeContext(access, now);
@@ -341,12 +372,44 @@ export async function resolveDailyWorkspace(
     session: (sessionResult.data as Json | null) ?? null,
   });
 
-  const after = decodeWorkspaceCursor(options.cursor);
-  const afterFiltered = after ? projected.tasks.filter((row) => cursorValue(row) < after) : projected.tasks;
-  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
+  const order = (options.order ?? "due_desc") as WorkspaceTaskOrder;
+  const search = options.search?.trim().toLowerCase() ?? "";
+  const scope = taskPageScope({
+    view: "day",
+    organizationId: access.organizationId,
+    personId: access.personId,
+    date,
+    order,
+    sortDate: context.currentDate,
+    search,
+    fromDate: options.fromDate ?? null,
+    toDate: options.toDate ?? null,
+  });
+  const filtered = projected.tasks.filter((task) => {
+    const searchable = [task.title, task.description, task.project?.name, task.milestone?.name]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .join(" ").toLowerCase();
+    if (search && !searchable.includes(search)) return false;
+    // Mirror the SQL attributed-date rule so a date range means the same thing
+    // in My day and in the paginated history views.
+    const attributedDate = taskRangeAttributionDate(task, context.currentDate);
+    if (options.fromDate && (!attributedDate || attributedDate < options.fromDate)) return false;
+    if (options.toDate && (!attributedDate || attributedDate > options.toDate)) return false;
+    return true;
+  }).sort((left, right) => compareWorkspaceTasks(left, right, order, context.currentDate));
+  const after = parseWorkspaceTaskCursor(options.cursor, scope);
+  const afterFiltered = after ? filtered.filter((row) => compareWorkspaceTaskCursor(row, after) > 0) : filtered;
+  const limit = Math.min(50, Math.max(1, options.limit ?? 50));
   const page = afterFiltered.slice(0, limit);
-  const next = afterFiltered.length > page.length && page.length
-    ? encodeWorkspaceCursor(cursorValue(page[page.length - 1]))
+  // `afterFiltered` is the exact remaining set for this keyset; a row leaving
+  // the filter before the cursor must not hide the rest of the pages.
+  const next = afterFiltered.length > limit
+    ? createWorkspaceTaskCursor(page[page.length - 1]!, {
+      scope,
+      order,
+      sortDate: context.currentDate,
+      position: (after?.position ?? 0) + page.length,
+    })
     : null;
 
   return {
@@ -356,5 +419,12 @@ export async function resolveDailyWorkspace(
     ...projected,
     tasks: page,
     cursor: { next },
+    totalCount: filtered.length,
+    counts: {
+      total: filtered.length,
+      open: filtered.filter((task) => task.completed !== true).length,
+      completed: filtered.filter((task) => task.completed === true).length,
+    },
+    ...(options.includeAllTaskIds ? { taskIds: projected.tasks.map((task) => String(task.id)) } : {}),
   };
 }

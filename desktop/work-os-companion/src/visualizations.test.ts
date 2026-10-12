@@ -209,11 +209,11 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
-  it("keeps My day open-only and states its counts from the rendered list", () => {
+  it("keeps My day open-only and states its counts from the complete day result", () => {
     expect(app).toContain("My day is open work only");
     expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
     expect(app).toContain("Today <em>{openToday.length}</em>");
-    expect(app).toContain("count: myDayTasks.filter((task) => task.completed !== true).length");
+    expect(app).toContain('count: taskView === "today" && !historical && pageCounts ? pageCounts.open : myDayTasks.filter((task) => task.completed !== true).length');
     expect(app).toContain("My day is open work only");
   });
 

@@ -33,6 +33,7 @@ export {
   hydrateTaskAssignees,
   isNiftyTaskAttributableToMember,
   listPersonOpenTasks,
+  listPersonTaskPage,
   listPersonTasks,
   isTaskAttributableToPerson,
   listTasks,

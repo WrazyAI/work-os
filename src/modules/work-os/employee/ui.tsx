@@ -77,7 +77,7 @@ export function Masthead({
         <h1 className="mt-1.5 text-[26px] font-bold leading-tight tracking-[-0.01em] text-[var(--text-primary)]">{title}</h1>
         {meta ? <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">{meta}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">{actions}</div> : null}
+      {actions ? <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">{actions}</div> : null}
     </header>
   );
 }
