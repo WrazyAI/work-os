@@ -24,6 +24,8 @@ they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.25
+
 - The app icon and the in-app logo now use the new Work OS mark.
 
 ## 0.4.24
