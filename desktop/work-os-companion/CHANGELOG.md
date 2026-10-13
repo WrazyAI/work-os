@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.26 — 2026-10-13
+
 - Changelog history now shows the date each version shipped and pages older updates twenty at a time.
 
 ## 0.4.25 — 2026-10-12
