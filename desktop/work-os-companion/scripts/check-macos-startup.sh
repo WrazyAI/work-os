@@ -53,6 +53,14 @@ latest_phase() {
   grep -o '"phase":"boot:[a-z_]*"' "$events" | tail -1 | sed 's/.*"phase":"//; s/"$//'
 }
 
+# The gate's own trail: the boot phases it passed and what the vault answered.
+# A runner without a usable keychain settles on the failure screen, and this is
+# the line that says so in the job log.
+report_gate_trail() {
+  [[ -f "$events" ]] || return 0
+  grep -E '"category":"(vault|app\.boot)' "$events" | tail -4
+}
+
 # A phase the gate can rest on: anything the app reaches after its own vault
 # read settled, including the failure screen that offers recovery.
 phase_is_settled() {
@@ -79,6 +87,7 @@ run_scenario() {
     fi
     if phase="$(latest_phase)" && phase_is_settled "$phase"; then
       echo "[$name] boot gate settled at $phase"
+      report_gate_trail
       kill "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       return 0
