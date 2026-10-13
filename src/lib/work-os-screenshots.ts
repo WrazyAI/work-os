@@ -34,6 +34,12 @@ const PREPARE_SCREENSHOTS_PER_REQUEST = 6;
 /** A hung provider call must never hold an interactive preparation open. */
 const SCREENSHOT_DOWNLOAD_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_DOWNLOAD_TIMEOUT_MS ?? 15_000) || 15_000);
 const SCREENSHOT_VISION_TIMEOUT_MS = Math.max(2_000, Number(process.env.WORK_OS_SCREENSHOT_VISION_TIMEOUT_MS ?? 20_000) || 20_000);
+/** The observation is one small tool call; bound the completion budget so the
+ * provider's credit pre-authorization checks the real cost. Without a limit the
+ * request pre-authorizes the model's full context (e.g. 65536 tokens) and fails
+ * with 402 whenever the account balance is lower, even though the call itself
+ * costs a fraction of that. */
+const SCREENSHOT_VISION_MAX_TOKENS = Math.max(256, Number(process.env.WORK_OS_SCREENSHOT_VISION_MAX_TOKENS ?? 1_200) || 1_200);
 
 function db() {
   return createAdminClient();
@@ -244,6 +250,7 @@ async function neutralSummary(url: string, log: ScreenshotLog) {
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
+      max_tokens: SCREENSHOT_VISION_MAX_TOKENS,
       messages: [
         {
           role: "system",

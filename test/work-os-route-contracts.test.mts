@@ -116,6 +116,7 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.match(screenshotsService, /work_activity_interval_evidence/, "retention marks interval evidence expiry without deleting the recap");
   assert.match(screenshotsService, /export async function prepareScreenshotWindow/);
   assert.match(screenshotsService, /export async function retainedScreenshotImage/);
+  assert.match(screenshotsService, /max_tokens: SCREENSHOT_VISION_MAX_TOKENS/, "the vision request bounds its completion budget so low provider credit cannot fail pre-authorization");
   assert.doesNotMatch(activityEngine, /from\("work_check_ins"\)/, "AI inference never creates employee check-ins");
   assert.doesNotMatch(activityEngine, /from\("work_sessions"\)\s*\.\s*(update|upsert)/, "AI inference never fakes the substantive-update cadence");
   assert.match(promptDelivery, /markActivityIntervalNotified/);
