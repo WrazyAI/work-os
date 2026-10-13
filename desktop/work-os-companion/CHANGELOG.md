@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.27 — 2026-10-13
+
+- EOD reminders now arrive on time when the wrap-up window opens, even if nothing else changes on the server.
+- The message box stays available while you're still on shift, so you can keep sending updates during the EOD window.
+
 ## 0.4.26 — 2026-10-13
 
 - Changelog history now shows the date each version shipped and pages older updates twenty at a time.
