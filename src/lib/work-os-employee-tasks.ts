@@ -1,5 +1,6 @@
 import {
   archiveTask,
+  assertTopLevelTaskParent,
   compareTaskRecency,
   completeTask,
   deleteTask,
@@ -89,6 +90,7 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
   const providerTaskId = String(task.provider_task_id ?? task.id);
   const syncedAtMs = task.synced_at ? Date.parse(String(task.synced_at)) : 0;
   let currentTask = task;
+  let refreshed = false;
   // The mirror is authoritative enough within the freshness window. Outside
   // it, refresh from Nifty quickly and fall back to the mirror on timeout —
   // opening a task must never hang on a provider round-trip. Work OS-native
@@ -97,10 +99,16 @@ export async function getWorkOsEmployeeTaskDetails(access: WorkOsAccess, taskId:
     try {
       await withTimeout(syncNiftyTask(ownerId, providerTaskId), TASK_DETAIL_PROVIDER_REFRESH_MS, "Nifty task refresh");
       currentTask = await getTaskByLocalOrProviderId(ownerId, taskId);
+      refreshed = true;
     } catch (error) {
       console.warn("[work-os] task detail provider refresh skipped", { taskId, message: error instanceof Error ? error.message : String(error) });
     }
   }
+  // The refresh can reassign the task to another employee. Re-authorize the
+  // refreshed row through the same gate as the original lookup instead of
+  // trusting the stale pre-refresh mirror. This stays outside the try so a
+  // rejection is never mistaken for a provider timeout and swallowed.
+  if (refreshed) currentTask = (await employeeTaskContext(access, taskId)).task;
   let subtasksQuery = db().from("work_tasks")
     .select("*, project:work_projects(id,name,provider_project_id)")
     .eq("organization_id", access.organizationId)
@@ -329,6 +337,7 @@ export async function createWorkOsEmployeeTask(access: WorkOsAccess, body: Json)
   let parent: Json | null = null;
   if (parentId) {
     parent = (await employeeTaskContext(access, parentId)).task;
+    assertTopLevelTaskParent(parent);
   }
   if (invalidPersonId) throw new Error("Assignees must be active Work OS organization members");
   const task = await createLocalWorkOsTask(access, {

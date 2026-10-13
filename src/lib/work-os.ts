@@ -23,6 +23,8 @@ export {
   addTaskProgress,
   adoptProviderTask,
   archiveTask,
+  assertSubtaskMoveTarget,
+  assertTopLevelTaskParent,
   compareTaskRecency,
   completeTask,
   createTask,

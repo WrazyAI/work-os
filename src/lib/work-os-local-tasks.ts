@@ -134,6 +134,30 @@ async function validateLocalTaskAssignees(access: WorkOsAccess, personIds: strin
   return uniqueIds;
 }
 
+/** A caller-supplied project must belong to the acting organization; otherwise
+ * the task would be filed under another tenant's project. */
+async function validateLocalTaskProject(access: WorkOsAccess, projectId: string | null | undefined) {
+  const id = projectId?.trim();
+  if (!id) return null;
+  const result = await db().from("work_projects").select("id")
+    .eq("organization_id", access.organizationId)
+    .eq("id", id)
+    .maybeSingle();
+  if (result.error) throw new Error(`validate Work OS task project: ${result.error.message}`);
+  if (!result.data) throw new Error("Task project must belong to the organization");
+  return id;
+}
+
+/** A subtask lives in its parent's project. A caller may omit the project — it
+ * is inherited — but must never override it with a different one. Top-level
+ * tasks have no parent to inherit from. */
+export function assertSubtaskProjectInherited(projectId: string | null, parent: Json | null) {
+  if (!parent) return;
+  if (projectId && projectId !== ((parent.project_id as string | null) ?? null)) {
+    throw new Error("Subtasks can only be created in their parent's project");
+  }
+}
+
 export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateLocalWorkOsTaskInput) {
   const title = input.title.trim();
   if (!title) throw new Error("Task title is required");
@@ -141,6 +165,8 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
   const description = input.description?.trim() || null;
   if (description && description.length > MAX_DESCRIPTION) throw new Error("Task description must be 20000 characters or fewer");
   const assigneePersonIds = await validateLocalTaskAssignees(access, input.assigneePersonIds ?? []);
+  const projectId = await validateLocalTaskProject(access, input.projectId);
+  assertSubtaskProjectInherited(projectId, input.parent ?? null);
   const now = new Date().toISOString();
   const result = await db().from("work_tasks").insert({
     organization_id: access.organizationId,
@@ -148,7 +174,7 @@ export async function createLocalWorkOsTask(access: WorkOsAccess, input: CreateL
     provider: LOCAL_TASK_PROVIDER,
     provider_task_id: `local-${randomUUID()}`,
     provider_project_id: input.providerProjectId ?? input.parent?.provider_project_id ?? null,
-    project_id: input.projectId ?? input.parent?.project_id ?? null,
+    project_id: projectId ?? input.parent?.project_id ?? null,
     title: title.slice(0, MAX_TITLE),
     description: description ? description.slice(0, MAX_DESCRIPTION) : null,
     task_group_id: input.taskGroupId ?? null,

@@ -849,21 +849,50 @@ export async function deleteTask(userId: string, taskId: string) {
   return deleted;
 }
 
+/** Every subtask move passes the same shape and project checks, whether the row
+ * is Work OS-native or mirrored from Nifty. One seam keeps the move and create
+ * paths from drifting apart: a subtask must never silently change project.
+ */
+export function assertSubtaskMoveTarget(task: Record<string, any>, parent: Record<string, any>) {
+  if (task.id === parent.id) throw new Error("A task cannot be its own parent");
+  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
+  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
+  if (task.organization_id !== parent.organization_id) throw new Error("Subtasks can only be moved between tasks in the same project");
+  const taskLocal = task.provider === "local";
+  const parentLocal = parent.provider === "local";
+  if (taskLocal && parentLocal) {
+    // Local rows carry no provider project, so the local project is the
+    // boundary: moving across projects would re-home the subtask silently.
+    if ((task.project_id ?? null) !== (parent.project_id ?? null)) {
+      throw new Error("Subtasks can only be moved between tasks in the same project");
+    }
+    return;
+  }
+  if (!taskLocal && parentLocal) throw new Error("Nifty subtasks cannot be moved beneath a Work OS task");
+  if (!taskLocal && !parentLocal) {
+    if (task.provider_project_id !== parent.provider_project_id) throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+    return;
+  }
+  // A Work OS subtask may join a Nifty task only inside the same provider project.
+  if (task.provider_project_id && parent.provider_project_id && task.provider_project_id !== parent.provider_project_id) {
+    throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
+  }
+}
+
+/** Employee-created subtasks hang from a top-level task only; deeper nesting
+ * stays out of the employee surface, matching the move path's rule. */
+export function assertTopLevelTaskParent(parent: Record<string, any>) {
+  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be created beneath a top-level task");
+}
+
 export async function moveTaskToParent(userId: string, taskId: string, parentTaskId: string) {
   const [task, parent] = await Promise.all([
     getTaskByLocalOrProviderId(userId, taskId),
     getTaskByLocalOrProviderId(userId, parentTaskId),
   ]);
-  if (task.id === parent.id) throw new Error("A task cannot be its own parent");
-  if (!task.parent_task_id && !task.parent_provider_task_id) throw new Error("Only subtasks can be moved to another task");
-  if (parent.parent_task_id || parent.parent_provider_task_id) throw new Error("Subtasks can only be moved beneath a top-level task");
-  if (task.organization_id !== parent.organization_id) throw new Error("Subtasks can only be moved between tasks in the same project");
+  assertSubtaskMoveTarget(task, parent);
   const localMove = task.provider === "local" || parent.provider === "local";
   if (localMove) {
-    if (task.provider !== "local") throw new Error("Nifty subtasks cannot be moved beneath a Work OS task");
-    if (task.provider === "local" && parent.provider === "nifty" && task.provider_project_id && parent.provider_project_id && task.provider_project_id !== parent.provider_project_id) {
-      throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
-    }
     if (task.parent_task_id === parent.id || (parent.provider_task_id && task.parent_provider_task_id === parent.provider_task_id)) return task;
     return selectFirst(
       db().from("work_tasks").update({
@@ -876,9 +905,6 @@ export async function moveTaskToParent(userId: string, taskId: string, parentTas
       }).eq("user_id", userId).eq("id", task.id).select("*"),
       "move Work OS task beneath parent",
     );
-  }
-  if (task.provider_project_id !== parent.provider_project_id) {
-    throw new Error("Subtasks can only be moved between tasks in the same Nifty project");
   }
   const providerTaskId = task.provider_task_id as string;
   const providerParentId = parent.provider_task_id as string;
