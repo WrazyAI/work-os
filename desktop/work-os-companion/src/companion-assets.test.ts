@@ -281,7 +281,11 @@ describe("floating companion integration", () => {
     const gate = readFileSync(resolve(root, "src/vaultGate.ts"), "utf8");
     expect(gate).toContain("VAULT_GATE_TIMEOUT_MS");
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toContain("runVaultGate(applyVaultState)");
+    expect(app).toContain("runVaultGate(() => applyVaultStateRef.current())");
+    // StrictMode mounts, cleans up, and mounts again: a "started once" guard
+    // would leave the second mount without a live attempt and strand the gate
+    // on its loading screen.
+    expect(app).not.toContain("vaultStartedRef");
     expect(app).toContain("boot:vault_failed");
     const startup = readFileSync(resolve(root, "scripts/check-macos-startup.sh"), "utf8");
     expect(startup).toContain("boot:vault_failed");

@@ -352,7 +352,11 @@ export default function App() {
     : { status: updateFlow.status };
   const [vaultGate, setVaultGate] = useState<VaultGateState>({ status: "pending" });
   const vaultAttemptRef = useRef<VaultAttempt | null>(null);
-  const vaultStartedRef = useRef(false);
+  // The latest vault opener, kept behind a ref so the boot effect's starter can
+  // stay identity-stable across the state churn of an ordinary session. It
+  // rejects until the first render supplies the real opener, so an ordering
+  // mistake surfaces as a failure screen instead of a silently skipped vault.
+  const applyVaultStateRef = useRef<() => Promise<void>>(() => Promise.reject(new Error("The vault opener is not ready yet.")));
   const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
@@ -1080,12 +1084,18 @@ export default function App() {
     }
   }, [queryClient, refresh, showError]);
 
+  // Declared before the boot effect so the first gate attempt opens the real
+  // vault, never the placeholder above.
+  useEffect(() => { applyVaultStateRef.current = applyVaultState; }, [applyVaultState]);
+
   const startVaultGate = useCallback(() => {
+    // The opener is read through a ref so this stays identity-stable: the boot
+    // effect must run once per mount, not once per view change.
     vaultAttemptRef.current?.abandon();
-    const attempt = runVaultGate(applyVaultState);
+    const attempt = runVaultGate(() => applyVaultStateRef.current());
     vaultAttemptRef.current = attempt;
     void attempt.result.then((outcome: VaultGateSettled) => { vaultAttemptRef.current = null; setVaultGate(outcome); });
-  }, [applyVaultState]);
+  }, []);
 
   // A retry must let go of the previous attempt's promise too: the one waiting
   // on a system dialog would otherwise be reused and wait forever.
@@ -1108,11 +1118,13 @@ export default function App() {
   }, [retryVaultGate, showError]);
 
   useEffect(() => {
-    if (vaultStartedRef.current) return;
-    vaultStartedRef.current = true;
+    // StrictMode mounts, cleans up, and mounts again: the cleanup retires the
+    // first attempt, so this must start a live one on the second run instead of
+    // remembering that a start already happened. Restarting is cheap — the host
+    // answers a repeat read from the value it already holds, and a read still
+    // waiting on a system dialog is joined rather than asked again.
     startVaultGate();
-    const attempt = vaultAttemptRef.current;
-    return () => attempt?.abandon();
+    return () => vaultAttemptRef.current?.abandon();
   }, [startVaultGate]);
 
   useEffect(() => {
