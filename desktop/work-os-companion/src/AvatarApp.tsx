@@ -42,7 +42,7 @@ import { MascotPet } from "./MascotPet";
 import { type MascotAgentActivity, type MascotWorkdayState } from "./mascotState";
 import { useMascotRuntime, useMascotScenarioMirror } from "./useMascotRuntime";
 import {
-  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, collectNudges, composerSendTarget, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
+  agendaAutoExpandKey, avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, eodAlertDue, hasOpenShiftSession, isHeaderDragStart, mergeAvatarChatEntries, nextAgendaAutoExpand, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, shiftElapsedFraction, snoozeUntil, stripPromptReminderTurns,
   type AvatarStoredTurn, type CompanionDayFacts, type CompanionNudge,
 } from "./avatarLogic";
 import "./avatar.css";
@@ -703,6 +703,13 @@ export default function AvatarApp(): React.ReactElement {
     return () => clearInterval(timer);
   }, []);
 
+  // Time-derived alert boundaries. The effect below only re-runs when a
+  // dependency changes, and the five-second clock tick alone does not do that,
+  // so the EOD and clock-in windows must enter its deps as booleans: the nudge
+  // then fires when the window opens, not when a server field happens to move.
+  const eodAlertNow = eodAlertDue(facts, now);
+  const clockInAlertNow = clockInAlertDue(facts, now);
+
   // ── Notification scheduler: hourly + clock-in + EOD, deduped per key ──
   useEffect(() => {
     if (!facts.loaded || connected === false) return;
@@ -757,7 +764,7 @@ export default function AvatarApp(): React.ReactElement {
       writeJson(NOTIFIED_KEY, [...notifiedKeys.current].slice(-80));
       fireNotification(nudge, notificationPermission.current);
     }
-  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [facts.loaded, facts.promptRequired, facts.nextPromptAt, facts.shiftDate, facts.promptKind, facts.sessionState, facts.shiftEndsAt, facts.eodSubmitted, connected, eodAlertNow, clockInAlertNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Snooze expiry: re-prompt when the snooze window passes ──
   useEffect(() => {
@@ -2116,7 +2123,7 @@ export default function AvatarApp(): React.ReactElement {
           </>)}
            </div>
            </div>
-           {contextualPrompt.action !== "open_eod" && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
+           {composerVisible(facts, contextualPrompt.action) && <footer className="avatar-composer-v2 px-2.5 pb-2.5 pt-2">
             {recapEditMode && activityPrompt ? (
               <div className="avatar-recap-edit">
                 <span>Editing your recap</span>

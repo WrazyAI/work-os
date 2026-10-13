@@ -1170,7 +1170,10 @@ undecided recap, which stays reachable in the chat and the notifications
 panel. It stays live through clock-out — the mascot keeps its wrap-up state
 instead of resting — until the report is submitted or one hour past the
 scheduled end, when the mascot rests again and the day stays in the outstanding
-EOD list. A day without a scheduled end follows the server's EOD signal alone.
+EOD list. While the session is still open the alert never takes the composer:
+the employee can keep sending updates and editing a recap through the lead
+window, and only clock-out hands the moment to the EOD page. A day without a
+scheduled end follows the server's EOD signal alone.
 
 The EOD uses a confirmed, amended, or inferred recap as activity context for
 the hours it covers, labeled with its provenance, and falls back to the hourly

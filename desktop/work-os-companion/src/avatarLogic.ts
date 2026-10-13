@@ -258,6 +258,12 @@ export function hasOpenShiftSession(facts: CompanionDayFacts): boolean {
   return !facts.eodSubmitted && Boolean(facts.clockedInAt) && !facts.clockedOutAt;
 }
 
+/** The composer stays usable while the shift session is open; a due EOD only
+ * takes it away after clock-out, when the EOD page owns the moment. */
+export function composerVisible(facts: CompanionDayFacts, promptAction: AvatarPrompt["action"]): boolean {
+  return promptAction !== "open_eod" || hasOpenShiftSession(facts);
+}
+
 /** The companion's panel header drags the window from its chrome — the shift
  * status and empty header space included. Controls inside it keep their own
  * clicks and never start a drag. */
@@ -318,12 +324,20 @@ export function hourlyNudge(facts: CompanionDayFacts, now: number, notifiedKeys:
   };
 }
 
+/** Whether the clock-in alert window is open: the scheduled shift started
+ * within the last fifteen minutes and there is no clock-in yet. The scheduler
+ * effect depends on this boundary, so the nudge fires when the window opens
+ * even if no server field changes. */
+export function clockInAlertDue(facts: CompanionDayFacts, now: number): boolean {
+  if (facts.clockedInAt || facts.sessionState === "clocked_out") return false;
+  const start = minutesSince(facts.shiftStartsAt, now);
+  return start !== null && start >= 0 && start <= 15;
+}
+
 /** Clock-in nudge: the scheduled shift started ≤15 minutes ago and there is
  * no clock-in yet. Fires once per day. */
 export function clockInNudge(facts: CompanionDayFacts, now: number, notifiedKeys: Set<string>): CompanionNudge | null {
-  if (facts.clockedInAt || facts.sessionState === "clocked_out") return null;
-  const start = minutesSince(facts.shiftStartsAt, now);
-  if (start === null || start < 0 || start > 15) return null;
+  if (!clockInAlertDue(facts, now)) return null;
   const key = `clock_in:${facts.shiftDate}`;
   if (notifiedKeys.has(key)) return null;
   return {

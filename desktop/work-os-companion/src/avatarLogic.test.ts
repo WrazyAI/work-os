@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  clockInNudge, collectNudges, composerSendTarget, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
+  clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
   agendaAutoExpandKey, nextAgendaAutoExpand,
@@ -39,6 +39,20 @@ describe("hasOpenShiftSession", () => {
   it("hides the shift display after clock-out or EOD", () => {
     expect(hasOpenShiftSession({ ...base, clockedOutAt: "2026-08-31T09:00:00Z" })).toBe(false);
     expect(hasOpenShiftSession({ ...base, eodSubmitted: true })).toBe(false);
+  });
+});
+
+describe("composerVisible", () => {
+  it("keeps the composer while the EOD alert is live and the session is open", () => {
+    expect(composerVisible(base, "open_eod")).toBe(true);
+    expect(composerVisible({ ...base, sessionState: "paused" }, "open_eod")).toBe(true);
+  });
+  it("hands the moment to the EOD page after clock-out or submission", () => {
+    expect(composerVisible({ ...base, sessionState: "clocked_out", clockedOutAt: "2026-08-31T16:05:00Z" }, "open_eod")).toBe(false);
+    expect(composerVisible({ ...base, eodSubmitted: true }, "open_eod")).toBe(false);
+  });
+  it("never hides the composer for other prompts", () => {
+    expect(composerVisible({ ...base, sessionState: "clocked_out", clockedOutAt: "2026-08-31T16:05:00Z" }, null)).toBe(true);
   });
 });
 
@@ -92,6 +106,21 @@ describe("clock-in nudge", () => {
     const facts: CompanionDayFacts = { ...base, clockedInAt: null, sessionState: "scheduled" };
     const at = new Date("2026-08-31T08:30:00Z").getTime();
     expect(clockInNudge(facts, at, new Set())).toBeNull();
+  });
+});
+
+describe("clockInAlertDue", () => {
+  it("opens at the scheduled start and closes after fifteen minutes", () => {
+    const facts: CompanionDayFacts = { ...base, clockedInAt: null, sessionState: "scheduled" };
+    expect(clockInAlertDue(facts, new Date("2026-08-31T07:59:00Z").getTime())).toBe(false);
+    expect(clockInAlertDue(facts, new Date("2026-08-31T08:00:30Z").getTime())).toBe(true);
+    expect(clockInAlertDue(facts, new Date("2026-08-31T08:15:00Z").getTime())).toBe(true);
+    expect(clockInAlertDue(facts, new Date("2026-08-31T08:16:00Z").getTime())).toBe(false);
+  });
+  it("stays closed once clocked in or clocked out", () => {
+    const at = new Date("2026-08-31T08:05:00Z").getTime();
+    expect(clockInAlertDue({ ...base, clockedInAt: "2026-08-31T08:02:00Z" }, at)).toBe(false);
+    expect(clockInAlertDue({ ...base, clockedInAt: null, sessionState: "clocked_out" }, at)).toBe(false);
   });
 });
 
