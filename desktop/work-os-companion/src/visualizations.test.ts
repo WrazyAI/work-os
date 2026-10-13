@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const readText = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 const app = readText(resolve(root, "src/App.tsx"));
+const insightsView = readText(resolve(root, "src/InsightsView.tsx"));
 const sidebar = readText(resolve(root, "src/SidebarNav.tsx"));
 const sidebarStyles = readText(resolve(root, "src/sidebar.css"));
 const avatarApp = readText(resolve(root, "src/AvatarApp.tsx"));
@@ -30,7 +31,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("Worktivity owns clock actions; the Windows Companion waits for provider confirmation.");
     expect(app).toContain("Worktivity attendance");
     expect(workspaceStyles).toContain(".pulse-provider-popover.active");
-    expect(app).toContain("Observed time and planned commitments · separate scales");
+    expect(insightsView).toContain("Observed time and planned commitments · separate scales");
     expect(insightChartStyles).toContain("Every series keeps its own scale");
     expect(app).toContain("Observed active time");
     expect(app).toContain("Clocked in");
@@ -477,22 +478,22 @@ describe("operational visualizations", () => {
   });
 
   it("keeps the insights chart kit truthful, accessible, and motion-safe", () => {
-    expect(app).toContain("TrendChart");
-    expect(app).toContain("DailyRhythmStrip");
-    expect(app).not.toContain('className="panel insight-flow"');
-    expect(app).toContain("HeatmapGrid");
-    expect(app).toContain("OnTimeBar");
-    expect(app).toContain("DeltaBadge");
-    expect(app).toContain("UpdateKindChart");
-    expect(app).toContain("ConsistencyChips");
+    expect(insightsView).toContain("TrendChart");
+    expect(insightsView).toContain("DailyRhythmStrip");
+    expect(insightsView).not.toContain('className="panel insight-flow"');
+    expect(insightsView).toContain("HeatmapGrid");
+    expect(insightsView).toContain("OnTimeBar");
+    expect(insightsView).toContain("DeltaBadge");
+    expect(insightsView).toContain("UpdateKindChart");
+    expect(insightsView).toContain("ConsistencyChips");
     expect(insightCharts).toContain("BarBreakdown");
-    expect(app).toContain("ActivityDonut");
-    expect(app).toContain("TrackedBars");
-    expect(app).toContain("ScrollFadeRegion");
+    expect(insightsView).toContain("ActivityDonut");
+    expect(insightsView).toContain("TrackedBars");
+    expect(insightsView).toContain("ScrollFadeRegion");
     expect(insightCharts).toContain('role="img"');
     expect(insightCharts).toContain("aria-label");
     expect(insightCharts).toContain("No dated outcomes");
-    expect(app).toContain("Undated work is never classified either way");
+    expect(insightsView).toContain("Undated work is never classified either way");
     expect(insightChartStyles).toContain("prefers-reduced-motion");
     expect(insightChartStyles).toContain(".trend-chart-table");
     expect(insightChartStyles).toContain(".activity-donut");
@@ -518,18 +519,18 @@ describe("operational visualizations", () => {
     expect(insightCharts).toContain("trendAxis");
     expect(insightCharts).toContain("heatmapColumns");
     expect(insightCharts).toContain("sharePercent");
-    expect(app).toContain("maxHeight={360}");
-    expect(app).toContain("maxHeight={320}");
-    expect(app).toContain('className="insight-activity-inline"');
+    expect(insightsView).toContain("maxHeight={360}");
+    expect(insightsView).toContain("maxHeight={320}");
+    expect(insightsView).toContain('className="insight-activity-inline"');
     expect(readFileSync(resolve(root, "src/ScrollFadeRegion.tsx"), "utf8")).toContain('role="region"');
   });
 
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {
-    expect(app).toContain('className="panel insight-hero"');
-    expect(app).toContain("Your work, without the noise.");
-    expect(app).toContain("Closing carry-over");
-    expect(app).toContain('className="panel insight-detail-disclosure"');
-    expect(app).toContain('range === "30d" ? <div className="split-chart"><HeatmapGrid');
+    expect(insightsView).toContain('className="panel insight-hero"');
+    expect(insightsView).toContain("Your work, without the noise.");
+    expect(insightsView).toContain("Closing carry-over");
+    expect(insightsView).toContain('className="panel insight-detail-disclosure"');
+    expect(insightsView).toContain('range === "30d" ? <div className="split-chart"><HeatmapGrid');
     expect(insightChartStyles).toContain(".insight-hero-stats");
     expect(insightChartStyles).toContain(".daily-rhythm-strip");
     expect(insightChartStyles).toContain(".insight-detail-disclosure");
@@ -537,7 +538,7 @@ describe("operational visualizations", () => {
 
   it("renders the grounded synthesis as bold-labelled short paragraphs with an evidence fallback", () => {
     const synthesisCard = readFileSync(resolve(root, "src/InsightSynthesis.tsx"), "utf8");
-    expect(app).toContain("<InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />");
+    expect(insightsView).toContain("<InsightSynthesisCard state={synthesis} onSynthesize={synthesize} />");
     expect(synthesisCard).toContain('<ChatMarkdown text={state.text} />');
     expect(synthesisCard).toContain('state.mode === "evidence"');
     expect(synthesisCard).toContain("showing the exact fact record instead");
