@@ -33,9 +33,11 @@ if [[ ! -x "$binary" ]]; then
 fi
 
 # Keep the keychain state of each scenario explicit: a leftover item from an
-# earlier step would otherwise decide what the next launch sees.
+# earlier step would otherwise decide what the next launch sees. Every call
+# reads stdin from /dev/null so a keychain prompt fails instead of blocking the
+# release pipeline on a password nobody can type.
 clear_saved_key() {
-  security delete-generic-password -s "$service" -a "$account" >/dev/null 2>&1 || true
+  security delete-generic-password -s "$service" -a "$account" </dev/null >/dev/null 2>&1 || true
 }
 
 # An item that this build is not trusted for. The ACL of an item created here
@@ -43,7 +45,7 @@ clear_saved_key() {
 # state: macOS must ask the app before handing the key over.
 seed_stale_key() {
   clear_saved_key
-  security add-generic-password -s "$service" -a "$account" -w "$(uuidgen)" >/dev/null 2>&1 || true
+  security add-generic-password -s "$service" -a "$account" -w "$(uuidgen)" </dev/null >/dev/null 2>&1 || true
 }
 
 latest_phase() {

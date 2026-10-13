@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -121,20 +121,36 @@ test("packaged startup gate accepts a settled launch and rejects a crash or a st
   const run = async (name, body) => {
     const cwd = join(root, name);
     const home = join(cwd, "home");
+    const bin = join(cwd, "bin");
     const binary = join(cwd, "src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion");
     mkdirSync(join(binary, ".."), { recursive: true });
     mkdirSync(home, { recursive: true });
+    // The gate seeds a real Keychain item on macOS; the test must never touch
+    // one, so `security` is shimmed and its arguments are recorded.
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "security"), `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "${cwd}/security-calls.log"\n`, { mode: 0o755 });
     writeFileSync(binary, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
     return new Promise((resolve, reject) => {
       const child = spawn("bash", [script], {
         cwd,
-        env: { ...process.env, RUNNER_TEMP: cwd, HOME: home, COMPANION_GATE_SECONDS: "3" },
+        env: {
+          ...process.env,
+          RUNNER_TEMP: cwd,
+          HOME: home,
+          PATH: `${bin}:${process.env.PATH}`,
+          COMPANION_GATE_SECONDS: "3",
+        },
       });
       let output = "";
       child.stdout.on("data", (chunk) => { output += chunk; });
       child.stderr.on("data", (chunk) => { output += chunk; });
       child.on("error", reject);
-      child.on("close", (code) => resolve({ code, output, log: readFileSync(join(cwd, "companion-startup.log"), "utf8") }));
+      child.on("close", (code) => resolve({
+        code,
+        output,
+        log: readFileSync(join(cwd, "companion-startup.log"), "utf8"),
+        securityCalls: existsSync(join(cwd, "security-calls.log")) ? readFileSync(join(cwd, "security-calls.log"), "utf8") : "",
+      }));
     });
   };
   // The gate reads the app's own boot phases: a launch that only stays alive is
@@ -149,6 +165,9 @@ test("packaged startup gate accepts a settled launch and rejects a crash or a st
   assert.equal(settled.code, 0);
   assert.match(settled.log, /started/);
   assert.match(settled.output, /boot gate settled at boot:connect_screen/);
+  // The second scenario seeds a saved key this build is not trusted for, so the
+  // gate is exercised against the state an in-place update creates.
+  assert.match(settled.securityCalls, /add-generic-password -s com\.wrazy\.workos -a stronghold-vault/);
   assert.equal(stuck.code, 1);
   assert.match(stuck.output, /never got past its loading screen/);
   assert.equal(crash.code, 1);
