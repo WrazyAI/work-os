@@ -39,20 +39,24 @@ export function shouldAnnounceUpdate(runningVersion: string | null | undefined, 
   return running !== (announcedVersion ?? "").trim();
 }
 
-export type ChangelogEntry = { version: string; bullets: string[] };
+export type ChangelogEntry = { version: string; date: string | null; bullets: string[] };
 
-/** Parses `## x.y.z` sections and their `- ` bullets. Non-version headings
- * (Unreleased, prose) are skipped; bullets before the first version heading
- * are dropped. Bullets render as plain text, never HTML. */
+/** Parses `## x.y.z` sections and their `- ` bullets. A section may carry the
+ * date it shipped after the version (`## 0.4.25 — 2026-10-12`); a recognized
+ * ISO date in the suffix is captured, an unrecognized suffix still parses the
+ * section without one (the modal never drops notes over a heading detail).
+ * Non-version headings (Unreleased, prose) are skipped; bullets before the
+ * first version heading are dropped. Bullets render as plain text, never HTML. */
 export function parseChangelog(markdown: string): ChangelogEntry[] {
   const entries: ChangelogEntry[] = [];
   let current: ChangelogEntry | null = null;
   // Windows checkouts deliver CRLF; `.` never matches \r, so an unnormalized
   // split silently dropped every bullet while the headings still matched.
   for (const line of markdown.replace(/\r\n?/g, "\n").split("\n")) {
-    const heading = line.match(/^##\s+(\d+\.\d+\.\d+)\s*$/);
+    const heading = line.match(/^##\s+(\d+\.\d+\.\d+)\b(.*)$/);
     if (heading) {
-      current = { version: heading[1]!, bullets: [] };
+      const date = /\b(\d{4}-\d{2}-\d{2})\b/.exec(heading[2] ?? "")?.[1] ?? null;
+      current = { version: heading[1]!, date, bullets: [] };
       entries.push(current);
       continue;
     }
@@ -64,6 +68,24 @@ export function parseChangelog(markdown: string): ChangelogEntry[] {
     if (bullet && current) current.bullets.push(bullet[1]!.trim());
   }
   return entries;
+}
+
+/** "October 12, 2026" for an ISO release date, or null when the value is
+ * missing or malformed. Date-only values render in UTC so the calendar day
+ * never shifts with the employee's timezone. */
+export function formatReleaseDate(value?: string | null): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((value ?? "").trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" }).format(date);
+  } catch {
+    return null;
+  }
 }
 
 /** Numeric SemVer comparison; invalid segments sort below valid ones. */

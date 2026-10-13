@@ -143,10 +143,12 @@ jobs:
           $changelog = "CHANGELOG.md"
           if (!(Test-Path $changelog)) { throw "Missing ${changelog}: every release must ship employee-facing notes" }
           $lines = Get-Content $changelog
-          $header = "## $env:RELEASE_VERSION"
+          # Headings must carry the ship date after the version
+          # (`## 0.4.25 — 2026-10-12`), so the check requires the dated form.
+          $headerPattern = "^##\s+" + [regex]::Escape($env:RELEASE_VERSION) + " — \d{4}-\d{2}-\d{2}$"
           $start = -1
-          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $header) { $start = $i; break } }
-          if ($start -lt 0) { throw "No $header section in $changelog. Move the Unreleased entries under the release version before publishing." }
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -match $headerPattern) { $start = $i; break } }
+          if ($start -lt 0) { throw "No dated ## $env:RELEASE_VERSION — <YYYY-MM-DD> section in $changelog. Move the Unreleased entries under the release version and record the ship date before publishing." }
           $bullets = 0
           for ($i = $start + 1; $i -lt $lines.Count; $i++) {
             if ($lines[$i] -match '^\s*##?\s+') { break }
@@ -284,9 +286,10 @@ jobs:
           "@ | Set-Content $notesPath -Encoding utf8
 
           $changelogLines = Get-Content "CHANGELOG.md"
-          $sectionHeader = "## $env:RELEASE_VERSION"
+          # Same dated heading the release check requires.
+          $sectionPattern = "^##\s+" + [regex]::Escape($env:RELEASE_VERSION) + " — \d{4}-\d{2}-\d{2}$"
           $sectionStart = -1
-          for ($i = 0; $i -lt $changelogLines.Count; $i++) { if ($changelogLines[$i].Trim() -eq $sectionHeader) { $sectionStart = $i; break } }
+          for ($i = 0; $i -lt $changelogLines.Count; $i++) { if ($changelogLines[$i].Trim() -match $sectionPattern) { $sectionStart = $i; break } }
           if ($sectionStart -ge 0) {
             $section = @()
             for ($i = $sectionStart + 1; $i -lt $changelogLines.Count; $i++) {

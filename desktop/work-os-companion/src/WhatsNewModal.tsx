@@ -2,19 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Clock, X } from "lucide-react";
 import { displayUpdateVersion } from "./updater";
 import { useModalScrollLock } from "./modalScrollLock";
-import type { ChangelogHistoryEntry } from "./whatsNew";
+import { formatReleaseDate, type ChangelogHistoryEntry } from "./whatsNew";
 
-const HISTORY_PAGE_SIZE = 10;
+const HISTORY_PAGE_SIZE = 20;
 
 /** Read-only changelog history: every logged release, newest first, with the
- * running version tagged. The first page is capped so the list stays scannable;
- * Show all reveals the rest. */
-export function ChangelogHistory({ entries, showAll, onShowAll }: {
+ * running version tagged and the date it shipped. Twenty releases render per
+ * page; Show more appends the next page until the end of the list. */
+export function ChangelogHistory({ entries, visibleCount, onShowMore }: {
   entries: ChangelogHistoryEntry[];
-  showAll: boolean;
-  onShowAll: (value: boolean) => void;
+  visibleCount: number;
+  onShowMore: () => void;
 }) {
-  const visible = showAll ? entries : entries.slice(0, HISTORY_PAGE_SIZE);
+  const visible = entries.slice(0, Math.max(HISTORY_PAGE_SIZE, visibleCount));
   const hidden = entries.length - visible.length;
   return (
     <div className="whats-new-history">
@@ -22,6 +22,7 @@ export function ChangelogHistory({ entries, showAll, onShowAll }: {
         <section className="whats-new-release" key={entry.version}>
           <header>
             <h3>Version {displayUpdateVersion(entry.version)}</h3>
+            {entry.date ? <time className="whats-new-date" dateTime={entry.date}>{formatReleaseDate(entry.date)}</time> : null}
             {entry.installed && <span className="whats-new-installed">This version</span>}
           </header>
           {entry.bullets.length > 0
@@ -30,10 +31,7 @@ export function ChangelogHistory({ entries, showAll, onShowAll }: {
         </section>
       ))}
       {hidden > 0 && (
-        <button type="button" className="whats-new-show-all" onClick={() => onShowAll(true)}>Show all {entries.length} updates</button>
-      )}
-      {showAll && entries.length > HISTORY_PAGE_SIZE && (
-        <button type="button" className="whats-new-show-all" onClick={() => onShowAll(false)}>Show {HISTORY_PAGE_SIZE} newest</button>
+        <button type="button" className="whats-new-show-all" onClick={onShowMore}>Show more</button>
       )}
     </div>
   );
@@ -50,7 +48,7 @@ export function WhatsNewModal({ displayVersion, bullets, history = [], onClose }
   onClose: () => void;
 }) {
   const [view, setView] = useState<"latest" | "history">("latest");
-  const [showAll, setShowAll] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const olderCount = history.filter((entry) => !entry.installed).length;
   useModalScrollLock(true);
@@ -72,7 +70,7 @@ export function WhatsNewModal({ displayVersion, bullets, history = [], onClose }
       </header>
       <div className="task-modal-body">
         {view === "history"
-          ? <ChangelogHistory entries={history} showAll={showAll} onShowAll={setShowAll} />
+          ? <ChangelogHistory entries={history} visibleCount={visibleCount} onShowMore={() => setVisibleCount((count) => count + HISTORY_PAGE_SIZE)} />
           : bullets.length > 0
             ? <ul className="whats-new-list">{bullets.map((bullet, index) => <li key={index}>{bullet}</li>)}</ul>
             : <p className="whats-new-empty">No changelog notes shipped with this build.</p>}

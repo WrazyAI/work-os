@@ -3009,6 +3009,12 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   letter-spacing: 0.08em;
   color: #666a61;
 }
+.whats-new-date {
+  font-size: 11px;
+  color: #8a8e85;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
 .whats-new-installed {
   padding: 2px 7px;
   border-radius: 999px;

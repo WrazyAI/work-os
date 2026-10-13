@@ -40,37 +40,54 @@ describe("changelog modal", () => {
   });
 });
 
-const history: ChangelogHistoryEntry[] = Array.from({ length: 12 }, (_, index) => ({
-  version: `0.4.${String(12 - index).padStart(2, "0")}`,
-  bullets: [`Note for 0.4.${12 - index}.`],
+const history: ChangelogHistoryEntry[] = Array.from({ length: 45 }, (_, index) => ({
+  version: `0.6.${45 - index}`,
+  date: index % 3 === 0 ? "2026-10-12" : null,
+  bullets: [`Note for 0.6.${45 - index}.`],
   installed: index === 0,
 }));
 
+const renderHistory = (visibleCount: number) =>
+  renderToStaticMarkup(createElement(ChangelogHistory, { entries: history, visibleCount, onShowMore: () => undefined }));
+
 describe("changelog history", () => {
-  it("shows the ten newest releases first and caps the rest behind Show all", () => {
-    const markup = renderToStaticMarkup(createElement(ChangelogHistory, { entries: history, showAll: false, onShowAll: () => undefined }));
-    expect((markup.match(/class="whats-new-release"/g) ?? []).length).toBe(10);
-    expect(markup).toContain("Show all 12 updates");
+  it("shows the twenty newest releases first and pages the rest behind Show more", () => {
+    const markup = renderHistory(20);
+    expect((markup.match(/class="whats-new-release"/g) ?? []).length).toBe(20);
+    expect(markup).toContain("Show more");
+    expect(markup).not.toContain("Show all");
     expect(markup).toContain("This version");
     // Newest first: the highest version precedes the next one down.
-    expect(markup.indexOf("Version 0.4.12")).toBeLessThan(markup.indexOf("Version 0.4.11"));
-    expect(markup).not.toContain("Version 0.4.01");
+    expect(markup.indexOf("Version 0.6.45")).toBeLessThan(markup.indexOf("Version 0.6.44"));
+    expect(markup).not.toContain("Version 0.6.25");
   });
 
-  it("reveals every logged release when expanded and can collapse again", () => {
-    const markup = renderToStaticMarkup(createElement(ChangelogHistory, { entries: history, showAll: true, onShowAll: () => undefined }));
-    expect((markup.match(/class="whats-new-release"/g) ?? []).length).toBe(12);
-    expect(markup).toContain("Version 0.4.01");
-    expect(markup).toContain("Show 10 newest");
-    expect(markup).not.toContain("Show all 12 updates");
+  it("appends the next page until the end of the list", () => {
+    const middle = renderHistory(40);
+    expect((middle.match(/class="whats-new-release"/g) ?? []).length).toBe(40);
+    expect(middle).toContain("Version 0.6.25");
+    expect(middle).toContain("Show more");
+    const all = renderHistory(45);
+    expect((all.match(/class="whats-new-release"/g) ?? []).length).toBe(45);
+    expect(all).toContain("Version 0.6.01");
+    expect(all).not.toContain("Show more");
   });
 
-  it("names the gap when a logged release shipped without notes", () => {
+  it("shows the ship date beside each version that logged one", () => {
+    const markup = renderHistory(20);
+    expect(markup).toContain('class="whats-new-date"');
+    expect(markup).toContain('dateTime="2026-10-12"');
+    expect(markup).toContain("October 12, 2026");
+  });
+
+  it("keeps a logged release readable when no ship date was recorded", () => {
     const markup = renderToStaticMarkup(createElement(ChangelogHistory, {
-      entries: [{ version: "0.4.0", bullets: [], installed: false }],
-      showAll: false,
-      onShowAll: () => undefined,
+      entries: [{ version: "0.4.0", date: null, bullets: [], installed: false }],
+      visibleCount: 20,
+      onShowMore: () => undefined,
     }));
+    expect(markup).toContain("Version 0.4.00");
+    expect(markup).not.toContain("whats-new-date");
     expect(markup).toContain("No notes were logged for this build.");
   });
 });

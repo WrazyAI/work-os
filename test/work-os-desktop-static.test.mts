@@ -570,7 +570,20 @@ assert.match(whatsNewModal, /role="dialog" aria-modal="true"/);
 assert.match(whatsNewModal, /No changelog notes shipped with this build\./);
 const changelog = read("CHANGELOG.md");
 assert.match(changelog, /^## Unreleased$/m);
-assert.match(changelog, /^## \d+\.\d+\.\d+$/m);
+// Every version heading carries the day the build shipped, so the changelog
+// history can show it; undated or impossible dates must not come back.
+const versionHeadings = changelog.split("\n").filter((line) => /^##\s+\d+\.\d+\.\d+\b/.test(line));
+assert.ok(versionHeadings.length > 0, "CHANGELOG.md must log released versions");
+for (const heading of versionHeadings) {
+  const dated = heading.match(/^## \d+\.\d+\.\d+ — (\d{4})-(\d{2})-(\d{2})$/);
+  assert.ok(dated, `dated version heading: ${heading}`);
+  const [year, month, day] = dated!.slice(1).map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day!, 12));
+  assert.ok(
+    date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day && year! >= 2024,
+    `plausible ship date: ${heading}`,
+  );
+}
 assert.match(changelog, /hard\s+release requirement/);
 // End-user brevity: one short bullet per change (wrapped lines joined).
 // Only entry sections count; the header guidance above them is exempt.

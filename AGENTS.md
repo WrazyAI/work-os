@@ -226,12 +226,13 @@ Companion releases must synchronize version metadata in
 `desktop/work-os-companion/package.json`,
 `desktop/work-os-companion/src-tauri/tauri.conf.json`, and
 `desktop/work-os-companion/src-tauri/Cargo.toml`. Move released entries from
-`## Unreleased` into `## <version>` in
-`desktop/work-os-companion/CHANGELOG.md`; CI fails without it and the GitHub
-release notes are built from that section. Write every entry for the employee
-who just installed the update — one short, plain bullet per change — because
-first launch after an update shows it in the changelog modal. Keep
-installer/updater verification and signing requirements intact.
+`## Unreleased` into `## <version> — <YYYY-MM-DD>` in
+`desktop/work-os-companion/CHANGELOG.md`, using the day the build ships; the
+What's New history shows that date beside the version. CI fails without it and
+the GitHub release notes are built from that section. Write every entry for
+the employee who just installed the update — one short, plain bullet per
+change — because first launch after an update shows it in the changelog modal.
+Keep installer/updater verification and signing requirements intact.
 
 Work OS changes deploy through the deployed Agent OS checkout on the VPS
 (`/home/dev/agent-os`, reached with
