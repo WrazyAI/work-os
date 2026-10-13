@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.28 — 2026-10-13
+
+- The notifications bell now shows how many tasks are overdue, with a Review action that opens the unfinished list.
+- Newly overdue tasks announce themselves with a reminder and a desktop notification, and your check-in now leads with the overdue count.
+
 ## 0.4.27 — 2026-10-13
 
 - EOD reminders now arrive on time when the wrap-up window opens, even if nothing else changes on the server.
