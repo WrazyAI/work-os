@@ -92,26 +92,26 @@ impl VaultPasswordError {
         }
     }
 
-    pub fn store_unavailable(reason: &str) -> Self {
+    pub fn store_unavailable() -> Self {
         Self {
             code: VaultPasswordErrorCode::StoreUnavailable,
-            message: format!("This device's password store is unavailable ({reason})."),
+            message: "This device's password store is unavailable right now. Try again in a moment.".into(),
             requires_reset: false,
         }
     }
 
-    pub fn store_write_failed(reason: &str) -> Self {
+    pub fn store_write_failed() -> Self {
         Self {
             code: VaultPasswordErrorCode::StoreWriteFailed,
-            message: format!("This device's password store refused to save a new key ({reason})."),
+            message: "This device's password store refused to save a new key. Try again in a moment.".into(),
             requires_reset: false,
         }
     }
 
-    pub fn unavailable(reason: &str) -> Self {
+    pub fn unavailable() -> Self {
         Self {
             code: VaultPasswordErrorCode::Unavailable,
-            message: format!("The local vault request could not run ({reason})."),
+            message: "The local vault request could not run. Try again in a moment.".into(),
             requires_reset: false,
         }
     }
@@ -160,7 +160,7 @@ pub fn classify_unavailable(reason: &str) -> VaultPasswordError {
             return VaultPasswordError::confirmation_required();
         }
     }
-    VaultPasswordError::store_unavailable(reason)
+    VaultPasswordError::store_unavailable()
 }
 
 /// The credential account for the vault this device holds.
@@ -233,17 +233,26 @@ fn read_or_create(
     notify: &dyn Fn(&str, &str),
 ) -> Result<String, VaultPasswordError> {
     let account = account_for(store.read_vault_id().as_deref());
+    // Store errors are for the diagnostics trail, never for the employee: the
+    // failure screen's copy is bounded and the OS wording is not.
+    let mut detail = String::new();
     let outcome = match decide(store.read(&account), store.vault_exists()) {
         StoreDecision::Use(password) => Ok(password),
         StoreDecision::UnlockFailed => Err(VaultPasswordError::unlock_failed()),
-        StoreDecision::Unavailable(reason) => Err(classify_unavailable(&reason)),
+        StoreDecision::Unavailable(reason) => {
+            detail = reason.clone();
+            Err(classify_unavailable(&reason))
+        }
         StoreDecision::Mint => {
             let mut value = [0_u8; 32];
             rand::rng().fill_bytes(&mut value);
             let password = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(value);
             match store.write(&account, &password) {
                 Ok(()) => Ok(password),
-                Err(reason) => Err(VaultPasswordError::store_write_failed(&reason)),
+                Err(reason) => {
+                    detail = reason.clone();
+                    Err(VaultPasswordError::store_write_failed())
+                }
             }
         }
     };
@@ -251,7 +260,11 @@ fn read_or_create(
         Ok(_) => notify("vault.password.ready", "Resolved the local vault key"),
         Err(error) => notify(
             "vault.password.failed",
-            &format!("Local vault key unavailable ({:?})", error.code),
+            &format!(
+                "Local vault key unavailable ({:?}){}",
+                error.code,
+                if detail.is_empty() { String::new() } else { format!(": {detail}") }
+            ),
         ),
     }
     outcome
@@ -266,10 +279,10 @@ fn reset(store: &dyn VaultStore, notify: &dyn Fn(&str, &str)) -> Result<(), Vaul
     let removed = store.delete(&stale_account);
     store
         .forget_vault()
-        .map_err(|reason| VaultPasswordError::store_write_failed(&reason))?;
+        .map_err(|_| VaultPasswordError::store_write_failed())?;
     let new_id = store
         .write_vault_id()
-        .map_err(|reason| VaultPasswordError::store_write_failed(&reason))?;
+        .map_err(|_| VaultPasswordError::store_write_failed())?;
     notify(
         "vault.local.reset",
         &format!(
@@ -475,6 +488,23 @@ mod tests {
         *store.answer.lock().unwrap() = StoreAnswer::Password("allowed".into());
         assert_eq!(read(&sender).unwrap(), "allowed");
         assert_eq!(store.reads(), 2);
+    }
+
+    #[test]
+    fn keeps_store_jargon_out_of_the_employee_message() {
+        let store = boxed(FakeStore::new(
+            StoreAnswer::Failed("keychain error OSStatus -25294".into()),
+            true,
+        ));
+        let sender = serving(store);
+        let error = read(&sender).unwrap_err();
+        assert_eq!(error.code, VaultPasswordErrorCode::StoreUnavailable);
+        assert!(
+            !error.message.contains("OSStatus") && !error.message.contains("-25294"),
+            "the failure screen shows a bounded reason, not the OS wording: {}",
+            error.message
+        );
+        assert!(error.message.len() < 200);
     }
 
     #[test]

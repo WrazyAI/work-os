@@ -98,7 +98,7 @@ impl VaultPasswordWorker {
         let (reply, receiver) = channel();
         self.sender
             .send(VaultRequest::Read { reply })
-            .map_err(|error| VaultPasswordError::unavailable(&error.to_string()))?;
+            .map_err(|_| VaultPasswordError::unavailable())?;
         await_reply(receiver).await
     }
 
@@ -106,7 +106,7 @@ impl VaultPasswordWorker {
         let (reply, receiver) = channel();
         self.sender
             .send(VaultRequest::Reset { reply })
-            .map_err(|error| VaultPasswordError::unavailable(&error.to_string()))?;
+            .map_err(|_| VaultPasswordError::unavailable())?;
         await_reply(receiver).await
     }
 }
@@ -117,8 +117,8 @@ async fn await_reply<T: Send + 'static>(
 ) -> Result<T, VaultPasswordError> {
     tauri::async_runtime::spawn_blocking(move || receiver.recv())
         .await
-        .map_err(|error| VaultPasswordError::unavailable(&error.to_string()))?
-        .map_err(|error| VaultPasswordError::unavailable(&error.to_string()))?
+        .map_err(|_| VaultPasswordError::unavailable())?
+        .map_err(|_| VaultPasswordError::unavailable())?
 }
 
 /// Starts the worker. Called once from setup, after diagnostics.
@@ -163,7 +163,7 @@ pub fn init(app: &tauri::AppHandle) {
 
 fn worker(app: &tauri::AppHandle) -> Result<tauri::State<'_, VaultPasswordWorker>, VaultPasswordError> {
     app.try_state::<VaultPasswordWorker>()
-        .ok_or_else(|| VaultPasswordError::unavailable("The vault worker is not running"))
+        .ok_or_else(VaultPasswordError::unavailable)
 }
 
 /// The password for this device's vault, creating one on first run.
