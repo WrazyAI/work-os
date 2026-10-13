@@ -6566,6 +6566,17 @@ button:not(:disabled):active {
   height: 100%;
 }
 
+.notifications-lead {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #f0d9d4;
+  border-radius: 10px;
+  background: #fdf3f1;
+  color: var(--color-danger, #c94e43);
+}
+
 .notifications-row.is-skeleton {
   grid-template-columns: 1fr;
   gap: 8px;

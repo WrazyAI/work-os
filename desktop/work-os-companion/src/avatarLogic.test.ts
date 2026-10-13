@@ -3,7 +3,7 @@ import {
   clockInNudge, clockInAlertDue, collectNudges, composerSendTarget, composerVisible, bubbleAction, eodAlertDue, eodNudge, hasOpenShiftSession, hourlyNudge, isHeaderDragStart, isOnShift, isPromptReminderTurn, mergeAvatarChatEntries, mergeConversationTurns, mergeNextStepsMoment, nextStepState, nextStepsSettleMs, prunePromptReminderTurns, replaceUndecidedRecapTurns, scheduledShiftEnd, serializeAvatarChatEntry, stripPromptReminderTurns,
   NEXT_STEPS_SETTLE_MS,
   avatarBubble, avatarPrompt, clearRecordedUpdatePrompt, nextSnoozeDelayMs, shiftElapsedFraction, snoozeUntil,
-  agendaAutoExpandKey, nextAgendaAutoExpand,
+  agendaAutoExpandKey, nextAgendaAutoExpand, overdueTasks,
   type CompanionDayFacts,
 } from "./avatarLogic";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
@@ -93,6 +93,34 @@ describe("hourly nudge", () => {
   it("waits until the server-scheduled prompt time", () => {
     const facts = { ...base, promptRequired: true, nextPromptAt: "2026-08-31T10:05:00Z" };
     expect(hourlyNudge(facts, NOW, new Set())).toBeNull();
+  });
+});
+
+describe("overdue work", () => {
+  const facts: CompanionDayFacts = {
+    ...base,
+    taskOptions: [
+      { id: "t-1", title: "Repair provider sync", dueDate: "2026-08-29", completed: false },
+      { id: "t-2", title: "Due today", dueDate: "2026-08-31", completed: false },
+      { id: "t-3", title: "Done late", dueDate: "2026-08-29", completed: true },
+      { id: "t-4", title: "No due date", dueDate: null, completed: false },
+      { id: "t-5", title: "Future", dueDate: "2026-09-02", completed: false },
+    ],
+  };
+
+  it("uses the one overdue definition every surface shares", () => {
+    expect(overdueTasks(facts).map((task) => task.id)).toEqual(["t-1"]);
+    expect(overdueTasks({ ...base, taskOptions: undefined })).toEqual([]);
+    expect(overdueTasks({ ...base, taskOptions: [] })).toEqual([]);
+  });
+
+  it("leads the check-in prompt with the overdue count", () => {
+    const due: CompanionDayFacts = { ...facts, promptRequired: true, promptKind: "hourly_fallback", nextPromptAt: "2026-08-31T09:59:00Z" };
+    const prompt = avatarPrompt(due, NOW);
+    expect(prompt.kind).toBe("check_in");
+    expect(prompt.body).toBe("1 task is overdue. Record what changed since your last update.");
+    const clean = avatarPrompt({ ...base, promptRequired: true, promptKind: "hourly_fallback", nextPromptAt: "2026-08-31T09:59:00Z" }, NOW);
+    expect(clean.body).not.toContain("overdue");
   });
 });
 

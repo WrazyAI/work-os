@@ -1,12 +1,12 @@
 import { useEffect, type KeyboardEvent } from "react";
-import { Bell, BellRing, ChevronRight, RefreshCw, X } from "lucide-react";
+import { Bell, BellRing, ChevronRight, CircleAlert, RefreshCw, X } from "lucide-react";
 import { Skeleton } from "./LoadingUi";
 import { formatWorkOsDate } from "./dateFormat";
 import { useAnchoredMenu } from "./taskSurfaces";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { renderViewportSurface } from "./viewportSurface";
-import { notificationsBadgeCount, notificationsSummary } from "./notificationsLogic";
+import { notificationsBadgeCount, notificationsSummary, overdueSummary } from "./notificationsLogic";
 import type { OutstandingEodDay, OutstandingEodStatus } from "./types";
 
 export const OUTSTANDING_STATUS_META: Record<OutstandingEodStatus, { label: string; className: string }> = {
@@ -47,12 +47,13 @@ export interface ReadyRecapSummary {
 /**
  * The masthead notifications panel. One list of what needs the employee right
  * now: what Otto remembers awaiting review, a ready recap awaiting a decision,
- * and the outstanding EOD days the bell already tracked. The badge counts all
- * three; every row opens the exact surface that resolves it.
+ * overdue tasks, and the outstanding EOD days the bell already tracked. The
+ * badge counts all four; every row opens the exact surface that resolves it.
  */
-export function NotificationsBell({ memoryCandidates, recap, days, loading, error, open, onToggle, onClose, onSelect, onOpenMemory, onOpenRecap, onRetry }: {
+export function NotificationsBell({ memoryCandidates, recap, overdueTasks, days, loading, error, open, onToggle, onClose, onSelect, onOpenMemory, onOpenRecap, onOpenOverdue, onRetry }: {
   memoryCandidates: number;
   recap: ReadyRecapSummary | null;
+  overdueTasks: number;
   days: OutstandingEodDay[];
   loading: boolean;
   error: string | null;
@@ -62,15 +63,16 @@ export function NotificationsBell({ memoryCandidates, recap, days, loading, erro
   onSelect: (day: OutstandingEodDay) => void;
   onOpenMemory: () => void;
   onOpenRecap: () => void;
+  onOpenOverdue: () => void;
   onRetry: () => void;
 }) {
   const { triggerRef, menuRef, style } = useAnchoredMenu(open);
-  const count = notificationsBadgeCount({ memoryCandidates, recapReady: !!recap, outstandingEodDays: days.length });
+  const count = notificationsBadgeCount({ memoryCandidates, recapReady: !!recap, overdueTasks, outstandingEodDays: days.length });
   const reviewCount = memoryCandidates + (recap ? 1 : 0);
   const label = count > 0 ? `Notifications, ${count} item${count === 1 ? "" : "s"} need attention` : "Notifications";
   const headline = loading && !count ? "Checking what needs you…"
     : error && !count ? "Could not refresh the list"
-      : count ? notificationsSummary({ memoryCandidates, recapReady: !!recap, outstandingEodDays: days.length })
+      : count ? notificationsSummary({ memoryCandidates, recapReady: !!recap, overdueTasks, outstandingEodDays: days.length })
         : "You're all caught up";
 
   useEffect(() => {
@@ -159,6 +161,21 @@ export function NotificationsBell({ memoryCandidates, recap, days, loading, erro
               {recap && reviewReminder("recap")}
             </ul>
           </section>}
+          {overdueTasks > 0 && <section className="notifications-section" aria-label="Tasks needing attention">
+            <span className="notifications-section-title">Needs attention</span>
+            <ul className="notifications-list">
+              <li>
+                <button type="button" className="notifications-row review overdue" onClick={onOpenOverdue}>
+                  <span className="notifications-lead" aria-hidden="true"><CircleAlert size={16} /></span>
+                  <span className="notifications-row-main">
+                    <span className="notifications-row-title">{overdueSummary(overdueTasks)}</span>
+                    <span className="notifications-row-meta">Unfinished work past its due date</span>
+                  </span>
+                  <span className="notifications-row-action">Review</span>
+                </button>
+              </li>
+            </ul>
+          </section>}
           {days.length > 0 && <section className="notifications-section" aria-label="Outstanding EODs">
             <span className="notifications-section-title">Outstanding EODs</span>
             <ul className="notifications-list">{days.map((day) => {
@@ -177,7 +194,7 @@ export function NotificationsBell({ memoryCandidates, recap, days, loading, erro
           </section>}
           {loading && !count ? <ul className="notifications-list" aria-hidden="true">{[0, 1, 2].map((row) => <li key={row} className="notifications-row is-skeleton"><Skeleton className="skeleton-line skeleton-title" /><Skeleton className="skeleton-line skeleton-body" /></li>)}</ul>
             : error && !count ? <div className="notifications-notice" role="status"><span>{error}</span><button type="button" onClick={onRetry}><RefreshCw size={14} /> Try again</button></div>
-              : !count ? <div className="notifications-empty"><strong>You&apos;re caught up</strong><span>Recaps, memories, and EODs show up here when they need you.</span></div>
+              : !count ? <div className="notifications-empty"><strong>You&apos;re caught up</strong><span>Recaps, memories, overdue tasks, and EODs show up here when they need you.</span></div>
                 : null}
         </div>
       </div>,

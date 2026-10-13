@@ -16,6 +16,7 @@ function render(overrides: Partial<Props> = {}) {
   return renderToStaticMarkup(createElement(NotificationsBell, {
     memoryCandidates: 0,
     recap: null,
+    overdueTasks: 0,
     days: [],
     loading: false,
     error: null,
@@ -25,6 +26,7 @@ function render(overrides: Partial<Props> = {}) {
     onSelect: noop,
     onOpenMemory: noop,
     onOpenRecap: noop,
+    onOpenOverdue: noop,
     onRetry: noop,
     ...overrides,
   }));
@@ -37,11 +39,13 @@ describe("NotificationsBell trigger", () => {
     expect(markup).not.toContain("notifications-bell-count");
   });
 
-  it("counts memories, a ready recap, and outstanding EOD days together", () => {
+  it("counts memories, a ready recap, overdue tasks, and outstanding EOD days together", () => {
     const markup = render({ memoryCandidates: 2, recap: { id: "recap-1", label: "2:00–3:00 PM" }, days });
     expect(markup).toContain('aria-label="Notifications, 5 items need attention"');
     expect(markup).toContain("notifications-bell-count");
     expect(markup).toContain(">5<");
+    const withOverdue = render({ memoryCandidates: 1, overdueTasks: 2 });
+    expect(withOverdue).toContain('aria-label="Notifications, 3 items need attention"');
   });
 });
 
@@ -67,6 +71,21 @@ describe("NotificationsBell panel", () => {
     expect(markup).toContain("Outstanding EODs");
     expect(markup).toContain("Thursday · 4h 50m observed · 10 task outcomes");
     expect(markup).toContain("eod-pill");
+  });
+
+  it("surfaces overdue tasks as a needs-attention row", () => {
+    const markup = render({ overdueTasks: 2, open: true });
+    expect(markup).toContain("Needs attention");
+    expect(markup).toContain("2 tasks are overdue");
+    expect(markup).toContain("Unfinished work past its due date");
+    expect(markup).toContain("notifications-lead");
+    expect(markup).toContain("2 overdue tasks");
+  });
+
+  it("says one task is overdue in the singular", () => {
+    const markup = render({ overdueTasks: 1, open: true });
+    expect(markup).toContain("1 task is overdue");
+    expect(markup).toContain("1 overdue task");
   });
 
   it("shows the caught-up empty state only when nothing is waiting", () => {

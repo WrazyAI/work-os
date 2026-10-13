@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { memoryCandidateIds, mergeSeenIds, notificationsBadgeCount, notificationsSummary, readyRecap, recapNotifyKey, unseenMemoryIds } from "./notificationsLogic";
+import { memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, notificationsBadgeCount, notificationsSummary, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import type { ActivityInterval, MemoryFact } from "./types";
 
 function fact(id: string, review_status: MemoryFact["review_status"]): MemoryFact {
@@ -69,15 +69,42 @@ describe("ready recap selection", () => {
   });
 });
 
+describe("overdue notifications", () => {
+  it("keys an announcement to the task and its due date", () => {
+    expect(overdueNotifyKey({ id: "task-1", dueDate: "2026-10-10" })).toBe("overdue:task-1:2026-10-10");
+    expect(unseenOverdueKeys(["overdue:task-1:2026-10-10", "overdue:task-2:2026-10-11"], ["overdue:task-1:2026-10-10"])).toEqual(["overdue:task-2:2026-10-11"]);
+  });
+
+  it("names the count in the singular and plural", () => {
+    expect(overdueSummary(1)).toBe("1 task is overdue");
+    expect(overdueSummary(3)).toBe("3 tasks are overdue");
+  });
+
+  it("never rotates a current overdue key out of the registry", () => {
+    const many = Array.from({ length: 130 }, (_, index) => `overdue:task-${index}:2026-10-10`);
+    const merged = mergeOverdueKeys([], many);
+    expect(merged).toHaveLength(130);
+    for (const key of many) expect(merged).toContain(key);
+    // Older keys still age out of the bounded registry.
+    const older = Array.from({ length: 200 }, (_, index) => `overdue:old-${index}:2026-10-01`);
+    const bounded = mergeOverdueKeys(older, many.slice(0, 5));
+    expect(bounded).toHaveLength(120);
+    for (const key of many.slice(0, 5)) expect(bounded).toContain(key);
+    // A current key already present is not duplicated.
+    expect(mergeOverdueKeys(["overdue:a:2026-10-10"], ["overdue:a:2026-10-10"])).toEqual(["overdue:a:2026-10-10"]);
+  });
+});
+
 describe("badge and headline counts", () => {
-  it("counts memories, one recap slot, and outstanding days together", () => {
-    expect(notificationsBadgeCount({ memoryCandidates: 3, recapReady: true, outstandingEodDays: 2 })).toBe(6);
-    expect(notificationsBadgeCount({ memoryCandidates: 0, recapReady: false, outstandingEodDays: 0 })).toBe(0);
+  it("counts memories, one recap slot, overdue tasks, and outstanding days together", () => {
+    expect(notificationsBadgeCount({ memoryCandidates: 3, recapReady: true, overdueTasks: 2, outstandingEodDays: 2 })).toBe(8);
+    expect(notificationsBadgeCount({ memoryCandidates: 0, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe(0);
   });
 
   it("names what is waiting for the panel headline", () => {
-    expect(notificationsSummary({ memoryCandidates: 1, recapReady: false, outstandingEodDays: 0 })).toBe("1 memory to review");
-    expect(notificationsSummary({ memoryCandidates: 2, recapReady: true, outstandingEodDays: 3 })).toBe("2 memories to review · a recap to review · 3 prior EODs");
-    expect(notificationsSummary({ memoryCandidates: 0, recapReady: false, outstandingEodDays: 0 })).toBe("You're caught up");
+    expect(notificationsSummary({ memoryCandidates: 1, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe("1 memory to review");
+    expect(notificationsSummary({ memoryCandidates: 2, recapReady: true, overdueTasks: 3, outstandingEodDays: 3 })).toBe("2 memories to review · a recap to review · 3 overdue tasks · 3 prior EODs");
+    expect(notificationsSummary({ memoryCandidates: 0, recapReady: false, overdueTasks: 1, outstandingEodDays: 0 })).toBe("1 overdue task");
+    expect(notificationsSummary({ memoryCandidates: 0, recapReady: false, overdueTasks: 0, outstandingEodDays: 0 })).toBe("You're caught up");
   });
 });

@@ -57,7 +57,7 @@ import wordmark from "./assets/work-os-mark.png";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
-import { MEMORY_SEEN_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeSeenIds, readyRecap, recapNotifyKey, unseenMemoryIds } from "./notificationsLogic";
+import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
@@ -1216,6 +1216,66 @@ export default function App() {
     recapNotifiedRef.current = next;
     writeSeenIds(RECAP_NOTIFIED_KEY, next);
   }, [readyRecapInterval, notifications]); // eslint-disable-line react-hooks/exhaustive-deps -- openGoalComposer only calls stable setters
+
+  // Overdue work for the bell and the reminder. The set matches the Unfinished
+  // destination exactly: tasks day-scoped to today belong to My day (and to the
+  // check-in mention), so the bell never counts work its Review action cannot
+  // show. The count itself stays the server's overdue backlog total.
+  const overdueBacklog = useMemo(() => {
+    // The same day-scoped set the Tasks workspace builds for My day; those
+    // tasks are excluded so the bell's count matches its Review destination.
+    const myDayIds = new Set(parentTasks(uniqueTasks(dayScopedTasks(visibleDay?.tasks ?? [], planItems, visibleDay?.shiftDate ?? "", taskHistory)))
+      .map((task) => String(task.provider_task_id || task.id)));
+    return parentTasks(uniqueTasks(backlogQuery.data?.tasks ?? []))
+      .filter((task) => isOverdueTask(task, visibleDay?.shiftDate ?? "") && !myDayIds.has(String(task.provider_task_id || task.id)))
+      .map((task) => ({ id: String(task.id ?? task.provider_task_id ?? ""), title: safeTaskText(task.title, "Untitled task"), dueDate: String(task.due_date ?? "").slice(0, 10) }))
+      .filter((task) => task.id);
+  }, [backlogQuery.data?.tasks, visibleDay?.tasks, visibleDay?.shiftDate, planItems, taskHistory]);
+  const overdueTaskCount = overdueBacklog.length;
+  const openOverdueTasks = useCallback(() => {
+    setNotificationsOpen(false);
+    // Restore the current workday and drop active filters — including the
+    // visible search text — so the overdue section is actually visible
+    // wherever the employee navigates from.
+    setPlanHistoryDate("");
+    setTaskSearch("");
+    setTaskSearchQuery("");
+    setTaskFilterFrom("");
+    setTaskFilterTo("");
+    setTaskView("unfinished");
+    setView("tasks");
+  }, []);
+
+  // Newly overdue tasks announce themselves once per task and due date: an in-app
+  // reminder with Otto's mark, and a system notification when the window is
+  // hidden. The shared registry keeps a reload from re-announcing what the
+  // employee already saw.
+  const overdueNotifiedRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!overdueBacklog.length) return;
+    const keys = overdueBacklog.map((task) => overdueNotifyKey(task));
+    const seen = overdueNotifiedRef.current ?? readSeenIds(OVERDUE_NOTIFIED_KEY);
+    const unseen = unseenOverdueKeys(keys, seen);
+    if (unseen.length > 0) {
+      notifications.notify(
+        "warning",
+        "Unfinished work is past its due date — review the Unfinished view.",
+        overdueSummary(unseen.length),
+        { label: "Review", onClick: openOverdueTasks },
+        { icon: "otto" },
+      );
+      if (document.hidden) {
+        void fireCompanionToast({
+          title: overdueSummary(unseen.length),
+          body: "Unfinished work is past its due date.",
+          target: "main",
+        });
+      }
+    }
+    const merged = mergeOverdueKeys(seen, keys);
+    overdueNotifiedRef.current = merged;
+    writeSeenIds(OVERDUE_NOTIFIED_KEY, merged);
+  }, [overdueBacklog, notifications]); // eslint-disable-line react-hooks/exhaustive-deps -- openOverdueTasks only calls stable setters
 
   /** Keep, reject, or forget a memory fact, then refresh every surface that
    * shows the same list (panel badge, settings band, modal). */
@@ -3378,6 +3438,7 @@ export default function App() {
       <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{view !== "tasks" && visibleDay?.niftySync && <span className={`provider nifty-state ${visibleDay.niftySync.error ? "degraded" : visibleDay.niftySync.syncing ? "syncing" : "fresh"}`} title={visibleDay.niftySync.error || (visibleDay.niftySync.syncing ? "Nifty is refreshing task state" : "Nifty task state is current")}>{visibleDay.niftySync.error ? "Nifty sync delayed" : visibleDay.niftySync.syncing ? "Nifty syncing" : "Nifty current"}</span>}{signedIn && !syncBypass && <NotificationsBell
         memoryCandidates={memoryCandidateCount}
         recap={recapSummary}
+        overdueTasks={overdueTaskCount}
         days={outstandingQuery.data?.days ?? []}
         loading={outstandingQuery.isFetching && !outstandingQuery.data}
         error={outstandingQuery.error ? errorMessage(outstandingQuery.error, "Outstanding EODs could not be loaded.") : null}
@@ -3387,6 +3448,7 @@ export default function App() {
         onSelect={(day: OutstandingEodDay) => { setNotificationsOpen(false); setEodLanding(false); setEodDate(day.date); setView("review"); }}
         onOpenMemory={() => { setNotificationsOpen(false); setMemoryOpen(true); }}
         onOpenRecap={() => { setNotificationsOpen(false); openGoalComposer(); }}
+        onOpenOverdue={openOverdueTasks}
         onRetry={() => void outstandingQuery.refetch()}
       />}<button className="icon" title="Refresh this page" disabled={refreshing} onClick={() => void refreshActiveView()}>{refreshing ? <FadeArc size={17} /> : <RefreshCw size={17} />}</button><button className="avatar" aria-label={`Profile for ${visibleOnboarding.profile.displayName}`} title="Open profile settings" onClick={() => setProfileOpen(true)}><ProfileAvatar name={visibleOnboarding.profile.displayName} avatarUrl={visibleOnboarding.profile.avatarUrl} /></button></div></header>
       {debugScenario.enabled && <div className="notice debug"><Bug size={15} /> {syncBypass ? "Offline playground — the backend is never contacted and changes stay on this device." : debugScenario.liveWrites ? "Scenario mode — filing real updates against the connected server." : "Scenario mode is active. Writes are disabled."}<button onClick={() => setScenario(DEFAULT_DEBUG_SCENARIO)}>Reset</button></div>}
@@ -3476,7 +3538,7 @@ export default function App() {
         canClockOut={canControlWorktivity && !worktivityPending}
         onEditFocus={openPlanningSession}
         onAddTask={() => void openTaskComposer()}
-        onManageTasks={() => setView("tasks")} onOpenOverdue={() => { setTaskView("unfinished"); setView("tasks"); }} currentDate={visibleDay?.shiftDate ?? ""}
+        onManageTasks={() => setView("tasks")} onOpenOverdue={openOverdueTasks} currentDate={visibleDay?.shiftDate ?? ""}
         onOpenTask={(task) => void openTaskDetails(task)}
         onToggleTask={setTaskCompletion}
         taskFlight={taskFlight}

@@ -5,6 +5,8 @@
  */
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
 import type { RecapNextStepState, RecapNextStepsMoment } from "./RecapNextStepsCard";
+import { overdueSummary } from "./notificationsLogic";
+import { isOverdueTask } from "./taskWorkspace";
 
 export interface CompanionDayFacts {
   shiftDate: string;
@@ -30,6 +32,9 @@ export interface CompanionDayFacts {
   employeeUpdates?: number;
   completedTasks?: number;
   openTasks?: number;
+  /** The day's open-task slice, enough to spot overdue work for the prompt and
+   * the check-in mention. Older payloads simply carry no tasks. */
+  taskOptions?: Array<{ id: string; title: string; dueDate?: string | null; completed?: boolean }>;
   eodSubmitted?: boolean;
 }
 
@@ -170,6 +175,16 @@ export function eodAlertDue(input: {
   return serverDue || now >= end - EOD_ALERT_LEAD_MS;
 }
 
+/** The day's overdue work, using the one overdue definition every surface
+ * shares (design §6.4): open work with a real due date before the workday.
+ * Undated older work is carry-over, never overdue. */
+export function overdueTasks(facts: CompanionDayFacts): Array<{ id: string; title: string; dueDate: string }> {
+  return (facts.taskOptions ?? []).flatMap((task) => {
+    if (!isOverdueTask({ due_date: task.dueDate ?? null, completed: task.completed === true }, facts.shiftDate)) return [];
+    return [{ id: task.id, title: task.title, dueDate: String(task.dueDate).slice(0, 10) }];
+  });
+}
+
 /** Builds one truthful, action-specific companion message from the current day.
  * It intentionally describes employee-authored updates and task state separately. */
 export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPrompt {
@@ -212,16 +227,18 @@ export function avatarPrompt(facts: CompanionDayFacts, now: number): AvatarPromp
     const dueAt = facts.nextPromptAt ? Date.parse(facts.nextPromptAt) : now;
     if (!Number.isFinite(dueAt) || dueAt <= now) {
       const firstCheckIn = facts.promptKind === "follow_up" && !facts.lastSubstantiveUpdateAt;
+      // The ask leads with the day's outstanding state, then the check-in
+      // itself; focus and task detail live in the task card and composer.
+      const overdue = overdueTasks(facts).length;
+      const ask = firstCheckIn
+        ? "Record what you started or moved forward."
+        : lastUpdate
+          ? `Your last recorded update was at ${lastUpdate}. What's changed since then?`
+          : "Record what changed since your last update.";
       return {
         kind: "check_in",
         heading: firstCheckIn ? "First check-in due" : "Check-in due",
-        // Keep the banner to the two sentences that matter; the focus and task
-        // state live in the task card and the composer, not in the nudge.
-        body: firstCheckIn
-          ? "Record what you started or moved forward."
-          : lastUpdate
-            ? `Your last recorded update was at ${lastUpdate}. What's changed since then?`
-            : "Record what changed since your last update.",
+        body: [overdue > 0 ? `${overdueSummary(overdue)}.` : null, ask].filter(Boolean).join(" "),
         compact: firstCheckIn ? "Tell Work OS what you started." : "Tell Work OS what changed.",
         action: null,
       };

@@ -45,6 +45,7 @@ export default function EodOutstandingPreview() {
       <NotificationsBell
         memoryCandidates={0}
         recap={null}
+        overdueTasks={state === "empty" || state === "loading" ? 0 : 2}
         days={days}
         loading={state === "loading"}
         error={state === "error" ? "Outstanding EODs could not be loaded." : null}
@@ -54,6 +55,7 @@ export default function EodOutstandingPreview() {
         onSelect={() => setOpen(false)}
         onOpenMemory={() => undefined}
         onOpenRecap={() => undefined}
+        onOpenOverdue={() => undefined}
         onRetry={() => undefined}
       />
       <button className="icon" title="Refresh this page" disabled><span /></button>

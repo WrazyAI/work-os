@@ -598,7 +598,10 @@ thread, but it is removed as soon as that prompt is answered or replaced, is
 never written to the vault or sent as conversation history, and never replays
 in the agent's stored context. A scheduled check-in appears only once its
 prompt time arrives: confirming the plan never triggers an immediate check-in
-demand.
+demand. A due check-in leads with the day's overdue count (`N tasks are
+overdue`) when open work is past its due date — the one task fact that belongs
+in the ask itself, because it is the day's outstanding state — and then the
+check-in ask.
 
 Both chat surfaces carry the same voice input contract (§8.8): the record
 control takes the send slot only while the draft is empty, and a transcript
@@ -909,8 +912,8 @@ there is never more than one guide per page.
 
 The masthead bell is the notifications panel: one detached surface (§8.3) that
 lists what needs the employee right now, and the badge counts all of it —
-memories awaiting review, one recap slot, and outstanding EOD days — in the
-amber recoverable-attention tone.
+memories awaiting review, one recap slot, overdue tasks, and outstanding EOD
+days — in the amber recoverable-attention tone.
 
 - **Rows** — agent-authored reminders wear the configured mascot mark, the
   same identity the chat window uses, never a generic tone glyph. The memory
@@ -918,14 +921,25 @@ amber recoverable-attention tone.
   fact count and opens the memory modal (§8.5) on its review tab; the recap row
   reads `Your recap is ready` with the interval label and opens the dock's
   Focus tab where the recap is confirmed or corrected. The outstanding EOD
-  section keeps its day rows, observed-time meta, and status pills.
-- **Arrival** — a new memory candidate or a ready undecided recap announces
-  itself exactly once per item: an in-app flyout carrying the mascot mark and
-  one `Review` action, a standing panel row until it is decided, and a system
-  notification when the window is hidden. The floating companion keeps owning
-  recap system delivery so one recap never fires two system toasts. The seen
-  registries are best-effort local memory: losing them may re-announce once,
-  never lose a reminder, and the panel always reflects live data.
+  section keeps its day rows, observed-time meta, and status pills. An overdue
+  row under `Needs attention` reads `N tasks are overdue` (`1 task is overdue`
+  in the singular) with a danger-tinted alert tile, one line of unfinished-work
+  meta, and a `Review` action that opens the Tasks workspace's Unfinished view
+  with the current workday and filters restored, where the overdue section
+  leads. The count covers exactly what that destination shows — work day-scoped
+  to My day stays there and is what the check-in mention surfaces — so the row
+  never counts work its action cannot show, and it disappears the moment the
+  work is done.
+- **Arrival** — a new memory candidate, a ready undecided recap, or a task that
+  newly goes overdue announces itself exactly once per item: an in-app flyout
+  carrying the mascot mark and one `Review` action, a standing panel row until
+  it is resolved, and a system notification when the window is hidden. The
+  floating companion keeps owning recap system delivery so one recap never
+  fires two system toasts. An overdue announcement is keyed to the task and its
+  due date, so moving a due date may announce again while the same overdue
+  state never repeats. The seen registries are best-effort local memory: losing
+  them may re-announce once, never lose a reminder, and the panel always
+  reflects live data.
 - **States** — loading reserves geometry with skeleton rows; an error keeps the
   last list and offers an inline retry; the empty state says the employee is
   caught up. Escape, outside press, and the close control dismiss the panel,
