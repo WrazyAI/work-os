@@ -120,6 +120,13 @@ transparency; this distribution targets GitHub Releases, not the Mac App Store.
    keeps Ctrl+M on both platforms. Recover a hidden app from its Dock icon or
    the menu-bar menu.
 
+Because the Mac package is ad-hoc signed, an in-place update changes the app's
+code signature, so the first launch after an update asks macOS for permission to
+read the saved Work OS key — the password dialog can open behind the floating
+companion. Allow it once and the app continues. If it is missed, Work OS says so
+on its own screen and offers Retry (and, when a saved key can no longer be read
+at all, Start fresh, which replaces only this device's local copy).
+
 Use the Worktivity Mac app to clock in, pause/resume, and clock out. Work OS
 shows confirmed provider attendance; its Windows PowerShell automation is not
 included in the Mac package. Tasks, planning, recaps, EOD, and floating chat

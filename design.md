@@ -1214,6 +1214,30 @@ A list that can grow in either direction loads contiguous pages on demand.
   exists.
 - Counts are announced through one polite status region, never row by row.
 
+### 9.3 The local vault gate
+
+The companion keeps this device's session, queued updates, and cached workday in
+an encrypted local vault, and the vault's key lives in the OS credential store.
+That read can wait on a system dialog — on macOS an in-place update changes the
+app's ad-hoc signature, so the saved Keychain item no longer matches the new
+build — so the gate that holds every screen until the vault opens always settles:
+
+| Gate state | Surface |
+|---|---|
+| Opening | Loading screen: wordmark, heading, wave, no recovery controls |
+| Opened | The workspace, or whatever screen the workspace itself requires next |
+| Failed | Failure screen: the bounded reason as its explanation, `Retry`, and `Start fresh on this device` only when a stored key cannot be read |
+
+The gate never offers an action it cannot honor. An offline bypass appears only
+on surfaces that can actually run offline; `Start fresh` arms on the first click
+and runs on the second, because it discards this device's local data, and its
+hint names what is replaced and what stays. A retry retires the previous attempt,
+so an answer that arrives late — a system dialog the employee finally allowed —
+can never jump past the screen in front of them. A failed gate is a boot phase of
+its own (`boot:vault_failed`), so a launch that stopped before the workspace is
+never reported as a crash, and the packaged-Mac startup gate asserts the app
+reaches a phase past its loading screen.
+
 ## 10. Motion
 
 Motion explains a state change:
