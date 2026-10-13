@@ -3,6 +3,7 @@ identifier = "allow-app-commands"
 description = "Allow the main companion window to use local IPC commands."
 commands.allow = [
   "get_vault_password",
+  "reset_local_vault",
   "app_heartbeat",
   "ensure_local_settings",
   "notify_focus",

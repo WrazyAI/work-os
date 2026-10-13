@@ -6391,7 +6391,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "work-os-companion"
-version = "0.4.28"
+version = "0.4.29"
 dependencies = [
  "base64 0.22.1",
  "keyring",
@@ -6414,6 +6414,7 @@ dependencies = [
  "webview2-com",
  "windows-sys 0.60.2",
  "work-os-diagnostics-core",
+ "work-os-vault-password-core",
  "zip 2.4.2",
 ]
 
@@ -6423,6 +6424,15 @@ version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "work-os-vault-password-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "rand 0.9.5",
+ "serde",
 ]
 
 [[package]]

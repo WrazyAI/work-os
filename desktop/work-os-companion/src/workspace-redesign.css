@@ -5774,7 +5774,8 @@ button:not(:disabled):active {
   background: #fffef8;
 }
 
-.loading > small {
+.loading > small,
+.loading-shell > small {
   max-width: 420px;
   color: var(--muted);
   font-size: 10px;

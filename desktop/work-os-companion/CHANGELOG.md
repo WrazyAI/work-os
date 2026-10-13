@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.29 — 2026-10-13
+
+- On macOS the companion no longer freezes on its loading screen after an update — and the mascot can be dragged again.
+- If macOS asks for permission to unlock your local data, Work OS now says so and offers a retry instead of stalling.
+
 ## 0.4.28 — 2026-10-13
 
 - The notifications bell now shows how many tasks are overdue, with a Review action that opens the unfinished list.

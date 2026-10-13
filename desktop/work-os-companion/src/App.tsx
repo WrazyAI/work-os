@@ -50,7 +50,8 @@ import { SortHeaderRow } from "./SortHeaderRow";
 import { ProgressRing } from "./ProgressRing";
 import { prefersReducedMotion, useListShift } from "./listShift";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
-import { secureState, type WorkOsConversationTurn } from "./vault";
+import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
+import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
 import wordmark from "./assets/work-os-mark.png";
@@ -349,7 +350,9 @@ export default function App() {
     : updateFlow.status === "failed" ? { status: "failed", version: updateFlow.update.version, message: updateFlow.message }
     : updateFlow.status === "installing" ? { status: "installing", version: updateFlow.update.version }
     : { status: updateFlow.status };
-  const [vaultReady, setVaultReady] = useState(false);
+  const [vaultGate, setVaultGate] = useState<VaultGateState>({ status: "pending" });
+  const vaultAttemptRef = useRef<VaultAttempt | null>(null);
+  const vaultStartedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
@@ -1050,24 +1053,70 @@ export default function App() {
     }
   }, [activeTaskHistoryQuery, debugScenario.enabled, eodDate, historicalQuery, historyQuery, insightRange, insightsQuery, outstandingQuery, planHistoryDate, queryClient, refresh, reloadOpenTaskDetails, reportDayQuery, setInsights, taskDetails, taskView, view, visibleDay]);
 
+  // Boot: open this device's vault, apply what it holds, then keep listening
+  // for desktop sign-in.
+  //
+  // The vault read is a gate that always settles — the credential store can
+  // wait on a macOS password dialog, and a gate that only resolved on success
+  // left the companion painted-but-dead on its loading screen. A gate failure
+  // is a real screen now, with the recovery the host asked for; a retry retires
+  // the previous attempt so a late answer cannot jump the screen the employee
+  // is already looking at.
+  const applyVaultState = useCallback(async () => {
+    const [saved, queue, settings, snapshot, enabled] = await Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]);
+    const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
+    void applyVoiceHotkey(settings.voiceHotkey);
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
+    if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
+      // Seed the cache with the last workday snapshot for an instant first
+      // paint; the live query revalidates it in the background.
+      queryClient.setQueryData(workOsKeys.day("compact"), snapshot);
+      setPlanHistoryDate(snapshot.shiftDate);
+    }
+    if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
+    if (!launchUpdateCheckRef.current && shouldAutoCheckUpdate({ supported: isTauri(), debugEnabled: debugRef.current.enabled, hasSession: !!current, autoCheckUpdates: settings.autoCheckUpdates })) {
+      launchUpdateCheckRef.current = true;
+      void checkForUpdates({ silent: true });
+    }
+  }, [queryClient, refresh, showError]);
+
+  const startVaultGate = useCallback(() => {
+    vaultAttemptRef.current?.abandon();
+    const attempt = runVaultGate(applyVaultState);
+    vaultAttemptRef.current = attempt;
+    void attempt.result.then((outcome: VaultGateSettled) => { vaultAttemptRef.current = null; setVaultGate(outcome); });
+  }, [applyVaultState]);
+
+  // A retry must let go of the previous attempt's promise too: the one waiting
+  // on a system dialog would otherwise be reused and wait forever.
+  const retryVaultGate = useCallback(() => {
+    abandonVaultOpen();
+    setVaultGate({ status: "pending" });
+    startVaultGate();
+  }, [startVaultGate]);
+
+  const startFreshOnThisDevice = useCallback(async () => {
+    try {
+      await resetLocalVault();
+    } catch (value) {
+      // The screen stays up with its own explanation; the notification says why
+      // the reset itself could not run.
+      showError(value, "This device's local data could not be replaced.", "Start fresh failed");
+      return;
+    }
+    retryVaultGate();
+  }, [retryVaultGate, showError]);
+
+  useEffect(() => {
+    if (vaultStartedRef.current) return;
+    vaultStartedRef.current = true;
+    startVaultGate();
+    const attempt = vaultAttemptRef.current;
+    return () => attempt?.abandon();
+  }, [startVaultGate]);
+
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]).then(([saved, queue, settings, snapshot, enabled]) => {
-      const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
-      void applyVoiceHotkey(settings.voiceHotkey);
-      const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
-      if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
-        // Seed the cache with the last workday snapshot for an instant first
-        // paint; the live query revalidates it in the background.
-        queryClient.setQueryData(workOsKeys.day("compact"), snapshot);
-        setPlanHistoryDate(snapshot.shiftDate);
-      }
-      if (current) void refresh({ refreshAttendance: true }).catch((value) => showError(value, "Could not load your workday.", "Workday unavailable"));
-      if (!launchUpdateCheckRef.current && shouldAutoCheckUpdate({ supported: isTauri(), debugEnabled: debugRef.current.enabled, hasSession: !!current, autoCheckUpdates: settings.autoCheckUpdates })) {
-        launchUpdateCheckRef.current = true;
-        void checkForUpdates({ silent: true });
-      }
-    }).catch((value) => showError(value, "Could not open the local vault.", "Local workspace unavailable")).finally(() => setVaultReady(true));
     void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
   }, [notifications, refresh, showError]);
@@ -3376,13 +3425,24 @@ export default function App() {
   }
 
   // Boot breadcrumb: the phase a crash would leave behind, reported on the next
-  // launch when the previous session never reached a clean exit.
-  const bootPhase = !vaultReady ? "boot:loading"
-    : !visibleSession ? "boot:connect_screen"
-      : !visibleOnboarding ? "boot:waiting_for_data"
-        : visibleOnboarding.onboardingRequired ? "boot:onboarding"
-          : "boot:workspace_ready";
-  useEffect(() => { markBootPhase(bootPhase); }, [bootPhase]);
+  // launch when the previous session never reached a clean exit. A gate that
+  // failed is a phase of its own — it is a screen the employee can act on, not
+  // a launch stuck before the app ever got a chance to say what happened.
+  const vaultFailure = vaultGate.status === "failed" ? vaultGate.failure : null;
+  const bootPhase = vaultGate.status === "pending" ? "boot:loading"
+    : vaultGate.status === "failed" ? "boot:vault_failed"
+      : !visibleSession ? "boot:connect_screen"
+        : !visibleOnboarding ? "boot:waiting_for_data"
+          : visibleOnboarding.onboardingRequired ? "boot:onboarding"
+            : "boot:workspace_ready";
+  useEffect(() => {
+    markBootPhase(bootPhase);
+    if (bootPhase === "boot:vault_failed") {
+      diagnostics.error("vault.gate.failed", "The local vault gate failed; the retry screen is up", {
+        code: vaultFailure?.requiresReset ? "unlock_failed" : vaultFailure?.confirmationRequired ? "confirmation_required" : "unknown",
+      });
+    }
+  }, [bootPhase, vaultFailure?.confirmationRequired, vaultFailure?.requiresReset]);
 
   // Prove this window is alive so the host can tell a running instance from a
   // leftover process that died without exiting, which would otherwise swallow
@@ -3404,7 +3464,14 @@ export default function App() {
     });
   }, [workspaceCadence?.checkInIntervalMinutes, workspaceCadence?.firstFollowUpMinutes]);
 
-  if (!vaultReady) return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
+  if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
+  if (vaultGate.status === "failed") return <LoadingScreen
+      failed
+      retry={retryVaultGate}
+      note={vaultGate.failure.message}
+      onReset={vaultGate.failure.requiresReset ? startFreshOnThisDevice : undefined}
+      onDebug={() => void openDebugger()}
+    />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
@@ -3917,14 +3984,61 @@ export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSa
     </aside>
   </main>;
 }
-export function LoadingScreen({ failed, retry, onDebug, onOffline }: { failed: boolean; retry: () => void; onDebug: () => void; onOffline: () => void }) {
+export function LoadingScreen({ failed, retry, note, onReset, onDebug, onOffline }: {
+  failed: boolean;
+  retry: () => void;
+  /** Bounded explanation of what is wrong, replacing the generic hint. */
+  note?: string;
+  /** Starts this device fresh; only offered when nothing else can recover. */
+  onReset?: () => void | Promise<void>;
+  onDebug: () => void;
+  /** Only surfaces that can actually run offline pass this. */
+  onOffline?: () => void;
+}) {
+  // A destructive recovery is armed on the first click and only runs on the
+  // second, so a stray click on a failure screen can never discard local data.
+  const [resetArmed, setResetArmed] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  useEffect(() => {
+    if (!resetArmed) return;
+    const timer = setTimeout(() => setResetArmed(false), 8_000);
+    return () => clearTimeout(timer);
+  }, [resetArmed]);
+  if (!failed) {
+    return <main className="loading"><div className="loading-shell">
+      <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>
+      <h1>Preparing your workday</h1>
+      <p>Syncing your schedule, tasks, and provider context…</p>
+      <Wave className="loading-wave-large" /><small className="loading-stage">Connecting to your workspace</small>
+    </div></main>;
+  }
+  const hint = onReset
+    ? resetArmed
+      ? "This deletes this device's saved session and queued updates. Tasks and updates already filed with the server stay, and you'll connect this device again."
+      : "Start fresh only if the saved data can't be opened — it replaces this device's local copy."
+    : onOffline
+      ? "Offline mode uses local fixtures only — nothing reaches the server."
+      : "Retry re-checks this device's saved key.";
   return <main className="loading"><div className="loading-shell">
     <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>
-    <h1>{failed ? "Work OS needs another try" : "Preparing your workday"}</h1>
-    <p>{failed ? "The details are in the notification above." : "Syncing your schedule, tasks, and provider context…"}</p>
-    {failed
-      ? <><button className="primary" onClick={retry}>Retry</button><div className="loading-alternatives"><button onClick={onOffline}>Continue offline</button><button className="quiet" onClick={onDebug}><Bug size={14} /> Scenario debugger</button></div><small>Offline mode uses local fixtures only — nothing reaches the server.</small></>
-      : <><Wave className="loading-wave-large" /><small className="loading-stage">Connecting to your workspace</small></>}
+    <h1>Work OS needs another try</h1>
+    <p>{note ?? "The details are in the notification above."}</p>
+    <button className="primary" onClick={retry} disabled={resetting}>Retry</button>
+    <div className="loading-alternatives">
+      {onOffline && <button onClick={onOffline} disabled={resetting}>Continue offline</button>}
+      {onReset && <button
+        className={resetArmed ? "danger" : ""}
+        disabled={resetting}
+        title={resetArmed ? "This deletes this device's saved Work OS data" : "Replace this device's unreadable local data"}
+        onClick={async () => {
+          if (!resetArmed) { setResetArmed(true); return; }
+          setResetting(true);
+          try { await onReset(); } finally { setResetting(false); setResetArmed(false); }
+        }}
+      >{resetting ? "Starting fresh…" : resetArmed ? "Delete local data and start fresh" : "Start fresh on this device"}</button>}
+      <button className="quiet" onClick={onDebug} disabled={resetting}><Bug size={14} /> Scenario debugger</button>
+    </div>
+    <small>{hint}</small>
   </div></main>;
 }
 

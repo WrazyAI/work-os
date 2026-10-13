@@ -1,0 +1,10 @@
+[package]
+name = "work-os-vault-password-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+base64 = "0.22"
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }

@@ -256,4 +256,45 @@ describe("floating companion integration", () => {
     const appPermissions = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");
     expect(appPermissions).not.toContain("diagnostics_snapshot");
   });
+
+  // The vault key lives in the OS credential store, and on macOS that read can
+  // wait on a system password dialog (an in-place update changes the app's
+  // ad-hoc signature, so the saved item stops matching). That read ran inside a
+  // synchronous command on the main thread and froze every window, which is the
+  // frozen loading screen and the mascot that could not be dragged.
+  it("keeps the credential store off the main thread and answers one dialog per launch", () => {
+    const host = readFileSync(resolve(root, "src-tauri/src/vault_password.rs"), "utf8");
+    expect(host).toMatch(/pub async fn get_vault_password/);
+    expect(host).toMatch(/pub async fn reset_local_vault/);
+    expect(host).toContain("spawn_blocking");
+    expect(host).toContain("vault::serve");
+    // The rules that broke live in the core crate, where they are tested
+    // without a keychain.
+    const core = readFileSync(resolve(root, "src-tauri/vault-password-core/src/lib.rs"), "utf8");
+    expect(core).toContain("pub const LEGACY_ACCOUNT: &str = \"stronghold-vault\";");
+    expect(core).toMatch(/StoreAnswer::Missing if vault_exists => StoreDecision::UnlockFailed/);
+    expect(core).toContain("fn reset_replaces_the_vault_id_so_a_stale_credential_cannot_block_a_restart");
+    const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
+    expect(vault).toContain('invoke<string>("get_vault_password")');
+    expect(vault).toContain('invoke("reset_local_vault")');
+    expect(vault).toContain("abandonVaultOpen");
+    const gate = readFileSync(resolve(root, "src/vaultGate.ts"), "utf8");
+    expect(gate).toContain("VAULT_GATE_TIMEOUT_MS");
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("runVaultGate(applyVaultState)");
+    expect(app).toContain("boot:vault_failed");
+    const startup = readFileSync(resolve(root, "scripts/check-macos-startup.sh"), "utf8");
+    expect(startup).toContain("boot:vault_failed");
+    expect(startup).toContain("seed_stale_key");
+  });
+
+  it("grants the recovery command to every window that can hit a broken vault", () => {
+    const permissions = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");
+    expect(permissions).toContain('"get_vault_password"');
+    expect(permissions).toContain('"reset_local_vault"');
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    expect(rust).toContain("vault_password::get_vault_password");
+    expect(rust).toContain("vault_password::reset_local_vault");
+    expect(rust).toContain("vault_password::init(app.handle())");
+  });
 });

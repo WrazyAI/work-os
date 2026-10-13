@@ -114,17 +114,22 @@ test("release mutations serialize across refs and publication checks packaged st
 });
 
 
-test("packaged startup gate accepts a live process and rejects an early crash", async (t) => {
+test("packaged startup gate accepts a settled launch and rejects a crash or a stuck one", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "work-os-startup-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const script = fileURLToPath(new URL("../desktop/work-os-companion/scripts/check-macos-startup.sh", import.meta.url));
   const run = async (name, body) => {
     const cwd = join(root, name);
+    const home = join(cwd, "home");
     const binary = join(cwd, "src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion");
     mkdirSync(join(binary, ".."), { recursive: true });
+    mkdirSync(home, { recursive: true });
     writeFileSync(binary, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
     return new Promise((resolve, reject) => {
-      const child = spawn("bash", [script], { cwd, env: { ...process.env, RUNNER_TEMP: cwd } });
+      const child = spawn("bash", [script], {
+        cwd,
+        env: { ...process.env, RUNNER_TEMP: cwd, HOME: home, COMPANION_GATE_SECONDS: "3" },
+      });
       let output = "";
       child.stdout.on("data", (chunk) => { output += chunk; });
       child.stderr.on("data", (chunk) => { output += chunk; });
@@ -132,12 +137,20 @@ test("packaged startup gate accepts a live process and rejects an early crash", 
       child.on("close", (code) => resolve({ code, output, log: readFileSync(join(cwd, "companion-startup.log"), "utf8") }));
     });
   };
-  const [live, crash] = await Promise.all([
-    run("live", 'echo started; exec sleep 30'),
+  // The gate reads the app's own boot phases: a launch that only stays alive is
+  // not enough, because that is exactly what a frozen companion did.
+  const phaseWrite = 'mkdir -p "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics"; '
+    + 'printf \'%s\\n\' \'{"category":"app.boot.phase","message":"boot:connect_screen","metadata":{"phase":"boot:connect_screen"}}\' > "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl"';
+  const [settled, stuck, crash] = await Promise.all([
+    run("settled", `${phaseWrite}; echo started; exec sleep 30`),
+    run("stuck", 'echo still-loading; exec sleep 30'),
     run("crash", 'echo startup-crash; exit 7'),
   ]);
-  assert.equal(live.code, 0);
-  assert.match(live.log, /started/);
+  assert.equal(settled.code, 0);
+  assert.match(settled.log, /started/);
+  assert.match(settled.output, /boot gate settled at boot:connect_screen/);
+  assert.equal(stuck.code, 1);
+  assert.match(stuck.output, /never got past its loading screen/);
   assert.equal(crash.code, 1);
   assert.match(crash.output, /startup-crash/);
 });

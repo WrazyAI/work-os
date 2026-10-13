@@ -1,6 +1,6 @@
 [package]
 name = "work-os-companion"
-version = "0.4.28"
+version = "0.4.29"
 
 description = "WrazyOS employee companion"
 authors = ["Wrazy"]
@@ -38,6 +38,7 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 work-os-diagnostics-core = { path = "diagnostics-core" }
+work-os-vault-password-core = { path = "vault-password-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }

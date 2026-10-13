@@ -431,8 +431,11 @@
 
 .loading-shell p {
   margin: 0;
+  max-width: 520px;
   color: #8d9187;
   font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
 }
 
 .loading-wave-large {

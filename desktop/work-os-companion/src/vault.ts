@@ -80,6 +80,24 @@ async function vault() {
   return context;
 }
 
+/** Retires the in-flight vault open so the next read starts a fresh attempt.
+ *
+ * A read waiting on a macOS password dialog keeps running in the host — the
+ * answer is cached there, so the next attempt is instant — but its promise must
+ * not be reused, or the retry would wait on the same unanswered dialog. */
+export function abandonVaultOpen() {
+  context = null;
+}
+
+/** Starts this device fresh: replaces the local vault and its key. Used only
+ * when the stored key cannot be read, so the local data cannot be opened at
+ * all. Anything already filed with the server is untouched. */
+export async function resetLocalVault(): Promise<void> {
+  abandonVaultOpen();
+  if (!isTauri()) return;
+  await invoke("reset_local_vault");
+}
+
 async function get<T>(key: string): Promise<T | null> {
   const { client } = await vault();
   const value = await client.getStore().get(key);

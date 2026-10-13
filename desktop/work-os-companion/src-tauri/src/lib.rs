@@ -2,9 +2,8 @@ mod debug_window;
 mod diagnostics;
 mod local_settings;
 mod session_guard;
+mod vault_password;
 
-use base64::Engine;
-use rand::RngCore;
 use tauri::menu::{Menu, MenuItem};
 use tauri::path::BaseDirectory;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -27,25 +26,6 @@ pub unsafe extern "C" fn memset_explicit(
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     destination
-}
-
-#[tauri::command]
-fn get_vault_password() -> Result<String, String> {
-    let entry = keyring::Entry::new("com.wrazy.workos", "stronghold-vault")
-        .map_err(|error| error.to_string())?;
-    match entry.get_password() {
-        Ok(password) => Ok(password),
-        Err(keyring::Error::NoEntry) => {
-            let mut value = [0_u8; 32];
-            rand::rng().fill_bytes(&mut value);
-            let password = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(value);
-            entry
-                .set_password(&password)
-                .map_err(|error| error.to_string())?;
-            Ok(password)
-        }
-        Err(error) => Err(error.to_string()),
-    }
 }
 
 fn allowed_desktop_connect_url(url: &str) -> Result<tauri::Url, String> {
@@ -590,7 +570,8 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            get_vault_password,
+            vault_password::get_vault_password,
+            vault_password::reset_local_vault,
             local_settings::ensure_local_settings,
             session_guard::app_heartbeat,
             arm_update_exit_watchdog,
@@ -616,6 +597,11 @@ pub fn run() {
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
             diagnostics::init(app.handle())
                 .map_err(|error| Box::<dyn std::error::Error>::from(error))?;
+            // The vault key is read by its own worker thread: a credential-store
+            // access can wait on a system dialog (macOS raises one after an
+            // in-place update changes the ad-hoc signature), and that must never
+            // happen on the main thread or twice per launch.
+            vault_password::init(app.handle());
             // Reap a predecessor that died without exiting — a tray app left
             // behind by a shutdown or a hung teardown would otherwise swallow
             // every later launch through the single-instance handoff — then
