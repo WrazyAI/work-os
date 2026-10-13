@@ -1098,8 +1098,11 @@ export default function App() {
   }, []);
 
   // A retry must let go of the previous attempt's promise too: the one waiting
-  // on a system dialog would otherwise be reused and wait forever.
+  // on a system dialog would otherwise be reused and wait forever. Raising the
+  // window first matters on macOS, where the confirmation dialog can sit behind
+  // the always-on-top companion and never reach the employee's attention.
   const retryVaultGate = useCallback(() => {
+    if (isTauri()) void invoke("focus_main").catch(() => undefined);
     abandonVaultOpen();
     setVaultGate({ status: "pending" });
     startVaultGate();

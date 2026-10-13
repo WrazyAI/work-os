@@ -23,7 +23,7 @@ root="$(pwd)"
 binary="$root/src-tauri/target/universal-apple-darwin/release/bundle/macos/Work OS Companion.app/Contents/MacOS/work-os-companion"
 log="${RUNNER_TEMP:?}/companion-startup.log"
 events="$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl"
-settle_seconds="${COMPANION_GATE_SECONDS:-40}"
+settle_seconds="${COMPANION_GATE_SECONDS:-60}"
 service="com.wrazy.workos"
 account="stronghold-vault"
 

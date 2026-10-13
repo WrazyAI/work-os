@@ -37,8 +37,11 @@ describe("vault gate", () => {
     const outcome = await attempt.result;
     expect(outcome.status).toBe("failed");
     if (outcome.status !== "failed") return;
-    expect(outcome.failure.confirmationRequired).toBe(true);
-    expect(VAULT_GATE_TIMEOUT_MS).toBeGreaterThan(3_000);
+    // The timeout names the one cause the employee can act on without claiming
+    // it is the cause: the host may have answered the keychain long ago.
+    expect(outcome.failure.confirmationRequired).toBe(false);
+    expect(outcome.failure.message).toContain("macOS");
+    expect(VAULT_GATE_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 
   it("ignores a late answer for a retired attempt", async () => {

@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
+import { diagnostics } from "./diagnostics";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
@@ -64,16 +65,22 @@ function httpsOrigin(value: string) {
 async function vault() {
   if (!context) {
     const pending = (async () => {
+      const startedAt = Date.now();
+      diagnostics.info("vault.open.started", "Opening the local vault");
       const path = await join(await appDataDir(), "work-os-vault.hold");
       const password = await invoke<string>("get_vault_password");
       const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
       let client: Client;
       try { client = await stronghold.loadClient("work-os"); }
       catch { client = await stronghold.createClient("work-os"); }
+      // The gate above this is the only thing the employee sees while this
+      // runs, so a slow open has to leave a trail to diagnose.
+      diagnostics.info("vault.open.ready", `Opened the local vault in ${Date.now() - startedAt}ms`);
       return { stronghold, client };
     })();
     context = pending;
-    void pending.catch(() => {
+    void pending.catch((error) => {
+      diagnostics.error("vault.open.failed", error instanceof Error ? error.message : String(error));
       if (context === pending) context = null;
     });
   }

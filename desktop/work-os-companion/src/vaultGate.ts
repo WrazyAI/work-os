@@ -21,7 +21,7 @@
  * in the host (its answer is cached there), so a late answer can never resolve
  * the retired attempt and jump the UI past the screen the employee is on. */
 
-export const VAULT_GATE_TIMEOUT_MS = 12_000;
+export const VAULT_GATE_TIMEOUT_MS = 30_000;
 
 /** The bounded, employee-facing explanation of a gate failure, plus which
  * recovery the UI may offer. */
@@ -59,8 +59,11 @@ const GENERIC_FAILURE: VaultGateFailure = {
 };
 
 const TIMEOUT_FAILURE: VaultGateFailure = {
-  message: "Opening this device's saved data is taking too long. On macOS a password dialog can open behind the companion — allow access there, then try again.",
-  confirmationRequired: true,
+  // Deliberately not a diagnosis: the credential store may have answered long
+  // ago and something else is slow. Name the one cause the employee can act on
+  // without asserting that it is the cause.
+  message: "Opening this device's saved data is taking longer than usual. If macOS is asking for permission to unlock it, allow that dialog — it can open behind the companion.",
+  confirmationRequired: false,
   requiresReset: false,
 };
 
