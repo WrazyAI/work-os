@@ -44,6 +44,23 @@ export function resolveEodActivityWindow(input: {
   return null;
 }
 
+/** Maps a `work_sessions` row onto the resolver. The admin client returns
+ * timestamptz columns as Date objects under snake_case names; reading
+ * camelCase keys off the raw row would always resolve to null. */
+export function eodActivityWindowFromSessionRow(row: {
+  scheduled_starts_at?: unknown;
+  scheduled_ends_at?: unknown;
+  clocked_in_at?: unknown;
+  clocked_out_at?: unknown;
+} | null | undefined): EodActivityWindow | null {
+  return resolveEodActivityWindow({
+    scheduledStartsAt: row?.scheduled_starts_at,
+    scheduledEndsAt: row?.scheduled_ends_at,
+    clockedInAt: row?.clocked_in_at,
+    clockedOutAt: row?.clocked_out_at,
+  });
+}
+
 /** Resolves the window from the day's latest session row. */
 export async function eodActivityWindowFor(organizationId: string, personId: string, date: string): Promise<EodActivityWindow | null> {
   const { data, error } = await createAdminClient().from("work_sessions")
@@ -51,5 +68,5 @@ export async function eodActivityWindowFor(organizationId: string, personId: str
     .eq("organization_id", organizationId).eq("person_id", personId).eq("shift_date", date)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(`load EOD activity window: ${error.message}`);
-  return resolveEodActivityWindow(data ?? {});
+  return eodActivityWindowFromSessionRow(data);
 }
