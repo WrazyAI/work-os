@@ -456,16 +456,24 @@ sequence: due date latest-first, open work above completed work, and undated
 items last.
 
 At wide widths, the title column absorbs available space. Progress, due date,
-status, and menu columns remain intrinsic and aligned. At narrow widths, hide
-description, progress, due, and redundant status before hiding the title or
-completion control.
+status, and menu columns remain intrinsic and aligned. At narrow widths, the
+due/status columns fold into a labeled line in the row body (Overdue · date,
+Due today, Due date) before anything is hidden; then the project name and
+description drop, so the title, completion control, and due signal always
+survive. The agenda strip stays one compact row down to 780px — focus
+statement, counts, and the carry action — and becomes a two-line stack below.
 
 Rows:
 
 - Minimum 64px high, with 12–16px vertical breathing room.
 - Transparent/paper surface with hairline dividers.
 - One title line, one metadata line, optional one-line description.
-- A single semantic status pill: Open, Overdue, Done, or Sync issue.
+- A single semantic status pill: Open, Overdue, Done, or Sync issue. The pill
+  stays quiet for Open; the failing states lead.
+- The project line renders only when the view actually mixes projects, and the
+  On today tag appears only where it discriminates (not inside My day).
+- The description renders only when it adds something beyond the title; it is
+  dropped at narrow widths along with the project line.
 - No per-row border box unless a row is a temporary pending/error state.
 - No raw provider IDs, object stringification, or invalid date output.
 
