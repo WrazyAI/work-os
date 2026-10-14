@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decideWorktivityAction, worktivityClockInChanged, worktivityClockInContext, worktivityClockOutBoundary, worktivityInstant, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted, worktivityConfirmationRequirement } from "../src/modules/work-os/worktivity-control";
+import { decideWorktivityAction, worktivityClockInChanged, worktivityClockInContext, worktivityClockOutBoundary, worktivityInstant, worktivityIntervalReopenCandidate, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted, worktivityConfirmationRequirement } from "../src/modules/work-os/worktivity-control";
 
 test("Worktivity provider state is the action gate and idempotency authority", () => {
   assert.deepEqual(decideWorktivityAction("clock_in", "off_shift"), { status: "ready" });
@@ -58,6 +58,18 @@ test("only a later provider start is a fresh work interval", () => {
   assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "2026-09-23T08:45:00.000Z"), false);
   assert.equal(worktivityRestarted(null, "2026-09-23T09:00:00.000Z"), true);
   assert.equal(worktivityRestarted("2026-09-23T09:00:00.000Z", "invalid"), false);
+});
+
+test("a closed interval reopens only while the provider still reports it open", () => {
+  // An inferred off-shift observation closed the row, but the provider never
+  // ended that interval: the sync may reopen it instead of replaying the
+  // idempotent clock-in.
+  assert.equal(worktivityIntervalReopenCandidate({ state: "clocked_out", correction_status: "valid" }), true);
+  assert.equal(worktivityIntervalReopenCandidate({ state: "clocked_out", correction_status: null }), true);
+  // An open session needs no reopen, and a correction keeps its closed row.
+  assert.equal(worktivityIntervalReopenCandidate({ state: "active", correction_status: "valid" }), false);
+  assert.equal(worktivityIntervalReopenCandidate({ state: "clocked_out", correction_status: "needs_correction" }), false);
+  assert.equal(worktivityIntervalReopenCandidate(null), false);
 });
 
 test("provider reconciliation keeps only explicit clock-in acknowledgements and reasons", () => {

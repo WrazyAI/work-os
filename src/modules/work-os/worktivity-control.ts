@@ -40,6 +40,15 @@ export function worktivityRestarted(existingStart: string | null, observedStart:
   return Number.isFinite(nextStart) && (!Number.isFinite(previousStart) || nextStart > previousStart);
 }
 
+/** Whether a closed Worktivity-attributed interval may be reopened because the
+ * provider still reports that same interval open. A session awaiting a
+ * clock-out correction stays closed until the employee resolves it. */
+export function worktivityIntervalReopenCandidate(session: { state?: unknown; correction_status?: unknown } | null | undefined): boolean {
+  if (!session) return false;
+  if (String(session.state) !== "clocked_out") return false;
+  return String(session.correction_status ?? "valid") !== "needs_correction";
+}
+
 /** Provider instants may use different ISO offsets while representing the
  * same moment. Invalid provider times cannot replace a stored clock-in. */
 export function worktivityClockInChanged(existingAt: unknown, providerAt: unknown): boolean {

@@ -12,7 +12,7 @@ import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
 import type { AttendanceProjection } from "@/modules/work-os/attendance";
-import { worktivityClockInChanged, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted } from "@/modules/work-os/worktivity-control";
+import { worktivityClockInChanged, worktivityIntervalReopenCandidate, worktivityIsoInstant, worktivityProjectionClockOutBoundary, worktivityRestarted } from "@/modules/work-os/worktivity-control";
 
 type Json = Record<string, unknown>;
 const db = () => createAdminClient();
@@ -405,6 +405,46 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     const priorEnd = latestClosed.data?.clocked_out_at ? Date.parse(String(latestClosed.data.clocked_out_at)) : Number.NaN;
     if (Number.isFinite(priorEnd) && observed.getTime() <= priorEnd) observed.setTime(priorEnd + 1);
     const providerInterval = projection.clockedInAt ?? projection.activityObservedAt ?? projection.observedAt;
+    // The provider still reports this interval open, but an earlier off-shift
+    // observation already closed its session. Replaying the idempotent clock-in
+    // below would only return that closed row, leaving the ledger (and its
+    // cadence) stuck while the employee works. Reopen the same interval instead:
+    // the provider-owned interval is authoritative and it never ended.
+    const replayed = await db().from("work_sessions").select("*")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId as string)
+      .eq("clock_in_idempotency_key", `worktivity:clock-in:${access.personId}:${providerInterval}`).maybeSingle();
+    if (replayed.error) throw new Error(`load replayed Worktivity interval: ${replayed.error.message}`);
+    if (replayed.data && worktivityIntervalReopenCandidate(replayed.data)) {
+      const shift = await shiftFor(access, new Date(projection.observedAt), "startable").catch(() => null);
+      const { data: reopened, error: reopenError } = await db().from("work_sessions").update({
+        state: "clocked_in",
+        source: "worktivity",
+        clocked_out_at: null,
+        clock_out_idempotency_key: null,
+        paused_at: null,
+        attendance_status: projection.status,
+        attendance_observed_at: projection.observedAt,
+        ...(shift ? { schedule_id: shift.scheduleId, scheduled_starts_at: shift.startsAt, scheduled_ends_at: shift.endsAt } : {}),
+        updated_at: projection.observedAt,
+      }).eq("organization_id", access.organizationId).eq("id", replayed.data.id)
+        .eq("state", "clocked_out").select("*");
+      if (reopenError) {
+        // Another path (e.g. a manual clock-in) may have opened a session
+        // between the active check and this update; the provider sync never
+        // fights an active session.
+        if (/duplicate|unique/i.test(reopenError.message)) return activeSession(access);
+        throw new Error(`reopen Worktivity work session: ${reopenError.message}`);
+      }
+      const row = (reopened ?? [])[0] as Record<string, any> | undefined;
+      if (row) {
+        await audit(access, String(row.id), "worktivity_reopened", "clocked_out", "clocked_in",
+          `worktivity:reopen:${row.id}:${projection.observedAt}`, projection.observedAt,
+          { providerStatus: projection.status, clockedInAt: providerInterval, previousClockedOutAt: replayed.data.clocked_out_at, scheduleAttached: !!shift }, "worktivity");
+        const action = projection.state === "paused" ? "pause" : "mark_active";
+        return (await transitionSession(access, { action, observed_at: projection.observedAt },
+          `worktivity:${action}:${row.id}:${projection.observedAt}`, "worktivity", true)).session;
+      }
+    }
     const result = await clockIn(access, {
       late_acknowledged: true,
       exception_acknowledged: true,

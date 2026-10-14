@@ -33,6 +33,8 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   const workdayService = await source("src/lib/work-os-workday.ts");
   assert.doesNotMatch(workdayService, /already confirmed on another device/);
   assert.match(workdayService, /The AI build is invalid, expired, already used/);
+  assert.match(workdayService, /worktivity:reopen:/, "the Worktivity sync reopens an interval the provider still reports open");
+  assert.match(workdayService, /worktivity_reopened/, "a reopened interval records its own session event");
   const eodService = await source("src/lib/work-os-eod.ts");
   assert.match(eodService, /selectDayEodWork/);
   assert.doesNotMatch(eodService, /workspace\.carryOverGroups/);
