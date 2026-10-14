@@ -4,6 +4,7 @@ export type TaskRow = Record<string, any>;
 export type GoalSuggestion = { text: string; taskIds: string[] } | null;
 export type TaskDateReason = "due" | "created" | "surfaced" | "carried" | "unknown";
 export type TaskSection = { id: "overdue" | "open" | "completed"; label: string; note: string; tasks: TaskRow[] };
+export type DayTaskGroup = { id: "overdue" | "today" | "later" | "undated"; label: string; note: string; tasks: TaskRow[] };
 
 const taskId = (task: TaskRow) => String(task.id ?? task.provider_task_id ?? "");
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -177,6 +178,36 @@ export function organizeTaskSections(tasks: TaskRow[], currentDate: string, sort
     { id: "completed", label: "Recently completed", note: sort.key === "status" ? "Latest completion first" : taskSortNote(sort), tasks: within(completedTasks, orderTasksByRecency(completedTasks)) },
   ] satisfies TaskSection[]).filter((section) => section.tasks.length > 0);
   return sort.key === "status" && sort.direction === "desc" ? [...sections].reverse() : sections;
+}
+
+/**
+ * My day's urgency groups (design §6.4): overdue work first, oldest due date
+ * leading, then work due today, then later-dated work, then undated work last.
+ * Rows inside each group follow the active column sort so the header arrows
+ * stay truthful; completed work is excluded here and lives in Completed.
+ */
+export function dayTaskGroups(tasks: TaskRow[], currentDate: string, sort: TaskSort = DEFAULT_TASK_SORT): DayTaskGroup[] {
+  const open = tasks.filter((task) => task.completed !== true);
+  const overdue = open.filter((task) => isOverdueTask(task, currentDate));
+  const overdueIds = new Set(overdue.map(taskId));
+  const dueToday: TaskRow[] = [];
+  const later: TaskRow[] = [];
+  const undated: TaskRow[] = [];
+  for (const task of open) {
+    if (overdueIds.has(taskId(task))) continue;
+    const due = dateOnly(task.due_date);
+    if (due === null) undated.push(task);
+    else if (due === currentDate) dueToday.push(task);
+    else later.push(task);
+  }
+  const canonicalOverdue = [...overdue].sort((left, right) => String(dateOnly(left.due_date)).localeCompare(String(dateOnly(right.due_date))) || recency(right) - recency(left));
+  const within = (group: TaskRow[], canonical: TaskRow[]) => sort.key === "status" ? canonical : sortTaskList(group, sort, currentDate);
+  return ([
+    { id: "overdue", label: "Overdue", note: sort.key === "status" ? "Oldest due first" : taskSortNote(sort), tasks: within(overdue, canonicalOverdue) },
+    { id: "today", label: "Due today", note: taskSortNote(sort), tasks: within(dueToday, orderTasksByRecency(dueToday)) },
+    { id: "later", label: "Later", note: taskSortNote(sort), tasks: within(later, orderTasksByRecency(later)) },
+    { id: "undated", label: "No date", note: taskSortNote(sort), tasks: within(undated, orderTasksByRecency(undated)) },
+  ] satisfies DayTaskGroup[]).filter((group) => group.tasks.length > 0);
 }
 
 /**

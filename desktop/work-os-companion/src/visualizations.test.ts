@@ -232,8 +232,10 @@ describe("operational visualizations", () => {
     expect(app).toContain("My day is open work only");
     expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
     expect(app).toContain("Today <em>{openToday.length}</em>");
-    expect(app).toContain('count: taskView === "today" && !historical && pageCounts ? pageCounts.open : myDayTasks.filter((task) => task.completed !== true).length');
-    expect(app).toContain("My day is open work only");
+    // My day is assembled on the client, so its chip, the strip counts, and
+    // the list it opens all derive from dayTaskGroups over the same day list.
+    expect(app).toContain("dayTaskGroups(myDayTasks, currentDate, taskSort)");
+    expect(app).not.toContain('taskView === "today" && !historical && pageCounts ? pageCounts.open');    expect(app).toContain("My day is open work only");
   });
 
   it("draws one animated SVG progress ring everywhere instead of conic rings and tick meters", () => {

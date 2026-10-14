@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
+import { DEFAULT_TASK_SORT, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, dayScopedTasks, dayTaskGroups, filterWorkspaceTasks, isOverdueTask, organizeTaskSections, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, suggestDailyGoal, subtaskProgress, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks } from "./taskWorkspace";
 import { nextSortState } from "./SortHeaderRow";
 
 describe("unified Tasks workspace", () => {
@@ -252,6 +252,44 @@ describe("canonical task ordering, overdue meaning, and shared day scope", () =>
     expect(byDue.map((section) => section.id)).toEqual(["overdue", "open", "completed"]);
     expect(byDue[0].tasks.map((task) => task.id)).toEqual(["late-b", "late-a"]);
     expect(byDue[0].note).toBe("Due date · latest first");
+  });
+
+  it("leads My day with overdue, today, later, and undated groups", () => {
+    const tasks = [
+      { id: "undated", title: "No date", completed: false },
+      { id: "later", title: "Later", due_date: "2026-09-20", completed: false },
+      { id: "over-late", title: "Oldest overdue", due_date: "2026-09-10", completed: false },
+      { id: "over-recent", title: "Recent overdue", due_date: "2026-09-15", completed: false },
+      { id: "due", title: "Due today", due_date: "2026-09-16", completed: false },
+      { id: "done", title: "Done", due_date: "2026-09-16", completed: true },
+    ];
+    const groups = dayTaskGroups(tasks, "2026-09-16", { key: "due", direction: "desc" });
+    expect(groups.map((group) => group.id)).toEqual(["overdue", "today", "later", "undated"]);
+    // Overdue work leads as its own group; rows follow the active sort, and
+    // the status sort keeps the oldest-due-first canonical order.
+    expect(groups[0].tasks.map((task) => task.id)).toEqual(["over-recent", "over-late"]);
+    expect(groups[0].note).toBe("Due date · latest first");
+    const byStatus = dayTaskGroups(tasks, "2026-09-16", { key: "status", direction: "asc" });
+    expect(byStatus[0].tasks.map((task) => task.id)).toEqual(["over-late", "over-recent"]);
+    expect(byStatus[0].note).toBe("Oldest due first");
+    expect(groups[1].tasks.map((task) => task.id)).toEqual(["due"]);
+    expect(groups[2].tasks.map((task) => task.id)).toEqual(["later"]);
+    expect(groups[3].tasks.map((task) => task.id)).toEqual(["undated"]);
+    expect(groups.flatMap((group) => group.tasks).some((task) => task.id === "done")).toBe(false);
+  });
+
+  it("orders rows inside each day group with the active column", () => {
+    const tasks = [
+      { id: "b", title: "Beta", due_date: "2026-09-20", completed: false },
+      { id: "a", title: "Alpha", due_date: "2026-09-21", completed: false },
+    ];
+    expect(dayTaskGroups(tasks, "2026-09-16", { key: "title", direction: "asc" })[0].tasks.map((task) => task.id)).toEqual(["a", "b"]);
+    expect(dayTaskGroups(tasks, "2026-09-16", { key: "title", direction: "desc" })[0].tasks.map((task) => task.id)).toEqual(["b", "a"]);
+  });
+
+  it("drops empty day groups instead of rendering hollow sections", () => {
+    const groups = dayTaskGroups([{ id: "only", title: "Only", due_date: "2026-09-16", completed: false }], "2026-09-16");
+    expect(groups.map((group) => group.id)).toEqual(["today"]);
   });
 
   it("shares one day scope between the dashboard hero and the tasks workspace", () => {

@@ -46,7 +46,7 @@ import { ApprovalFlow, ApprovalResults } from "./ApprovalFlow";
 import { BatchApprovalCards } from "./TaskBatchCard";
 import { attachFiledProposals, filedProposalGroups, isBatchToolOp, isPlanImportOp, skipBatchOperation, type FiledProposalRow } from "./interpretation";
 import { TaskSelectionCard, type TaskSelectionCardTask } from "./TaskSelectionCard";
-import { dayScopedTasks, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
+import { dayScopedTasks, dayTaskGroups, DEFAULT_TASK_SORT, filterWorkspaceTasks, isOverdueTask, orderTasksByRecency, parentTasks, readTaskSort, safeTaskText, sortTaskList, subtaskProgress, suggestDailyGoal, taskDateAttribution, taskKind, taskSortNote, taskState, tasksForDate, unfinishedBefore, uniqueTasks, writeTaskSort, DAY_SORT_STORAGE_KEY, TASK_SORT_COLUMNS, TASKS_SORT_STORAGE_KEY, TASKS_WORKSPACE_SORT_COLUMNS, type TaskRow, type TaskSort } from "./taskWorkspace";
 import { SortHeaderRow } from "./SortHeaderRow";
 import { ProgressRing } from "./ProgressRing";
 import { prefersReducedMotion, useListShift } from "./listShift";
@@ -4629,7 +4629,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   // Null counts mean the server does not provide totals yet; chips fall back to
   // the loaded window and no pagination note is claimed.
   const chipCounts: Array<{ id: TaskView; label: string; count: number }> = [
-    { id: "today", label: "My day", count: taskView === "today" && !historical && pageCounts ? pageCounts.open : myDayTasks.filter((task) => task.completed !== true).length },
+    { id: "today", label: "My day", count: dayTaskGroups(myDayTasks, currentDate, taskSort).reduce((sum, group) => sum + group.tasks.filter((task) => task.completed !== true).length, 0) },
     { id: "unfinished", label: "Unfinished", count: taskView === "unfinished" ? pageCounts?.open ?? parentTasks(uniqueTasks(unfinishedTasks)).length : parentTasks(uniqueTasks(unfinishedFallback)).length },
     { id: "completed", label: "Completed", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.completed : serverCounts?.completed ?? parentTasks(uniqueTasks(completedTasks)).length },
     { id: "all", label: "All tasks", count: (taskView === "all" || taskView === "completed") && pageCounts ? pageCounts.total : serverCounts?.total ?? parentTasks(uniqueTasks(workspaceHistory)).length },
@@ -4644,7 +4644,9 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const rowsForDisplay = taskView === "today" && !historical
     ? displayed.filter((task) => task.completed !== true)
     : displayed;
-  const displayedTasks = !historical && historyOrder === "server"
+  // Only server-backed views arrive pre-sorted. My day is assembled on the
+  // client, so it must apply the active sort here or the header arrows lie.
+  const displayedTasks = !historical && historyOrder === "server" && serverBackedRows
     ? rowsForDisplay
     : sortTaskList(rowsForDisplay, taskSort, currentDate);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -4664,9 +4666,11 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     : goal ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   const dateFilterActive = !!filterFrom || !!filterTo;
-  const focusOpenCount = myDayTasks.filter((task) => task.completed !== true).length;
-  const focusDueSoonCount = myDayTasks.filter((task) => typeof task.due_date === "string" && task.due_date.slice(0, 10) <= currentDate).length;
-  const focusCompletedCount = completedTasks.filter((task) => String(task.completed_at ?? task.due_date ?? "").slice(0, 10) === currentDate).length;
+  // One source for the day's counts: the groups are built from the same
+  // my-day list the view renders, so the strip can never contradict the list.
+  const dayGroups = dayTaskGroups(myDayTasks, currentDate, taskSort);
+  const dayGroupCount = (id: "overdue" | "today" | "later" | "undated") => dayGroups.find((group) => group.id === id)?.tasks.length ?? 0;
+  const focusDoneTodayCount = completedTasks.filter((task) => String(task.completed_at ?? task.due_date ?? "").slice(0, 10) === currentDate).length;
   useEffect(() => {
     if (!filtersOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -4695,7 +4699,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
         {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><span className="agenda-strip-text">{agendaText}</span><Pencil size={13} aria-hidden="true" /></button> : <span className="agenda-strip-text">{agendaText}</span>}
         <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small>
       </div>
-      {!historical && <div className="task-focus-stats" aria-label="Focus summary"><span><b>{focusOpenCount}</b><small>open today</small></span><span><b>{focusDueSoonCount}</b><small>due soon</small></span><span><b>{focusCompletedCount}</b><small>completed</small></span></div>}
+      {!historical && <div className="task-focus-stats" aria-label="Today’s counts"><span className={dayGroupCount("overdue") > 0 ? "attention" : undefined}><b>{dayGroupCount("overdue")}</b><small>overdue</small></span><span><b>{dayGroupCount("today")}</b><small>due today</small></span><span><b>{focusDoneTodayCount}</b><small>done today</small></span></div>}
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </section>
     {!historical && <nav className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</nav>}
