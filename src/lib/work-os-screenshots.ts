@@ -9,13 +9,15 @@ import type { WorkOsAccess } from "@/lib/work-os-api";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { fetchScreenshotsForDay, framesWithinBounds, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
+import { fingerprintScreenshot } from "@/lib/worktivityScreenshotRuns";
+import { saveFrameFingerprint } from "@/lib/worktivityFrameCache";
 import { localDateForTimezone, localDayBounds, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 
 type Json = Record<string, unknown>;
 
 /** The pipeline only needs these fields; both activity logs and screenshot
  * records carry them, so summaries can be produced from either source. */
-type ScreenshotLog = Pick<WtActivityLog, "ID" | "Screenshot" | "CreateDate" | "Title" | "Url"> & { CaptureDate?: string | null };
+type ScreenshotLog = Pick<WtActivityLog, "ID" | "Screenshot" | "CreateDate" | "Title" | "Url"> & { CaptureDate?: string | null; ActivityLevel?: number | null };
 
 const captureAt = (log: ScreenshotLog) => log.CaptureDate || log.CreateDate;
 
@@ -334,6 +336,7 @@ type ScreenshotPolicyConfig = { sensitiveApps: string[]; sensitiveDomains: strin
 async function processScreenshotLog(
   access: ScreenshotScope,
   personId: string,
+  worktivityEmployeeId: string,
   date: string,
   log: ScreenshotLog,
   config: ScreenshotPolicyConfig,
@@ -421,6 +424,25 @@ async function processScreenshotLog(
       updated_at: new Date().toISOString(),
     }, { onConflict: "evidence_event_id" }).select("*").single();
     if (error) throw new Error(`save screenshot summary: ${error.message}`);
+    // Feed the shared frame-analysis cache so a later admin audit reuses this
+    // frame's fingerprint instead of downloading the image again. Best-effort:
+    // a cache outage must never fail frame processing.
+    if (worktivityEmployeeId) {
+      try {
+        await saveFrameFingerprint(db(), {
+          employeeId: worktivityEmployeeId,
+          screenshotId: log.ID,
+          capturedAt: captureAt(log),
+          localDate: date,
+          app: log.Title ?? null,
+          url: log.Url ?? null,
+          activityLevel: log.ActivityLevel ?? null,
+          fingerprint: await fingerprintScreenshot(bytes),
+        });
+      } catch (cacheError) {
+        console.warn(`[worktivity] frame fingerprint cache write failed for ${log.ID}: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`);
+      }
+    }
     await db().from("work_evidence_events").update({
       summary: observation.summary,
       metadata: { worktivityLogId: log.ID, app: log.Title, domain: log.Url, needsReview },
@@ -488,7 +510,7 @@ export async function summarizeWorktivityScreenshots(
   const results = [];
   const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? DEFAULT_SCREENSHOTS_PER_RUN)));
   for (const log of sampleScreenshots(pending, maxScreenshots)) {
-    const row = await processScreenshotLog(access, personId, date, log, config, timezone);
+    const row = await processScreenshotLog(access, personId, person.worktivity_employee_id, date, log, config, timezone);
     if (String((row as any)?.processing_status ?? "") !== "failed") terminalAfter.add(`screenshot:${log.ID}`);
     results.push(row);
   }
@@ -684,7 +706,7 @@ export async function prepareScreenshotWindow(input: {
   let analyzedThisCall = 0;
   for (const log of sampleScreenshots(pending, maxFrames)) {
     const captureDate = localDateForTimezone(new Date(captureAt(log)), timezone);
-    const row = await processScreenshotLog(access, input.personId, captureDate, log, config, timezone);
+    const row = await processScreenshotLog(access, input.personId, person.worktivity_employee_id, captureDate, log, config, timezone);
     if (String((row as any)?.processing_status ?? "") !== "failed") analyzedThisCall += 1;
   }
 
