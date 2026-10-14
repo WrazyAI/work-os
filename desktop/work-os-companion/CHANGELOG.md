@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.30 — 2026-10-14
+
+- Approval cards keep their step controls and Skip/Approve decisions on one clean row, with the batch progress along the card's top edge.
+- The workday page no longer shows a Nifty sync label in the header.
+
 ## 0.4.29 — 2026-10-13
 
 - On macOS the companion no longer freezes on its loading screen after an update — and the mascot can be dragged again.
