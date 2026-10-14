@@ -936,7 +936,10 @@ there is never more than one guide per page.
   `How <page> works`) reopens the guide for the page on screen. Reopening by
   hand does not consume an unseen guide; acknowledgement happens on dismissal.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
-  described by its promise. It holds one custom inline-SVG scene drawn on the
+  described by its promise. Its header names the speaker once with the
+  configured companion mark, the same identity the chat surfaces use, so a
+  guide reads as the same companion the employee met in setup. It holds one
+  custom inline-SVG scene drawn on the
   workspace palette (`aria-hidden`; no raster art). The scene plays one
   bounded pass through the numbered steps; each step is also a real button that
   activates the matching scene phase on hover, focus, or click. Reduced-motion
@@ -1018,8 +1021,49 @@ Focus is visible on every interactive element. A focus outline must reach 3:1
 against its surroundings; the current signal-lime outline does not (§3.1).
 Dismissal never leaves focus on removed content.
 
-## 9. Data truth, provenance, and state
+### 8.14 First run: the welcome, the setup, and the hand-off
 
+The employee has not met the product yet, so first run is the one surface where
+the companion carries the experience instead of annotating it. Otto is on stage
+from the first frame to the last, and the panel beside him stays in the quiet
+product language: personality on the stage, discipline in the panel.
+
+- **The welcome.** A full-width stage holding one statement, Otto, and his
+  spoken line, with one `Start setup` action and a short `Six short steps.`
+  note. It appears only for a draft that has never been written
+  (`draft.updatedAt` is null and the draft is on the first step). Any other
+  entry — a resumed draft, a returning employee — lands directly on the step
+  the draft holds, and no welcome is shown or replayed.
+- **The step screen.** A split view. The stage carries the step's purpose as
+  one eyebrow and one statement, then what Otto says; the panel carries exactly
+  one heading, which is the concrete instruction, and the work itself. Neither
+  column repeats the other: the reasoning lives in the spoken line, the
+  instruction lives in the panel, and the truth-bearing copy (the consent
+  sentence, the schedule precedence note, the attendance status) stays where it
+  can be read in full.
+- **The journey rail.** Six stops under the stage: completed, current (wider,
+  in signal), and upcoming. It is absent from the welcome, since nothing has
+  started. Its accessible name states the position and the step
+  (`Setup progress: step N of M, <label>`), and one polite live region
+  announces the same sentence once per step rather than reading the stage aloud.
+- **What Otto says.** The spoken line is the only place the step's reasoning
+  lives, and it is spoken in his voice, not explained in the interface's. The
+  full sentence is exposed to assistive technology once, prefixed with the
+  configured name; the resolving words are `aria-hidden`. Nothing in a line
+  may overstate what the step does.
+- **Poses.** Attending while the employee answers, working while the workspace
+  is really being prepared, and celebrating at the completion. Each recipe
+  names a genuine agent/workday pair through the shared state layer; the stage
+  opts out of the application runtime because there is no workspace state for
+  it to mirror yet.
+- **The hand-off.** The completion states the truthful attendance status and
+  offers one `Enter My Day`. Choosing it puts Otto in his working pose and
+  shows the inline wait, and that state lasts exactly as long as the transition
+  takes — never a fixed or invented delay.
+- **Leaving.** `Sign out` stays in the step masthead throughout, so a first run
+  that cannot complete is never a dead end.
+
+## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
 
 - Work OS session state.
@@ -1288,7 +1332,7 @@ build — so the gate that holds every screen until the vault opens always settl
 
 | Gate state | Surface |
 |---|---|
-| Opening | Loading screen: wordmark, heading, wave, no recovery controls |
+| Opening | Loading screen: the companion in his working pose, heading, the real stage line, wave, no recovery controls |
 | Opened | The workspace, or whatever screen the workspace itself requires next |
 | Failed | Failure screen: the bounded reason as its explanation, `Retry`, and `Start fresh on this device` only when a stored key cannot be read |
 
@@ -1329,6 +1373,15 @@ five-second active window, hold still for one second, then repeat twice. A
 snoozed prompt replays the same sequence when it returns. The mascot then stays
 still in its alert pose until the employee responds. Never loop continuously,
 and remove attention motion under reduced-motion preferences.
+
+First run adds exactly one entrance per step and nothing else: the step
+statement and the spoken bubble each arrive over at most 260ms with a 6px
+translation, and the spoken line resolves word by word at 26ms per word, capped
+at 48 words, then stops. The reveal is CSS with no timer, so it cannot outlive
+its line, replay on its own, or compete with anything else animating. Reduced
+motion renders every one of those states flat. A step change moves in the
+direction the employee moved (forward or back) so the panel's arrival explains
+what changed.
 
 Respect prefers-reduced-motion. Remove transforms, shimmer, and nonessential
 animation while preserving state, labels, and final geometry.
@@ -1385,6 +1438,9 @@ It may appear as:
 
 - a small head mark beside agent speech;
 - a restrained full figure in a connect/ready hero;
+- a full figure on the first-run stage, where he hosts setup, and on the pre-app
+  loading screen and its failure state, where he is honestly working or
+  recovering;
 - a compact orb in the floating companion;
 - a thinking/recovering/celebrating state when the corresponding event is real.
 

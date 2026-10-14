@@ -3556,40 +3556,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .story-brand b {
   color: var(--signal);
 }
-.story-copy {
-  position: relative;
-  z-index: 2;
-  max-width: 360px;
-  margin-top: clamp(54px, 9vh, 94px);
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
-}
-.story-copy > span {
-  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-  color: var(--signal);
-}
-.story-copy h1 {
-  font: 600 clamp(30px, 4vw, 51px)/0.98 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: -0.055em;
-  margin: 13px 0;
-}
-.story-copy p {
-  font-size: 12px;
-  line-height: 1.6;
-  color: #d5d4cd;
-  max-width: 310px;
-}
-.phase-art {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.54;
-  z-index: -1;
-  animation: artReveal 0.7s ease both;
-}
 .onboarding-story:after {
   content: "";
   position: absolute;
@@ -3601,26 +3567,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     rgba(18, 20, 16, 0.8) 100%
   );
   z-index: -1;
-}
-.phase-path {
-  position: relative;
-  z-index: 2;
-  margin-top: auto;
-  display: flex;
-  gap: 6px;
-}
-.phase-path i {
-  width: 22px;
-  height: 3px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.25);
-  transition:
-    width 0.35s,
-    background 0.35s;
-}
-.phase-path i.active {
-  width: 40px;
-  background: var(--signal);
 }
 .onboarding-workspace {
   min-width: 0;
@@ -3667,11 +3613,17 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   margin: 0 auto;
   padding: clamp(26px, 5vh, 54px) 0 22px;
   overflow: auto;
-  animation: phaseReveal 0.42s ease both;
 }
 .phase-intro {
   max-width: 570px;
   margin-bottom: 26px;
+}
+/* The panel heading is the step's instruction, not a second hero: the stage
+   statement above it carries the page-scale type. */
+.phase-intro h2 {
+  font: 600 clamp(21px, 2.3vw, 29px)/1.08 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.035em;
+  margin: 0;
 }
 .phase-intro > span {
   display: flex;
@@ -3681,11 +3633,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font: 600 9px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-}
-.phase-intro h2 {
-  font: 600 clamp(28px, 3.6vw, 44px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: -0.045em;
-  margin: 11px 0;
 }
 .phase-intro p {
   font-size: 12px;
@@ -4037,27 +3984,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   justify-content: center;
   text-align: center;
 }
-.connection-orb {
-  width: 86px;
-  height: 86px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: #d8f7af;
-  color: #34590f;
-  box-shadow: 0 0 0 0 rgba(184, 255, 90, 0.45);
-  animation: connectedPulse 2.4s ease infinite;
-}
-.connection-orb.unknown {
-  background: #e7e6de;
-  color: #696d64;
-  animation: none;
-}
-.connection-orb.off_shift {
-  background: #ecebdc;
-  color: #60634f;
-  animation: none;
-}
 .connected-state > small {
   margin-top: 22px;
   text-transform: uppercase;
@@ -4148,31 +4074,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   align-items: center;
   gap: 7px;
 }
-@keyframes phaseReveal {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes artReveal {
-  from {
-    opacity: 0.25;
-    transform: scale(1.025);
-  }
-  to {
-    opacity: 0.54;
-    transform: scale(1);
-  }
-}
-@keyframes connectedPulse {
-  50% {
-    box-shadow: 0 0 0 18px rgba(184, 255, 90, 0);
-  }
-}
 @media (max-width: 840px) {
   .guided-onboarding {
     grid-template-columns: 34% 66%;
@@ -4183,9 +4084,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .profile-board {
     grid-template-columns: 1fr;
   }
-  .story-copy h1 {
-    font-size: 30px;
-  }
 }
 @media (max-width: 720px) {
   .guided-onboarding {
@@ -4195,16 +4093,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
     overflow: auto;
   }
   .onboarding-story {
-    min-height: 230px;
-  }
-  .story-copy {
-    margin-top: 30px;
-  }
-  .story-copy h1 {
-    font-size: 28px;
-  }
-  .phase-art {
-    object-position: center 60%;
+    min-height: 440px;
   }
   .onboarding-workspace {
     min-height: 600px;
@@ -4420,6 +4309,30 @@ body.modal-open {
 .task-modal.guide-modal > header h2 {
   max-width: 440px;
   font-size: 23px;
+}
+/* The guide header names its speaker once, with the same identity the chat
+   surfaces use. The eyebrow and mark share the first row; title and promise
+   take a row each. */
+.task-modal.guide-modal > header .guide-header-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 9px;
+}
+.task-modal.guide-modal > header .guide-mascot {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+.task-modal.guide-modal > header .guide-mascot .chat-mascot-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.task-modal.guide-modal > header .guide-header-copy h2,
+.task-modal.guide-modal > header .guide-header-copy p {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 .task-modal.guide-modal > header p {
   max-width: 440px;

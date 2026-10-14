@@ -1,29 +1,71 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, BriefcaseBusiness, Check, CircleAlert, Clock3, LogOut, Plus, ShieldCheck, Sparkles, Trash2, UserRound, Wifi } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Check, CircleAlert, LogOut, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { AttendanceProjection, OnboardingData, OnboardingSchedule, ProfileItemKind, WorkProfileItem } from "./types";
-import seenArt from "./assets/onboarding/phase-seen.webp";
-import understoodArt from "./assets/onboarding/phase-understood.webp";
-import controlArt from "./assets/onboarding/phase-control.webp";
-import preparedArt from "./assets/onboarding/phase-prepared.webp";
-import safeArt from "./assets/onboarding/phase-safe.webp";
-import connectedArt from "./assets/onboarding/phase-connected.webp";
-import wordmark from "./assets/work-os-mark.png";
 import { supportedTimezones, timezoneLabel } from "../../../src/modules/work-os/timezones";
 import { createCoalescedDraftQueue, onboardingHydrationKey, shouldHydrateOnboardingForm, type DraftSaveState } from "./onboardingDraftState";
+import { OnboardingStage, STAGE_POSE, type StagePose } from "./OnboardingStage";
+import { FadeArc } from "./LoadingUi";
 
-type AssetSource = string | { src: string };
-const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
-
+/**
+ * First run.
+ *
+ * The employee has not met the product yet, so Otto hosts this instead of
+ * annotating it: he is on stage from the first frame, he says why each step
+ * matters, and he carries the one piece of copy the step would otherwise have
+ * to explain itself. The panel beside him stays in the quiet product language —
+ * it does the work, the stage does the welcome.
+ */
 const PHASES = [
-  { id: "seen", feeling: "Welcome", title: "Your workspace is ready for you.", body: "We’ve brought in the basics so setup feels quick, familiar, and personal from the start.", art: seenArt },
-  { id: "understood", feeling: "Understood", title: "Tell us how you contribute.", body: "Choose a broad work scope. Your official company role stays unchanged.", art: understoodArt },
-  { id: "profile", feeling: "In control", title: "Shape the profile that guides your companion.", body: "Keep, remove, reorder, or add the signals that describe useful work.", art: controlArt },
-  { id: "prepared", feeling: "Prepared", title: "Set the rhythm around your day.", body: "Confirm when you usually work and how the companion should reach you.", art: preparedArt },
-  { id: "safe", feeling: "Safe", title: "Your boundaries stay explicit.", body: "Review the required Work OS tracking and screenshot-analysis boundaries before connecting.", art: safeArt },
-  { id: "connected", feeling: "Connected", title: "Your Work OS is ready.", body: "We are checking Worktivity for your observed attendance status.", art: connectedArt },
+  {
+    id: "seen",
+    feeling: "Welcome",
+    title: "Good to have you here.",
+    line: "I’m Otto — I’ll be around while you work. Give me a couple of minutes now to learn how you work, and then I’ll stay out of your way.",
+  },
+  {
+    id: "understood",
+    feeling: "Understood",
+    title: "What kind of work is it?",
+    line: "Pick whichever is closest. This only shapes how I phrase things for you — your official company role stays exactly as it is.",
+  },
+  {
+    id: "profile",
+    feeling: "In control",
+    title: "Here’s what I’ll listen for.",
+    line: "Keep what sounds right, drop what doesn’t, and add anything I missed. None of it becomes a task, and none of it is written to Nifty.",
+  },
+  {
+    id: "prepared",
+    feeling: "Prepared",
+    title: "When does work usually happen?",
+    line: "I use this to time my check-ins and the end-of-day nudge. If your manager has set an official schedule, theirs takes precedence.",
+  },
+  {
+    id: "safe",
+    feeling: "Safe",
+    title: "This part, I won’t rush.",
+    line: "Read what is captured and what never is, then tell me yes. None of this measures how good your work is.",
+  },
+  {
+    id: "connected",
+    feeling: "Connected",
+    title: "That’s everything.",
+    line: "You’re set. Here is where things stand right now.",
+  },
 ] as const;
 type PhaseId = (typeof PHASES)[number]["id"];
 const DAYS = [{ value: 1, label: "Mon" }, { value: 2, label: "Tue" }, { value: 3, label: "Wed" }, { value: 4, label: "Thu" }, { value: 5, label: "Fri" }, { value: 6, label: "Sat" }, { value: 0, label: "Sun" }];
+
+/** Otto listens through the form steps and only changes when something real
+ *  happened: nothing at all, then work while the workspace is prepared. */
+const PHASE_POSE: Record<PhaseId, StagePose> = {
+  seen: "attending",
+  understood: "attending",
+  profile: "attending",
+  prepared: "attending",
+  safe: "attending",
+  connected: "done",
+};
 
 interface FormState {
   preferredName: string; email: string; timezone: string; language: string; schedule: OnboardingSchedule;
@@ -50,11 +92,17 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
   data: OnboardingData; simulated: boolean; busy: boolean;
   onSubmit: (body: Record<string, unknown>) => Promise<AttendanceProjection | undefined>;
   onSaveDraft: (body: Record<string, unknown>) => Promise<OnboardingData | { queued: true } | void>;
-  onComplete: () => void; onOpenDebug: () => void; onLogout: () => void;
+  onComplete: () => void | Promise<void>; onOpenDebug: () => void; onLogout: () => void;
   onNotify: (tone: "success" | "error" | "info", message: string, title?: string) => void;
 }) {
   const restored = Math.max(0, PHASES.findIndex((phase) => phase.id === data.draft.step));
   const [phaseIndex, setPhaseIndex] = useState(restored >= PHASES.length - 1 ? 0 : restored);
+  // A draft that has never been written means nobody has seen any of this yet —
+  // that is the only case where Otto introduces himself. Every other entry lands
+  // straight on the step they left.
+  const [stage, setStage] = useState<"welcome" | "form">(() => (restored === 0 && !data.draft.updatedAt ? "welcome" : "form"));
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  const [entering, setEntering] = useState(false);
   const [form, setForm] = useState(() => initial(data));
   const [removed, setRemoved] = useState<WorkProfileItem[]>([]);
   const [newItem, setNewItem] = useState("");
@@ -69,6 +117,8 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
   const hydratedIdentity = useRef<string | null>(null);
   const phase = PHASES[phaseIndex];
   const archetype = data.catalog.archetypes.find((entry) => entry.id === form.archetypeId);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const mounted = useRef(false);
 
   const hydrationKey = onboardingHydrationKey({ email: data.profile.email });
   useEffect(() => {
@@ -88,6 +138,14 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
     const timer = window.setTimeout(() => void saveDraft(phase.id).catch(() => undefined), 700);
     return () => clearTimeout(timer);
   }, [form, phase.id]);
+  // A new step is new content with new controls; move the reading position to
+  // its heading (but never on first render, which would steal boot focus).
+  useEffect(() => {
+    const first = !mounted.current;
+    mounted.current = true;
+    if (first || stage !== "form" || entering) return;
+    panelRef.current?.querySelector<HTMLElement>(".phase-heading")?.focus();
+  }, [phaseIndex, stage, entering]);
 
   const grouped = useMemo(() => (["responsibility", "deliverable", "evidence"] as ProfileItemKind[]).map((kind) => ({ kind, items: form.items.filter((entry) => entry.kind === kind) })), [form.items]);
   function workPreferences() { return { archetypeId: form.archetypeId, customRoleTitle: form.customRoleTitle, specialtyIds: form.specialtyIds, items: form.items, voiceUpdatesEnabled: form.voiceUpdatesEnabled, githubUsername: form.githubUsername }; }
@@ -126,13 +184,19 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
     if (phase.id === "safe" && !form.acceptWorkOsConsent) return "Accept the Work OS tracking and screenshot-analysis policy to continue.";
     return "";
   }
+  function goBack() {
+    setDirection("back");
+    setPhaseIndex((current) => Math.max(0, current - 1));
+  }
   async function next() {
     const problem = validateCurrent();
     if (problem) { onNotify("error", problem, "Check this step"); return; }
     if (phase.id === "safe") {
       try {
         const result = await onSubmit({ ...draftBody("safe"), privacy: { screenshotAnalysisConsent: true, sensitiveAppExclusions: form.sensitiveAppExclusions.split(",").map((entry) => entry.trim()).filter(Boolean) }, acceptTrackingConsent: true, privacyNoticeAcknowledged: true });
-        setAttendance(result); setPhaseIndex(PHASES.length - 1);
+        setAttendance(result);
+        setDirection("forward");
+        setPhaseIndex(PHASES.length - 1);
         onNotify("success", "Your preferences and consent were saved.", "Workspace connected");
       } catch (error) {
         onNotify("error", error instanceof Error ? error.message : "Work OS could not finish onboarding.", "Onboarding not completed");
@@ -141,41 +205,76 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
     }
     try { await saveDraft(PHASES[Math.min(phaseIndex + 1, PHASES.length - 2)].id); }
     catch { return; }
+    setDirection("forward");
     setPhaseIndex((current) => Math.min(current + 1, PHASES.length - 1));
   }
+  /** The finish is a hand-off: Otto works while the workspace is really being
+   *  prepared, and this state lasts exactly as long as that takes. */
+  async function enterWorkspace() {
+    if (entering) return;
+    setEntering(true);
+    try {
+      await onComplete();
+    } catch (error) {
+      setEntering(false);
+      onNotify("error", error instanceof Error ? error.message : "Work OS could not finish setting up. Try again.", "Workspace setup did not finish");
+    }
+  }
 
-  return <main className="guided-onboarding" aria-busy={busy}>
-    <aside className="onboarding-story" aria-live="polite">
-      <div className="story-brand"><img src={assetUrl(wordmark)} alt="" /><strong>WORK <b>OS</b></strong></div>
-      <div className="story-copy"><span>{phase.feeling}</span><h1>{phase.title}</h1><p>{phase.body}</p></div>
-      <img key={phase.id} className="phase-art" src={assetUrl(phase.art)} alt="" />
-      <div className="phase-path" aria-label={`Onboarding progress: ${phase.feeling}`}>
-        {PHASES.map((entry, index) => <i key={entry.id} className={index <= phaseIndex ? "active" : ""} />)}
-      </div>
-    </aside>
-    <section className="onboarding-workspace">
-      <header><span>{phase.feeling}</span><div><button className="quiet-action" disabled={busy} onClick={onLogout}><LogOut size={15} /> Sign out</button><button className="debug-trigger" title="Open debug scenarios" aria-label="Open debug scenarios" onClick={onOpenDebug}><CircleAlert size={16} /></button></div></header>
+  const welcoming = stage === "welcome";
+  const pose: StagePose = entering ? "working" : PHASE_POSE[phase.id];
+  const line = entering ? "Setting up your workspace — syncing your schedule, tasks, and provider context." : phase.line;
+  const welcomeLine = "I’m Otto — I’ll be around while you work. Give me a couple of minutes now to learn how you work, and then I’ll stay out of your way.";
+  return <main className="guided-onboarding" data-stage={stage} data-direction={direction} aria-busy={busy}>
+    <OnboardingStage
+      pose={pose}
+      eyebrow={phase.feeling}
+      title={welcoming ? "Hey, good to have you." : phase.title}
+      line={welcoming ? welcomeLine : line}
+      journey={welcoming ? undefined : { total: PHASES.length, index: phaseIndex, label: phase.feeling }}
+      replayKey={welcoming ? "welcome" : `${phase.id}:${entering ? "entering" : "step"}`}
+    >
+      {welcoming && <div className="otto-bubble-actions">
+        <button className="primary" onClick={() => setStage("form")}>Start setup <ArrowRight size={16} /></button>
+        <span className="otto-bubble-note">Six short steps.</span>
+      </div>}
+    </OnboardingStage>
+    {!welcoming && <section className="onboarding-workspace">
+      <header><span>Workspace setup</span><div><button className="quiet-action" disabled={busy} onClick={onLogout}><LogOut size={15} /> Sign out</button><button className="debug-trigger" title="Open debug scenarios" aria-label="Open debug scenarios" onClick={onOpenDebug}><CircleAlert size={16} /></button></div></header>
       {simulated && <div className="debug-notice"><CircleAlert size={15} /> Scenario mode. Writes stay on this device.</div>}
-      <div className="phase-content" key={phase.id}>
+      <div className="phase-content" key={phase.id} ref={panelRef}>
         {phase.id === "seen" && <Seen data={data} form={form} setForm={setForm} />}
         {phase.id === "understood" && <Understood data={data} form={form} setForm={setForm} select={selectArchetype} />}
         {phase.id === "profile" && <ProfileBoard grouped={grouped} removed={removed} newKind={newKind} newItem={newItem} setNewKind={setNewKind} setNewItem={setNewItem} setForm={setForm} setRemoved={setRemoved} />}
         {phase.id === "prepared" && <Prepared form={form} setForm={setForm} schedule={schedule} authoritativeBreaks={data.breakPolicy.worktivityAuthoritative} />}
         {phase.id === "safe" && <Safe data={data} form={form} setForm={setForm} />}
-        {phase.id === "connected" && <Connected attendance={attendance} onComplete={onComplete} />}
+        {phase.id === "connected" && <Connected attendance={attendance} entering={entering} onEnter={() => void enterWorkspace()} />}
       </div>
-      {phase.id !== "connected" && <footer className="phase-actions"><button className="back" disabled={busy || phaseIndex === 0} onClick={() => setPhaseIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={16} /> Back</button><span className={`save-state ${draftSaveState}`}>{draftSaveState === "saving" ? "Saving…" : draftSaveState === "offline" ? "Offline · queued for replay" : draftSaveState === "conflict" ? "Conflict · refresh required" : `Saved · revision ${draftRevision.current}`}</span><button className="primary" disabled={busy || draftSaveState === "conflict"} onClick={() => void next()}>{busy ? "Saving…" : phase.id === "safe" ? "Connect Work OS" : "Continue"}<ArrowRight size={16} /></button></footer>}
-    </section>
+      {phase.id !== "connected" && <footer className="phase-actions"><button className="back" disabled={busy || phaseIndex === 0} onClick={goBack}><ArrowLeft size={16} /> Back</button><span className={`save-state ${draftSaveState}`}>{draftSaveState === "saving" ? "Saving…" : draftSaveState === "offline" ? "Offline · queued for replay" : draftSaveState === "conflict" ? "Conflict · refresh required" : `Saved · revision ${draftRevision.current}`}</span><button className="primary" disabled={busy || draftSaveState === "conflict"} onClick={() => void next()}>{busy ? "Saving…" : phase.id === "safe" ? "Connect Work OS" : "Continue"}<ArrowRight size={16} /></button></footer>}
+    </section>}
   </main>;
 }
 
-function Seen({ data, form, setForm }: any) { return <><PhaseIntro icon={UserRound} eyebrow="Workspace context" title={`Welcome, ${form.preferredName || "there"}.`} body="It’s good to have you here. We’ve brought in the basics from your workspace—just confirm what feels right, and we’ll help you start the day with clarity." /><div className="identity-grid"><label><span>Preferred name</span><input value={form.preferredName} onChange={(e) => setForm({ ...form, preferredName: e.target.value })} /></label><label><span>Work email</span><input value={form.email} readOnly /></label></div><div className="context-list"><Context label="Official role" value={data.organizationSetup.roleProfile?.name || "Pending manager setup"} /><Context label="Team" value={data.organizationSetup.teams.map((team: any) => team.name).join(", ") || "Pending manager setup"} /><Context label="Manager" value={data.organizationSetup.managers.map((manager: any) => manager.display_name).join(", ") || "Pending manager setup"} /></div><div className="provider-line"><span className={data.providerPrefill.nifty.mapped ? "ok" : ""}>Nifty {data.providerPrefill.nifty.mapped ? "connected" : "not mapped"}</span><span className={data.providerPrefill.worktivity.mapped ? "ok" : ""}>Worktivity {data.providerPrefill.worktivity.mapped ? "connected" : "not mapped"}</span></div></>; }
-function Understood({ data, form, setForm, select }: any) { const selected = data.catalog.archetypes.find((entry: any) => entry.id === form.archetypeId); return <><PhaseIntro icon={BriefcaseBusiness} eyebrow="Work archetype" title="What kind of work do you do?" body="This personalizes prompts and reports. It never changes your official company role." />{data.profile.workPreferences.inferredArchetypeId && <div className="suggestion-note"><Sparkles size={15} /> Suggested from your imported role</div>}<div className="archetype-grid">{data.catalog.archetypes.map((entry: any) => <button key={entry.id} className={form.archetypeId === entry.id ? "selected" : ""} onClick={() => select(entry.id)}><strong>{entry.name}</strong><small>{entry.description}</small>{form.archetypeId === entry.id && <Check size={16} />}</button>)}</div>{form.archetypeId === "custom" && <label className="wide-input"><span>Your role</span><input value={form.customRoleTitle} onChange={(e) => setForm({ ...form, customRoleTitle: e.target.value })} placeholder="Describe your work" /></label>}{(selected?.specialties ?? []).length > 0 && <div className="specialties"><span>Specialties</span><div>{selected.specialties.map((specialty: any) => <button className={form.specialtyIds.includes(specialty.id) ? "selected" : ""} key={specialty.id} onClick={() => setForm({ ...form, specialtyIds: form.specialtyIds.includes(specialty.id) ? form.specialtyIds.filter((id: string) => id !== specialty.id) : [...form.specialtyIds, specialty.id] })}>{specialty.name}</button>)}</div></div>}</>; }
-function ProfileBoard({ grouped, removed, newKind, newItem, setNewKind, setNewItem, setForm, setRemoved }: any) { function move(id: string, delta: number) { setForm((current: any) => { const index=current.items.findIndex((item: any)=>item.id===id), target=index+delta;if(index<0||target<0||target>=current.items.length)return current;const items=[...current.items];[items[index],items[target]]=[items[target],items[index]];return {...current,items}; }); } return <><PhaseIntro icon={Sparkles} eyebrow="Your work profile" title="Does this sound like your work?" body="These are profile signals—not tasks. Every suggestion stays editable and nothing is written to Nifty." /><div className="profile-board">{grouped.map((group: any) => <section key={group.kind}><header><strong>{group.kind === "responsibility" ? "Responsibilities" : group.kind === "deliverable" ? "Deliverables" : "Evidence sources"}</strong><small>{group.items.length}</small></header>{group.items.map((item: WorkProfileItem) => <div className="profile-item" key={item.id}><span>{item.label}<em>{item.source}</em></span><button aria-label={`Move ${item.label} up`} onClick={() => move(item.id,-1)}><ArrowUp size={14}/></button><button aria-label={`Move ${item.label} down`} onClick={() => move(item.id,1)}><ArrowDown size={14}/></button><button aria-label={`Remove ${item.label}`} onClick={() => {setRemoved((all: WorkProfileItem[])=>[...all,item]);setForm((current: any)=>({...current,items:current.items.filter((entry: any)=>entry.id!==item.id)}));}}><Trash2 size={14}/></button></div>)}{!group.items.length && <p className="empty-group">No items kept in this group.</p>}</section>)}</div><div className="add-profile-item"><select value={newKind} onChange={(e)=>setNewKind(e.target.value)}><option value="responsibility">Responsibility</option><option value="deliverable">Deliverable</option><option value="evidence">Evidence source</option></select><input value={newItem} onChange={(e)=>setNewItem(e.target.value)} placeholder="Add your own" /><button disabled={!newItem.trim()} onClick={()=>{const item={id:`user:${newKind}:${Date.now()}`,kind:newKind,label:newItem.trim(),source:"user"};setForm((current:any)=>({...current,items:[...current.items,item]}));setNewItem("");}}><Plus size={15}/> Add</button></div>{removed.length>0&&<button className="restore" onClick={()=>{setForm((current:any)=>({...current,items:[...current.items,...removed]}));setRemoved([]);}}>Restore {removed.length} removed suggestion{removed.length===1?"":"s"}</button>}</>; }
-function Prepared({ form, setForm, schedule, authoritativeBreaks }: any) { const [breakDraft,setBreakDraft]=useState(form.schedule.breaks[0] ?? { start: "", end: "" }); const patchBreak=(patch:Partial<{start:string;end:string}>)=>{const next={...breakDraft,...patch};setBreakDraft(next);schedule({breaks:next.start&&next.end?[next]:[]});}; return <><PhaseIntro icon={Clock3} eyebrow="Your rhythm" title="When does work usually happen?" body="This is your proposed schedule. A manager-owned official schedule still takes precedence." /><div className="day-selector">{DAYS.map((day)=><button key={day.value} className={form.schedule.daysOfWeek.includes(day.value)?"selected":""} onClick={()=>schedule({daysOfWeek:form.schedule.daysOfWeek.includes(day.value)?form.schedule.daysOfWeek.filter((value:number)=>value!==day.value):[...form.schedule.daysOfWeek,day.value]})}>{day.label}</button>)}</div><div className="schedule-grid"><TimezoneCombobox value={form.timezone} onChange={(timezone)=>setForm({...form,timezone})}/><label><span>Shift starts</span><input type="time" value={form.schedule.shiftStart} onChange={(e)=>schedule({shiftStart:e.target.value})}/></label><label><span>Shift ends</span><input type="time" value={form.schedule.shiftEnd} onChange={(e)=>schedule({shiftEnd:e.target.value})}/></label>{!authoritativeBreaks&&<><label><span>Break starts</span><input type="time" value={breakDraft.start} onChange={(e)=>patchBreak({start:e.target.value})}/></label><label><span>Break ends</span><input type="time" value={breakDraft.end} onChange={(e)=>patchBreak({end:e.target.value})}/></label></>}</div>{authoritativeBreaks&&<p className="policy-note">Break time is derived only from explicit Worktivity OnBreak records for this organization.</p>}<div className="preference-list"><Toggle icon={Bell} title="Desktop notifications" detail="Shift prompts, check-ins, and EOD review" checked={form.desktopNotifications} onChange={(value:boolean)=>setForm({...form,desktopNotifications:value})}/><Toggle icon={Sparkles} title="Voice updates" detail="Use voice when the microphone flow is available" checked={form.voiceUpdatesEnabled} onChange={(value:boolean)=>setForm({...form,voiceUpdatesEnabled:value})}/></div></>; }
+/** The panel's one heading: the concrete instruction for this step. The stage
+ *  above carries the purpose, and Otto carries the reasoning, so nothing here
+ *  repeats either of them. Focusable so a step change lands the reader on it. */
+function PhaseHeading({ title }: { title: string }) {
+  return <div className="phase-intro"><h2 className="phase-heading" tabIndex={-1}>{title}</h2></div>;
+}
+function Seen({ data, form, setForm }: any) { return <><PhaseHeading title="Is this right?" /><div className="identity-grid"><label><span>Preferred name</span><input value={form.preferredName} onChange={(e) => setForm({ ...form, preferredName: e.target.value })} /></label><label><span>Work email</span><input value={form.email} readOnly /></label></div><div className="context-list"><Context label="Official role" value={data.organizationSetup.roleProfile?.name || "Pending manager setup"} /><Context label="Team" value={data.organizationSetup.teams.map((team: any) => team.name).join(", ") || "Pending manager setup"} /><Context label="Manager" value={data.organizationSetup.managers.map((manager: any) => manager.display_name).join(", ") || "Pending manager setup"} /></div><div className="provider-line"><span className={data.providerPrefill.nifty.mapped ? "ok" : ""}>Nifty {data.providerPrefill.nifty.mapped ? "connected" : "not mapped"}</span><span className={data.providerPrefill.worktivity.mapped ? "ok" : ""}>Worktivity {data.providerPrefill.worktivity.mapped ? "connected" : "not mapped"}</span></div></>; }
+function Understood({ data, form, setForm, select }: any) { const selected = data.catalog.archetypes.find((entry: any) => entry.id === form.archetypeId); return <><PhaseHeading title="Pick the closest fit." />{data.profile.workPreferences.inferredArchetypeId && <div className="suggestion-note"><Sparkles size={15} /> Suggested from your imported role</div>}<div className="archetype-grid">{data.catalog.archetypes.map((entry: any) => <button key={entry.id} className={form.archetypeId === entry.id ? "selected" : ""} onClick={() => select(entry.id)}><strong>{entry.name}</strong><small>{entry.description}</small>{form.archetypeId === entry.id && <Check size={16} />}</button>)}</div>{form.archetypeId === "custom" && <label className="wide-input"><span>Your role</span><input value={form.customRoleTitle} onChange={(e) => setForm({ ...form, customRoleTitle: e.target.value })} placeholder="Describe your work" /></label>}{(selected?.specialties ?? []).length > 0 && <div className="specialties"><span>Specialties</span><div>{selected.specialties.map((specialty: any) => <button className={form.specialtyIds.includes(specialty.id) ? "selected" : ""} key={specialty.id} onClick={() => setForm({ ...form, specialtyIds: form.specialtyIds.includes(specialty.id) ? form.specialtyIds.filter((id: string) => id !== specialty.id) : [...form.specialtyIds, specialty.id] })}>{specialty.name}</button>)}</div></div>}</>; }
+function ProfileBoard({ grouped, removed, newKind, newItem, setNewKind, setNewItem, setForm, setRemoved }: any) { function move(id: string, delta: number) { setForm((current: any) => { const index=current.items.findIndex((item: any)=>item.id===id), target=index+delta;if(index<0||target<0||target>=current.items.length)return current;const items=[...current.items];[items[index],items[target]]=[items[target],items[index]];return {...current,items}; }); } return <><PhaseHeading title="Does this sound like your work?" /><div className="profile-board">{grouped.map((group: any) => <section key={group.kind}><header><strong>{group.kind === "responsibility" ? "Responsibilities" : group.kind === "deliverable" ? "Deliverables" : "Evidence sources"}</strong><small>{group.items.length}</small></header>{group.items.map((item: WorkProfileItem) => <div className="profile-item" key={item.id}><span>{item.label}<em>{item.source}</em></span><button aria-label={`Move ${item.label} up`} onClick={() => move(item.id,-1)}><ArrowUp size={14}/></button><button aria-label={`Move ${item.label} down`} onClick={() => move(item.id,1)}><ArrowDown size={14}/></button><button aria-label={`Remove ${item.label}`} onClick={() => {setRemoved((all: WorkProfileItem[])=>[...all,item]);setForm((current: any)=>({...current,items:current.items.filter((entry: any)=>entry.id!==item.id)}));}}><Trash2 size={14}/></button></div>)}{!group.items.length && <p className="empty-group">No items kept in this group.</p>}</section>)}</div><div className="add-profile-item"><select value={newKind} onChange={(e)=>setNewKind(e.target.value)}><option value="responsibility">Responsibility</option><option value="deliverable">Deliverable</option><option value="evidence">Evidence source</option></select><input value={newItem} onChange={(e)=>setNewItem(e.target.value)} placeholder="Add your own" /><button disabled={!newItem.trim()} onClick={()=>{const item={id:`user:${newKind}:${Date.now()}`,kind:newKind,label:newItem.trim(),source:"user"};setForm((current:any)=>({...current,items:[...current.items,item]}));setNewItem("");}}><Plus size={15}/> Add</button></div>{removed.length>0&&<button className="restore" onClick={()=>{setForm((current:any)=>({...current,items:[...current.items,...removed]}));setRemoved([]);}}>Restore {removed.length} removed suggestion{removed.length===1?"":"s"}</button>}</>; }
+function Prepared({ form, setForm, schedule, authoritativeBreaks }: any) { const [breakDraft,setBreakDraft]=useState(form.schedule.breaks[0] ?? { start: "", end: "" }); const patchBreak=(patch:Partial<{start:string;end:string}>)=>{const next={...breakDraft,...patch};setBreakDraft(next);schedule({breaks:next.start&&next.end?[next]:[]});}; return <><PhaseHeading title="When does work usually happen?" /><div className="day-selector">{DAYS.map((day)=><button key={day.value} className={form.schedule.daysOfWeek.includes(day.value)?"selected":""} onClick={()=>schedule({daysOfWeek:form.schedule.daysOfWeek.includes(day.value)?form.schedule.daysOfWeek.filter((value:number)=>value!==day.value):[...form.schedule.daysOfWeek,day.value]})}>{day.label}</button>)}</div><div className="schedule-grid"><TimezoneCombobox value={form.timezone} onChange={(timezone)=>setForm({...form,timezone})}/><label><span>Shift starts</span><input type="time" value={form.schedule.shiftStart} onChange={(e)=>schedule({shiftStart:e.target.value})}/></label><label><span>Shift ends</span><input type="time" value={form.schedule.shiftEnd} onChange={(e)=>schedule({shiftEnd:e.target.value})}/></label>{!authoritativeBreaks&&<><label><span>Break starts</span><input type="time" value={breakDraft.start} onChange={(e)=>patchBreak({start:e.target.value})}/></label><label><span>Break ends</span><input type="time" value={breakDraft.end} onChange={(e)=>patchBreak({end:e.target.value})}/></label></>}</div>{authoritativeBreaks&&<p className="policy-note">Break time is derived only from explicit Worktivity OnBreak records for this organization.</p>}<div className="preference-list"><Toggle icon={Bell} title="Desktop notifications" detail="Shift prompts, check-ins, and EOD review" checked={form.desktopNotifications} onChange={(value:boolean)=>setForm({...form,desktopNotifications:value})}/><Toggle icon={Sparkles} title="Voice updates" detail="Use voice when the microphone flow is available" checked={form.voiceUpdatesEnabled} onChange={(value:boolean)=>setForm({...form,voiceUpdatesEnabled:value})}/></div></>; }
 function TimezoneCombobox({ value, onChange }: { value: string; onChange: (value: string) => void }) { const [query,setQuery]=useState(value); const [open,setOpen]=useState(false); const [activeIndex,setActiveIndex]=useState(0); const listboxId=useId(); const options=useMemo(()=>supportedTimezones().filter((zone)=>zone.toLowerCase().includes(query.toLowerCase())).slice(0,50),[query]); const choose=(index:number)=>{const zone=options[index];if(!zone)return;onChange(zone);setQuery(zone);setOpen(false);}; const move=(index:number)=>setActiveIndex(Math.max(0,Math.min(options.length-1,index))); return <label className="timezone-combobox"><span>Timezone</span><input role="combobox" aria-expanded={open} aria-controls={listboxId} aria-activedescendant={open&&options[activeIndex]?`${listboxId}-${activeIndex}`:undefined} aria-autocomplete="list" value={query} onFocus={()=>{setOpen(true);setActiveIndex(Math.max(0,options.indexOf(value)))}} onChange={(e)=>{setQuery(e.target.value);setOpen(true);setActiveIndex(0)}} onKeyDown={(e)=>{if(e.key==="Escape"){setOpen(false);return;}if(e.key==="ArrowDown"){e.preventDefault();setOpen(true);move(open?activeIndex+1:0);return;}if(e.key==="ArrowUp"){e.preventDefault();setOpen(true);move(open?activeIndex-1:options.length-1);return;}if(e.key==="Home"){e.preventDefault();setOpen(true);move(0);return;}if(e.key==="End"){e.preventDefault();setOpen(true);move(options.length-1);return;}if(e.key==="Enter"){e.preventDefault();choose(open?activeIndex:0);}if(e.key==="Tab")setOpen(false);}} placeholder="Search city or IANA timezone" />{open&&<ul id={listboxId} role="listbox">{options.map((zone,index)=><li id={`${listboxId}-${index}`} role="option" aria-selected={zone===value} data-active={index===activeIndex||undefined} key={zone}><button type="button" onMouseDown={(e)=>e.preventDefault()} onMouseMove={()=>setActiveIndex(index)} onClick={()=>choose(index)}>{timezoneLabel(zone)} <small>{zone}</small></button></li>)}</ul>}</label>; }
-function Safe({ data, form, setForm }: any) { return <><PhaseIntro icon={ShieldCheck} eyebrow="Trust and privacy" title="Clear boundaries, before anything begins." body={data.policy.assurance}/><div className="policy-summary"><strong>Work OS uses this information for:</strong><p>{data.policy.purpose}</p><ul><li>Sampled Worktivity screenshots are analysed as neutral activity context.</li><li>{data.screenshotPolicy.retention}</li><li>{data.screenshotPolicy.sensitiveCapture}</li><li>{data.screenshotPolicy.limitation}</li></ul></div><label className="wide-input"><span>Sensitive apps or domains to exclude</span><input value={form.sensitiveAppExclusions} onChange={(e)=>setForm({...form,sensitiveAppExclusions:e.target.value})} placeholder="Banking, personal email, health portals"/></label><div className="consent-box"><label><input type="checkbox" checked={form.acceptWorkOsConsent} onChange={(e)=>setForm({...form,acceptWorkOsConsent:e.target.checked})}/><span>I accept Work OS tracking and the sampled screenshot-analysis policy above, including encrypted 30-day raw retention, sensitive-capture deletion, and the fact screenshots do not prove productivity or task completion.</span></label><small>{data.policy.version}</small></div></>; }
-function Connected({ attendance, onComplete }: {attendance?:AttendanceProjection;onComplete:()=>void}) { const state=attendance?.state??"unknown"; const title=state==="active"?"You’re online.":state==="paused"?"Connected. You’re on a break.":state==="off_shift"?"Connected — waiting for Worktivity.":"Connected — attendance unavailable."; return <div className="connected-state"><span className={`connection-orb ${state}`}><Wifi size={30}/></span><small>Workspace connected</small><h2>{title}</h2><p>{attendance?.message??"Work OS will keep checking Worktivity in the background without guessing your status."}</p>{attendance?.stale&&<div className="stale-status">Last observed status · refresh pending</div>}<button className="primary" onClick={onComplete}>Enter My Day <ArrowRight size={16}/></button></div>; }
-function PhaseIntro({ icon:Icon, eyebrow, title, body }: any) { return <div className="phase-intro"><span><Icon size={15}/>{eyebrow}</span><h2>{title}</h2><p>{body}</p></div>; }
+function Safe({ data, form, setForm }: any) { return <><PhaseHeading title="What you are agreeing to." /><div className="policy-summary"><strong>Work OS uses this information for:</strong><p>{data.policy.purpose}</p><ul><li>Sampled Worktivity screenshots are analysed as neutral activity context.</li><li>{data.screenshotPolicy.retention}</li><li>{data.screenshotPolicy.sensitiveCapture}</li><li>{data.screenshotPolicy.limitation}</li></ul></div><label className="wide-input"><span>Sensitive apps or domains to exclude</span><input value={form.sensitiveAppExclusions} onChange={(e)=>setForm({...form,sensitiveAppExclusions:e.target.value})} placeholder="Banking, personal email, health portals"/></label><div className="consent-box"><label><input type="checkbox" checked={form.acceptWorkOsConsent} onChange={(e)=>setForm({...form,acceptWorkOsConsent:e.target.checked})}/><span>I accept Work OS tracking and the sampled screenshot-analysis policy above, including encrypted 30-day raw retention, sensitive-capture deletion, and the fact screenshots do not prove productivity or task completion.</span></label><small>{data.policy.version}</small></div></>; }
+function Connected({ attendance, entering, onEnter }: {attendance?:AttendanceProjection;entering:boolean;onEnter:()=>void}) { const state=attendance?.state??"unknown"; const title=state==="active"?"You’re online.":state==="paused"?"Connected. You’re on a break.":state==="off_shift"?"Connected — waiting for Worktivity.":"Connected — attendance unavailable."; return <div className="connected-state">
+  <small>Workspace connected</small>
+  <h2 className="phase-heading" tabIndex={-1}>{title}</h2>
+  <p>{attendance?.message??"Work OS will keep checking Worktivity in the background without guessing your status."}</p>
+  {attendance?.stale&&<div className="stale-status">Last observed status · refresh pending</div>}
+  {entering
+    ? <div className="entering-state" role="status"><FadeArc size={18} /><span className="entering-copy">Setting up your workspace — syncing your schedule, tasks, and provider context.</span></div>
+    : <button className="primary" onClick={onEnter}>Enter My Day <ArrowRight size={16}/></button>}
+</div>; }
 function Context({label,value}:{label:string;value:string}) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 function Toggle({icon:Icon,title,detail,checked,onChange}:any) { return <label className="guided-toggle"><Icon size={17}/><span><strong>{title}</strong><small>{detail}</small></span><input type="checkbox" checked={checked} onChange={(e)=>onChange(e.target.checked)}/></label>; }

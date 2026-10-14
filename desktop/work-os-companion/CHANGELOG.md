@@ -25,6 +25,13 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto now welcomes you before setup begins, then walks you through it one step at a time.
+- Setup steps got a quieter screen: what Otto says explains the step, and the page keeps only what you need to do.
+- The loading screen now shows Otto working instead of a logo, and says what is actually happening.
+- Page guides now show Otto in the header, so a first visit to a page reads as the same companion.
+- Removed the six stock background photos from setup; Otto's stage is a plain dark screen now.
+>>>>>>> 29e965b3 (feat(companion): let Otto host first run)
+
 ## 0.4.35 — 2026-10-14
 
 - Admins can now open an administration workspace in the companion: the team's overview, people, tasks, EOD review, insights, evidence, and settings, with one button back to their own workday.

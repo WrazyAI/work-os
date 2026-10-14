@@ -3524,7 +3524,7 @@ export default function App() {
     });
   }, [workspaceCadence?.checkInIntervalMinutes, workspaceCadence?.firstFollowUpMinutes]);
 
-  if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} onDebug={() => void openDebugger()} onOffline={() => undefined} />;
+  if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} stage="Opening this device’s saved session" onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (vaultGate.status === "failed") return <LoadingScreen
       failed
       retry={retryVaultGate}
@@ -3543,10 +3543,11 @@ export default function App() {
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
       retry={() => void refresh()}
+      stage="Reading your schedule and workday"
       onDebug={() => void openDebugger()}
       onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
     />;
-  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
   const startNewChat = () => {
@@ -4051,11 +4052,13 @@ export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSa
     </aside>
   </main>;
 }
-export function LoadingScreen({ failed, retry, note, onReset, onDebug, onOffline }: {
+export function LoadingScreen({ failed, retry, note, stage, onReset, onDebug, onOffline }: {
   failed: boolean;
   retry: () => void;
   /** Bounded explanation of what is wrong, replacing the generic hint. */
   note?: string;
+  /** What is actually happening right now. Only ever pass what is true. */
+  stage?: string;
   /** Starts this device fresh; only offered when nothing else can recover. */
   onReset?: () => void | Promise<void>;
   onDebug: () => void;
@@ -4073,10 +4076,13 @@ export function LoadingScreen({ failed, retry, note, onReset, onDebug, onOffline
   }, [resetArmed]);
   if (!failed) {
     return <main className="loading"><div className="loading-shell">
-      <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>
-      <h1>Preparing your workday</h1>
+      {/* Otto carries the wait instead of a logo badge: he is the same
+          presence the employee just met in setup, and he is honestly working.
+          The isolated path keeps this pose from depending on a live workday. */}
+      <MascotPet isolated agent="working" workday="active" className="mascot-loading" artClassName="mascot-loading-art" />
+      <h1>Getting your day ready</h1>
       <p>Syncing your schedule, tasks, and provider context…</p>
-      <Wave className="loading-wave-large" /><small className="loading-stage">Connecting to your workspace</small>
+      <Wave className="loading-wave-large" /><small className="loading-stage">{stage ?? "Connecting to your workspace"}</small>
     </div></main>;
   }
   const hint = onReset
@@ -4087,7 +4093,7 @@ export function LoadingScreen({ failed, retry, note, onReset, onDebug, onOffline
       ? "Offline mode uses local fixtures only — nothing reaches the server."
       : "Retry re-checks this device's saved key.";
   return <main className="loading"><div className="loading-shell">
-    <div className="wordmark-badge"><img src={assetUrl(wordmark)} alt="" /></div>
+    <MascotPet isolated agent="blocked" workday="active" className="mascot-loading" artClassName="mascot-loading-art" />
     <h1>Work OS needs another try</h1>
     <p>{note ?? "The details are in the notification above."}</p>
     <button className="primary" onClick={retry} disabled={resetting}>Retry</button>

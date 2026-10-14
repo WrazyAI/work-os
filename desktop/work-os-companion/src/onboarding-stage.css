@@ -1,0 +1,390 @@
+/* First-run stage, speech, and journey ---------------------------------------
+ *
+ * The onboarding screen is the only surface in the product with a dark canvas,
+ * so it is where the companion carries the experience rather than annotating
+ * it. Personality lives here; the form panel beside it stays in the quiet
+ * product language. Every animation below is one bounded entrance that ends in
+ * the real state — nothing loops, and reduced motion keeps every meaning.
+ */
+
+/* Otto's world, not a stock photograph: a deep green-black ground with a
+   phosphor wash behind the figure, echoing the screen he is drawn as. The wash
+   lives on the stage's own background so its falloff never clips into a box.
+   It stays decorative — remove it and the screen still communicates. */
+.onboarding-story {
+  padding: clamp(20px, 3vh, 32px) clamp(22px, 3vw, 38px);
+  background: linear-gradient(180deg, #1c2018 0%, #15180f 56%, #0e1009 100%);
+}
+
+/* Faint scanlines and an edge vignette. Painted under the stage content. */
+.onboarding-story:after {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 4px),
+    radial-gradient(125% 88% at 50% -10%, transparent 42%, rgba(6, 8, 4, 0.5) 100%);
+}
+
+.onboarding-stage-body {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  /* The statement, what Otto says, and the figure read as one block anchored
+     just above the progress rail, so the breathing room stays in one place
+     instead of splitting the column in half. */
+  justify-content: flex-end;
+  gap: clamp(22px, 4.5vh, 42px);
+}
+
+.stage-statement {
+  animation: onboarding-statement-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.stage-statement > span {
+  display: block;
+  font: 600 10px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.stage-statement h1 {
+  margin: 12px 0 0;
+  font: 600 clamp(27px, 3.3vw, 43px) / 1.04 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.05em;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Otto stands under what he says, so the bubble gets the full column to read
+   in instead of being squeezed beside him. */
+.otto-scene {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+/* The phosphor wash behind the figure, wherever the scene lands. A blurred
+   filled circle rather than a gradient box: it has no edge to clip, so it
+   cannot render as a lighter rectangle over the stage. */
+.otto-scene:before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -26%;
+  bottom: -14%;
+  width: min(96%, 420px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: rgba(168, 241, 91, 0.12);
+  filter: blur(40px);
+}
+
+.mascot-stage {
+  flex: 0 0 auto;
+  width: clamp(104px, 12.5vw, 146px);
+  margin-left: 12px;
+}
+
+.mascot-stage-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 20px 38px rgba(0, 0, 0, 0.42));
+}
+
+.otto-bubble {
+  position: relative;
+  width: 100%;
+  /* `ch` resolves against this element's own font, so the measure is set here
+     and the spoken line simply inherits it. */
+  font-size: 13.5px;
+  max-width: 56ch;
+  padding: 13px 15px 14px;
+  border: 1px solid rgba(248, 245, 234, 0.15);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #23271d, #1b1e18);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  animation: otto-bubble-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* The tail points down at the figure standing under the bubble. */
+.otto-bubble:before {
+  content: "";
+  position: absolute;
+  left: 30px;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  border-right: 1px solid rgba(248, 245, 234, 0.15);
+  border-bottom: 1px solid rgba(248, 245, 234, 0.15);
+  border-bottom-right-radius: 3px;
+  background: #1b1e18;
+  transform: rotate(45deg);
+}
+
+.otto-line {
+  margin: 0;
+  color: #f2f0e8;
+  font-size: inherit;
+  font-weight: 450;
+  line-height: 1.62;
+}
+
+.otto-line-word {
+  display: inline-block;
+  animation: otto-word-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Actions belonging to the spoken line arrive after it has settled. */
+.otto-bubble-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  animation: onboarding-action-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--otto-settle, 0ms);
+}
+
+.otto-bubble-note {
+  color: #a9ad9f;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.otto-journey {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: clamp(16px, 3vh, 26px);
+}
+
+.otto-journey i {
+  flex: 1 1 0;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(248, 245, 234, 0.18);
+  transition: flex-grow 320ms cubic-bezier(0.2, 0.8, 0.2, 1), background 320ms;
+}
+
+.otto-journey i[data-state="done"] {
+  background: rgba(168, 241, 91, 0.5);
+}
+
+.otto-journey i[data-state="now"] {
+  flex-grow: 2.2;
+  background: var(--signal);
+}
+
+/* The welcome is the same stage with the panel not yet open, so entering setup
+   reads as one camera move rather than a second screen. */
+.guided-onboarding[data-stage="welcome"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.guided-onboarding[data-stage="welcome"] .onboarding-stage-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  align-content: center;
+  align-items: center;
+  gap: clamp(20px, 4vw, 64px);
+}
+
+.guided-onboarding[data-stage="welcome"] .stage-statement h1 {
+  /* Two lines of the hero sentence, measured against the heading's own size. */
+  max-width: 14ch;
+  font-size: clamp(33px, 4vw, 56px);
+  line-height: 0.99;
+}
+
+.guided-onboarding[data-stage="welcome"] .otto-scene {
+  gap: 15px;
+}
+
+.guided-onboarding[data-stage="welcome"] .mascot-stage {
+  width: clamp(140px, 15vw, 190px);
+}
+
+.guided-onboarding[data-stage="welcome"] .otto-bubble {
+  font-size: 14.5px;
+}
+
+/* Entering the form: the panel arrives from the reading edge and the stage
+   statement steps back, so the eye is handed from Otto to the work. */
+.guided-onboarding[data-stage="form"] .onboarding-workspace {
+  animation: onboarding-panel-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guided-onboarding[data-direction="forward"] .phase-content {
+  animation: onboarding-step-forward 230ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guided-onboarding[data-direction="back"] .phase-content {
+  animation: onboarding-step-back 230ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Programmatic focus for the step heading: no ring on a non-interactive
+   heading, but the reading position still moves. */
+.phase-heading:focus {
+  outline: none;
+}
+
+/* The finish is a hand-off, not a status screen: Otto is working while the
+   workspace is actually being prepared, and it lasts exactly that long. */
+.entering-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.entering-state .entering-copy {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+@keyframes otto-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes otto-word-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes onboarding-statement-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes onboarding-action-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes onboarding-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes onboarding-step-forward {
+  from {
+    opacity: 0;
+    transform: translateX(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes onboarding-step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .guided-onboarding[data-stage="welcome"] .onboarding-stage-body {
+    grid-template-columns: minmax(0, 1fr);
+    /* `safe` keeps the top of the block reachable if a short window cannot
+       fit it, instead of centering it out of scroll range. */
+    align-content: safe center;
+    gap: 24px;
+  }
+
+  .guided-onboarding[data-stage="welcome"] .stage-statement h1 {
+    max-width: none;
+    font-size: clamp(30px, 5.4vw, 42px);
+  }
+
+  .guided-onboarding[data-stage="welcome"] .mascot-stage {
+    width: clamp(104px, 18vw, 140px);
+  }
+}
+
+@media (max-width: 720px) {
+  .mascot-stage {
+    width: 92px;
+    margin-left: 6px;
+  }
+
+  .otto-bubble:before {
+    left: 22px;
+  }
+
+  .otto-line {
+    font-size: 12.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-statement,
+  .otto-bubble,
+  .otto-bubble-actions,
+  .otto-line-word,
+  .guided-onboarding[data-stage="form"] .onboarding-workspace,
+  .guided-onboarding[data-direction="forward"] .phase-content,
+  .guided-onboarding[data-direction="back"] .phase-content {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+
+  .otto-journey i {
+    transition: none;
+  }
+}

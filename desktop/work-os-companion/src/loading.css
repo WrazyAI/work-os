@@ -383,7 +383,7 @@
 
 .loading {
   background:
-    radial-gradient(circle at 50% 32%, rgba(168, 241, 91, 0.08), transparent 24rem),
+    radial-gradient(circle at 50% 27%, rgba(168, 241, 91, 0.1), transparent 23rem),
     #171914;
 }
 
@@ -407,20 +407,19 @@
   }
 }
 
-.loading-shell .wordmark-badge {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
-  margin-bottom: 20px;
+/* Otto carries the wait: the same presence the employee just met in setup, in
+   his real working state. One identity on this screen, not a logo plus a
+   mascot. */
+.mascot-loading {
+  width: clamp(118px, 15vw, 166px);
+  margin-bottom: 24px;
 }
 
-.loading-shell .wordmark-badge img {
-  width: 38px;
-  height: 38px;
+.mascot-loading-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 22px 44px rgba(0, 0, 0, 0.45));
 }
 
 .loading-shell h1 {

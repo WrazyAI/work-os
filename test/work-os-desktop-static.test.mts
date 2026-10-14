@@ -51,6 +51,28 @@ assert.match(redesignStyles, /\.focus-edit-button/);
 const app = read("src/App.tsx");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
+
+// First run is the one place the employee meets the product, so the companion
+// hosts it: the stage carries Otto and his spoken line, and the loading screen
+// carries the same figure in a real state instead of a logo badge.
+const onboardingStage = read("src/OnboardingStage.tsx");
+assert.match(onboarding, /import \{ OnboardingStage, STAGE_POSE/);
+assert.match(onboarding, /data-stage=\{stage\}/);
+assert.match(onboarding, /<OnboardingStage/);
+assert.doesNotMatch(onboarding, /phase-path|phase-art|story-copy/);
+assert.match(onboardingStage, /import \{ MascotPet \} from "\.\/MascotPet"/);
+assert.match(onboardingStage, /export const STAGE_POSE/);
+assert.match(onboardingStage, /import \{ MASCOT \} from "\.\/mascot"/);
+assert.match(onboardingStage, /aria-live="polite"/);
+assert.doesNotMatch(onboardingStage, /studio-otto\.svg|work-os-companion\.png/);
+assert.match(read("src/onboarding-stage.css"), /prefers-reduced-motion: reduce/);
+// `main` is read further down this file; read the entrypoint locally here.
+assert.match(read("src/main.tsx"), /import "\.\/onboarding-stage\.css"/);
+assert.match(app, /agent="working" workday="active"/);
+assert.match(app, /agent="blocked" workday="active"/);
+assert.match(app, /stage="Opening this device/);
+assert.match(app, /Getting your day ready/);
+assert.doesNotMatch(app, /wordmark-badge/);
 assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);
 assert.match(app, /openDebuggerWindow/);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { PageGuideArt } from "./PageGuideArt";
+import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
 
 /**
@@ -54,7 +55,10 @@ export default function PageGuide({
         aria-describedby="page-guide-promise"
       >
         <header>
-          <div>
+          <div className="guide-header-copy">
+            {/* The guide is the same companion the employee just met in setup,
+                so it speaks with his identity rather than a page icon. */}
+            <MascotMark className="guide-mascot" />
             <span>{developerPreview ? "Developer preview" : "Page guide"}</span>
             <h2 id="page-guide-title">{guide.title}</h2>
             <p id="page-guide-promise">{guide.promise}</p>
