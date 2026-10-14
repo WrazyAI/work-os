@@ -3057,25 +3057,6 @@ body {
   background: #fff3d6;
 }
 
-/* Below the single-line budget the strip reflows deliberately: the focus
-   statement keeps the full first row, controls share the second. Chips only
-   wrap inside their own pill at 900px and under, where the blueprint allows it. */
-@media (max-width: 1120px) {
-  .task-agenda-strip {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "focus focus"
-      "chips carry";
-    align-items: center;
-    gap: 8px 14px;
-  }
-
-  .agenda-strip-focus { grid-area: focus; }
-  .agenda-strip-chips { grid-area: chips; justify-content: flex-start; }
-  .agenda-strip-carry { grid-area: carry; }
-}
-
 @media (max-width: 900px) {
   .agenda-strip-chips { flex-wrap: wrap; }
 }

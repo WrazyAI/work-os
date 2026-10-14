@@ -19,12 +19,18 @@ const tasks: TaskRow[] = [
   { id: "task-carry", title: "Review provider sync failures", description: "Resolve the remaining delayed Nifty records.", due_date: "2026-08-20", provider_created_at: "2026-08-19T13:00:00Z", priority: "medium", assignee_person_ids: ["person-1", "person-2"], synced_at: `${CURRENT_DATE}T08:55:00Z`, completed: false, project: { name: "Work OS" } },
   { id: "task-old", title: "Document desktop release evidence", description: "Attach the signed installer verification record.", provider_created_at: "2026-08-18T11:00:00Z", priority: "low", synced_at: `${CURRENT_DATE}T08:50:00Z`, completed: false, project: { name: "Work OS" } },
   { id: "task-done", title: "Remove Plan navigation", description: "Plan is no longer a user-facing route.", due_date: CURRENT_DATE, provider_created_at: `${CURRENT_DATE}T07:30:00Z`, completed: true, synced_at: `${CURRENT_DATE}T08:45:00Z`, project: { name: "Work OS" } },
+  { id: "task-later", title: "Draft the Q3 review outline for the LaunchLoom handoff", description: "Later-dated work stays below today in the My day groups.", due_date: "2026-08-28", provider_created_at: "2026-08-19T14:00:00Z", priority: "medium", synced_at: `${CURRENT_DATE}T08:52:00Z`, completed: false, project: { name: "Work OS" } },
   { id: "task-done-release", title: "Archive old task normalization", description: "Retain the completed record for history sorting.", completed: true, completed_at: `${CURRENT_DATE}T06:30:00Z`, provider_created_at: `${CURRENT_DATE}T06:00:00Z`, synced_at: `${CURRENT_DATE}T08:40:00Z`, project: { name: "Work OS" } },
 ];
 
 const currentPlan: DailyPlan = {
   id: "plan-current", status: "draft", freeform_intent: "Ship the unified Tasks workspace with truthful history and carryover.", goal_provenance: "accepted_suggestion", suggestion_task_ids: ["task-today", "task-carry"], shift_date: CURRENT_DATE, revision: 3,
-  items: [{ id: "item-today", task_id: "task-today", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Ship unified Tasks workspace", blocker: null, item_kind: "nifty_task", completion_state: "open" }],
+  items: [
+    { id: "item-today", task_id: "task-today", source: "due_today", disposition: "selected", rank: 0, title_snapshot: "Ship unified Tasks workspace", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+    { id: "item-carry-today", task_id: "task-carry", source: "carry_over", disposition: "selected", rank: 1, title_snapshot: "Review provider sync failures", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+    { id: "item-old-today", task_id: "task-old", source: "carry_over", disposition: "selected", rank: 2, title_snapshot: "Document desktop release evidence", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+    { id: "item-later-today", task_id: "task-later", source: "carry_over", disposition: "selected", rank: 3, title_snapshot: "Draft the Q3 review outline", blocker: null, item_kind: "nifty_task", completion_state: "open" },
+  ],
 };
 
 const historicalPlan: DailyPlan = {

@@ -238,6 +238,12 @@ describe("operational visualizations", () => {
     expect(app).toContain("dayTaskGroups(displayedTasks, currentDate, taskSort)");
     expect(app).toContain('className="task-record-section"');
     expect(app).toContain("historyOrder === \"server\" && serverBackedRows");
+    // Rows fold their due/status line at narrow widths instead of losing it.
+    expect(app).toContain("task-meta-project");
+    expect(app).toContain("task-meta-due");
+    expect(dashboardStyles).toContain(".task-record.workspace-task .task-meta-due { display: none;");
+    expect(dashboardStyles).toContain(".task-record.workspace-task .task-state.open");
+    expect(dashboardStyles).not.toContain("@media (min-width: 721px) and (max-width: 780px)");
     expect(app).not.toContain('taskView === "today" && !historical && pageCounts ? pageCounts.open');    expect(app).toContain("My day is open work only");
   });
 
@@ -363,8 +369,9 @@ describe("operational visualizations", () => {
     expect(styles).not.toContain(".tasks-workspace .page-intro");
     // Chips never wrap inside their pill above 900px; the strip reflows instead.
     expect(workspaceStyles).toMatch(/\.agenda-strip-chips \{[\s\S]*?flex-wrap: nowrap/);
-    expect(workspaceStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?display: flex;[\s\S]*?min-width: 280px;/);
-    expect(workspaceStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"chips carry"/);
+    expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
+    expect(dashboardStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?min-width: 0;/);
+    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"stats carry"/);
     expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{[\s\S]*?\.agenda-strip-chips \{ flex-wrap: wrap; \}/);
     // Title line never wraps the On today tag onto the metadata line.
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
