@@ -18,6 +18,7 @@ const dashboardStyles = readText(resolve(root, "src/dashboard-overhaul.css"));
 const insightStyles = readText(resolve(root, "src/plan-insights.css"));
 const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
 const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
+const insightDashboardStyles = readText(resolve(root, "src/insight-dashboard.css"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
@@ -482,8 +483,8 @@ describe("operational visualizations", () => {
     expect(insightsView).toContain("DailyRhythmStrip");
     expect(insightsView).not.toContain('className="panel insight-flow"');
     expect(insightsView).toContain("HeatmapGrid");
-    expect(insightsView).toContain("OnTimeBar");
-    expect(insightsView).toContain("DeltaBadge");
+    expect(insightCharts).toContain("OnTimeBar");
+    expect(insightCharts).toContain("DeltaBadge");
     expect(insightsView).toContain("UpdateKindChart");
     expect(insightsView).toContain("ConsistencyChips");
     expect(insightCharts).toContain("BarBreakdown");
@@ -526,12 +527,18 @@ describe("operational visualizations", () => {
   });
 
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {
-    expect(insightsView).toContain('className="panel insight-hero"');
+    expect(insightsView).toContain('className="insight-kpi-strip"');
+    expect(insightsView).toContain("<PlanReliability rows={reliabilityRows} />");
+    expect(insightsView).toContain("<FlowStages slices={flow}");
     expect(insightsView).toContain("Your work, without the noise.");
     expect(insightsView).toContain("Closing carry-over");
     expect(insightsView).toContain('className="panel insight-detail-disclosure"');
     expect(insightsView).toContain('range === "30d" ? <div className="split-chart"><HeatmapGrid');
-    expect(insightChartStyles).toContain(".insight-hero-stats");
+    expect(insightsView).toContain("comparisonAvailable");
+    expect(insightDashboardStyles).toContain(".insight-kpi-strip");
+    expect(insightDashboardStyles).toContain(".ratio-track");
+    expect(insightDashboardStyles).toContain(".flow-stage-plot");
+    expect(insightChartStyles).toContain(".delta-badge-wrap");
     expect(insightChartStyles).toContain(".daily-rhythm-strip");
     expect(insightChartStyles).toContain(".insight-detail-disclosure");
   });

@@ -90,38 +90,56 @@
 
 /* --- Delta badges ------------------------------------------------------- */
 
+.delta-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
 .delta-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 3px 7px;
-  background: rgba(255, 255, 255, 0.5);
+  gap: 4px;
+  min-height: 21px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #eceee6;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .delta-badge b {
   color: var(--ink);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.delta-badge small {
-  color: var(--muted);
-  font-size: 10px;
+  font-weight: 700;
 }
 
 .delta-badge.better {
-  border-color: rgba(130, 189, 57, 0.55);
-  background: rgba(184, 255, 90, 0.16);
+  background: rgba(184, 255, 90, 0.28);
+}
+
+.delta-badge.better b {
+  color: #3d6210;
 }
 
 .delta-badge.worse {
-  border-color: rgba(200, 78, 66, 0.35);
-  background: rgba(200, 78, 66, 0.07);
+  background: rgba(200, 78, 66, 0.1);
+}
+
+.delta-badge.worse b {
+  color: var(--danger);
+}
+
+.delta-badge.neutral b {
+  color: var(--muted);
+}
+
+.delta-caption {
+  color: var(--muted);
+  font-size: 10px;
 }
 
 /* --- Trend chart -------------------------------------------------------- */
@@ -1755,8 +1773,9 @@
 
 
 /* Premium Insights composition -------------------------------------------------
-   The page reads as a personal review: one outcome hero, one comparison band,
-   one primary visualization, then progressive detail. */
+   The page leads with the KPI strip, then banded cards: the primary chart,
+   plan reliability, the record mix, closing attention, and progressive
+   detail. The strip and band primitives live in insight-dashboard.css. */
 .insights-page {
   gap: 18px;
   padding-bottom: 64px;
@@ -1775,94 +1794,6 @@
   max-width: 760px;
   font-size: 13px;
   line-height: 1.55;
-}
-
-.insight-hero {
-  display: grid;
-  gap: 24px;
-  padding: 26px 28px;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 90% 8%, rgba(168, 241, 91, 0.11), transparent 28%),
-    var(--paper);
-}
-
-.insight-hero-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 28px;
-}
-
-.insight-eyebrow {
-  display: block;
-  margin-bottom: 9px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 760;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.insight-hero h2 {
-  margin: 0;
-  font: 740 34px/1.05 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: -0.035em;
-}
-
-.insight-hero-head > div:first-child > p {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.insight-hero-head > div:first-child > p strong {
-  color: var(--ink);
-  font-weight: 720;
-}
-
-.insight-source-status {
-  display: grid;
-  justify-items: end;
-  gap: 5px;
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.insight-source-status .stale {
-  color: var(--danger);
-}
-
-.insight-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-}
-
-.insight-hero-stats > div {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 16px 18px 0 0;
-}
-
-.insight-hero-stats > div + div {
-  border-left: 1px solid var(--line);
-  padding-left: 18px;
-}
-
-.insight-hero-stats small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.insight-hero-stats strong {
-  font: 700 22px/1.1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
 }
 
 .insight-synthesis {
@@ -1904,101 +1835,56 @@
   line-height: 1.65;
 }
 
-.insight-decision-grid {
+.insight-attention-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
+  margin: 0;
+  padding: 0;
 }
 
-.insight-decision-panel {
-  display: grid;
-  align-content: start;
-  gap: 18px;
-  min-height: 0;
-  padding: 22px;
-}
-
-.insight-change-list {
-  display: grid;
-}
-
-.insight-change-list > div {
+.insight-attention-list > p {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 48px;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 0;
   border-top: 1px solid var(--line);
-  font-size: 12px;
 }
 
-.insight-change-list > div:first-child {
+.insight-attention-list > p:first-child {
+  padding-top: 0;
   border-top: 0;
 }
 
-.insight-change-list > div > span:first-child {
-  color: var(--ink);
-  font-weight: 620;
-}
-
-.insight-change-list .delta-badge {
-  margin: 0;
-  border: 0;
-  background: transparent;
-  padding-inline: 0;
-  font-size: 11px;
-}
-
-.insight-change-list .delta-badge small {
-  font-size: 10px;
-}
-
-.insight-attention-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  border-top: 1px solid var(--line);
-}
-
-.insight-attention-list p {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-  padding: 16px 14px 0 0;
-}
-
-.insight-attention-list p + p {
-  border-left: 1px solid var(--line);
-  padding-left: 14px;
-}
-
 .insight-attention-list strong {
-  font: 700 24px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  flex: 0 0 auto;
+  min-width: 32px;
+  font: 720 25px/1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
 .insight-attention-list span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.4;
 }
 
+.insight-attention-list p.active strong {
+  color: var(--danger);
+}
+
+.insight-attention-list p.active.amber strong {
+  color: #9a670c;
+}
+
 .insight-attention-list .attention-copy {
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--line);
-  border-left: 0;
-  margin-top: 14px;
-  padding: 12px 0 0;
+  display: block;
 }
 
 .insight-attention-list .attention-next {
-  grid-column: 1 / -1;
-  grid-template-columns: 84px minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
   align-items: baseline;
-  border-top: 1px solid var(--line);
-  border-left: 0;
-  margin-top: 12px;
-  padding: 13px 0 0;
+  gap: 10px;
 }
 
 .insight-attention-list .attention-next > span {
@@ -2299,28 +2185,12 @@
 }
 
 @media (max-width: 1024px) {
-  .insight-hero-head {
-    display: grid;
-  }
-
-  .insight-source-status {
-    justify-items: start;
-  }
-
-  .insight-hero-stats,
   .insight-source-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .insight-hero-stats > div:nth-child(3),
   .insight-source-grid > div:nth-child(3) {
     border-left: 0;
-  }
-
-  .insight-hero-stats > div:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-    margin-top: 14px;
-    padding-top: 14px;
   }
 
   .insight-source-grid > div:nth-child(n + 3) {
@@ -2336,18 +2206,6 @@
 @media (max-width: 720px) {
   .insights-page {
     gap: 14px;
-  }
-
-  .insight-hero {
-    padding: 22px 18px;
-  }
-
-  .insight-hero h2 {
-    font-size: 29px;
-  }
-
-  .insight-decision-grid {
-    grid-template-columns: 1fr;
   }
 
   .daily-rhythm-strip {
@@ -2375,29 +2233,8 @@
 }
 
 @media (max-width: 560px) {
-  .insight-hero-stats,
-  .insight-attention-list,
   .consistency-rows {
     grid-template-columns: 1fr;
-  }
-
-  .insight-hero-stats > div + div,
-  .insight-attention-list p + p {
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding-left: 0;
-  }
-
-  .insight-hero-stats > div {
-    padding-block: 12px;
-  }
-
-  .insight-hero-stats > div:nth-child(n + 3) {
-    margin-top: 0;
-  }
-
-  .insight-attention-list p {
-    padding: 13px 0;
   }
 
   .consistency-rows li:nth-child(2) {

@@ -65,11 +65,105 @@ export function DeltaBadge({ stat }: { stat: DeltaStat }) {
       : "worse";
   const Arrow = direction === "up" ? ArrowUpRight : direction === "down" ? ArrowDownRight : Minus;
   return (
-    <span className={`delta-badge ${tone}`} title={`${stat.label}: ${stat.current} now, ${stat.previous} in the equal earlier period`}>
-      <Arrow size={12} aria-hidden />
-      <b>{direction === "flat" ? "no change" : `${direction === "up" ? "+" : "−"}${magnitude}`}</b>
-      <small>vs earlier period</small>
+    <span className="delta-badge-wrap" title={`${stat.label}: ${stat.current} now, ${stat.previous} in the equal earlier period`}>
+      <span className={`delta-badge ${tone}`}>
+        <Arrow size={12} aria-hidden />
+        <b>{direction === "flat" ? "no change" : `${direction === "up" ? "+" : "−"}${magnitude}`}</b>
+      </span>
+      <small className="delta-caption">vs earlier period</small>
     </span>
+  );
+}
+
+/** One tile in the insights KPI strip: the recorded value leads, the equal-
+ * period pill and an optional per-day sparkline give it context. The value
+ * always renders as text — a chart never carries the only copy of a number. */
+export function KpiCard({ label, value, delta, detail, spark, sparkLabel, attention = false }: {
+  label: string;
+  value: string;
+  delta?: DeltaStat | null;
+  detail?: string;
+  spark?: number[];
+  sparkLabel?: string;
+  attention?: boolean;
+}) {
+  return (
+    <article className={`insight-kpi${attention ? " attention" : ""}`}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+      <div className="insight-kpi-foot">
+        {delta ? <DeltaBadge stat={delta} /> : detail ? <span className="insight-kpi-detail">{detail}</span> : null}
+      </div>
+      {spark && spark.length > 1 ? <Sparkline values={spark} label={sparkLabel ?? `${label} per day`} /> : null}
+    </article>
+  );
+}
+
+export interface ReliabilityRow {
+  key: string;
+  label: string;
+  percent: number | null;
+  detail: string;
+  tone?: "ok" | "warn" | "neutral";
+}
+
+/** Goal-style ratio rows: the exact recorded percentage, a bounded progress
+ * track, and the counts behind it. Percentages are ratios from the record,
+ * never targets invented for the employee. */
+export function PlanReliability({ rows }: { rows: ReliabilityRow[] }) {
+  return (
+    <ul className="ratio-rows">
+      {rows.map((row) => {
+        const percent = row.percent === null ? null : Math.max(0, Math.min(100, Math.round(row.percent)));
+        return (
+          <li key={row.key} className={`ratio-row ${row.tone ?? "neutral"}`}>
+            <div className="ratio-head">
+              <span>{row.label}</span>
+              <strong>{percent === null ? "—" : `${percent}%`}</strong>
+            </div>
+            <div className="ratio-track" role="img" aria-label={`${row.label}: ${percent === null ? "not recorded in this range" : `${percent}%`}`}>
+              {percent !== null ? <i style={{ width: `${percent}%` }} /> : null}
+            </div>
+            <p className="ratio-detail">{row.detail}</p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Record mix: one tinted stage block per flow state, sized by its share of
+ * the range's recorded items, with exact counts and shares in the legend.
+ * The stages form a composition of this range — they are not a sequence and
+ * no conversion is implied. */
+export function FlowStages({ slices, ariaLabel }: { slices: FlowSlice[]; ariaLabel: string }) {
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const positive = slices.filter((slice) => slice.value > 0);
+  if (total <= 0 || !positive.length) return <p className="insight-empty-note">Nothing was recorded in this range yet.</p>;
+  const max = Math.max(...positive.map((slice) => slice.value));
+  return (
+    <div className="flow-stages">
+      <div className="flow-stage-plot" role="img" aria-label={ariaLabel}>
+        {positive.map((slice) => (
+          <div className="flow-stage" key={slice.key}>
+            <i
+              className={FLOW_TONE[slice.key]}
+              title={`${slice.label}: ${slice.value} · ${sharePercent(slice.value, total)}%`}
+              style={{ height: `${Math.max(16, Math.round((slice.value / max) * 100))}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      <ul className="flow-stage-legend">
+        {slices.map((slice) => (
+          <li key={slice.key} className={slice.value === 0 ? "zero" : undefined}>
+            <i className={FLOW_TONE[slice.key]} aria-hidden />
+            <span>{slice.label}</span>
+            <b>{slice.value}<small> · {sharePercent(slice.value, total)}%</small></b>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

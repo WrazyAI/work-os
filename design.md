@@ -321,6 +321,29 @@ This is the one place where a dense diagnostic list is intended. The §2.3 rule
 against a permanently visible diagnostic wall applies to product surfaces, not to
 this opt-in developer window.
 
+### 4.5 Insights dashboard composition
+
+The employee Insights dashboard (companion first, replicated in the web
+workspace) leads with the record itself:
+
+- A five-tile KPI strip: label, exact value, an equal-earlier-period pill only
+  when the response actually carries a comparison (never a drop against zero),
+  and an optional per-day sparkline. The value is always rendered as text.
+- Banded cards under it: the primary daily chart; plan reliability (recorded
+  ratio rows — on-time outcomes, days with an update, days recorded — each a
+  percentage, a bounded track, and the exact counts behind it); the record mix
+  (tinted stage blocks sized by share of the range's recorded items, with exact
+  counts in the legend — a composition, never a conversion sequence); closing
+  attention (carry-over, overdue, blockers, tinted only when non-zero, plus
+  next focus); work rhythm; and evidence & context beside recorded updates.
+- The exact-value daily table stays behind the daily-breakdown disclosure
+  (§9). Charts keep their accessible exact-value fallbacks and reduced-motion
+  behavior; observed activity keeps its cool treatment and never becomes a
+  score.
+
+At viewport widths under ~1120px the bands collapse to one column and the KPI
+strip wraps to three then two tiles; nothing gains horizontal scroll.
+
 ## 5. Dashboard blueprint
 
 The dashboard is a command center, not a report of everything Work OS knows.
