@@ -101,6 +101,11 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
   const carryOverDelta = comparisonAvailable && rangeSummary
     ? { key: "carried", label: "Carry-over", current: carryOverCount, previous: carryOverCount - rangeSummary.carryOverDelta, delta: rangeSummary.carryOverDelta, unit: "count" as const, goodDirection: false }
     : null;
+  // The rate's own delta in percentage points; the raw completed count can
+  // rise while the rate falls, so the pill must never use the count.
+  const commitmentPill = rangeSummary?.commitmentRate != null && rangeSummary.commitmentRateDelta != null
+    ? { key: "commitment-rate", label: "Commitment rate", current: rangeSummary.commitmentRate, previous: rangeSummary.commitmentRate - rangeSummary.commitmentRateDelta, delta: rangeSummary.commitmentRateDelta, unit: "percent" as const, goodDirection: true }
+    : null;
   const hasUpdateChart = updateSlices.some((slice) => slice.value > 0);
 
   return <main className="page insights-page">
@@ -125,10 +130,10 @@ export function PersonalInsights({ data, loading, range, onRange, onReference, o
 
       <div className="insight-kpi-strip" aria-label={`Key measurements for ${rangeLabel}`}>
         <KpiCard label="Outcomes completed" value={String(data.totals.tasksCompleted)} delta={pillFor("tasksCompleted")} spark={series.map((point) => point.outcomes)} sparkLabel={`Completed outcomes per day for ${rangeLabel}`} />
-        <KpiCard label="Commitment rate" value={rangeSummary?.commitmentRate != null ? `${rangeSummary.commitmentRate}%` : "—"} delta={pillFor("plannedCompleted")} detail="No planned commitments in this range" />
+        <KpiCard label="Commitment rate" value={rangeSummary?.commitmentRate != null ? `${rangeSummary.commitmentRate}%` : "—"} delta={commitmentPill} detail={rangeSummary?.commitmentRate != null ? `${data.totals.plannedCompleted} of ${data.totals.planned} planned` : "No planned commitments in this range"} />
         <KpiCard label="Updates recorded" value={String(data.totals.updates)} delta={pillFor("updates")} spark={series.map((point) => point.updates)} sparkLabel={`Recorded updates per day for ${rangeLabel}`} />
         <KpiCard label="Observed context" value={durationLabel(data.totals.observedSeconds)} delta={pillFor("observedMinutes")} spark={series.map((point) => point.observedMinutes)} sparkLabel={`Observed minutes per day for ${rangeLabel}`} />
-        <KpiCard label="Closing carry-over" value={String(carryOverCount)} delta={carryOverDelta} attention={carryOverCount > 0} detail="Nothing carried at the close" />
+        <KpiCard label="Closing carry-over" value={String(carryOverCount)} delta={carryOverDelta} attention={carryOverCount > 0} detail={carryOverCount > 0 ? "Still open at the close" : "Nothing carried at the close"} />
       </div>
       {!hasRecord ? <p className="insight-empty-note">No work record is stored for {rangeLabel} yet. Goals, updates, task outcomes, and evidence will appear here as they are recorded.</p> : null}
 
