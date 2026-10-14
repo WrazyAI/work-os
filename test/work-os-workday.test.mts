@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
+import { checkInCadenceOverridden, checkInIntervalMs, decideWorkdayPrompt, dedupePlanCandidates, firstFollowUpAt, firstFollowUpMinutes, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, planningPromptAnswered, prioritizePlanCandidates, suppressPromptForSubmittedEod } from "../src/modules/work-os/workday";
 
 const session = {
   state: "active" as const,
@@ -61,6 +61,48 @@ test("planningPromptAnswered recognizes engagement without a confirmed plan", ()
   // Exactly at clock-in counts as engagement; before it does not.
   assert.equal(planningPromptAnswered({ session, breaks: [], lastSubstantiveUpdateAt: "2026-08-12T09:00:00.000Z", at: "2026-08-12T09:40:00.000Z" }), true);
   assert.equal(planningPromptAnswered({ session, breaks: [], lastSubstantiveUpdateAt: "2026-08-12T08:59:00.000Z", at: "2026-08-12T09:40:00.000Z" }), false);
+});
+
+test("a reopened Worktivity interval restarts the cadence instead of replaying missed prompts", () => {
+  // A session whose provider interval was falsely closed mid-day is reopened
+  // with the cadence restarted: the next check-in is one interval out, never an
+  // overdue backlog of every prompt the false close missed. getWorkday mirrors
+  // the session's cadence columns onto the prompt context.
+  const reopened = {
+    ...session,
+    clockedInAt: "2026-08-12T00:46:29.086Z",
+    lastPromptKind: "follow_up" as const,
+    lastPromptAt: "2026-08-12T12:55:00.000Z",
+    nextFallbackAt: "2026-08-12T13:25:00.000Z",
+  };
+  const reopenedContext = {
+    session: reopened,
+    breaks: [],
+    hasConfirmedPlan: false,
+    lastPromptKind: "follow_up" as const,
+    lastPromptAt: "2026-08-12T12:55:00.000Z",
+    nextFallbackAt: "2026-08-12T13:25:00.000Z",
+    lastSubstantiveUpdateAt: "2026-08-12T12:55:00.000Z",
+    checkInIntervalMinutes: 30,
+    storedCheckInIntervalMinutes: 30,
+  };
+  const waiting = decideWorkdayPrompt({ ...reopenedContext, at: "2026-08-12T12:56:00.000Z" });
+  assert.equal(waiting.kind, null);
+  assert.equal(waiting.nextPromptAt, "2026-08-12T13:25:00.000Z");
+  const due = decideWorkdayPrompt({ ...reopenedContext, at: "2026-08-12T13:25:30.000Z" });
+  assert.equal(due.kind, "hourly_fallback");
+  assert.equal(due.nextPromptAt, "2026-08-12T13:25:00.000Z");
+});
+
+test("a late check-in delivery anchors the next one to the delivery, not the missed schedule", () => {
+  const interval = 30 * 60_000;
+  const scheduled = Date.parse("2026-08-12T10:00:00.000Z");
+  // On time (or within a poll lag): keep the drift-corrected schedule.
+  assert.equal(nextFallbackAfterDelivery(scheduled, scheduled + 30_000, interval), "2026-08-12T10:30:00.000Z");
+  // More than one interval late: anchor to the delivery so the cadence cannot
+  // crawl through every missed slot, one delivery per poll.
+  assert.equal(nextFallbackAfterDelivery(scheduled, scheduled + 31 * 60_000, interval), "2026-08-12T11:01:00.000Z");
+  assert.equal(nextFallbackAfterDelivery(scheduled, Date.parse("2026-08-12T17:48:00.000Z"), interval), "2026-08-12T18:18:00.000Z");
 });
 
 test("check-in cadence defaults to an hourly fallback and accepts bounded configuration", () => {

@@ -145,6 +145,15 @@ export function nextSessionState(current: WorkSessionState, action: WorkSessionA
   return "clocked_out";
 }
 
+/** The next check-in deadline after a delivery. On-time deliveries keep the
+ * drift-corrected schedule; a delivery already more than one interval behind
+ * anchors to the delivery itself, so a long gap (a pause, a resumed workday)
+ * cannot make the cadence crawl through every missed slot. */
+export function nextFallbackAfterDelivery(scheduledAt: number, deliveredAt: number, intervalMs: number): string {
+  const anchor = deliveredAt - scheduledAt > intervalMs ? deliveredAt : scheduledAt;
+  return new Date(anchor + intervalMs).toISOString();
+}
+
 function inWindow(at: number, window: { startsAt: string; endsAt: string }) {
   return at >= Date.parse(window.startsAt) && at < Date.parse(window.endsAt);
 }

@@ -7,7 +7,7 @@ import { recordTaskDayEvent } from "@/lib/work-os-daily-workspace";
 import { recordWorkMemory } from "@/lib/work-memory";
 import { planIntentFingerprint } from "@/lib/work-os-plan-build";
 import { localDateForTimezone, resolveStartableShiftWindow, resolveUpcomingShiftWindow, type WorkOsScheduleException, type WorkOsScheduleRule } from "@/modules/work-os/companion";
-import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
+import { checkInIntervalMs, decideWorkdayPrompt, eodDueAt, EOD_LEAD_TIME_MS, firstFollowUpAt as nextFirstFollowUpAt, MAX_DAILY_PLAN_ITEMS, nextFallbackAfterDelivery, nextSessionState, PLAN_ITEM_DRAFT_HEADROOM, prioritizePlanCandidates, type WorkSessionAction, type WorkSessionState } from "@/modules/work-os/workday";
 import { resolveWorkOsCadence, type ResolvedWorkOsCadence } from "@/lib/work-os-local-config";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "@/lib/work-os-late-start";
 import { materializePlanLocalTasks, type PlanTaskMaterialization } from "@/lib/work-os-local-tasks";
@@ -136,7 +136,7 @@ async function recordPromptDelivery(access: WorkOsAccess, session: Record<string
   if (!session || !prompt.kind || !["follow_up", "hourly_fallback"].includes(prompt.kind) || !prompt.nextPromptAt) return { session, delivered: false };
   const scheduledAt = Date.parse(prompt.nextPromptAt);
   if (!Number.isFinite(scheduledAt) || scheduledAt > at.getTime()) return { session, delivered: false };
-  const nextFallbackAt = new Date(scheduledAt + checkInIntervalMs(cadence.checkInIntervalMinutes)).toISOString();
+  const nextFallbackAt = nextFallbackAfterDelivery(scheduledAt, at.getTime(), checkInIntervalMs(cadence.checkInIntervalMinutes));
   let query = db().from("work_sessions").update({
     last_prompt_kind: prompt.kind,
     last_prompt_at: at.toISOString(),
@@ -416,6 +416,11 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
     if (replayed.error) throw new Error(`load replayed Worktivity interval: ${replayed.error.message}`);
     if (replayed.data && worktivityIntervalReopenCandidate(replayed.data)) {
       const shift = await shiftFor(access, new Date(projection.observedAt), "startable").catch(() => null);
+      // The check-in cadence restarts from the reopen instead of replaying the
+      // prompts the false close missed: the first resumed check-in lands one
+      // interval from now, with a window that covers work since the reopen.
+      const cadence = workOsCadenceFor(access);
+      const reopenAt = new Date(projection.observedAt);
       const { data: reopened, error: reopenError } = await db().from("work_sessions").update({
         state: "clocked_in",
         source: "worktivity",
@@ -424,6 +429,10 @@ export async function syncWorktivitySession(access: WorkOsAccess, projection: At
         paused_at: null,
         attendance_status: projection.status,
         attendance_observed_at: projection.observedAt,
+        last_prompt_kind: "follow_up",
+        last_prompt_at: projection.observedAt,
+        next_fallback_at: new Date(reopenAt.getTime() + checkInIntervalMs(cadence.checkInIntervalMinutes)).toISOString(),
+        check_in_interval_minutes: cadence.checkInIntervalMinutes,
         ...(shift ? { schedule_id: shift.scheduleId, scheduled_starts_at: shift.startsAt, scheduled_ends_at: shift.endsAt } : {}),
         updated_at: projection.observedAt,
       }).eq("organization_id", access.organizationId).eq("id", replayed.data.id)
