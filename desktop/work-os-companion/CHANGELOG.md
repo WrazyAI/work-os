@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.36 — 2026-10-14
+
 - Otto now welcomes you before setup begins, then walks you through it one step at a time.
 - Setup steps got a quieter screen: what Otto says explains the step, and the page keeps only what you need to do.
 - The loading screen now shows Otto working instead of a logo, and says what is actually happening.
