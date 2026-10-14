@@ -435,13 +435,26 @@ test("EOD review refuses self-approval", async () => {
 
 test("admin routes honor the selected organization", async () => {
   const api = await source("src/lib/work-os-api.ts");
-  assert.match(api, /export async function requireWorkOsAdmin\(organizationId\?: string \| null\)/);
-  assert.match(api, /roles: \["admin"\], organizationId: organizationId \?\? null/);
+  assert.match(api, /export async function requireWorkOsAdmin\(organizationId\?: string \| null, authorization\?: string \| null\)/);
+  assert.match(api, /roles: \["admin"\], organizationId: organizationId \?\? null, authorization: authorization \?\? null/);
   const tasks = await source("src/app/api/work-os/tasks/route.ts");
-  assert.match(tasks, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\)\)/);
+  assert.match(tasks, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\), req\.headers\.get\("authorization"\)\)/);
   const status = await source("src/app/api/work-os/status/route.ts");
   assert.match(status, /export async function GET\(req: Request\)/);
-  assert.match(status, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\)\)/);
+  assert.match(status, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\), req\.headers\.get\("authorization"\)\)/);
+  // The installed companion authorizes with its bearer device session on every
+  // administration surface, alongside the organization it selected.
+  const overview = await source("src/app/api/work-os/admin/overview/route.ts");
+  assert.match(overview, /requireWorkOsAdmin\(req\.headers\.get\("x-work-os-organization-id"\), req\.headers\.get\("authorization"\)\)/);
+  for (const path of [
+    "src/app/api/work-os/admin/insights/route.ts",
+    "src/app/api/work-os/organization/route.ts",
+    "src/app/api/work-os/people/route.ts",
+    "src/app/api/work-os/evidence/route.ts",
+  ]) {
+    const text = await source(path);
+    assert.match(text, /authorization: req\.headers\.get\("authorization"\)/);
+  }
 });
 
 test("local task completion is idempotent", async () => {
