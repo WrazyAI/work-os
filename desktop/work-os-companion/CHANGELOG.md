@@ -26,7 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Your Tasks list now leads with what's urgent — overdue, due today, later, and no date — and its counts always agree with the views above it.
-- Task rows read cleaner: the project repeats less, the status pill only speaks up when something is wrong, and at narrow widths the due date stays visible instead of disappearing.
+- Task rows read cleaner: the project line only appears in mixed lists, and the due date stays visible at any window size.
 
 ## 0.4.38 — 2026-10-14
 
