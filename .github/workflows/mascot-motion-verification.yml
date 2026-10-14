@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   browser:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +31,7 @@ jobs:
       - name: Install browser runtime
         run: |
           npm install --prefix /tmp/otto-browser playwright --no-audit --no-fund
-          # The self-hosted runner has the browser system libraries preinstalled,
-          # and --with-deps needs sudo, which the runner does not have.
-          /tmp/otto-browser/node_modules/.bin/playwright install chromium
+          /tmp/otto-browser/node_modules/.bin/playwright install --with-deps chromium
 
       - name: Start companion preview
         working-directory: desktop/work-os-companion

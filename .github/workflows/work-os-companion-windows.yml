@@ -429,7 +429,7 @@ jobs:
   finalize-release:
     name: Verify combined assets and publish internal release
     needs: [unsigned-windows-release, unsigned-macos-release]
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
