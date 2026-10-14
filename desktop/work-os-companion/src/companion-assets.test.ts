@@ -119,6 +119,11 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("nextAgendaAutoExpand");
     expect(avatar).toContain('from "lucide-react"');
     expect(capability.permissions).toContain("core:window:allow-start-dragging");
+    // macOS consumes the first click on an inactive window unless the webview
+    // accepts it, which would make the floating companion need a second grab.
+    const dragConfig = JSON.parse(readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
+    const dragWindow = dragConfig.app.windows.find((window: { label?: string }) => window.label === "avatar");
+    expect(dragWindow).toMatchObject({ acceptFirstMouse: true });
     // The avatar reads the shared cached day query instead of its own fetch.
     expect(avatar).toContain('workOsKeys.day("compact")');
     expect(avatar).toContain('fetchDay({ variant: "compact" })');

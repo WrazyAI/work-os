@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.31 — 2026-10-14
+
+- The mascot can be dragged on the first try on macOS — clicking the companion from another app no longer needs a second attempt.
+
 ## 0.4.30 — 2026-10-14
 
 - On macOS the companion no longer freezes on its loading screen after an update — and the mascot can be dragged again.
