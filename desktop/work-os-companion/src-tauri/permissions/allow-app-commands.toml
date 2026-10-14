@@ -6,6 +6,7 @@ commands.allow = [
   "reset_local_vault",
   "app_heartbeat",
   "ensure_local_settings",
+  "focus_main",
   "notify_focus",
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
