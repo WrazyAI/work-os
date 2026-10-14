@@ -261,7 +261,7 @@ jobs:
           name: work-os-companion-${{ steps.release.outputs.version }}-unsigned-internal
           path: ${{ steps.assets.outputs.stage }}/*
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 14
           compression-level: 0
 
       - name: Create or update draft internal GitHub Release
@@ -429,7 +429,7 @@ jobs:
   finalize-release:
     name: Verify combined assets and publish internal release
     needs: [unsigned-windows-release, unsigned-macos-release]
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     permissions:
       contents: write

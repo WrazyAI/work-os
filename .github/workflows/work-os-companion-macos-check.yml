@@ -1,11 +1,13 @@
 name: Work OS Companion macOS build
 
+# Nightly at 20:50 UTC (8:50 pm GMT) against the latest main — the build that
+# was last deployed — instead of on every companion pull request: macOS minutes
+# are the most expensive runner minutes, and the packaged-app startup gate only
+# needs to catch regressions in what actually ships. Dispatch it by hand when a
+# change needs Mac validation before merge.
 on:
-  pull_request:
-    paths:
-      - "desktop/work-os-companion/**"
-      - ".github/workflows/work-os-companion-macos-check.yml"
-      - ".github/workflows/work-os-companion-windows.yml"
+  schedule:
+    - cron: "50 20 * * *"
   workflow_dispatch:
 
 permissions:

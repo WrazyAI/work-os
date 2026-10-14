@@ -27,7 +27,8 @@ concurrency:
 jobs:
   cleanup:
     name: Retain the newest companion deployments
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}

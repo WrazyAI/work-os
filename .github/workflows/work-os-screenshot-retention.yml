@@ -14,7 +14,8 @@ concurrency:
 
 jobs:
   delete-expired-screenshots:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
     steps:
       - name: Delete encrypted screenshots older than 30 days
         env:
