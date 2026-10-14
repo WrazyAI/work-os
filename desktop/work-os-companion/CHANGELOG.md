@@ -25,8 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
-- Setup's form is rebuilt: clearer fields, real switches, and a mistake is now marked beside the field instead of in a notification.
-- Your work-profile step lists each kind of signal on its own instead of squeezing three columns together.
+- Setup is easier to fill in: if you miss something, it is pointed out right beside the field instead of in a notification.
+- Your work profile now lists responsibilities, deliverables, and evidence sources one after another, so each kind of signal has room.
 
 ## 0.4.36 — 2026-10-14
 
