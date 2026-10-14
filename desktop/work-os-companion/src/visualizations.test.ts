@@ -20,6 +20,9 @@ const insightStyles = readText(resolve(root, "src/plan-insights.css"));
 const insightChartStyles = readText(resolve(root, "src/insight-charts.css"));
 const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
 const insightDashboardStyles = readText(resolve(root, "src/insight-dashboard.css"));
+const adminWorkspace = readText(resolve(root, "src/admin/AdminWorkspace.tsx"));
+const adminData = readText(resolve(root, "src/admin/data.ts"));
+const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
 const modalScrollLock = readText(resolve(root, "src/modalScrollLock.ts"));
@@ -114,7 +117,11 @@ describe("operational visualizations", () => {
   });
 
   it("hides the temporary evidence and shift-status surfaces", () => {
-    expect(sidebar).not.toContain('label: "Evidence"');
+    // The employee rail keeps Evidence hidden until that surface is ready for
+    // daily use; the administration rail owns it as a review surface (§16).
+    const employeeDestinations = sidebar.slice(sidebar.indexOf("const DESTINATIONS"), sidebar.indexOf("const ADMIN_DESTINATIONS"));
+    expect(employeeDestinations).not.toContain('label: "Evidence"');
+    expect(employeeDestinations).not.toContain('label: "Overview"');
     expect(sidebar).not.toContain("evidenceEnabled");
     expect(sidebar).not.toContain("sidebar-status");
     expect(sidebarStyles).not.toContain(".sidebar-status");
@@ -534,6 +541,18 @@ describe("operational visualizations", () => {
     expect(insightsView).toContain("maxHeight={320}");
     expect(insightsView).toContain('className="insight-activity-inline"');
     expect(readFileSync(resolve(root, "src/ScrollFadeRegion.tsx"), "utf8")).toContain('role="region"');
+  });
+
+  it("switches between administration and the signed-in admin's own workday", () => {
+    expect(app).toContain('import AdminWorkspace from "./admin/AdminWorkspace"');
+    expect(app).toContain("work-os.workspace-mode");
+    expect(app).toContain('switchLabel="Open administration"');
+    expect(app).toContain("Administration");
+    expect(adminWorkspace).toContain("Switch to employee view");
+    expect(adminWorkspace).toContain('session.role === "admin"');
+    expect(adminData).toContain('["work-os", "admin"');
+    // Administration reads never enter the on-disk employee cache.
+    expect(queryClientSource).toContain('key[1] !== "admin"');
   });
 
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {

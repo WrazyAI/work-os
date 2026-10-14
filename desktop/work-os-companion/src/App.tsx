@@ -1,6 +1,6 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
 import { readStoredFlag, writeStoredFlag } from "./storedFlags";
 import { emit, listen } from "./tauriEvents";
@@ -80,6 +80,9 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
+import AdminWorkspace from "./admin/AdminWorkspace";
+import { adminKeys, fetchSession } from "./admin/data";
+import type { SessionResponse } from "./admin/types";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { useModalScrollLock } from "./modalScrollLock";
@@ -108,6 +111,10 @@ type EodScreenshotContext = { processed: number; excluded: number; failed: numbe
  * frames is enough to cover a day's sampled context without letting a single
  * press run away with vision cost. */
 const EOD_PREPARE_ROUNDS = 4;
+
+/** Remembers which workspace this device last opened. The choice is a view
+ * preference; the account's role stays the authority on what it may open. */
+const WORKSPACE_MODE_KEY = "work-os.workspace-mode";
 
 const worktivityControlTransport: WorktivityControlTransport = {
   preflight: (request) => apiRequest<WorktivityPreflight>("/api/work-os/me/workday/worktivity-control", {
@@ -233,6 +240,7 @@ export default function App() {
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
+  const [workspace, setWorkspace] = useState<"employee" | "admin">(() => (localStorage.getItem(WORKSPACE_MODE_KEY) === "admin" ? "admin" : "employee"));
   const [input, setInput] = useState("");
   const [progressComposerOpen, setProgressComposerOpen] = useState(false);
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
@@ -808,6 +816,29 @@ export default function App() {
   const compactDayQuery = useDayQuery({ enabled: signedIn && !syncBypass, variant: "compact", pollMs: 60_000 });
   const detailsDayQuery = useDayQuery({ enabled: signedIn && !syncBypass && detailsViews, variant: "details" });
   const onboardingQuery = useOnboardingQuery({ enabled: signedIn && !syncBypass });
+  // Which workspace this account may open, read independently of the employee
+  // day payload so an admin reaches administration even before their own
+  // onboarding or day query settles.
+  const workSessionQuery = useQuery<SessionResponse>({
+    queryKey: adminKeys.session(),
+    queryFn: fetchSession,
+    enabled: signedIn && !syncBypass,
+    staleTime: 5 * 60_000,
+  });
+  const workspaceDefaultApplied = useRef(false);
+  useEffect(() => {
+    if (workspaceDefaultApplied.current || !workSessionQuery.data) return;
+    workspaceDefaultApplied.current = true;
+    if (!localStorage.getItem(WORKSPACE_MODE_KEY) && workSessionQuery.data.role === "admin") setWorkspace("admin");
+  }, [workSessionQuery.data]);
+  const setWorkspaceMode = (next: "employee" | "admin") => {
+    setWorkspace(next);
+    try {
+      localStorage.setItem(WORKSPACE_MODE_KEY, next);
+    } catch {
+      // The preference is best-effort; the live state above still applies.
+    }
+  };
   const historyQuery = useTaskHistoryQuery({
     enabled: signedIn && !syncBypass,
   });
@@ -3508,6 +3539,13 @@ export default function App() {
       onDebug={() => void openDebugger()}
       onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
     />;
+  if (workspace === "admin" && session && workSessionQuery.data?.role === "admin" && !syncBypass) {
+    return <AdminWorkspace
+      session={workSessionQuery.data}
+      onSwitchToEmployee={() => setWorkspaceMode("employee")}
+      onSignOut={() => { void logout(); }}
+    />;
+  }
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={() => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); void refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
@@ -3529,9 +3567,11 @@ export default function App() {
       onNavigate={(nextView) => setView(nextView)}
       onNewChat={startNewChat}
       onSignOut={() => { void logout(); }}
+      onSwitchWorkspace={workSessionQuery.data?.role === "admin" ? () => setWorkspaceMode("admin") : undefined}
+      switchLabel="Open administration"
     />
     <section className={`stage${dockVisible ? " has-dock" : ""}`}>
-      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{signedIn && !syncBypass && <NotificationsBell
+      <header className="masthead"><div><p>{formatWorkOsDate(visibleDay?.shiftDate)}</p><div className="masthead-title-row"><h1>{views.find((item) => item.id === view)?.label}</h1>{lateReasonMissing && <button type="button" className="late-attention-pill" onClick={() => openPlanningSession()} aria-label="This workday started 30 or more minutes late. Open the focus editor to record the reason."><AlertTriangle size={12} />Late start — add a reason</button>}{view === "review" && outstandingDays.length > 0 && <button type="button" className="eod-attention-pill" onClick={() => setNotificationsOpen(true)} aria-label={`${outstandingDays.length} prior EOD${outstandingDays.length === 1 ? "" : "s"} need attention. Open the outstanding list.`}><AlertTriangle size={12} />{outstandingDays.length} prior EOD{outstandingDays.length === 1 ? "" : "s"} need{outstandingDays.length === 1 ? "s" : ""} attention</button>}</div></div><div className="mast-actions">{pageGuideView && <button className="icon guide-launch" title={`How ${pageGuideLabel} works`} aria-label={`How ${pageGuideLabel} works`} onClick={() => openGuide(pageGuideView)}><CircleHelp size={17} /></button>}{view === "tasks" && visibleDay?.shiftDate && <TaskDateNavigator currentDate={visibleDay.shiftDate} selectedDate={planHistoryDate || visibleDay.shiftDate} onDate={loadPlanHistory} />}{workSessionQuery.data?.role === "admin" && <button type="button" className="admin-switch-ghost" title="Open the administration workspace" onClick={() => setWorkspaceMode("admin")}><LayoutDashboard size={15} aria-hidden />Administration</button>}{signedIn && !syncBypass && <NotificationsBell
         memoryCandidates={memoryCandidateCount}
         recap={recapSummary}
         overdueTasks={overdueTaskCount}

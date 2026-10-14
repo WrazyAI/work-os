@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowLeftRight,
   Check,
   ChevronDown,
   ChevronRight,
   Gauge,
+  Images,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -13,9 +15,11 @@ import {
   PanelLeftOpen,
   Settings,
   SquarePen,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import wordmark from "./assets/work-os-mark.png";
+import type { AdminSection } from "./admin/types";
 
 export type SidebarView = "day" | "tasks" | "review" | "insights" | "evidence" | "settings";
 
@@ -25,10 +29,23 @@ export type SidebarNavProps = {
   onNewChat: () => void;
   onSignOut?: () => void;
   initiallyCollapsed?: boolean;
+  /** "admin" swaps the rail to the administration destinations. */
+  mode?: "employee" | "admin";
+  adminSection?: AdminSection;
+  onAdminNavigate?: (section: AdminSection) => void;
+  /** When present, the workspace menu offers the workspace switch. */
+  onSwitchWorkspace?: () => void;
+  switchLabel?: string;
 };
 
 type Destination = {
   id: SidebarView;
+  label: string;
+  icon: LucideIcon;
+};
+
+type AdminDestination = {
+  id: AdminSection;
   label: string;
   icon: LucideIcon;
 };
@@ -41,8 +58,20 @@ const DESTINATIONS: Destination[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
+const ADMIN_DESTINATIONS: AdminDestination[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "people", label: "People", icon: Users },
+  { id: "tasks", label: "Tasks", icon: ListChecks },
+  { id: "review", label: "EOD Review", icon: MessageSquareText },
+  { id: "insights", label: "Insights", icon: Gauge },
+  { id: "evidence", label: "Evidence", icon: Images },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
 const PRIMARY_DESTINATION_IDS = new Set<SidebarView>(["day", "tasks", "review"]);
 const CONTEXT_DESTINATION_IDS = new Set<SidebarView>(["insights"]);
+const ADMIN_PRIMARY_IDS = new Set<AdminSection>(["overview", "people", "tasks"]);
+const ADMIN_CONTEXT_IDS = new Set<AdminSection>(["review", "insights", "evidence"]);
 
 const menuWidth = 228;
 
@@ -121,11 +150,15 @@ function WorkspaceMenu({
   onClose,
   onSettings,
   onSignOut,
+  onSwitchWorkspace,
+  switchLabel,
 }: {
   anchor: HTMLElement;
   onClose: () => void;
   onSettings: () => void;
   onSignOut?: () => void;
+  onSwitchWorkspace?: (() => void) | undefined;
+  switchLabel?: string | undefined;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState(() => {
@@ -184,6 +217,13 @@ function WorkspaceMenu({
         <Check size={16} aria-hidden="true" />
       </div>
       <div className="sidebar-menu-rule" />
+      {onSwitchWorkspace ? (
+        <button type="button" role="menuitem" onClick={() => { onClose(); onSwitchWorkspace(); }}>
+          <ArrowLeftRight size={16} aria-hidden="true" />
+          <span>{switchLabel ?? "Switch workspace"}</span>
+          <ChevronRight size={15} aria-hidden="true" />
+        </button>
+      ) : null}
       <button type="button" role="menuitem" onClick={() => { onClose(); onSettings(); }}>
         <Settings size={16} aria-hidden="true" />
         <span>Workspace settings</span>
@@ -206,11 +246,22 @@ export default function SidebarNav({
   onNewChat,
   onSignOut,
   initiallyCollapsed = true,
+  mode = "employee",
+  adminSection,
+  onAdminNavigate,
+  onSwitchWorkspace,
+  switchLabel,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [collapsedSurfaceHover, setCollapsedSurfaceHover] = useState(false);
   const workspaceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const admin = mode === "admin";
+  const activeId: SidebarView | AdminSection = admin ? adminSection ?? "overview" : activeView;
+  const navigate = (id: SidebarView | AdminSection) => {
+    if (admin) onAdminNavigate?.(id as AdminSection);
+    else onNavigate(id as SidebarView);
+  };
 
   const setCollapsedState = (next: boolean) => {
     setCollapsed(next);
@@ -218,9 +269,15 @@ export default function SidebarNav({
     setWorkspaceOpen(false);
   };
 
-  const primary = DESTINATIONS.filter(({ id }) => PRIMARY_DESTINATION_IDS.has(id));
-  const context = DESTINATIONS.filter(({ id }) => CONTEXT_DESTINATION_IDS.has(id));
-  const settings = DESTINATIONS.filter(({ id }) => id === "settings");
+  const primary = admin
+    ? ADMIN_DESTINATIONS.filter(({ id }) => ADMIN_PRIMARY_IDS.has(id))
+    : DESTINATIONS.filter(({ id }) => PRIMARY_DESTINATION_IDS.has(id));
+  const context = admin
+    ? ADMIN_DESTINATIONS.filter(({ id }) => ADMIN_CONTEXT_IDS.has(id))
+    : DESTINATIONS.filter(({ id }) => CONTEXT_DESTINATION_IDS.has(id));
+  const settings = admin
+    ? ADMIN_DESTINATIONS.filter(({ id }) => id === "settings")
+    : DESTINATIONS.filter(({ id }) => id === "settings");
 
   const updateCollapsedSurfaceHover = (target: EventTarget | null) => {
     if (!collapsed || !(target instanceof Element)) {
@@ -292,30 +349,48 @@ export default function SidebarNav({
           )}
         </div>
 
-        <div className="sidebar-new-chat-wrap">
-          <button type="button" data-sidebar-row data-sidebar-nav-option data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
-            <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
-            <span className="sidebar-row-copy">New chat</span>
-          </button>
-        </div>
+        {!admin && (
+          <>
+            <div className="sidebar-new-chat-wrap">
+              <button type="button" data-sidebar-row data-sidebar-nav-option data-label="New chat" title="New chat" aria-label="New chat" className="sidebar-row sidebar-new-chat" onClick={onNewChat}>
+                <span className="sidebar-row-icon"><SquarePen size={18} strokeWidth={1.85} /></span>
+                <span className="sidebar-row-copy">New chat</span>
+              </button>
+            </div>
 
-        <nav className="sidebar-navigation" aria-label="Work OS">
-          <SidebarGlideGroup className="nav-group nav-core">
-            {primary.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
-            ))}
-          </SidebarGlideGroup>
-          <SidebarGlideGroup className="nav-group nav-context">
-            {context.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} onClick={() => onNavigate(id)} />
-            ))}
-          </SidebarGlideGroup>
-        </nav>
+            <nav className="sidebar-navigation" aria-label="Work OS">
+              <SidebarGlideGroup className="nav-group nav-core">
+                {primary.map(({ id, label, icon: Icon }) => (
+                  <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+                ))}
+              </SidebarGlideGroup>
+              <SidebarGlideGroup className="nav-group nav-context">
+                {context.map(({ id, label, icon: Icon }) => (
+                  <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+                ))}
+              </SidebarGlideGroup>
+            </nav>
+          </>
+        )}
+        {admin ? (
+          <nav className="sidebar-navigation" aria-label="Work OS administration">
+            <SidebarGlideGroup className="nav-group nav-core">
+              {primary.map(({ id, label, icon: Icon }) => (
+                <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+              ))}
+            </SidebarGlideGroup>
+            <SidebarGlideGroup className="nav-group nav-context">
+              {context.map(({ id, label, icon: Icon }) => (
+                <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} onClick={() => navigate(id)} />
+              ))}
+            </SidebarGlideGroup>
+          </nav>
+        ) : null}
 
         <div className="sidebar-footer">
           <SidebarGlideGroup className="nav-group nav-settings">
             {settings.map(({ id, label, icon: Icon }) => (
-              <SidebarRow key={id} icon={Icon} label={label} active={activeView === id} hint={id === "settings" ? "Ctrl + ," : undefined} onClick={() => onNavigate(id)} />
+              <SidebarRow key={id} icon={Icon} label={label} active={activeId === id} hint={id === "settings" && !admin ? "Ctrl + ," : undefined} onClick={() => navigate(id)} />
             ))}
           </SidebarGlideGroup>
         </div>
@@ -327,6 +402,8 @@ export default function SidebarNav({
           onClose={() => setWorkspaceOpen(false)}
           onSettings={() => onNavigate("settings")}
           onSignOut={onSignOut}
+          onSwitchWorkspace={onSwitchWorkspace}
+          switchLabel={switchLabel}
         />
       )}
     </aside>

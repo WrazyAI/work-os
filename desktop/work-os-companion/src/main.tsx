@@ -9,6 +9,7 @@ import ChatPreview from "./ChatPreview";
 import EodPreview from "./EodPreview";
 import InsightsSynthesisPreview from "./InsightsSynthesisPreview";
 import InsightsPreview from "./InsightsPreview";
+import AdminPreview from "./admin/AdminPreview";
 import EodOutstandingPreview from "./EodOutstandingPreview";
 import ActivityIntervalPreview from "./ActivityIntervalPreview";
 import TasksPreview from "./TasksPreview";
@@ -64,7 +65,8 @@ const Root = params.get("window") === "avatar" ? AvatarApp
                 : import.meta.env.DEV && params.has("preview-settings") ? SettingsPreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview
-                : import.meta.env.DEV && params.has("preview-insights") ? InsightsPreview
+                : import.meta.env.DEV && params.has("preview-admin") ? AdminPreview
+: import.meta.env.DEV && params.has("preview-insights") ? InsightsPreview
               : import.meta.env.DEV && params.has("preview-insights-synthesis") ? InsightsSynthesisPreview
                 : import.meta.env.DEV && params.has("preview-outstanding") ? EodOutstandingPreview
                   : import.meta.env.DEV && params.has("preview-activity-intervals") ? ActivityIntervalPreview

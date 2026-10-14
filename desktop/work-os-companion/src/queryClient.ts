@@ -36,7 +36,10 @@ export const workOsKeys = {
 const PERSISTED_ROOT = "work-os";
 
 export function isPersistedQueryKey(key: QueryKey): boolean {
-  return key[0] === PERSISTED_ROOT;
+  // Administration reads (roster, evidence, review state, organization
+  // settings) stay out of the on-disk cache: they belong to the workspace
+  // record, not to this device's employee session.
+  return key[0] === PERSISTED_ROOT && key[1] !== "admin";
 }
 
 export function createWorkOsQueryClient(): QueryClient {

@@ -244,6 +244,8 @@ assert.match(app, /agenda-strip-chip/);
 assert.doesNotMatch(app, /task-record-columns/);
 assert.doesNotMatch(app, /task-view-tabs/);
 assert.match(app, /PersonalInsights/);
+assert.match(app, /AdminWorkspace/);
+assert.match(app, /work-os\.workspace-mode/);
 assert.match(app, /observedSeconds/);
 assert.doesNotMatch(app, /width: "(?:76|52|34)%"/);
 assert.doesNotMatch(app, /will enter the plan at explicit clock-in/);
