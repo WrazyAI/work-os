@@ -19,7 +19,7 @@ export const ConversationLauncher = forwardRef<HTMLButtonElement, {
   const detail = required
     ? `Tell ${MASCOT.name} what changed`
     : mode === "agenda"
-      ? "Planning does not clock you in"
+      ? `Chat with ${MASCOT.name} about it`
       : `${MASCOT.name} is ready when you are`;
 
   return (

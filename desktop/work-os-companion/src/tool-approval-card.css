@@ -188,15 +188,12 @@
 .approval-results article .approval-retry:focus-visible { outline: 2px solid #7cc936; outline-offset: 2px; }
 
 @media (max-width: 560px) {
-  /* One single row at the companion's width: quiet step arrows beside the
-     decisions, so the actions keep the card's remaining width instead of
-     stacking under oversized step boxes. Only a genuinely cramped card wraps
-     the actions beneath the arrows. */
+  /* Same compact card as the wide sheet: the step arrows and the two decisions
+     keep their content width on one row, and only a genuinely cramped card
+     wraps the actions beneath the arrows. */
   .approval-flow > footer { align-items: center; flex-direction: row; flex-wrap: wrap; row-gap: 6px; }
   .approval-step-nav { align-self: center; }
-  .approval-actions { width: auto; display: flex; flex: 1 1 auto; min-width: min(100%, 200px); }
-  .approval-actions button { flex: 1 1 0; min-width: 0; min-height: 40px; white-space: nowrap; }
-  .approval-step-nav button { min-height: 40px; }
+  .approval-actions { width: auto; display: flex; flex: 0 1 auto; min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) { .tool-approval-card, .approval-flow *, .approval-results * { transition: none !important; animation: none !important; } }

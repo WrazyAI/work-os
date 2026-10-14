@@ -105,6 +105,13 @@ describe("ProgressComposer simplified chrome", () => {
     expect(markup).not.toContain("What would you like to record?");
   });
 
+  it("invites the chat from the agenda launcher", () => {
+    const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, open: false, mode: "agenda" }));
+    expect(markup).toContain("Add a task");
+    expect(markup).toContain("Chat with Otto about it");
+    expect(markup).not.toContain("Planning does not clock you in");
+  });
+
   it("still surfaces the due state when an update is required", () => {
     const markup = renderToStaticMarkup(createElement(ProgressComposer, { ...base, required: true }));
     expect(markup).toContain("An update is due");

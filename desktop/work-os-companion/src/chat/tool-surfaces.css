@@ -542,8 +542,8 @@
 }
 
 [data-workos-tool-surface="approval"] .approval-flow > header {
-  min-height: 60px;
-  padding: 12px 15px 10px;
+  min-height: 48px;
+  padding: 11px 14px;
   border-bottom: 0;
   background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
 }
@@ -588,8 +588,8 @@
 }
 
 [data-workos-tool-surface="approval"] .approval-flow > footer {
-  min-height: 62px;
-  padding: 10px 12px;
+  min-height: 50px;
+  padding: 11px 14px;
   border-top: 1px solid var(--tool-line);
   background: #fafcf7;
 }
@@ -1400,13 +1400,8 @@
     flex-direction: column;
   }
 
-  [data-workos-tool-surface="approval"] .approval-step-nav button,
-  [data-workos-tool-surface="approval"] .approval-actions button,
   [data-workos-tool-surface="batch"] .task-batch-foot button {
     min-height: 40px;
-  }
-
-  [data-workos-tool-surface="batch"] .task-batch-foot button {
     width: 100%;
   }
 
