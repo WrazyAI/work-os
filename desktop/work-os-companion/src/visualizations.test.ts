@@ -10,6 +10,7 @@ const insightsView = readText(resolve(root, "src/InsightsView.tsx"));
 const sidebar = readText(resolve(root, "src/SidebarNav.tsx"));
 const sidebarStyles = readText(resolve(root, "src/sidebar.css"));
 const avatarApp = readText(resolve(root, "src/AvatarApp.tsx"));
+const avatarStyles = readText(resolve(root, "src/avatar.css"));
 const chatPreview = readText(resolve(root, "src/ChatPreview.tsx"));
 const taskSurfaces = readText(resolve(root, "src/taskSurfaces.tsx"));
 const styles = readText(resolve(root, "src/styles.css"));
@@ -186,6 +187,15 @@ describe("operational visualizations", () => {
     expect(avatarApp).toContain("isHeaderDragStart");
     expect(avatarApp).toContain("startDragging");
     expect(chatPreview).toContain('style={{ width: "min(400px, 100%)", height: 620 }}');
+  });
+
+  it("keeps the floating approval card on the shared compact footer", () => {
+    // The floating chat must not force full-width approval actions, flex the
+    // decisions apart, or hide the step arrows: each wrapped the footer onto a
+    // second row and broke parity with the in-app sheet's compact card.
+    expect(avatarStyles).not.toMatch(/\.avatar-chat \.approval-actions[^{]*\{[^}]*width:\s*100%/);
+    expect(avatarStyles).not.toMatch(/\.avatar-chat \.approval-actions button[^{]*\{[^}]*flex:\s*1/);
+    expect(avatarStyles).not.toMatch(/\.avatar-chat \.approval-step-nav[^{]*\{[^}]*display:\s*none/);
   });
 
   it("pins task row columns so the status pill aligns across every row shape", () => {
