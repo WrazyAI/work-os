@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /** Administration workspace primitives.
@@ -187,7 +188,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  const content = (
     <div className="admin-drawer-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="admin-drawer" role="dialog" aria-modal="true" aria-label={title} style={{ width }}>
         <header className="admin-drawer-head">
@@ -204,6 +205,10 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       </aside>
     </div>
   );
+  // The drawer portals to the document body so an ancestor transform (page
+  // transitions, scroll containers) can never clip or offset the overlay.
+  if (typeof document === "undefined") return content;
+  return createPortal(content, document.body);
 }
 
 /** Action button in the workspace's quiet product language. */

@@ -4,13 +4,13 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { seedAdminFixtures } from "./admin/adminFixtures";
 import { GroupedBars, ShareBars, StackedTimeBars } from "./admin/charts";
-import { adminKeys } from "./admin/data";
+import { adminKeys, isoDaysAgo, todayIso } from "./admin/data";
 import { Avatar, Drawer, Pill, Segmented } from "./admin/ui";
 
 describe("administration primitives", () => {
   it("renders pills with their tone and avatar initials", () => {
     const markup = renderToStaticMarkup(createElement("div", null,
-      createElement(Pill, { tone: "ok" }, "On shift"),
+      createElement(Pill, { tone: "ok", children: "On shift" }),
       createElement(Avatar, { name: "Amara Okafor", size: 30 }),
     ));
     expect(markup).toContain("admin-pill ok");
@@ -31,12 +31,12 @@ describe("administration primitives", () => {
   });
 
   it("renders a drawer as a labelled modal only while open", () => {
-    const open = renderToStaticMarkup(createElement(Drawer, { open: true, onClose: () => undefined, title: "Ben Sato", subtitle: "ben@example.com" }, "body copy"));
+    const open = renderToStaticMarkup(createElement(Drawer, { open: true, onClose: () => undefined, title: "Ben Sato", subtitle: "ben@example.com", children: "body copy" }));
     expect(open).toContain('role="dialog"');
     expect(open).toContain('aria-modal="true"');
     expect(open).toContain("Ben Sato");
     expect(open).toContain("body copy");
-    const closed = renderToStaticMarkup(createElement(Drawer, { open: false, onClose: () => undefined, title: "Closed" }, "hidden"));
+    const closed = renderToStaticMarkup(createElement(Drawer, { open: false, onClose: () => undefined, title: "Closed", children: "hidden" }));
     expect(closed).not.toContain("dialog");
   });
 
@@ -66,12 +66,12 @@ describe("administration primitives", () => {
   it("seeds the preview fixtures for every administration surface", () => {
     const client = new QueryClient();
     seedAdminFixtures(client, "dense");
-    expect(client.getQueryData(adminKeys.overview("2026-10-14"))).toBeTruthy();
+    expect(client.getQueryData(adminKeys.overview(todayIso()))).toBeTruthy();
     expect(client.getQueryData(adminKeys.people())).toBeTruthy();
     expect(client.getQueryData(adminKeys.person("p-2"))).toBeTruthy();
     expect(client.getQueryData(adminKeys.insights("7d", ""))).toBeTruthy();
-    expect(client.getQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: "2026-10-01", to: "2026-10-14" }))).toBeTruthy();
-    expect(client.getQueryData(adminKeys.evidence({ personId: "", source: "", from: "2026-10-01", to: "2026-10-14", disputed: "", limit: "100" }))).toBeTruthy();
+    expect(client.getQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: isoDaysAgo(30), to: todayIso() }))).toBeTruthy();
+    expect(client.getQueryData(adminKeys.evidence({ personId: "", source: "", from: isoDaysAgo(13), to: todayIso(), disputed: "", limit: "100" }))).toBeTruthy();
     expect(client.getQueryData(adminKeys.organization())).toBeTruthy();
     expect(client.getQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }))).toBeTruthy();
   });

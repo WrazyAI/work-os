@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { adminKeys, ADMIN_STALE_MS } from "./data";
+import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
 import type {
   AdminInsights,
   AdminOverview,
@@ -264,7 +264,9 @@ function evidenceResponse(): EvidenceResponse {
 }
 
 export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "empty") {
-  const today = DATES[DATES.length - 1];
+  const today = todayIso();
+  const evidenceFrom = isoDaysAgo(13);
+  const reportFrom = isoDaysAgo(30);
   if (state === "empty") {
     queryClient.setQueryData(adminKeys.overview(today), {
       ...overview(),
@@ -277,8 +279,8 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     } satisfies AdminOverview);
     queryClient.setQueryData(adminKeys.people(), { people: [], roleProfiles: [] } satisfies PeopleResponse);
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
-    queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: DATES[0], to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
-    queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: DATES[0], to: today, disputed: "", limit: "100" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
+    queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
+    queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, disputed: "", limit: "100" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
     return;
   }
 
@@ -353,16 +355,17 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   queryClient.setQueryData(adminKeys.insights("30d", ""), insightsFor("30d"));
   queryClient.setQueryData(adminKeys.insights("90d", ""), insightsFor("90d"));
   for (const status of ["pending_review", "draft", "rejected", "approved", "all"]) {
-    queryClient.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: DATES[0], to: today }), reportsResponse(status === "all" ? "" : status));
+    queryClient.setQueryData(adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: reportFrom, to: today }), reportsResponse(status === "all" ? "" : status));
   }
   queryClient.setQueryData(adminKeys.reportEvidence("p-2", today), evidenceResponse());
+  queryClient.setQueryData(adminKeys.reportEvidence("p-1", today), evidenceResponse());
   queryClient.setQueryData(adminKeys.reportIntervals("p-2", today), { intervals: [] });
   const seedIntervals = [
     { id: "i-1", person: "p-2", label: "10:00–11:00", reviewStatus: "confirmed", headline: "Worked through the webhook retry test suite and left review comments.", evidenceCount: 6, recordedActivity: [{ description: "Pushed commits to wrazy/agent-os", relation: "performed" as const, url: null }, { description: "CI run on wrazy/agent-os passed", relation: "triggered" as const, url: null }] },
     { id: "i-2", person: "p-1", label: "11:00–12:00", reviewStatus: "inferred", headline: "Drafted the settings IA in Figma with a Notion outline open.", evidenceCount: 5, recordedActivity: [] },
   ];
-  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: DATES[0], to: today, disputed: "", limit: "100" }), evidenceResponse());
-  queryClient.setQueryData(adminKeys.intervals({ personId: "", from: DATES[0], to: today, limit: "60" }), {
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, disputed: "", limit: "100" }), evidenceResponse());
+  queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
     intervals: seedIntervals.map((entry) => ({
       ...entry,
       windowStart: `${today}T10:00:00.000Z`,

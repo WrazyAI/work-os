@@ -198,7 +198,7 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
             <div className="admin-table-wrap">
               <table className="admin-table">
                 <thead>
-                  <tr><th>Person</th><th>Outcomes</th><th>Late</th><th>Updates</th><th>Commitment</th><th>EOD</th><th>Tracked</th><th>Last activity</th></tr>
+                  <tr><th>Person</th><th>Outcomes</th><th>Late</th><th>Updates</th><th>Commitment</th><th>EOD</th><th>Last activity</th></tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
@@ -214,7 +214,6 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
                       <td className="admin-numeric">{row.updates}</td>
                       <td className="admin-numeric">{row.commitmentRate != null ? `${row.commitmentRate}%` : "—"}</td>
                       <td className="admin-numeric">{row.eodSubmitted}</td>
-                      <td className="admin-numeric">{row.trackedMinutes ? formatMinutes(row.trackedMinutes) : "—"}</td>
                       <td className="admin-quiet">{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "—"}</td>
                     </tr>
                   ))}
