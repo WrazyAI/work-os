@@ -400,7 +400,7 @@ export default function SidebarNav({
         <WorkspaceMenu
           anchor={workspaceButtonRef.current}
           onClose={() => setWorkspaceOpen(false)}
-          onSettings={() => onNavigate("settings")}
+          onSettings={() => navigate("settings")}
           onSignOut={onSignOut}
           onSwitchWorkspace={onSwitchWorkspace}
           switchLabel={switchLabel}

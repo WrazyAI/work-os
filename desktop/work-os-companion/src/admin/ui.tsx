@@ -166,6 +166,11 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 }) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const lastFocus = useRef<Element | null>(null);
+  // Callers pass inline closures, so the effect must not depend on onClose:
+  // a parent re-render (a typed note, a filter change) would otherwise re-run
+  // it, yank focus back to the close button, and drop the open state.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -174,7 +179,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -185,7 +190,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
       document.body.style.overflow = previousOverflow;
       if (lastFocus.current instanceof HTMLElement) lastFocus.current.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const content = (

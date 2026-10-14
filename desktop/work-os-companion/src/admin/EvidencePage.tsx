@@ -56,7 +56,7 @@ export default function EvidencePage() {
   const [receipt, setReceipt] = useState<string | null>(null);
 
   const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, staleTime: ADMIN_STALE_MS });
-  const filters = { personId, source: tab === "evidence" ? source : "", from, to, disputed: disputedOnly ? "true" : "", limit: "100" };
+  const filters = { personId, source: tab === "evidence" ? source : "", from, to, correction: disputedOnly ? "disputed" : "", summary: "1", limit: "100" };
   const evidence = useQuery({
     queryKey: adminKeys.evidence(filters),
     queryFn: () => fetchAdminEvidence(filters),
