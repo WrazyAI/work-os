@@ -3466,6 +3466,16 @@ export default function App() {
     return startInstanceHeartbeat(() => { void invoke("app_heartbeat").catch(() => undefined); });
   }, []);
 
+  // A quit tears the webview down without running its unload handler, so the
+  // host asks for the clean-exit breadcrumb first. Without this answer every
+  // normal quit reads as a crash on the next launch.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listen("work-os://app-quit", () => markCleanExit()).then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
+
   // The app's own config file: created the first time from the cadence the
   // workspace reports for this person, then read back. An edit there wins over
   // the workspace on this machine, which is what the API layer reports.

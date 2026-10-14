@@ -307,3 +307,16 @@ describe("floating companion integration", () => {
     expect(rust).toContain("vault_password::init(app.handle())");
   });
 });
+
+describe("app quit", () => {
+  it("asks the webview for a clean-exit breadcrumb before the host quits", () => {
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    // The tray item and a user-initiated ExitRequested both go through the
+    // helper, and the helper keeps the exit watchdog armed behind it.
+    expect(rust).toContain('"work-os://app-quit"');
+    expect(rust).toMatch(/"quit" => request_clean_exit\(app\)/);
+    expect(rust).toMatch(/fn request_clean_exit[\s\S]{0,600}arm_exit_watchdog/);
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain('listen("work-os://app-quit"');
+  });
+});

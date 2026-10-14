@@ -84,4 +84,11 @@ describe("boot trace wiring", () => {
     expect(mark).toBeGreaterThan(-1);
     expect(install).toBeGreaterThan(mark);
   });
+
+  it("writes the clean-exit breadcrumb when the host asks before quitting", () => {
+    const app = read("App.tsx");
+    const request = app.indexOf('listen("work-os://app-quit"');
+    expect(request).toBeGreaterThan(-1);
+    expect(app.indexOf("markCleanExit()", request)).toBeGreaterThan(request);
+  });
 });

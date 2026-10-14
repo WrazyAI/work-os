@@ -191,6 +191,10 @@ fn toggle_companion(app: &tauri::AppHandle) {
 /// most the latest armed watchdog can stay dangerous.
 static EXIT_WATCHDOG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Set once a quit has been requested: the webview is asked for its clean-exit
+/// breadcrumb exactly once, and a repeat request never starts a second wait.
+static CLEAN_EXIT_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Guarantees the process dies once an exit has been requested. A graceful
 /// shutdown can deadlock inside DLL detach (WebView2/COM teardown), leaving a
 /// half-dead "Not Responding" process that then holds the executable locked
@@ -326,6 +330,31 @@ async fn finish_worktivity_control(app: tauri::AppHandle) -> Result<(), String> 
 
 #[cfg(not(windows))]
 fn arm_exit_watchdog(_grace_seconds: u64) {}
+
+/// Asks every window to write its clean-exit breadcrumb before the process goes
+/// away.
+///
+/// The webview's own unload handler does not run when the host tears the
+/// process down, so without this a normal quit left the boot breadcrumb dirty
+/// and the next launch reported it as a crash — an error-level entry the
+/// employee cannot act on. The exit watchdog stays armed, so a stuck webview
+/// still cannot keep the process alive, and a killed process still leaves the
+/// breadcrumb dirty for exactly the case it exists to catch.
+fn request_clean_exit(app: &tauri::AppHandle) {
+    arm_exit_watchdog(4);
+    if CLEAN_EXIT_REQUESTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        // A quit is already in flight; let its own delayed exit land.
+        return;
+    }
+    let _ = app.emit("work-os://app-quit", ());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        // A beat for the webview to run its listener; the watchdog armed above
+        // is the backstop if that never happens.
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        handle.exit(0);
+    });
+}
 
 /* ── Voice input: hold-to-talk ─────────────────────────────────────────────
  *
@@ -641,10 +670,7 @@ pub fn run() {
                     show_main(app);
                     let _ = app.emit("work-os://capture", ());
                 }
-                "quit" => {
-                    arm_exit_watchdog(4);
-                    app.exit(0);
-                }
+                "quit" => request_clean_exit(app),
                 _ => {}
             })
             .on_tray_icon_event(|tray, event| {
@@ -682,10 +708,20 @@ pub fn run() {
             match event {
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => show_main(app),
-                // Arm the terminate watchdog when the process begins exiting so
-                // a hung detach (WebView2/COM) can never outlive the exit
-                // request.
-                tauri::RunEvent::ExitRequested { .. } => arm_exit_watchdog(4),
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    // Arm the terminate watchdog whenever the process begins
+                    // exiting: a hung detach (WebView2/COM) can never outlive
+                    // the exit request.
+                    arm_exit_watchdog(4);
+                    // A user-initiated quit (Cmd+Q, the tray, the Dock) is held
+                    // for a beat so the webview can write its clean-exit
+                    // breadcrumb; programmatic exits — our own delayed exit or
+                    // the updater's install step — fall straight through.
+                    if code.is_none() {
+                        api.prevent_exit();
+                        request_clean_exit(app);
+                    }
+                }
                 // A clean exit leaves nothing for the next launch to reap.
                 tauri::RunEvent::Exit => session_guard::clear(app),
                 _ => {}
