@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.38 — 2026-10-14
+
 - The working-days row in setup now reads as one control instead of seven loose chips.
 
 ## 0.4.37 — 2026-10-14
