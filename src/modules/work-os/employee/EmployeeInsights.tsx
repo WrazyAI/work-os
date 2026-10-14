@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CalendarRange, RefreshCw, Sparkles, Target, TrendingUp } from "lucide-react";
 import { useEmployeeDay } from "./useEmployeeDay";
@@ -73,7 +73,9 @@ export default function EmployeeInsights() {
   // next to different numbers, and a response that arrives after the selection
   // moves on is dropped.
   const activeSynthesisScopeRef = useRef("");
-  activeSynthesisScopeRef.current = `${range}:${through}`;
+  // A layout effect keeps the scope current at commit: a passive effect can run
+  // after paint, and a response landing in that window must still be dropped.
+  useLayoutEffect(() => { activeSynthesisScopeRef.current = `${range}:${through}`; }, [range, through]);
   useEffect(() => { setSynthesis(null); }, [range, through]);
   const synthesize = useMutation({
     mutationFn: (variables: { range: string; through: string }) => fetchJson<{ synthesis: string; mode?: "ai" | "evidence" }>("/api/work-os/me/insights/synthesize", {

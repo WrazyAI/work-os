@@ -240,7 +240,7 @@ function MemoryModal({
                     Show all {recent.length}
                   </button>
                 ) : null}
-                <p className="mt-3 text-[11px] leading-5 text-[var(--text-tertiary)]">Memory grounds Otto's answers in your own record. It is never used as performance evidence.</p>
+                <p className="mt-3 text-[11px] leading-5 text-[var(--text-tertiary)]">Memory grounds Otto&apos;s answers in your own record. It is never used as performance evidence.</p>
               </div>
             </div>
           )}

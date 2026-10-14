@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -98,7 +98,9 @@ export default function EmployeeReview() {
   /* The report date the editor is currently showing; an assistant response for
      another day must never alter the active editor. */
   const activeReportDateRef = useRef<string>("");
-  activeReportDateRef.current = eodDay?.shiftDate ?? "";
+  // Kept current at commit, not after paint: a deferred assistant response must
+  // never pass the guard against the date the editor has already left.
+  useLayoutEffect(() => { activeReportDateRef.current = eodDay?.shiftDate ?? ""; }, [eodDay?.shiftDate]);
 
   type AssistantDraftMode = "draft" | "redraft" | "refine" | "loom";
   const assistantDraft = useMutation({
