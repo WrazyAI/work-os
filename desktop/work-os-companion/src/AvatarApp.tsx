@@ -1724,6 +1724,22 @@ export default function AvatarApp(): React.ReactElement {
     () => (facts.loaded ? deriveTaskContext(facts.taskOptions, facts.shiftDate) : null),
     [facts.loaded, facts.shiftDate, facts.taskOptions],
   );
+
+  // The floating Tasks view leads with every open task, classified by the same
+  // overdue predicate the check-in context uses, so the card's status chips and
+  // its collapsed one-line summary stay truthful.
+  const openTaskCardItems = useMemo(() => {
+    const open = facts.taskOptions.filter((task) => !task.completed);
+    return deriveTaskContext(open, facts.shiftDate, open.length).visible.map((task) => ({
+      id: task.id,
+      title: task.title,
+      dueDate: task.dueDate,
+      state: task.overdue ? "overdue" : "pending",
+      subtaskTotal: task.subtaskTotal,
+      subtaskCompleted: task.subtaskCompleted,
+      subtasks: task.subtasks,
+    }));
+  }, [facts.taskOptions, facts.shiftDate]);
   const showShiftTime = hasOpenShiftSession(facts);
   const { fraction, label, progressAvailable } = shiftElapsedFraction(facts, now);
   const elapsedText = label ? `${label} elapsed` : "Elapsed time unavailable";
@@ -1986,9 +2002,7 @@ export default function AvatarApp(): React.ReactElement {
             <TaskSelectionCard
               title="Open tasks"
               status={facts.loaded ? "ready" : "loading"}
-              tasks={facts.taskOptions
-                .filter((task) => !task.completed)
-                .map((task) => ({ id: task.id, title: task.title, dueDate: task.dueDate, state: "pending", subtaskTotal: task.subtaskTotal, subtaskCompleted: task.subtaskCompleted, subtasks: task.subtasks }))}
+              tasks={openTaskCardItems}
               onMarkSelectedDone={proposeAvatarSelectedCompletions}
               onLoadSubtasks={loadTaskSubtasks}
               proposedTaskIds={[...proposedTaskIds]}

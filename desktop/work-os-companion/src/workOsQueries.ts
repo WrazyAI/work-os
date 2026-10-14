@@ -289,10 +289,15 @@ export function useActivityIntervalsQuery(options: { enabled: boolean; date: str
     refetchInterval: options.pollMs ?? false,
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage: ActivityIntervalsData) => lastPage.nextCursor ?? undefined,
-    queryFn: ({ pageParam, signal }) => apiRequest<ActivityIntervalsData>(
-      activityIntervalsUrl(options.date!, pageParam),
-      { signal },
-    ),
+    queryFn: ({ pageParam, signal }) => {
+      // Keep the query's cancellation signal and the request's own deadline:
+      // a bare query signal would otherwise remove apiRequest's timeout.
+      const timeout = AbortSignal.timeout(20_000);
+      return apiRequest<ActivityIntervalsData>(
+        activityIntervalsUrl(options.date!, pageParam),
+        { signal: signal ? AbortSignal.any([signal, timeout]) : timeout },
+      );
+    },
   });
 }
 

@@ -185,10 +185,12 @@ const queryLayer = read("src/workOsQueries.ts");
 assert.match(queryLayer, /\/api\/work-os\/me\/eod\/outstanding\?days=14/);
 assert.match(queryLayer, /fetchDay\(\{ variant: "details", date: options\.date! \}\)/);
 // The recap stream is an infinite query: a small first page plus the keyset
-// cursor for the next one.
+// cursor for the next one, keeping the request deadline alongside the query's
+// cancellation signal.
 assert.match(queryLayer, /ACTIVITY_INTERVALS_PAGE_SIZE/);
 assert.match(queryLayer, /activityIntervalsUrl\(options\.date!, pageParam\)/);
 assert.match(queryLayer, /cursor=\$\{encodeURIComponent\(cursor\)\}/);
+assert.match(queryLayer, /AbortSignal\.any\(\[signal, timeout\]\)/);
 assert.match(taskSurfaces, /Refresh from record/);
 assert.match(app, /eod-start-earlier/);
 assert.match(taskSurfaces, /Refine this draft/);

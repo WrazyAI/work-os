@@ -151,7 +151,10 @@ export function TaskSelectionCard({
     setSubmitState("idle");
     setSubmitError(null);
     setSentCount(0);
-    setCollapsed(collapseWhenInactive || readStoredFlag(collapsePersistenceKey));
+    // A keyed card reads its stored choice once at mount; a task refresh keeps
+    // whatever the employee (or the post-submit receipt) set since, so the card
+    // never reopens itself after filing completions.
+    setCollapsed((current) => (collapsePersistenceKey ? current : collapseWhenInactive));
   }, [taskIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps -- collapseWhenInactive is applied below
 
   useEffect(() => {
