@@ -34,6 +34,7 @@ import "./sidebar.css";
 import "./task-design-gallery.css";
 import "./loading.css";
 import "./onboarding-stage.css";
+import "./onboarding-form.css";
 import "./otto.css";
 import "./signal-spirit.css";
 import "./work-os-chat.css";

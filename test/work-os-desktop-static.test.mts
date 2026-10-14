@@ -74,6 +74,29 @@ assert.doesNotMatch(onboardingStage, /studio-otto\.svg|work-os-companion\.png/);
 assert.match(read("src/onboarding-stage.css"), /prefers-reduced-motion: reduce/);
 // `main` is read further down this file; read the entrypoint locally here.
 assert.match(read("src/main.tsx"), /import "\.\/onboarding-stage\.css"/);
+assert.match(read("src/main.tsx"), /import "\.\/onboarding-form\.css"/);
+// The panel's form language: one raised field tier, one inset tier for supplied
+// values, selection that reads without colour, and validation beside the field.
+const onboardingForm = read("src/onboarding-form.css");
+assert.match(onboardingForm, /--ob-field:/);
+assert.match(onboardingForm, /--ob-inset:/);
+assert.match(onboardingForm, /input\[readonly\]/);
+assert.match(onboardingForm, /\.field-error/);
+assert.match(onboardingForm, /\[aria-invalid="true"\]:focus-visible/);
+assert.match(onboardingForm, /\.guided-toggle input\[type="checkbox"\]/);
+assert.match(onboardingForm, /prefers-reduced-motion: reduce/);
+// Sentence case, not an uppercase tracked label: that is an eyebrow, not a
+// field label (§3.3).
+assert.match(onboardingForm, /text-transform: none/);
+assert.match(onboarding, /function FieldError/);
+assert.match(onboarding, /aria-pressed=\{form\.archetypeId === entry\.id\}/);
+assert.match(onboarding, /aria-pressed=\{form\.specialtyIds\.includes\(specialty\.id\)\}/);
+assert.match(onboarding, /aria-pressed=\{form\.schedule\.daysOfWeek\.includes\(day\.value\)\}/);
+assert.match(onboarding, /setProblem\(issue\)/);
+assert.match(onboarding, /\[aria-invalid="true"\], \[data-invalid="true"\]/);
+assert.doesNotMatch(onboarding, /Saved · revision/);
+// The panel masthead is a label only; session controls live on the stage once.
+assert.match(onboarding, /<header><span>Workspace setup<\/span><\/header>/);
 assert.match(app, /agent="working" workday="active"/);
 assert.match(app, /agent="blocked" workday="active"/);
 assert.match(app, /stage="Opening this device/);

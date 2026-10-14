@@ -1,0 +1,896 @@
+/* The setup panel's form language -------------------------------------------
+ *
+ * The stage is where the personality lives; this side is the instrument. The
+ * upgrade here is craft rather than decoration: one raised field tier, one
+ * inset tier for facts and tracks, real hover/focus/invalid states, selection
+ * that answers a press, and inline validation next to the field it belongs to.
+ *
+ * Imported after styles.css, so it supersedes the flat control rules there.
+ */
+
+.onboarding-workspace {
+  --ob-field: #fffefb;
+  --ob-line: #dfe3d8;
+  --ob-line-strong: #bfc9ba;
+  --ob-inset: #f0f1e8;
+  --ob-hairline: #eceee5;
+  --ob-ink-soft: #4d564c;
+  --ob-faint: #8b9287;
+  --ob-signal-deep: #5e9d27;
+  --ob-danger: #a8372d;
+  --ob-radius-field: 12px;
+  --ob-radius-block: 14px;
+  --ob-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* One column, optically centred while it fits and scrollable from the top
+     when it does not: a short step should look composed, not abandoned. */
+  grid-template-rows: 68px auto minmax(0, 1fr) auto;
+}
+
+/* The panel's only masthead label now that session controls live on the stage. */
+.onboarding-workspace > header {
+  border-bottom: 1px solid var(--ob-hairline);
+}
+
+.phase-content {
+  display: grid;
+  align-content: safe center;
+  width: min(680px, calc(100% - 56px));
+}
+
+.phase-intro {
+  margin-bottom: 30px;
+}
+
+.phase-intro h2 {
+  margin: 0;
+}
+
+/* --- fields ---------------------------------------------------------------- */
+
+.onboarding-workspace label > span,
+.onboarding-workspace .wide-input > span,
+.ob-field-label {
+  font: 650 11.5px / 1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ob-ink-soft);
+}
+
+.onboarding-workspace input:not([type="checkbox"]):not([type="radio"]),
+.onboarding-workspace select {
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-field);
+  background: var(--ob-field);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(20, 30, 18, 0.035);
+  color: var(--ink);
+  font-size: 13.5px;
+  transition: border-color 0.16s var(--ob-ease), box-shadow 0.16s var(--ob-ease), background 0.16s var(--ob-ease);
+}
+
+@media (hover: hover) {
+  .onboarding-workspace input:not([type="checkbox"]):not([type="radio"]):hover:not([readonly]),
+  .onboarding-workspace select:hover {
+    border-color: var(--ob-line-strong);
+  }
+}
+
+.onboarding-workspace select {
+  appearance: none;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%234d564c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 15px 15px;
+}
+
+/* Two class-level selectors, deliberately: the :not() chain on the base field
+   rule would out-specify the unanswered-field ring below and paint a green ring
+   over a red border. Switches and the consent box win on their own selectors. */
+.onboarding-workspace input:focus-visible,
+.onboarding-workspace select:focus-visible {
+  outline: 2px solid var(--ob-signal-deep);
+  outline-offset: 1px;
+}
+
+/* A value that came from the workspace is a fact, not an empty well waiting for
+   input, so it reads as inset paper instead of a raised field. */
+.onboarding-workspace input[readonly] {
+  border-color: transparent;
+  background: var(--ob-inset);
+  box-shadow: inset 0 1px 3px rgba(20, 30, 18, 0.05);
+  color: var(--ob-ink-soft);
+}
+
+.onboarding-workspace input[aria-invalid="true"],
+.onboarding-workspace select[aria-invalid="true"],
+.onboarding-workspace input[aria-invalid="true"]:focus-visible {
+  border-color: var(--ob-danger);
+  box-shadow: 0 0 0 3px rgba(168, 55, 45, 0.13);
+}
+
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--ob-danger);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.field-error svg {
+  flex: 0 0 auto;
+}
+
+.ob-note {
+  margin: 0;
+  color: var(--ob-faint);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* --- step 1: identity and imported facts ---------------------------------- */
+
+.identity-grid,
+.schedule-grid {
+  gap: 14px;
+}
+
+.identity-grid,
+.schedule-grid,
+.wide-input {
+  align-items: start;
+}
+
+.identity-grid label,
+.schedule-grid label,
+.wide-input {
+  align-content: start;
+}
+
+.ob-provenance {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 26px 0 10px;
+  color: var(--ob-faint);
+  font: 650 10.5px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.context-list {
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-field);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.035);
+  overflow: hidden;
+}
+
+.context-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 50px;
+  padding: 0 16px;
+  border-top: 1px solid var(--ob-hairline);
+}
+
+.context-list > div:first-child {
+  border-top: 0;
+}
+
+.context-list span {
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+}
+
+.context-list strong {
+  font: 650 13px / 1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+  text-align: right;
+}
+
+.provider-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.provider-line span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--ob-line);
+  border-radius: 999px;
+  background: var(--ob-field);
+  color: var(--ob-faint);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.provider-line span:before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c4c9bd;
+}
+
+.provider-line span.ok {
+  border-color: #cfe0b6;
+  background: #f6faee;
+  color: var(--ob-ink-soft);
+}
+
+.provider-line span.ok:before {
+  background: var(--ob-signal-deep);
+}
+
+/* --- selection: archetypes, specialties, days ------------------------------ */
+
+.suggestion-note {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  margin-bottom: 14px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #f4f8ec;
+  color: var(--ob-ink-soft);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.archetype-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(206px, 1fr));
+  gap: 10px;
+}
+
+.archetype-grid button {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 96px;
+  padding: 14px 42px 14px 15px;
+  text-align: left;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-field);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.035);
+  transition: transform 0.16s var(--ob-ease), border-color 0.16s var(--ob-ease), box-shadow 0.16s var(--ob-ease);
+}
+
+.archetype-grid button:hover {
+  transform: translateY(-1px);
+  border-color: var(--ob-line-strong);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.05), 0 10px 24px rgba(20, 30, 18, 0.06);
+}
+
+.archetype-grid button:active {
+  transform: scale(0.985);
+}
+
+.archetype-grid button[aria-pressed="true"] {
+  border-color: #141a14;
+  background: #182018;
+}
+
+.archetype-grid button strong {
+  font: 700 14px / 1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.archetype-grid button small {
+  color: var(--ob-faint);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.archetype-grid button[aria-pressed="true"] strong {
+  color: #f7f7f1;
+}
+
+.archetype-grid button[aria-pressed="true"] small {
+  color: #aeb6a8;
+}
+
+.archetype-grid button svg {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--signal);
+  color: #1d2a12;
+  box-sizing: content-box;
+}
+
+.specialties {
+  margin-top: 22px;
+}
+
+.specialties > span {
+  display: block;
+  margin-bottom: 9px;
+  font: 650 11.5px / 1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ob-ink-soft);
+}
+
+.specialties > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.specialties button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ob-line);
+  border-radius: 999px;
+  background: var(--ob-field);
+  color: var(--ob-ink-soft);
+  font: 650 12px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  transition: transform 0.16s var(--ob-ease), border-color 0.16s var(--ob-ease), background 0.16s var(--ob-ease);
+}
+
+.specialties button:hover {
+  transform: translateY(-1px);
+  border-color: var(--ob-line-strong);
+}
+
+.specialties button:active {
+  transform: scale(0.985);
+}
+
+.specialties button[aria-pressed="true"] {
+  border-color: var(--ob-signal-deep);
+  background: var(--signal);
+  color: #1d2a12;
+}
+
+/* A week read as one instrument: an inset track with seven segments. */
+.day-selector {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-inset);
+  box-shadow: inset 0 1px 3px rgba(20, 30, 18, 0.055);
+}
+
+.day-selector button {
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ob-ink-soft);
+  font: 650 12px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  transition: background 0.16s var(--ob-ease), color 0.16s var(--ob-ease), box-shadow 0.16s var(--ob-ease);
+}
+
+.day-selector button:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.day-selector button[aria-pressed="true"] {
+  background: #182018;
+  color: #f7f7f1;
+  box-shadow: 0 1px 3px rgba(20, 30, 18, 0.2);
+}
+
+/* --- step 3: the work profile board ---------------------------------------- */
+
+.profile-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.profile-board section {
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-field);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.035);
+  overflow: hidden;
+}
+
+.profile-board section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--ob-hairline);
+  background: #fbfbf6;
+}
+
+.profile-board section > header strong {
+  font: 700 12.5px / 1.3 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.profile-board section > header small {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--ob-inset);
+  color: var(--ob-ink-soft);
+  font: 700 10.5px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+.profile-item {
+  grid-template-columns: minmax(0, 1fr) repeat(3, 32px);
+  gap: 2px;
+  min-height: 54px;
+  padding: 9px 10px 9px 16px;
+}
+
+.profile-item > span {
+  display: grid;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.profile-item em {
+  font: 550 10.5px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ob-faint);
+}
+
+.profile-item button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ob-faint);
+  transition: background 0.14s var(--ob-ease), color 0.14s var(--ob-ease);
+}
+
+.profile-item button:hover {
+  background: var(--ob-inset);
+  color: var(--ink);
+  border-color: transparent;
+}
+
+.profile-item button:last-child:hover {
+  background: #fbeae6;
+  color: var(--ob-danger);
+}
+
+.empty-group {
+  margin: 0;
+  justify-self: stretch;
+  padding: 15px 16px;
+  color: var(--ob-faint);
+  font-size: 12px;
+}
+
+.add-profile-item {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.add-profile-item button {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-field);
+  background: var(--ob-inset);
+  color: var(--ob-faint);
+  font: 650 12.5px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  transition: background 0.16s var(--ob-ease), color 0.16s var(--ob-ease), border-color 0.16s var(--ob-ease);
+}
+
+.add-profile-item button:not(:disabled) {
+  border-color: #141a14;
+  background: #182018;
+  color: #f7f7f1;
+}
+
+.add-profile-item button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.restore {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ob-ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restore:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --- step 4: rhythm and switches ------------------------------------------- */
+
+.schedule-grid {
+  margin-top: 18px;
+}
+
+.preference-list {
+  margin-top: 20px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-field);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.035);
+  overflow: hidden;
+}
+
+.guided-toggle {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ob-hairline);
+}
+
+.guided-toggle:first-child {
+  border-top: 0;
+}
+
+.guided-toggle > svg {
+  color: var(--ob-faint);
+}
+
+.guided-toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.guided-toggle strong {
+  font: 650 12.5px / 1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.guided-toggle small {
+  color: var(--ob-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* A real switch. The knob is a background image rather than a pseudo-element
+   on the input, which WebKit refuses to render. */
+.guided-toggle input[type="checkbox"] {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  background-color: #d5dacd;
+  background-image: radial-gradient(circle, #fff 0 8.5px, transparent 9px);
+  background-repeat: no-repeat;
+  background-position: 3px center;
+  background-size: 18px 18px;
+  box-shadow: inset 0 1px 2px rgba(20, 30, 18, 0.15);
+  cursor: pointer;
+  transition: background-color 0.18s var(--ob-ease), background-position 0.18s var(--ob-ease);
+}
+
+.guided-toggle input[type="checkbox"]:checked {
+  background-color: var(--ob-signal-deep);
+  background-position: calc(100% - 3px) center;
+}
+
+.guided-toggle input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--ob-signal-deep);
+  outline-offset: 2px;
+}
+
+.policy-note {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--ob-inset);
+  color: var(--ob-ink-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* --- step 5: the consent gate --------------------------------------------- */
+
+.policy-summary {
+  padding: 18px 20px;
+  border: 1px solid var(--ob-line);
+  border-radius: var(--ob-radius-block);
+  background: var(--ob-field);
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.035);
+}
+
+.policy-summary strong {
+  display: block;
+  margin-bottom: 9px;
+  font: 700 12.5px / 1.4 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+.policy-summary p {
+  margin: 0 0 14px;
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.policy-summary ul {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.policy-summary li {
+  position: relative;
+  padding-left: 20px;
+  color: var(--ob-ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.policy-summary li:before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ob-line-strong);
+}
+
+.consent-box {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid #d5dfc6;
+  border-radius: var(--ob-radius-block);
+  background: #f8fbf1;
+}
+
+.consent-box label {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 13px;
+  align-items: start;
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+  line-height: 1.62;
+}
+
+.consent-box small {
+  color: var(--ob-faint);
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+/* The one decision the step exists for, so it is a real control rather than a
+   default browser box. */
+.consent-box input[type="checkbox"] {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  border: 1px solid var(--ob-line-strong);
+  border-radius: 7px;
+  background: var(--ob-field);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: background-color 0.16s var(--ob-ease), border-color 0.16s var(--ob-ease);
+}
+
+.consent-box input[type="checkbox"]:checked {
+  border-color: var(--ob-signal-deep);
+  background-color: var(--ob-signal-deep);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23f8fbf1' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px 15px;
+}
+
+.consent-box input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--ob-signal-deep);
+  outline-offset: 2px;
+}
+
+.wide-input {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+}
+
+/* --- finish and footer ----------------------------------------------------- */
+
+.connected-state {
+  justify-content: center;
+  min-height: 0;
+}
+
+.connected-state > small {
+  margin-top: 0;
+  font: 700 10px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.14em;
+  color: var(--ob-faint);
+}
+
+.connected-state h2 {
+  max-width: 15ch;
+  margin: 12px 0;
+  font: 600 clamp(26px, 3vw, 36px) / 1.06 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.045em;
+}
+
+.connected-state p {
+  max-width: 44ch;
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+  line-height: 1.62;
+}
+
+.connected-state .primary {
+  margin-top: 22px;
+}
+
+.entering-state .entering-copy {
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+}
+
+.phase-actions {
+  min-height: 80px;
+  height: auto;
+  border-top: 1px solid var(--ob-hairline);
+  background: rgba(251, 250, 246, 0.97);
+}
+
+.phase-actions .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 12px 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ob-ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.16s var(--ob-ease), color 0.16s var(--ob-ease);
+}
+
+.phase-actions .back:not(:disabled):hover {
+  background: var(--ob-inset);
+  color: var(--ink);
+}
+
+.phase-actions .primary {
+  min-width: 148px;
+  min-height: 44px;
+  gap: 8px;
+}
+
+.phase-actions .primary svg {
+  transition: transform 0.18s var(--ob-ease);
+}
+
+.phase-actions .primary:hover svg {
+  transform: translateX(2px);
+}
+
+/* The save state is a quiet dot rather than an internal revision number. */
+.phase-actions > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ob-faint);
+  font: 600 10.5px / 1 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.phase-actions > span:before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cfd4c8;
+}
+
+.phase-actions > span.saved:before {
+  background: var(--ob-signal-deep);
+}
+
+.phase-actions > span.saving:before {
+  background: #c88918;
+}
+
+.phase-actions > span.offline:before,
+.phase-actions > span.conflict:before {
+  background: var(--ob-danger);
+}
+
+@media (max-width: 720px) {
+  .phase-content {
+    width: min(680px, calc(100% - 36px));
+  }
+
+  .add-profile-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .add-profile-item select {
+    grid-column: 1 / -1;
+  }
+
+  .archetype-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archetype-grid button,
+  .specialties button,
+  .add-profile-item button,
+  .phase-actions .primary svg,
+  .guided-toggle input[type="checkbox"] {
+    transition: none;
+  }
+
+  .archetype-grid button:hover,
+  .specialties button:hover,
+  .archetype-grid button:active,
+  .specialties button:active,
+  .add-profile-item button:not(:disabled):hover,
+  .phase-actions .primary:hover svg {
+    transform: none;
+  }
+}
+
+/* Last, so it wins over the plain focus ring above: an unanswered field shows
+   one red ring, not a green one layered over a red border. */
+.onboarding-workspace input[aria-invalid="true"]:focus-visible,
+.onboarding-workspace select[aria-invalid="true"]:focus-visible {
+  outline: 2px solid var(--ob-danger);
+  /* Offset 0, so the ring meets the border and reads as one 3px red edge
+     rather than two rings with a gap between them. */
+  outline-offset: 0;
+  border-color: var(--ob-danger);
+  box-shadow: none;
+}

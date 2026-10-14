@@ -25,6 +25,9 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Setup's form is rebuilt: clearer fields, real switches, and a mistake is now marked beside the field instead of in a notification.
+- Your work-profile step lists each kind of signal on its own instead of squeezing three columns together.
+
 ## 0.4.36 — 2026-10-14
 
 - Otto now welcomes you before setup begins, then walks you through it one step at a time.

@@ -1063,7 +1063,21 @@ product language: personality on the stage, discipline in the panel.
 - **Leaving.** Session controls sit in the same top-right corner on the welcome
   and on the step masthead, so `Sign out` is reachable from the first screen and
   never moves between them. A first run that cannot complete is never a dead
-  end.
+  end. Session controls appear once: the stage owns them, and the step panel's
+  masthead carries only its label.
+- **The controls.** The panel is the instrument to the stage's personality, so
+  its craft is depth and state rather than decoration. One raised field tier
+  (white, 12px radius, a top highlight, a hairline) and one inset tier for the
+  values the workspace supplied, so a supplied fact never looks like an empty
+  field waiting for input. Field labels are sentence case 11–12px: an uppercase
+  tracked label is an eyebrow, not a label. Selection is a real control —
+  archetype cards, specialty chips, and the weekday track carry `aria-pressed`
+  and a selected treatment that reads without colour. Validation is inline: the
+  unanswered control takes `aria-invalid` and a message beside it in a live
+  region, and `Continue` moves focus to it; an answer that is a set rather than
+  a field (the archetype cards, the weekday track) puts the message in the flow
+  and takes focus itself. The save state names the state and never an internal
+  revision number.
 
 ## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
