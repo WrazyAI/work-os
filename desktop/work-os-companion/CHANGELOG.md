@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.33 — 2026-10-14
+
+- The floating mascot's approval card now matches the in-app one: the step arrows and Skip/Approve sit on one compact row instead of stacking.
+
 ## 0.4.32 — 2026-10-14
 
 - The floating mascot's approval card is now as compact as the in-app one — same header, footer, and button sizes.
