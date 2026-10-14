@@ -71,6 +71,7 @@ function createFakeClient(initial: Row[] = []) {
     const query: Record<string, unknown> = {
       select: () => query,
       eq: (column: string, value: unknown) => { filters.push((row) => row[column] === value); return query; },
+      is: (column: string, value: unknown) => { filters.push((row) => (row[column] ?? null) === value); return query; },
       gte: (column: string, value: string) => { filters.push((row) => String(row[column]) >= value); return query; },
       lt: (column: string, value: string) => { filters.push((row) => String(row[column]) < value); return query; },
       upsert: (values: Row | Row[]) => { mode = "upsert"; upsertValues = Array.isArray(values) ? values : [values]; return query; },
@@ -101,10 +102,15 @@ test("fingerprints are reused only at the current algorithm version and well for
 test("classifications are reused only under the exact cache key", () => {
   const key = classificationCacheKey({ promptVersion: 1, model: "gpt-x", rubricHash: "abc", exactHash: exact(1) });
   const classification = { app: "VS Code", category: "work" as const, confidence: 0.9, reason: "editing code" };
-  const hit = record({ classification, classificationKey: key });
+  const hit = record({ fingerprint: fingerprint(1), fingerprintVersion: FRAME_FINGERPRINT_VERSION, classification, classificationKey: key });
   assert.deepEqual(reusableClassification(hit, key), classification);
   assert.equal(reusableClassification(hit, `${key}!`), null, "a different key must not reuse the classification");
   assert.equal(reusableClassification(record(), key), null);
+  assert.equal(
+    reusableClassification(record({ classification, classificationKey: key }), key),
+    null,
+    "a classification without a content hash is never reused",
+  );
 });
 
 test("the classification key changes with prompt version, model, rubric, and frame content", () => {
@@ -176,13 +182,30 @@ test("load filters to the employee and capture window", async () => {
   assert.deepEqual([...loaded.keys()], ["shot-1"]);
 });
 
+test("writers reject a frame with no capture time and pruning removes undated rows", async () => {
+  const fake = createFakeClient();
+  const store = createFrameAnalysisStore(fake.client);
+  await assert.rejects(store.save([record({ capturedAt: "" })]), /no capture time/);
+  await assert.rejects(
+    saveFrameFingerprint(fake.client, {
+      employeeId: "employee-a",
+      screenshotId: "shot-1",
+      capturedAt: "",
+      fingerprint: fingerprint(1),
+    }),
+    /no capture time/,
+  );
+  assert.equal(fake.rows.length, 0, "nothing is written without a capture time");
+});
+
 test("pruning removes only rows older than the retention cutoff", async () => {
   const fake = createFakeClient([
     { employee_id: "employee-a", screenshot_id: "old", captured_at: "2026-07-01T10:00:00.000Z" },
     { employee_id: "employee-a", screenshot_id: "recent", captured_at: "2026-07-15T10:00:00.000Z" },
+    { employee_id: "employee-a", screenshot_id: "undated", captured_at: null },
   ]);
   const removed = await pruneFrameAnalyses(fake.client, "2026-07-10T00:00:00.000Z");
-  assert.equal(removed, 1);
+  assert.equal(removed, 2, "the stale row and the undated row are both removed");
   assert.deepEqual(fake.rows.map((row) => row.screenshot_id), ["recent"]);
 });
 

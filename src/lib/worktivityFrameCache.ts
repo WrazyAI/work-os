@@ -95,8 +95,11 @@ export function reusableFingerprint(record: FrameAnalysisRecord | null | undefin
   return fingerprint;
 }
 
-/** A cached classification usable under exactly this cache key, or null. */
+/** A cached classification usable under exactly this cache key, or null. A
+ * record without a valid content hash is never reused: the classification must
+ * provably belong to a fingerprinted frame. */
 export function reusableClassification(record: FrameAnalysisRecord | null | undefined, key: string): FrameClassification | null {
+  if (!/^[a-f0-9]{64}$/.test(record?.fingerprint?.exactHash ?? "")) return null;
   const classification = record?.classification;
   if (!classification || record?.classificationKey !== key) return null;
   if (!classification.app || !VISION_CATEGORIES.includes(classification.category)) return null;
@@ -171,11 +174,13 @@ export function createFrameAnalysisStore(client: FrameCacheClient = createAdminC
 
     async save(records) {
       if (!records.length) return 0;
+      const undated = records.find((record) => !record.capturedAt);
+      if (undated) throw new Error(`frame analysis for ${undated.screenshotId} has no capture time`);
       const now = new Date().toISOString();
       const rows = records.map((record) => ({
         employee_id: record.employeeId,
         screenshot_id: record.screenshotId,
-        captured_at: record.capturedAt || null,
+        captured_at: record.capturedAt,
         local_date: record.localDate,
         app: record.app,
         url: record.url,
@@ -202,10 +207,11 @@ export function createFrameAnalysisStore(client: FrameCacheClient = createAdminC
  * touches the classification columns. */
 export async function saveFrameFingerprint(client: FrameCacheClient, write: FrameFingerprintWrite): Promise<void> {
   if (!write.employeeId || !write.screenshotId) throw new Error("frame fingerprint needs an employee and screenshot id");
+  if (!write.capturedAt) throw new Error(`frame fingerprint for ${write.screenshotId} has no capture time`);
   const { error } = await client.from("worktivity_frame_analyses").upsert({
     employee_id: write.employeeId,
     screenshot_id: write.screenshotId,
-    captured_at: write.capturedAt || null,
+    captured_at: write.capturedAt,
     local_date: write.localDate ?? null,
     app: write.app ?? null,
     url: write.url ?? null,
@@ -219,11 +225,17 @@ export async function saveFrameFingerprint(client: FrameCacheClient, write: Fram
 }
 
 /** Retention: provider screenshots only exist for about a month, so older cached
- * analyses can never serve another audit. Returns the number of rows removed. */
+ * analyses can never serve another audit. Rows that somehow lack a capture time
+ * can never satisfy the cutoff filter, so they are removed here too. Returns the
+ * number of rows removed. */
 export async function pruneFrameAnalyses(client: FrameCacheClient, olderThanIso: string): Promise<number> {
-  const { data, error } = await client.from("worktivity_frame_analyses")
+  const stale = await client.from("worktivity_frame_analyses")
     .delete()
     .lt("captured_at", olderThanIso);
-  if (error) throw new Error(`prune frame analyses: ${error.message}`);
-  return Array.isArray(data) ? data.length : 0;
+  if (stale.error) throw new Error(`prune frame analyses: ${stale.error.message}`);
+  const undated = await client.from("worktivity_frame_analyses")
+    .delete()
+    .is("captured_at", null);
+  if (undated.error) throw new Error(`prune undated frame analyses: ${undated.error.message}`);
+  return (Array.isArray(stale.data) ? stale.data.length : 0) + (Array.isArray(undated.data) ? undated.data.length : 0);
 }
