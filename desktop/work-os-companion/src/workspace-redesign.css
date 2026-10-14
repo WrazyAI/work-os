@@ -4925,7 +4925,7 @@ button:not(:disabled):active {
 .task-records .workspace-task > .task-check { grid-column: 1; align-self: start; margin-top: 1px; }
 .task-records .workspace-task > .task-row-body { grid-column: 2; }
 .task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; align-self: start; margin-top: 1px; }
-.task-records .workspace-task > .task-due { grid-column: 4; justify-self: end; text-align: right; align-self: start; margin-top: 1px; }
+.task-records .workspace-task > .task-due { grid-column: 4; display: inline-flex; align-items: center; justify-self: end; min-height: 22px; text-align: right; align-self: start; margin-top: 1px; }
 .task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; align-self: start; margin-top: 1px; }
 .task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; align-self: start; margin-top: 1px; }
 

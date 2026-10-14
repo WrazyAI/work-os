@@ -387,6 +387,8 @@ describe("operational visualizations", () => {
     // Completion aligns with the title; the right cluster stays centered.
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-check { grid-column: 1; align-self: start;");
     expect(workspaceStyles).toContain("align-self: start; margin-top: 1px; }");
+    // The due date centers against its status pill (both 22px boxes).
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .task-due { grid-column: 4; display: inline-flex; align-items: center;");
     // One frame: the panel is the card, and in-row chips match the meta line.
     expect(workspaceStyles).toMatch(/\.task-records\.evidence-list \{[\s\S]*?border: 0;/);
     expect(workspaceStyles).toContain(".task-row-line.secondary-line .task-assignee-tags > span");
