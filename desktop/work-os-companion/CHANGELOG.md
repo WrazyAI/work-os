@@ -27,6 +27,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## 0.4.30 — 2026-10-14
 
+- The Insights page now leads with your key numbers and how they changed, with cleaner charts for plan reliability, work mix, and what needs attention.
 - Approval cards keep their step controls and Skip/Approve decisions on one clean row, with the batch progress along the card's top edge.
 - The workday page no longer shows a Nifty sync label in the header.
 
