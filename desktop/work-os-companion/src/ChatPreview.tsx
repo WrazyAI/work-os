@@ -224,10 +224,23 @@ function InAppSection() {
   const empty = params.has("empty");
   const activityDate = focusParam ? "2026-09-28" : null;
   // Seed before the stream mounts so its first render reads the fixture instead
-  // of racing a real (unauthenticated) fetch into the error state.
+  // of racing a real (unauthenticated) fetch into the error state. The stream
+  // reads an infinite query, so the fixture carries its paged shape with one
+  // older page still available, making the Load more edge reviewable.
   const fixtureClient = useMemo(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    if (activityDate) client.setQueryData(workOsKeys.activityIntervals(activityDate), { date: activityDate, intervals: PREVIEW_INTERVALS }, { updatedAt: Date.now() });
+    if (activityDate) {
+      const last = PREVIEW_INTERVALS[PREVIEW_INTERVALS.length - 1];
+      client.setQueryData(workOsKeys.activityIntervals(activityDate), {
+        pages: [{
+          date: activityDate,
+          intervals: PREVIEW_INTERVALS,
+          nextCursor: last ? `${last.windowEnd}|${last.id}` : null,
+          total: PREVIEW_INTERVALS.length + 3,
+        }],
+        pageParams: [null],
+      }, { updatedAt: Date.now() });
+    }
     return client;
   }, [activityDate]);
   const [input, setInput] = useState("");

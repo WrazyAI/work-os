@@ -287,15 +287,17 @@ describe("splitActivityTime", () => {
 });
 
 describe("ActivityIntervalList", () => {
+  const seededPages = (intervals: ActivityInterval[], nextCursor: string | null = null, total = intervals.length) => ({
+    pages: [{ date: "2026-09-28", intervals, nextCursor, total }],
+    pageParams: [null],
+  });
+
   it("renders recaps newest first with an honest empty state", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), {
-      date: "2026-09-28",
-      intervals: [
-        { ...baseInterval, id: "newest", label: "3–4 PM" },
-        { ...baseInterval, id: "oldest", label: "2–3 PM", reviewStatus: "confirmed" as const },
-      ],
-    });
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), seededPages([
+      { ...baseInterval, id: "newest", label: "3–4 PM" },
+      { ...baseInterval, id: "oldest", label: "2–3 PM", reviewStatus: "confirmed" as const },
+    ]));
     const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
       createElement(ActivityIntervalList, {
         date: "2026-09-28",
@@ -309,7 +311,7 @@ describe("ActivityIntervalList", () => {
     expect(markup.indexOf("3–4 PM")).toBeLessThan(markup.indexOf("2–3 PM"));
     expect(markup).toContain("Confirmed");
 
-    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), { date: "2026-09-28", intervals: [] });
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), seededPages([]));
     const empty = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
       createElement(ActivityIntervalList, {
         date: "2026-09-28",
@@ -322,9 +324,44 @@ describe("ActivityIntervalList", () => {
     expect(empty).toContain("No activity recaps yet.");
   });
 
+  it("pages the stream with an explicit Load more edge", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), seededPages(
+      [baseInterval],
+      "2026-09-28T15:17:00.000Z|interval-1",
+      34,
+    ));
+    const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+      createElement(ActivityIntervalList, {
+        date: "2026-09-28",
+        enabled: true,
+        timezone: "UTC",
+        onDecide: async () => undefined,
+        decidingId: null,
+      }),
+    ));
+    // The badge states the complete range; the open edge states the window.
+    expect(markup).toContain(">34<");
+    expect(markup).toContain("Showing 1 of 34");
+    expect(markup).toContain("Load more");
+
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), seededPages([baseInterval]));
+    const complete = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+      createElement(ActivityIntervalList, {
+        date: "2026-09-28",
+        enabled: true,
+        timezone: "UTC",
+        onDecide: async () => undefined,
+        decidingId: null,
+      }),
+    ));
+    expect(complete).not.toContain("Load more");
+    expect(complete).not.toContain("Showing");
+  });
+
   it("shows the View in app action only when the surface provides a handler", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), { date: "2026-09-28", intervals: [baseInterval] });
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), seededPages([baseInterval]));
     const withHandler = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
       createElement(ActivityIntervalList, {
         date: "2026-09-28",

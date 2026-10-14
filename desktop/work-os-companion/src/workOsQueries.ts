@@ -271,13 +271,28 @@ export function prepareEodScreenshots(date: string, signal?: AbortSignal) {
 
 /** The employee's Activity Interval Review stream, newest interval first.
  * Bounded to the trailing 30 days so the Tasks tab can scroll history. */
+/** One recap page (design §9.2): tall cards, so the stream asks for a small
+ * contiguous page and appends the next one only on the explicit control. */
+export const ACTIVITY_INTERVALS_PAGE_SIZE = 12;
+
+/** The recap page URL: the bounded first page, or the next page behind its
+ * keyset cursor. */
+export function activityIntervalsUrl(date: string, cursor: string | null): string {
+  return `/api/work-os/me/activity-intervals?date=${encodeURIComponent(date)}&days=30&limit=${ACTIVITY_INTERVALS_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+}
+
 export function useActivityIntervalsQuery(options: { enabled: boolean; date: string | null; pollMs?: number }) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: workOsKeys.activityIntervals(options.date ?? "none"),
     enabled: options.enabled && !!options.date,
     staleTime: ACTIVITY_INTERVALS_STALE_MS,
     refetchInterval: options.pollMs ?? false,
-    queryFn: () => apiRequest<ActivityIntervalsData>(`/api/work-os/me/activity-intervals?date=${encodeURIComponent(options.date!)}&days=30`),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage: ActivityIntervalsData) => lastPage.nextCursor ?? undefined,
+    queryFn: ({ pageParam, signal }) => apiRequest<ActivityIntervalsData>(
+      activityIntervalsUrl(options.date!, pageParam),
+      { signal },
+    ),
   });
 }
 

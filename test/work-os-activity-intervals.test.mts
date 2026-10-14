@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   activityIntervalCardView,
   activityIntervalConfig,
+  activityIntervalCursor,
   activityIntervalSlotKey,
   formatIntervalRange,
   intervalMemoryQuery,
@@ -12,6 +13,7 @@ import {
   intervalProvenanceLabel,
   intervalSourceHash,
   intervalStructure,
+  parseActivityIntervalCursor,
   parseIntervalSynthesis,
   resolveActivityIntervalWindow,
   selectIntervalEvidence,
@@ -38,6 +40,20 @@ test("a prompt slot has one deterministic identity", () => {
   assert.equal(activityIntervalSlotKey("session-1", "2026-09-28T15:19:29.446Z"), key);
   assert.notEqual(activityIntervalSlotKey("session-2", "2026-09-28T15:19:29.446Z"), key);
   assert.notEqual(activityIntervalSlotKey("session-1", "2026-09-28T16:19:29.446Z"), key);
+});
+
+test("recap page cursors round-trip and reject malformed values", () => {
+  const cursor = activityIntervalCursor({ window_end: "2026-09-28T15:17:00.000Z", id: "interval-1" });
+  assert.equal(cursor, "2026-09-28T15:17:00.000Z|interval-1");
+  assert.deepEqual(parseActivityIntervalCursor(cursor), { windowEnd: "2026-09-28T15:17:00.000Z", id: "interval-1" });
+  // A Date value from the driver normalizes to the same instant.
+  assert.equal(activityIntervalCursor({ window_end: new Date("2026-09-28T15:17:00.000Z"), id: "interval-1" }), cursor);
+  assert.equal(parseActivityIntervalCursor(null), null);
+  assert.equal(parseActivityIntervalCursor(undefined), null);
+  assert.equal(parseActivityIntervalCursor(""), null);
+  assert.equal(parseActivityIntervalCursor("no-separator"), null);
+  assert.equal(parseActivityIntervalCursor("not-a-date|interval-1"), null);
+  assert.equal(parseActivityIntervalCursor("2026-09-28T15:17:00.000Z|"), null);
 });
 
 test("interval window starts at the latest boundary and is capped", () => {

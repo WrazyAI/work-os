@@ -1048,27 +1048,65 @@ export async function activityIntervalFullView(row: ActivityIntervalRecord): Pro
 }
 
 /** Employee's recent activity stream, newest interval first. Raw image bytes
- * and storage paths never appear in the payload. */
+ * and storage paths never appear in the payload.
+ *
+ * The stream is paged on demand (design §9.2 / §6.4): the caller passes its
+ * page `limit` and the `cursor` from the previous page, and receives the
+ * contiguous older page plus the complete range count. A keyset cursor
+ * (`window_end|id`) keeps pages contiguous when a newer recap arrives between
+ * requests; without a `limit` the legacy window (80) is returned unchanged. */
 export async function listActivityIntervals(
   access: WorkOsAccess,
-  options: { date?: string; days?: number } = {},
-): Promise<{ date: string; intervals: ActivityIntervalView[] }> {
+  options: { date?: string; days?: number; limit?: number; cursor?: string | null } = {},
+): Promise<{ date: string; intervals: ActivityIntervalView[]; nextCursor: string | null; total: number }> {
   if (!access.personId) throw new Error("Work OS person mapping required.");
   const timezone = await personTimezone(access.organizationId, access.personId);
   const date = options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date) ? options.date : localDateForTimezone(new Date(), timezone);
   const days = Math.max(1, Math.min(30, Math.floor(options.days ?? 1)));
+  const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Math.floor(options.limit!))) : 80;
   const from = new Date(`${date}T12:00:00Z`);
   from.setUTCDate(from.getUTCDate() - (days - 1));
   const fromDate = from.toISOString().slice(0, 10);
-  const rows = await db().from("work_activity_intervals").select("*")
+  const cursor = parseActivityIntervalCursor(options.cursor);
+  let page = db().from("work_activity_intervals").select("*")
     .eq("organization_id", access.organizationId).eq("person_id", access.personId)
     .gte("local_date", fromDate).lte("local_date", date)
-    .order("window_end", { ascending: false }).limit(80);
+    .order("window_end", { ascending: false }).order("id", { ascending: false }).limit(limit + 1);
+  if (cursor) page = page.or(`window_end.lt.${cursor.windowEnd},and(window_end.eq.${cursor.windowEnd},id.lt.${cursor.id})`);
+  const [rows, counted] = await Promise.all([
+    page,
+    db().from("work_activity_intervals").select("*", { count: "exact", head: true })
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId)
+      .gte("local_date", fromDate).lte("local_date", date),
+  ]);
   if (rows.error) throw new Error(`list activity intervals: ${rows.error.message}`);
-  const intervals = (rows.data ?? []) as ActivityIntervalRecord[];
-  if (!intervals.length) return { date, intervals: [] };
-  const evidenceByInterval = await loadIntervalEvidence(intervals.map((row) => String(row.id)));
-  return { date, intervals: intervals.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])) };
+  if (counted.error) throw new Error(`count activity intervals: ${counted.error.message}`);
+  const fetched = (rows.data ?? []) as ActivityIntervalRecord[];
+  const hasMore = fetched.length > limit;
+  const records = hasMore ? fetched.slice(0, limit) : fetched;
+  const total = Number.isFinite(counted.count) ? Number(counted.count) : records.length;
+  const last = records[records.length - 1];
+  const nextCursor = hasMore && last ? activityIntervalCursor(last) : null;
+  if (!records.length) return { date, intervals: [], nextCursor: null, total };
+  const evidenceByInterval = await loadIntervalEvidence(records.map((row) => String(row.id)));
+  return { date, intervals: records.map((row) => intervalView(row, evidenceByInterval.get(String(row.id)) ?? [])), nextCursor, total };
+}
+
+/** Stable keyset cursor for the recap stream: the last row's window end and id. */
+export function activityIntervalCursor(row: { window_end?: unknown; id?: unknown }): string {
+  return `${isoInstant(row.window_end) ?? ""}|${String(row.id ?? "")}`;
+}
+
+/** Reads a cursor produced by `activityIntervalCursor`; anything malformed is
+ * ignored so a stale or hand-edited value can only return the first page. */
+export function parseActivityIntervalCursor(raw: string | null | undefined): { windowEnd: string; id: string } | null {
+  if (typeof raw !== "string") return null;
+  const separator = raw.lastIndexOf("|");
+  if (separator <= 0) return null;
+  const windowEnd = isoInstant(raw.slice(0, separator));
+  const id = raw.slice(separator + 1);
+  if (!windowEnd || !id || Number.isNaN(Date.parse(windowEnd))) return null;
+  return { windowEnd, id };
 }
 
 /** Loads the evidence disclosure rows (and raw-image retention state) for a set

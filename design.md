@@ -604,6 +604,17 @@ separate Screenshots and GitHub activity sections) — plus confirm/amend
 actions, so the day's goal and its interval check-ins read as one record. The
 stream is separated by a hairline. Each sheet tab scrolls as its own region.
 
+The goal sits in a collapsible section: a `Today's focus` eyebrow with one
+far-right disclosure. Collapsed, the section keeps the same one-line account
+the card would give — the goal text, or `No goal set for today.` — so the
+stream beneath it is reachable without scrolling past a tall editor the
+employee is not using. The choice is remembered on the device (best-effort
+local storage, default expanded) and only the employee's own disclosure
+changes it; applying a goal never re-collapses the section. The recap stream
+below pages on demand: a small contiguous page with the same explicit
+`Load more` edge and `Showing N of M` line as the floating Tasks tab, so the
+Focus tab never loads the whole 30-day history to show the day's recaps.
+
 ### 7.3 Floating Otto chat
 
 The floating companion uses the same white window border/header treatment and
@@ -616,7 +627,10 @@ The thread owns scrolling, but its bottom dissolve belongs to the fixed
 composer edge, not the scroll content: keep the thread fully opaque, disable
 scroll anchoring while an inline task card expands, and place the short fade
 outside the scroller at the composer’s top border. Task-card selection and
-confirmation actions remain clear above that edge.
+confirmation actions remain clear above that edge. The Tasks view is a reading
+list, not a thread: entering it starts at the top, and nothing that arrives —
+a recap decision, a new recap, or an appended page — moves the reader. The
+chat tab alone follows the thread scroll contract.
 
 Both chat surfaces use the configured mascot head crop through
 src/chat/MascotMark.tsx. Never hardcode mascot art, the mascot name, or a
@@ -1183,6 +1197,22 @@ beneath the daily goal. Expired images say
 so honestly without deleting the recap; there are no charts, scores, or hours
 totals.
 
+The Tasks tab leads with the day's open work, then the stream. The `Open tasks`
+card sits at the very top — the overdue/pending list is the first thing the
+employee sees, not something below a month of recaps — and it collapses whole
+from its far-right disclosure: collapsed it keeps a one-line account of the
+open work (`N pending · M overdue`, or the current selection), and the choice
+is remembered on the device (best-effort local storage, default expanded).
+
+The stream itself pages on demand rather than loading the range up front. One
+request returns at most twelve recaps (the cards are tall; a page is a
+screenful or two), and the open edge carries one explicit `Load more` control
+with a `Showing N of M` line while more history exists; appended pages stay
+mounted and the count chip states the complete range. This follows the Tasks
+list's deliberate exception to the streaming-list contract (§9.2 / §6.4):
+paging is never automatic, so opening the tab, approving a recap, or appending
+a page never yanks the reader's position.
+
 The chat bubble for a due recap is a short conversational card: the interval
 label (the window itself already says it covers the last hour, so no lead-in
 line repeats it), the headline and the evidence-bounded detail (tall enough to
@@ -1243,6 +1273,10 @@ A list that can grow in either direction loads contiguous pages on demand.
 - The count states what is rendered. Use `Showing N of M` whenever more history
   exists.
 - Counts are announced through one polite status region, never row by row.
+- The Tasks list (§6.4) and the chat surfaces' recap streams (§9.1) are the
+  deliberate exceptions: they page at their own sizes (50 tasks, 12 recaps)
+  behind one explicit load control and never a sentinel, so appending a page
+  can never move the reader's position.
 
 ### 9.3 The local vault gate
 

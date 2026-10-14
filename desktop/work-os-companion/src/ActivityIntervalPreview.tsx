@@ -124,18 +124,32 @@ const fixtures: ActivityInterval[] = [
 ];
 
 export default function ActivityIntervalPreview() {
+  const params = new URLSearchParams(window.location.search);
+  // ?more seeds an older page still available so the open edge (count line +
+  // Load more) renders for review; clicking it exercises the real fetch path.
+  const moreAvailable = params.has("more");
   const [intervals, setIntervals] = useState(fixtures);
   const [editRequested, setEditRequested] = useState(false);
   // Seed the cache before the list mounts: a query with no data would start a
-  // real fetch and its rejection could override the fixture.
+  // real fetch and its rejection could override the fixture. The stream reads
+  // an infinite query, so the fixture carries its paged shape.
+  const intervalPages = (current: ActivityInterval[]) => ({
+    pages: [{
+      date: DATE,
+      intervals: current,
+      nextCursor: moreAvailable ? `${current.at(-1)?.windowEnd ?? ""}|${current.at(-1)?.id ?? ""}` : null,
+      total: moreAvailable ? 34 : current.length,
+    }],
+    pageParams: [null],
+  });
   const client = useMemo(() => {
     const seeded = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    seeded.setQueryData(workOsKeys.activityIntervals(DATE), { date: DATE, intervals: fixtures });
+    seeded.setQueryData(workOsKeys.activityIntervals(DATE), intervalPages(fixtures));
     return seeded;
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- ?more is read once per mount
   useEffect(() => {
-    client.setQueryData(workOsKeys.activityIntervals(DATE), { date: DATE, intervals });
-  }, [client, intervals]);
+    client.setQueryData(workOsKeys.activityIntervals(DATE), intervalPages(intervals));
+  }, [client, intervals]); // eslint-disable-line react-hooks/exhaustive-deps -- ?more is read once per mount
 
   const decide = async (id: string, action: "confirm" | "amend", feedback?: string) => {
     setIntervals((current) => current.map((interval) => interval.id === id

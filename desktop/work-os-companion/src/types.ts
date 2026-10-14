@@ -439,6 +439,11 @@ export interface ActivityInterval {
 export interface ActivityIntervalsData {
   date: string;
   intervals: ActivityInterval[];
+  /** Keyset cursor for the next (older) page; null once the range is complete.
+   * Older servers omit it, and the stream then renders one unpaged window. */
+  nextCursor?: string | null;
+  /** Complete count for the range; older servers omit it. */
+  total?: number;
 }
 
 /** Card shape returned by the activity-interval routes. The prompt turn and

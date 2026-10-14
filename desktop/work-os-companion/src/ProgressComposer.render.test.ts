@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ProgressComposer } from "./App";
 import { workOsKeys } from "./queryClient";
 import type { ProposedOperation, ToolCallResult } from "./interpretation";
@@ -219,7 +219,10 @@ describe("ProgressComposer focus panel goal card", () => {
       evidence: [],
     };
     const queryClient = new QueryClient();
-    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), { date: "2026-09-28", intervals: [interval] });
+    queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), {
+      pages: [{ date: "2026-09-28", intervals: [interval], nextCursor: null, total: 1 }],
+      pageParams: [null],
+    });
     const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
       createElement(ProgressComposer, {
         ...focusBase,
@@ -232,5 +235,62 @@ describe("ProgressComposer focus panel goal card", () => {
     expect(markup).toContain("Recent activity");
     expect(markup).toContain("Implementation and verification in the Work OS codebase");
     expect(markup.indexOf("Ship the focus card.")).toBeLessThan(markup.indexOf("Recent activity"));
+    // The goal sits in a collapsible section whose disclosure is a real control.
+    expect(markup).toContain("focus-goal-disclosure");
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('aria-label="Hide today’s focus"');
+    expect(markup).toContain("focus-goal-body");
+  });
+
+  it("collapses the goal section to its one-line preview from the stored choice", () => {
+    const values = new Map([["work-os.focus.goal-collapsed.v1", "true"]]);
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value); },
+      },
+    });
+    try {
+      const interval: ActivityInterval = {
+        id: "interval-collapsed",
+        windowStart: "2026-09-28T14:17:00.000Z",
+        windowEnd: "2026-09-28T15:17:00.000Z",
+        label: "2:17–3:17 PM",
+        promptKind: "hourly_fallback",
+        generationStatus: "ready",
+        reviewStatus: "inferred",
+        headline: "Implementation and verification in the Work OS codebase",
+        detail: "Worked in VS Code with terminal verification.",
+        employeeFeedback: null,
+        failureReason: null,
+        generatedAt: "2026-09-28T15:18:00.000Z",
+        reviewedAt: null,
+        evidenceExpired: false,
+        evidenceCount: 0,
+        evidence: [],
+      };
+      const queryClient = new QueryClient();
+      queryClient.setQueryData(workOsKeys.activityIntervals("2026-09-28"), {
+        pages: [{ date: "2026-09-28", intervals: [interval], nextCursor: null, total: 1 }],
+        pageParams: [null],
+      });
+      const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client: queryClient },
+        createElement(ProgressComposer, {
+          ...focusBase,
+          goal: "Ship the focus card.",
+          activityDate: "2026-09-28",
+          activityTimezone: "UTC",
+        }),
+      ));
+      expect(markup).toContain("focus-goal is-collapsed");
+      expect(markup).toContain("focus-goal-preview");
+      expect(markup).toContain("Ship the focus card.");
+      expect(markup).toContain('aria-expanded="false"');
+      expect(markup).toContain('aria-label="Show today’s focus"');
+      // The stream stays reachable beneath the collapsed goal.
+      expect(markup).toContain("Recent activity");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

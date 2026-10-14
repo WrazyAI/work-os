@@ -2331,6 +2331,67 @@ body {
   padding: 16px 18px 18px;
 }
 
+/* The Focus tab's goal section collapses to its one-line state (design
+   §7.2.1): the recap stream beneath it stays reachable without scrolling past
+   a tall editor the employee is not using. */
+.focus-goal {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.focus-goal.is-collapsed {
+  gap: 6px;
+}
+
+.focus-goal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.focus-goal-eyebrow {
+  color: #557d35;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.focus-goal-disclosure {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.focus-goal-disclosure:hover {
+  background: var(--hover, rgba(24, 32, 24, 0.055));
+  color: var(--ink);
+}
+
+.focus-goal-disclosure:focus-visible {
+  outline: 2px solid var(--signal-strong, #7cc936);
+  outline-offset: 1px;
+}
+
+.focus-goal-preview {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .goal-editor-field {
   display: grid;
   min-width: 0;

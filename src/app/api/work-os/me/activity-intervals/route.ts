@@ -21,7 +21,9 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     const params = new URL(req.url).searchParams;
     const date = params.get("date") ?? undefined;
     const days = params.get("days") ? Number(params.get("days")) : undefined;
-    const result = await listActivityIntervals(auth.access, { date, days });
+    const limit = params.get("limit") ? Number(params.get("limit")) : undefined;
+    const cursor = params.get("cursor");
+    const result = await listActivityIntervals(auth.access, { date, days, limit, cursor });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return jsonError(error);

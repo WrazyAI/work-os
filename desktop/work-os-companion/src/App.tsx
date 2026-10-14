@@ -2,6 +2,7 @@ import { hasPendingMascotApproval } from "./mascotApproval";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { lateReasonRequired, PROLONGED_ABSENCE_MINUTES } from "./lateStart";
+import { readStoredFlag, writeStoredFlag } from "./storedFlags";
 import { emit, listen } from "./tauriEvents";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
@@ -14,7 +15,7 @@ import { changelogBulletsFor, changelogHistory, readAnnouncedVersion, shouldAnno
 import { WhatsNewModal } from "./WhatsNewModal";
 import CHANGELOG_RAW from "../CHANGELOG.md?raw";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
+import { Activity, AlertTriangle, Archive, ArrowLeft, BriefcaseBusiness, Bug, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CirclePause, CirclePlay, Clock3, FileCheck2, Gauge, LayoutDashboard, ListChecks, LogIn, LogOut, MessageSquareText, MoreHorizontal, Pause, Pencil, PlugZap, Plus, RefreshCw, RotateCcw, Search, Settings, ShieldCheck, Sparkles, SquarePen, Target, Trash2, X } from "lucide-react";
 import { ApiRequestError, apiRequest, discardReadyInterpretation, flushQueue, isQueuedResult, readyInterpretations, sendOrQueue, setDebugSession, setSyncBypass, updateTaskCompletion } from "./api";
 import { beginAuthentication, errorMessage, listenForAuthentication } from "./auth";
 import { diagnostics, exportDiagnostics, openLogsDir } from "./diagnostics";
@@ -199,6 +200,8 @@ function proposalFilingTransport() {
 /** How often the review-notification sources (memory, activity intervals) are
  * re-read while the app is open. Matches the day poll cadence. */
 const NOTIFICATION_POLL_MS = 60_000;
+/** Device-local memory for the Focus tab's goal section (§7.2.1). */
+const GOAL_COLLAPSE_KEY = "work-os.focus.goal-collapsed.v1";
 
 /** The seen registries are best-effort local memory: losing them only means a
  * reminder may be announced once more, never that one is lost. */
@@ -873,7 +876,9 @@ export default function App() {
   // recap waiting to be confirmed. Both poll only while the app is open.
   const memoryQuery = useMemoryQuery({ enabled: signedIn && !syncBypass, pollMs: NOTIFICATION_POLL_MS });
   const notificationIntervalsQuery = useActivityIntervalsQuery({ enabled: signedIn && !syncBypass, date: visibleDay?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
-  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.intervals), [notificationIntervalsQuery.data]);
+  // The bell only needs the newest ready recap, which always lives on the
+  // first page; later pages stay unloaded until the stream asks for them.
+  const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.pages[0]?.intervals), [notificationIntervalsQuery.data]);
   const recapSummary = useMemo(() => readyRecapInterval ? { id: readyRecapInterval.id, label: readyRecapInterval.label } : null, [readyRecapInterval]);
   const memoryCandidateCount = useMemo(() => memoryQuery.data ? memoryCandidateIds(memoryQuery.data.facts).length : 0, [memoryQuery.data]);
   const reportDayQuery = useReportDayQuery({ date: eodDate, currentDate: day?.shiftDate ?? "" });
@@ -4281,6 +4286,12 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
   // no goal exists yet or the employee chose to edit. Nothing saves until Apply.
   const goalPanelOpen = open && panel === "goal";
   const [goalEditing, setGoalEditing] = useState(false);
+  const [goalCollapsed, setGoalCollapsed] = useState(() => readStoredFlag(GOAL_COLLAPSE_KEY));
+  const toggleGoalCollapsed = () => setGoalCollapsed((current) => {
+    const next = !current;
+    writeStoredFlag(GOAL_COLLAPSE_KEY, next);
+    return next;
+  });
   const [goalDraft, setGoalDraft] = useState(goal);
   const [goalFromSuggestion, setGoalFromSuggestion] = useState(false);
   const [pendingGoal, setPendingGoal] = useState<string | null>(null);
@@ -4368,14 +4379,25 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
     <section className={`progress-flyout ${panel === "goal" ? "goal-flyout" : agendaMode ? "agenda-flyout" : ""}`} role="dialog" aria-label={panel === "goal" ? "Daily focus editor" : "Daily update composer"}>
       <header className="workos-chat-head"><span className="conversation-pane-title">{MASCOT.name}</span><ChatTabs tabs={[{ id: "update", label: agendaMode ? "Chat" : "Update" }, { id: "goal", label: "Focus" }]} active={panel} onSelect={(id) => { if (id === "goal") onOpenGoal(); else onOpen(); }} ariaLabel="Composer view" /><span className="progress-header-actions">{panel !== "goal" && <button aria-label="Start a new chat" title="Start a new chat" onClick={onClearChat}><SquarePen size={15} /></button>}<button aria-label="Close composer" onClick={onClose}><X size={16} /></button></span></header>
       {panel === "goal" ? <p className="workos-chat-sub">{`${goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted suggestion" : goal ? "Written by you" : "Optional context"} · ${saveLabel}`}{onRetryGoalSave && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" aria-label="Retry saving the goal" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} onClick={onRetryGoalSave}><RefreshCw size={12} /></button> : null}</p> : required ? <p className="workos-chat-sub">An update is due</p> : null}
-        {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">{cardGoal && !goalEditing ? <div className="goal-card">
+        {panel === "goal" ? <div className="conversation-scroll-region"><div className="goal-composer-panel">
+          <section className={`focus-goal${goalCollapsed ? " is-collapsed" : ""}`} aria-labelledby="focus-goal-heading">
+            <header className="focus-goal-head">
+              <span className="focus-goal-eyebrow" id="focus-goal-heading">Today’s focus</span>
+              <button type="button" className="focus-goal-disclosure" aria-expanded={!goalCollapsed} aria-controls="focus-goal-body" aria-label={goalCollapsed ? "Show today’s focus" : "Hide today’s focus"} title={goalCollapsed ? "Show today’s focus" : "Hide today’s focus"} onClick={toggleGoalCollapsed}>
+                <ChevronDown size={16} aria-hidden="true" className={`chat-task-chevron${goalCollapsed ? "" : " is-open"}`} />
+              </button>
+            </header>
+            {goalCollapsed ? <p className="focus-goal-preview">{cardGoal || "No goal set for today."}</p> : null}
+            <div id="focus-goal-body" hidden={goalCollapsed}>{cardGoal && !goalEditing ? <div className="goal-card">
          <button type="button" className="goal-card-edit" aria-label="Edit today’s focus" title="Edit today’s focus" onClick={() => { setGoalDraft(cardGoal); setGoalFromSuggestion(false); setGoalEditing(true); }}><Pencil size={14} aria-hidden="true" /></button>
          <p className="goal-card-text">{cardGoal}</p>
        </div> : <>
          <div className="goal-editor-field"><label htmlFor="daily-focus-input">What is the goal for today?</label><textarea id="daily-focus-input" aria-describedby="daily-focus-help" autoFocus maxLength={4000} value={goalDraft} onChange={(event) => { setGoalDraft(event.target.value); setGoalFromSuggestion(false); }} placeholder="Add context that is not obvious from your tasks" /><small id="daily-focus-help">Tasks remain the source of work intent. This note adds context and does not affect attendance.</small></div>
          <div className="goal-editor-actions"><button type="button" className="primary" disabled={goalApplyDisabled} onClick={applyGoalDraft}>{cardGoal ? "Apply" : "Apply goal"}</button>{cardGoal ? <button type="button" className="secondary" onClick={() => { setGoalEditing(false); setGoalDraft(cardGoal); setGoalFromSuggestion(false); }}>Cancel</button> : null}</div>
          {!cardGoal && goalSuggestion && <div className="goal-suggestion composer-goal-suggestion"><Sparkles size={16} /><div><strong>Suggested from today’s tasks</strong><p>{goalSuggestion.text}</p></div><button type="button" onClick={() => { setGoalDraft(goalSuggestion.text); setGoalFromSuggestion(true); }}>Use suggestion</button></div>}
-               </>}{activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
+               </>}</div>
+          </section>
+          {activityDate ? <ActivityIntervalStream date={activityDate} timezone={activityTimezone} pollMs={activityPollMs} /> : null}</div></div> : <div className="conversation-scroll-region"><div className="progress-conversation workos-thread" ref={conversationRef}>{visibleHistory.length > 0 && <div className="progress-history">{visibleHistory.map((turn, index) => <Fragment key={turn.id ?? index}>
   {shouldShowChatDivider(visibleHistory, index) ? <ChatTimeDivider at={turn.createdAt} /> : null}
   <HistoryTurn
   turn={{

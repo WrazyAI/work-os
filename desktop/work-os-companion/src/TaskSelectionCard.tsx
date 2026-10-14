@@ -2,6 +2,7 @@ import { Fragment, useEffect, useId, useRef, useState, type CSSProperties } from
 import { AlertTriangle, Check, ChevronDown, CircleAlert, ListChecks, RefreshCw } from "lucide-react";
 import { formatWorkOsDate } from "./dateFormat";
 import { safeTaskText } from "./taskWorkspace";
+import { readStoredFlag, writeStoredFlag } from "./storedFlags";
 import { cx } from "./chat/cx";
 
 export type TaskSelectionCardSubtask = {
@@ -67,6 +68,11 @@ export type TaskSelectionCardProps = {
   onLoadSubtasks?: (taskId: string) => Promise<readonly TaskSelectionCardSubtask[]>;
   /** Collapses the whole card to its summary once the thread moves on. */
   collapseWhenInactive?: boolean;
+  /** Device-local collapse memory for a host that keeps the card mounted (the
+   * floating Tasks tab). With a key the far-right disclosure collapses the
+   * whole card, and the choice survives reopening the view; without one the
+   * card keeps its transient list disclosure. */
+  collapsePersistenceKey?: string;
 };
 
 function statusChipClass(state: string | undefined, proposed: boolean) {
@@ -104,6 +110,7 @@ export function TaskSelectionCard({
   reviewLabel = "Review in Chat",
   onLoadSubtasks,
   collapseWhenInactive = false,
+  collapsePersistenceKey,
 }: TaskSelectionCardProps) {
   const listedTasks: TaskSelectionCardTask[] = [];
   const knownIds = new Set<string>();
@@ -118,7 +125,7 @@ export function TaskSelectionCard({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [confirming, setConfirming] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending" | "overdue">("all");
-  const [collapsed, setCollapsed] = useState(collapseWhenInactive);
+  const [collapsed, setCollapsed] = useState(() => collapseWhenInactive || readStoredFlag(collapsePersistenceKey));
   const [listOpen, setListOpen] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [childrenById, setChildrenById] = useState<Record<string, readonly TaskSelectionCardSubtask[] | "loading" | "error">>({});
@@ -144,7 +151,7 @@ export function TaskSelectionCard({
     setSubmitState("idle");
     setSubmitError(null);
     setSentCount(0);
-    setCollapsed(collapseWhenInactive);
+    setCollapsed(collapseWhenInactive || readStoredFlag(collapsePersistenceKey));
   }, [taskIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps -- collapseWhenInactive is applied below
 
   useEffect(() => {
@@ -278,6 +285,16 @@ export function TaskSelectionCard({
   const listVisible = !collapsed && listOpen;
 
   const toggleList = () => {
+    // A keyed card collapses whole: the far-right disclosure is the employee's
+    // device-local memory of how much space the card should take, not a
+    // transient list toggle. Unkeyed cards keep the list-only behavior.
+    if (collapsePersistenceKey) {
+      const next = !collapsed;
+      setCollapsed(next);
+      setListOpen(true);
+      writeStoredFlag(collapsePersistenceKey, next);
+      return;
+    }
     if (collapsed) {
       setCollapsed(false);
       setListOpen(true);

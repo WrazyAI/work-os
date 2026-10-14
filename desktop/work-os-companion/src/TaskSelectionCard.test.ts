@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TaskSelectionCard, taskSelectionSummaryText } from "./TaskSelectionCard";
 
 const tasks = [
@@ -118,6 +118,31 @@ describe("TaskSelectionCard", () => {
     expect(markup).toContain("Proposed");
     expect(markup).toContain("already has a pending proposal");
     expect(markup).toContain("disabled");
+  });
+
+  it("remembers the whole-card collapse for a keyed host", () => {
+    const values = new Map([["work-os.avatar.tasks-collapsed.v1", "true"]]);
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => { values.set(key, value); },
+      },
+    });
+    try {
+      const markup = renderToStaticMarkup(createElement(TaskSelectionCard, {
+        tasks,
+        onMarkSelectedDone: () => undefined,
+        collapsePersistenceKey: "work-os.avatar.tasks-collapsed.v1",
+      }));
+      expect(markup).toContain("is-collapsed");
+      expect(markup).toContain('aria-expanded="false"');
+      // The collapsed header keeps a one-line account of the open work, and the
+      // card body is hidden rather than re-rendered away.
+      expect(markup).toContain("1 pending · 1 overdue");
+      expect(markup).toContain('class="chat-task-body" hidden=""');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ActivityIntervalCard } from "./ActivityIntervalCard";
 import { decideActivityIntervalReview, useActivityIntervalsQuery } from "./workOsQueries";
@@ -20,13 +20,16 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
   onViewInApp?: () => void;
 }) {
   const query = useActivityIntervalsQuery({ enabled, date, pollMs });
-  const intervals = query.data?.intervals ?? [];
+  const intervals = useMemo(() => query.data?.pages.flatMap((page) => page.intervals) ?? [], [query.data]);
+  // The badge states the complete range (design §6.4); the open edge reports
+  // the loaded window whenever more history exists.
+  const total = query.data?.pages[0]?.total ?? intervals.length;
 
   return (
     <section className="chat-activity-stream" aria-label="Recent activity">
       <header className="chat-activity-stream-head">
         <span className="chat-activity-eyebrow">Recent activity</span>
-        {intervals.length > 0 ? <span className="chat-activity-count">{intervals.length}</span> : null}
+        {total > 0 ? <span className="chat-activity-count">{total}</span> : null}
         {onViewInApp ? <button type="button" className="chat-activity-view" onClick={onViewInApp}>View in app</button> : null}
       </header>
       {!date || query.isPending ? (
@@ -51,7 +54,7 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
               key={interval.id}
               interval={interval}
               timezone={timezone}
-              currentDate={query.data?.date ?? date}
+              currentDate={query.data?.pages[0]?.date ?? date}
               onDecide={onDecide}
               deciding={decidingId === interval.id}
               resolveSrc={resolveSrc}
@@ -59,6 +62,25 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
           ))}
         </div>
       )}
+      {query.isFetchingNextPage ? (
+        <div className="chat-activity-skeletons" aria-hidden="true">
+          <div className="chat-activity-skeleton" />
+          <div className="chat-activity-skeleton" />
+        </div>
+      ) : null}
+      {query.hasNextPage ? (
+        <div className="chat-activity-more">
+          <small>{`Showing ${intervals.length} of ${total}`}</small>
+          <button
+            type="button"
+            className="chat-activity-more-button"
+            disabled={query.isFetchingNextPage}
+            onClick={() => void query.fetchNextPage()}
+          >
+            {query.isFetchingNextPage ? "Loading recaps…" : query.isFetchNextPageError ? "Retry load more" : "Load more"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -98,6 +98,14 @@ assert.match(read("src/AvatarApp.tsx"), /onViewInApp/);
 assert.match(read("src/ActivityIntervalList.tsx"), /View in app/);
 assert.match(read("src/ActivityIntervalList.tsx"), /export function ActivityIntervalStream/);
 assert.match(redesignStyles, /\.goal-composer-panel \.chat-activity-stream/);
+// The Focus goal section and the recap stream page on demand (design §7.2.1,
+// §9.2): the goal collapses to a one-line preview, and the stream states its
+// loaded window above one explicit control.
+assert.match(app, /focus-goal-disclosure/);
+assert.match(app, /GOAL_COLLAPSE_KEY/);
+const activityListSource = read("src/ActivityIntervalList.tsx");
+assert.match(activityListSource, /Load more/);
+assert.match(activityListSource, /Showing \$\{intervals\.length\} of \$\{total\}/);
 assert.match(app, /Scheduled today/);
 assert.match(app, /Due from yesterday/);
 assert.match(app, /Add a task — planning doesn't clock you in/);
@@ -176,6 +184,11 @@ assert.match(app, /work-os:\/\/open-memory/);
 const queryLayer = read("src/workOsQueries.ts");
 assert.match(queryLayer, /\/api\/work-os\/me\/eod\/outstanding\?days=14/);
 assert.match(queryLayer, /fetchDay\(\{ variant: "details", date: options\.date! \}\)/);
+// The recap stream is an infinite query: a small first page plus the keyset
+// cursor for the next one.
+assert.match(queryLayer, /ACTIVITY_INTERVALS_PAGE_SIZE/);
+assert.match(queryLayer, /activityIntervalsUrl\(options\.date!, pageParam\)/);
+assert.match(queryLayer, /cursor=\$\{encodeURIComponent\(cursor\)\}/);
 assert.match(taskSurfaces, /Refresh from record/);
 assert.match(app, /eod-start-earlier/);
 assert.match(taskSurfaces, /Refine this draft/);
@@ -444,6 +457,13 @@ assert.match(avatar, /focus_summary: interpretation\.summary,/);
 assert.match(avatar, /const items = buildPlanItemsFromInterpretation\(facts\.planItems, interpretation, answers\);/);
 assert.match(avatar, /planIntent: day\?\.plan\?\.focus_summary \?\? day\?\.plan\?\.freeform_intent \?\? null,/);
 assert.doesNotMatch(avatar, /goal_provenance: "employee",\s*\n\s*focus_summary: interpretation\.summary/);
+// The floating Tasks view leads with Open tasks (collapsible, remembered) and
+// pages the recap stream beneath it; a recap decision never scrolls the list.
+assert.match(avatar, /collapsePersistenceKey=\{AVATAR_TASKS_COLLAPSE_KEY\}/);
+const openTasksAt = avatar.indexOf('title="Open tasks"');
+const recapStreamAt = avatar.indexOf("<ActivityIntervalList");
+assert.ok(openTasksAt >= 0 && recapStreamAt >= 0 && openTasksAt < recapStreamAt, "Open tasks leads the floating Tasks view");
+assert.match(avatar, /avatarTab === "tasks"\) return/);
 
 const planner = read("src/PlanningSession.tsx");
 assert.match(planner, /setInput\(seedInput\?\.trim\(\) \? seedInput : plan\?\.focus_summary \?\? plan\?\.freeform_intent \?\? ""\);/);

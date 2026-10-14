@@ -123,6 +123,8 @@ const DAY_POLL_MS = 60_000;
 const POSITION_KEY = "work-os.avatar.position.v1";
 const NOTIFIED_KEY = "work-os.avatar.notified.v1";
 const SNOOZE_KEY = "work-os.avatar.snooze.v1";
+/** Device-local memory for the Tasks tab's Open tasks card (§7.3). */
+const AVATAR_TASKS_COLLAPSE_KEY = "work-os.avatar.tasks-collapsed.v1";
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -277,6 +279,7 @@ export default function AvatarApp(): React.ReactElement {
   const notificationPermission = useRef(false);
   const chatScroll = useRef<HTMLDivElement | null>(null);
   const threadMetricsRef = useRef<{ scrollHeight: number } | null>(null);
+  const previousAvatarTabRef = useRef<"chat" | "tasks">("chat");
   const [sweepSignal, setSweepSignal] = useState(0);
   const bumpSweep = () => setSweepSignal((value) => value + 1);
   const dayRef = useRef<DayFacts>(facts);
@@ -1800,6 +1803,17 @@ export default function AvatarApp(): React.ReactElement {
   useEffect(() => {
     const el = chatScroll.current;
     if (!el) return;
+    const tabChanged = previousAvatarTabRef.current !== avatarTab;
+    previousAvatarTabRef.current = avatarTab;
+    if (avatarTab === "tasks") {
+      // The Tasks view is a reading list, not a thread: entering it starts at
+      // the top, and nothing that arrives — a recap decision, a new recap, the
+      // next page — moves the reader. The thread scroll contract below belongs
+      // to the chat tab alone.
+      if (tabChanged) el.scrollTo({ top: 0, behavior: "instant" });
+      threadMetricsRef.current = { scrollHeight: el.scrollHeight };
+      return;
+    }
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
     const newest = el.lastElementChild as HTMLElement | null;
     const previousHeight = threadMetricsRef.current?.scrollHeight ?? el.scrollHeight;
@@ -1816,6 +1830,9 @@ export default function AvatarApp(): React.ReactElement {
       newestHeight: newest ? newest.offsetHeight : 0,
       newestTop: newest ? newest.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
       wasAtBottom,
+      // Opening the chat tab shows the latest turn; ordinary arrivals keep the
+      // reader's position unless they were already at the bottom.
+      forceBottom: tabChanged,
     });
     if (target !== null) el.scrollTo({ top: target, behavior });
     threadMetricsRef.current = { scrollHeight: el.scrollHeight };
@@ -1844,9 +1861,10 @@ export default function AvatarApp(): React.ReactElement {
   }, [avatarTab, chat.length, thinking]);
 
   // View more — and a fresh recap while the window is already open — lands the
-  // reader on the latest item instead of the top of the thread.
+  // reader on the latest item instead of the top of the thread. The Tasks view
+  // is exempt: a recap decision there must never yank the list.
   useEffect(() => {
-    if (!expanded || !scrollToLatest) return;
+    if (!expanded || !scrollToLatest || avatarTab === "tasks") return;
     const el = chatScroll.current;
     if (!el) return;
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
@@ -1855,7 +1873,7 @@ export default function AvatarApp(): React.ReactElement {
       threadMetricsRef.current = { scrollHeight: el.scrollHeight };
     }));
     return () => cancelAnimationFrame(frame);
-  }, [expanded, scrollToLatest]);
+  }, [expanded, scrollToLatest, avatarTab]);
   useEffect(() => {
     if (!expanded || !activityPrompt) return;
     setScrollToLatest((signal) => signal + 1);
@@ -1965,15 +1983,6 @@ export default function AvatarApp(): React.ReactElement {
            <div className="avatar-chat" ref={chatScroll}>
             {attentionDue && <section className={`avatar-context ${contextualPrompt.kind}`} aria-label={activityPreparing ? "Reviewing your last hour" : contextualPrompt.heading}><strong>{activityPreparing ? "Reviewing your last hour…" : contextualPrompt.heading}</strong><small>{activityPreparing ? "Otto is analyzing your recent Worktivity frames to summarize the interval." : contextualPrompt.body}</small>{!activityPreparing && contextualPrompt.action === "open_eod" && <button onClick={() => void openEodReview()}>Open EOD review</button>}</section>}
           {avatarTab === "tasks" ? (<>
-            <ActivityIntervalList
-              date={facts.shiftDate || null}
-              enabled={facts.loaded}
-              timezone={facts.timezone}
-              onDecide={decideActivityPrompt}
-              decidingId={decidingIntervalId}
-              pollMs={DAY_POLL_MS}
-              onViewInApp={() => void openFocusInApp()}
-            />
             <TaskSelectionCard
               title="Open tasks"
               status={facts.loaded ? "ready" : "loading"}
@@ -1987,6 +1996,16 @@ export default function AvatarApp(): React.ReactElement {
               degraded={daySyncState === "stale"}
               emptyTitle="No open tasks"
               emptyMessage="Tasks waiting to be completed will appear here."
+              collapsePersistenceKey={AVATAR_TASKS_COLLAPSE_KEY}
+            />
+            <ActivityIntervalList
+              date={facts.shiftDate || null}
+              enabled={facts.loaded}
+              timezone={facts.timezone}
+              onDecide={decideActivityPrompt}
+              decidingId={decidingIntervalId}
+              pollMs={DAY_POLL_MS}
+              onViewInApp={() => void openFocusInApp()}
             />
           </>) : (<>
           {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
