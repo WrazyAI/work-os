@@ -92,7 +92,7 @@ The application currently uses the authenticated WrazyOS update endpoint declare
 If release assets move to a public repository or public object store, Tauri v2 can instead consume the attached internal manifest directly:
 
 ```text
-https://github.com/zahemen9900/work-os/releases/download/<internal-tag>/latest-internal.json
+https://github.com/WrazyAI/work-os/releases/download/<internal-tag>/latest-internal.json
 ```
 
 The static manifest is only usable when both the manifest and its referenced installer URL are anonymously reachable. The updater public key in the shipped app must match the private key used by CI, and rotating that key requires a signed transition release or existing clients will reject future updates.

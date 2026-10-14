@@ -16,7 +16,7 @@ import { checkInIntervalOption, firstFollowUpOption } from "../src/modules/work-
 test("local config parsing keeps only bounded cadence entries", () => {
   const config = parseWorkOsLocalConfig(JSON.stringify({
     people: {
-      "david@maigreeks.com": { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 },
+      "person@example.com": { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 },
       "below-floor@example.com": { checkInIntervalMinutes: 4 },
       "partial@example.com": { firstFollowUpMinutes: 30 },
       "bad@example.com": { checkInIntervalMinutes: "nope" },
@@ -26,7 +26,7 @@ test("local config parsing keeps only bounded cadence entries", () => {
     unknownKey: true,
   }));
   assert.deepEqual(config.people, {
-    "david@maigreeks.com": { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 },
+    "person@example.com": { checkInIntervalMinutes: 10, firstFollowUpMinutes: 10 },
     "partial@example.com": { firstFollowUpMinutes: 30 },
     "upper@example.com": { checkInIntervalMinutes: 20 },
   });
@@ -37,21 +37,21 @@ test("local config parsing keeps only bounded cadence entries", () => {
 test("person overrides match by id or email, case-insensitively", () => {
   const config = parseWorkOsLocalConfig(JSON.stringify({
     people: {
-      "david@maigreeks.com": { checkInIntervalMinutes: 10 },
+      "person@example.com": { checkInIntervalMinutes: 10 },
       "8772f360-f816-4914-9b99-849bdc573cb5": { firstFollowUpMinutes: 15 },
     },
   }));
-  assert.deepEqual(personCadenceOverride(config, { email: "David@Maigreeks.com" }), { checkInIntervalMinutes: 10 });
+  assert.deepEqual(personCadenceOverride(config, { email: "Person@Example.com" }), { checkInIntervalMinutes: 10 });
   assert.deepEqual(personCadenceOverride(config, { personId: "8772f360-f816-4914-9b99-849bdc573cb5" }), { firstFollowUpMinutes: 15 });
   assert.equal(personCadenceOverride(config, { email: "nobody@example.com" }), null);
 });
 
 test("resolved cadence prefers the local entry, then the environment, then defaults", () => {
   const config = parseWorkOsLocalConfig(JSON.stringify({
-    people: { "david@maigreeks.com": { checkInIntervalMinutes: 10 } },
+    people: { "person@example.com": { checkInIntervalMinutes: 10 } },
   }));
   const env = { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "30", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" } as NodeJS.ProcessEnv;
-  assert.deepEqual(resolveWorkOsCadence({ email: "david@maigreeks.com" }, env, config), {
+  assert.deepEqual(resolveWorkOsCadence({ email: "person@example.com" }, env, config), {
     checkInIntervalMinutes: 10,
     firstFollowUpMinutes: 45,
     personOverride: true,
@@ -179,8 +179,8 @@ test("the override path resolves the same way on macOS, Linux, and Windows", () 
 });
 
 test("the installed app's own config file wins over every deployment source", () => {
-  const identity = { email: "david@maigreeks.com" };
-  const config = parseWorkOsLocalConfig(JSON.stringify({ people: { "david@maigreeks.com": { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10 } } }));
+  const identity = { email: "person@example.com" };
+  const config = parseWorkOsLocalConfig(JSON.stringify({ people: { "person@example.com": { checkInIntervalMinutes: 30, firstFollowUpMinutes: 10 } } }));
   const env = { WORK_OS_CHECK_IN_INTERVAL_MINUTES: "45", WORK_OS_FIRST_FOLLOW_UP_MINUTES: "45" } as NodeJS.ProcessEnv;
 
   // The machine's file is what an employee edited, so it is the most specific

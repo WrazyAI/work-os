@@ -42,7 +42,7 @@ if (process.argv.includes("--env-stdin")) {
 }
 
 const emailFlag = process.argv.indexOf("--person-email");
-const email = emailFlag >= 0 ? process.argv[emailFlag + 1] : "david@maigreeks.com";
+const email = emailFlag >= 0 ? process.argv[emailFlag + 1] : "employee@example.com";
 if (!email) throw new Error("--person-email requires a value");
 
 const { Client } = await import("pg");

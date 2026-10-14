@@ -27,10 +27,10 @@
 | **Storage file bytes** | ⚠️ **NOT in the dump** — only `storage.objects` metadata | Bucket contents (uploads, screenshots) are 402-gated. Mitigation: the runner already synced uploads to VPS disk (`downloads/`), and daily-log screenshots exist in `downloads/screenshots/`. **Open item:** verify coverage of the private `uploads` bucket vs. disk copies; do not delete anything. |
 | Old backups (partial, superseded) | VPS `~/backups/`, `~/agent-os-backups/` | Historical only. |
 
-**App auth users** (from `auth.users`): `lsperry267@gmail.com` (owner, first
-user), `david@maigreeks.com`, `info@wrazyos.com`, `zahemen990@gmail.com`,
-`zahemen9900@gmail.com`, `screenshot-test@wrazyos.com` (test),
-`work-os-acceptance-983b9ee0@maigreeks.com` (test).
+**App auth users** (from `auth.users`): the workspace owner account, three
+operator accounts (one is `info@wrazyos.com`), and two test accounts
+(`screenshot-test@…`, `work-os-acceptance-…`). Individual addresses live in the
+private ops notes.
 
 ## 3. Target architecture
 
@@ -55,7 +55,7 @@ starts (default: keep a small always-on compute).
 - [x] DB password reset via Management API; direct connection verified (PG 17.6, aarch64).
 - [x] Full logical dump (131 tables, 0 failures) on VPS + local.
 - [x] Dump copied off-box.
-- [x] Owner account confirmed: `lsperry267@gmail.com`.
+- [x] Owner account confirmed.
 
 ### Phase 1 — Neon setup (no code changes yet) ✅ DONE (2026-08-28)
 - [x] Install Neon agent skills (`neon`, `neon-postgres`) via skills CLI — installed
@@ -92,7 +92,7 @@ starts (default: keep a small always-on compute).
   drops+recreates `public` schema each run).
 
 ### Phase 3 — Code migration ✅ DONE for the work-os repo (PR #55, 2026-08-28)
-Branch `codex/neon-migration` → PR https://github.com/zahemen9900/work-os/pull/55 (CI green).
+Branch `codex/neon-migration` → PR #55 (CI green).
 1. **Data layer** ✅ — `@supabase/supabase-js` replaced by a PostgREST-compatible
    `pg` shim (`src/lib/db/query.ts` + `pool.ts`) behind `createAdminClient()` —
    all 42 call sites / 26 files unchanged: eq/in/not/or/contains/is/ilike/match,

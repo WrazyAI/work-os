@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Historical, authentic backfill for Work OS insights data.
 //
-//   npx tsx scripts/backfill-work-os-insights.ts --person david@maigreeks.com --from 2026-08-01 --to 2026-09-10
+//   npx tsx scripts/backfill-work-os-insights.ts --person employee@example.com --from 2026-08-01 --to 2026-09-10
 //
 // What it repairs, all from provider-exact data (nothing is fabricated):
 //   sessions  — missing/open sessions from stored Worktivity observations, or
@@ -71,7 +71,7 @@ async function main() {
   const { isNiftyTaskAttributableToMember } = await import("../src/lib/work-os-tasks");
   const { localDateForTimezone } = await import("../src/modules/work-os/companion");
   const options = args();
-  const email = typeof options.person === "string" ? options.person : "david@maigreeks.com";
+  const email = typeof options.person === "string" ? options.person : "employee@example.com";
   const from = typeof options.from === "string" ? options.from : "2026-08-01";
   const to = typeof options.to === "string" ? options.to : new Date().toISOString().slice(0, 10);
   const dryRun = options["dry-run"] === true;

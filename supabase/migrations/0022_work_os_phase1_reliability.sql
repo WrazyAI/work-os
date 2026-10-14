@@ -205,16 +205,18 @@ declare
   v_role uuid;
   v_team uuid;
 begin
+  -- Individual addresses are environment-specific and kept in the private ops
+  -- notes. With no substitution this block is a no-op (v_org stays null).
   select organization_id,id into v_org,v_david from work_people
-    where lower(email)='david@maigreeks.com' order by active desc,created_at limit 1;
+    where lower(email)='<member-email>' order by active desc,created_at limit 1;
   if v_org is null then return; end if;
-  select id into v_owner_user from auth.users where lower(email)='lsperry267@gmail.com' limit 1;
+  select id into v_owner_user from auth.users where lower(email)='<owner-email>' limit 1;
   if v_owner_user is not null then
     select id into v_owner from work_people where organization_id=v_org
-      and (auth_user_id=v_owner_user or lower(email)='lsperry267@gmail.com') limit 1;
+      and (auth_user_id=v_owner_user or lower(email)='<owner-email>') limit 1;
     if v_owner is null then
       insert into work_people(user_id,organization_id,auth_user_id,display_name,email,active,raw)
-      values(v_owner_user,v_org,v_owner_user,'WrazyAI Owner','lsperry267@gmail.com',true,'{}'::jsonb)
+      values(v_owner_user,v_org,v_owner_user,'WrazyAI Owner','<owner-email>',true,'{}'::jsonb)
       returning id into v_owner;
     end if;
     update work_org_members set person_id=v_owner,active=true,updated_at=now()

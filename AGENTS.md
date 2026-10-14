@@ -235,8 +235,9 @@ change — because first launch after an update shows it in the changelog modal.
 Keep installer/updater verification and signing requirements intact.
 
 Work OS changes deploy through the deployed Agent OS checkout on the VPS
-(`/home/dev/agent-os`, reached with
-`ssh -i /home/zahemen/.ssh/google_compute_engine dev@72.62.5.190`). Use the
+(`/home/dev/agent-os`). This repository is public, so the host address and the
+SSH key path are kept out of it; read them from the private Agent OS repo
+(`git fetch agentos && git show agentos/main:docs/vps-access.md`). Use the
 atomic redeploy path there (`npm run redeploy`): it builds a staging tree, swaps
 it, restarts the web service, checks live assets, and rolls back on failure.
 Never build over a running server's active `.next` tree, and verify the
