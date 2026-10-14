@@ -32,7 +32,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## 0.4.35 — 2026-10-14
 
-- Admins can now open an administration workspace in the companion: the team's overview, people, tasks, EOD review, insights, evidence, and settings, with one button back to their own workday.
+- Admins can now open their team's workspace from the companion: people, tasks, EOD review, insights, evidence, and settings, with one button back.
 
 ## 0.4.34 — 2026-10-14
 
