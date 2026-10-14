@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ personId: string }> }) {
   try {
     const auth = await requireWorkOsAccess({
+      authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
       roles: ["manager", "admin"],
     });

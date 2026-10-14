@@ -29,7 +29,7 @@ function withReportFilters(query: any, filters: ReportFilters): any {
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["manager", "admin"] });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["manager", "admin"] });
     if (auth.response) return auth.response;
     const sp = new URL(req.url).searchParams;
     const requestedPersonId = sp.get("personId");

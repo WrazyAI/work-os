@@ -7,8 +7,12 @@ export const dynamic = "force-dynamic";
 
 const FEATURES = new Set(["employee_companion", "github_evidence", "ghl_evidence", "screenshot_summaries", "desktop_companion", "seo_mission_control", "voice_input"]);
 
-async function adminAccess() {
-  return requireWorkOsAccess({ roles: ["admin"] });
+async function adminAccess(req: Request) {
+  return requireWorkOsAccess({
+    roles: ["admin"],
+    authorization: req.headers.get("authorization"),
+    organizationId: req.headers.get("x-work-os-organization-id"),
+  });
 }
 
 async function audit(organizationId: string, actor: string, action: string, targetType: string, targetId: string, metadata = {}) {
@@ -18,9 +22,9 @@ async function audit(organizationId: string, actor: string, action: string, targ
   if (error) throw new Error(`write Work OS audit log: ${error.message}`);
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const auth = await adminAccess();
+    const auth = await adminAccess(req);
     if (auth.response) return auth.response;
     const db = createAdminClient();
     const [organization, memberships, teams, teamMembers] = await Promise.all([
@@ -44,7 +48,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const auth = await adminAccess();
+    const auth = await adminAccess(req);
     if (auth.response) return auth.response;
     const body = await req.json() as Record<string, unknown>;
     const db = createAdminClient();
@@ -93,7 +97,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    const auth = await adminAccess();
+    const auth = await adminAccess(req);
     if (auth.response) return auth.response;
     const body = await req.json() as Record<string, unknown>;
     const db = createAdminClient();

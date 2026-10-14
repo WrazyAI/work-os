@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id") });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id") });
     if (auth.response) return auth.response;
     const requestedPersonId = new URL(req.url).searchParams.get("personId");
     const personScope = requestedPersonId
@@ -31,6 +31,7 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   try {
     const auth = await requireWorkOsAccess({
+      authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
       roles: ["manager", "admin"],
     });

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * people a login could belong to (matched against the employee-supplied
  * github_username) and the integration's configuration state. */
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const db = createAdminClient();

@@ -32,7 +32,7 @@ const ALLOWED = new Set([
 ]);
 
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+  const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
   if (auth.response) return auth.response;
 
   const sp = new URL(req.url).searchParams;
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+  const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
   if (auth.response) return auth.response;
 
   const body = await req.json().catch(() => null);

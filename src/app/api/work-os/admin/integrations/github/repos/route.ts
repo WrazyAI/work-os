@@ -100,7 +100,7 @@ async function mergeConnectedRepos(input: {
  * (WORK_OS_GITHUB_ADMIN_TOKEN) is optional and the UI degrades to manual
  * instructions without it. */
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const connection = await loadGithubConnection(auth.access.organizationId);
@@ -142,7 +142,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const secret = githubWebhookSecret();
@@ -215,7 +215,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const repo = new URL(req.url).searchParams.get("repo")?.trim() ?? "";

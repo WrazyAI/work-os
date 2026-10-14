@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ blueprintId: string }> }) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const { blueprintId } = await params;

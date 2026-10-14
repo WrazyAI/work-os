@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["manager", "admin"] });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["manager", "admin"] });
     if (auth.response) return auth.response;
     const personIds = await accessibleWorkOsPersonIds(auth.access);
     if (personIds && !personIds.length) return NextResponse.json({ people: [], roleProfiles: [] });

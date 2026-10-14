@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const auth = await requireWorkOsAccess({
+      authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
       roles: ["admin"],
     });
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   try {
     const auth = await requireWorkOsAccess({
+      authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
       roles: ["admin"],
     });

@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const ownerId = workOsOrganizationOwnerId(auth.access);
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const ownerId = workOsOrganizationOwnerId(auth.access);

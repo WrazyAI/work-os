@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const ALLOWED = new Set(["subteam_id", "archived", "limit", "offset", "sort"]);
 
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+  const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
   if (auth.response) return auth.response;
 
   const sp = new URL(req.url).searchParams;

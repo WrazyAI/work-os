@@ -270,14 +270,15 @@ export async function requireWorkOsPersonAccess(access: WorkOsAccess, personId: 
   return NextResponse.json({ error: "forbidden" }, { status: 403 });
 }
 
-export async function requireWorkOsAdmin(organizationId?: string | null): Promise<
+export async function requireWorkOsAdmin(organizationId?: string | null, authorization?: string | null): Promise<
   | { ctx: WorkOsAccess["ctx"]; access: WorkOsAccess; response?: never }
   | { response: NextResponse; ctx?: never; access?: never }
 > {
   // Honor the caller's selected organization. Without it, loadMembership picks
   // the user's oldest membership, which silently writes to the wrong tenant
-  // for anyone who belongs to more than one organization.
-  const result = await requireWorkOsAccess({ roles: ["admin"], organizationId: organizationId ?? null });
+  // for anyone who belongs to more than one organization. A desktop bearer
+  // token authorizes the same membership as a browser cookie.
+  const result = await requireWorkOsAccess({ roles: ["admin"], organizationId: organizationId ?? null, authorization: authorization ?? null });
   if (result.response) return { response: result.response };
   return { ctx: result.access.ctx, access: result.access };
 }

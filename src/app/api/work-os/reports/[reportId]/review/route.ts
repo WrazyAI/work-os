@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: Request, { params }: { params: Promise<{ reportId: string }> }) {
   try {
     const auth = await requireWorkOsAccess({
+      authorization: req.headers.get("authorization"),
       organizationId: req.headers.get("x-work-os-organization-id"),
       roles: ["manager", "admin"],
     });

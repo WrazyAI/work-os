@@ -9,7 +9,7 @@ const FIELDS = new Set(["priority", "blocked_reason", "estimated_effort_minutes"
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
     if (auth.response) return auth.response;
     const { data, error } = await createAdminClient().from("work_provider_field_mappings").select("*").eq("organization_id", auth.access.organizationId).order("semantic_field");
     if (error) throw new Error(`load provider field mappings: ${error.message}`);
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
     if (auth.response) return auth.response;
     const body = await req.json();
     const provider = typeof body.provider === "string" ? body.provider.trim().toLowerCase() : "";

@@ -9,7 +9,7 @@ const cache = new Map<string, { ts: number; body: unknown }>();
 const TTL = 60_000;
 
 export async function GET(req: Request) {
-  const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
+  const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id"), roles: ["admin"] });
   if (auth.response) return auth.response;
 
   const cached = cache.get(auth.access.organizationId);

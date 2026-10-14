@@ -12,7 +12,7 @@ const EVIDENCE_SELECT =
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireWorkOsAccess({ organizationId: req.headers.get("x-work-os-organization-id") });
+    const auth = await requireWorkOsAccess({ authorization: req.headers.get("authorization"), organizationId: req.headers.get("x-work-os-organization-id") });
     if (auth.response) return auth.response;
     const sp = new URL(req.url).searchParams;
     const requestedPersonId = sp.get("personId");
@@ -99,7 +99,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"));
+  const auth = await requireWorkOsAdmin(req.headers.get("x-work-os-organization-id"), req.headers.get("authorization"));
   if ("response" in auth) return auth.response;
   try {
     const body = await req.json();
