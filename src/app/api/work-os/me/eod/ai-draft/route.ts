@@ -3,6 +3,7 @@ import { draftEodNarrative, gatherEodGrounding, gatherEodScreenshotContext, refi
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import type { EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { loomMetadataEnabled } from "@/lib/work-os-loom";
 import { jsonError, requireWorkOsAccess } from "@/lib/work-os-api";
@@ -116,7 +117,8 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     if (auth.access.featureFlags.github_evidence === true) {
       try {
         const timezone = await personTimezone(auth.access.organizationId, personId);
-        const bounds = localDayBounds(date, timezone);
+        const window = await eodActivityWindowFor(auth.access.organizationId, personId, date);
+        const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, timezone);
         const activity = await listGithubActivity({
           organizationId: auth.access.organizationId,
           personId,

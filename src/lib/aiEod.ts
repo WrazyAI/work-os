@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
@@ -379,7 +380,9 @@ export async function refineEodNarrative(grounding: EodGrounding, draft: string,
 export async function gatherEodScreenshotContext(organizationId: string, personId: string, date: string, timezone?: string) {
   const supabase = createAdminClient();
   const resolvedTimezone = timezone ?? await screenshotTimezone(supabase, organizationId, personId);
-  const bounds = localDayBounds(date, resolvedTimezone);
+  // Counts and hour lines cover the workday window, matching the report.
+  const window = await eodActivityWindowFor(organizationId, personId, date);
+  const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, resolvedTimezone);
   const events = await supabase.from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")

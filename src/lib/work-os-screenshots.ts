@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getStorageBackend } from "@/lib/db/storage";
 import { canAccessWorkOsPerson } from "@/lib/work-os-api";
 import type { WorkOsAccess } from "@/lib/work-os-api";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { dateOnly } from "@/lib/work-os-internal";
 import { employeeTrackingConsent } from "@/lib/work-os-onboarding";
 import { fetchScreenshotsForDay, framesWithinBounds, type WtActivityLog, type WtScreenshot } from "@/lib/worktivity";
@@ -478,7 +479,7 @@ export async function summarizeWorktivityScreenshots(
   access: ScreenshotScope,
   personId: string,
   date: string,
-  options: { execution?: ScreenshotExecution; maxScreenshots?: number; timezone?: string } = {},
+  options: { execution?: ScreenshotExecution; maxScreenshots?: number; timezone?: string; window?: { startIso: string; endIso: string } | null } = {},
 ) {
   const execution = options.execution ?? "feature";
   await assertScreenshotExecutionAllowed(access.organizationId, execution);
@@ -495,7 +496,9 @@ export async function summarizeWorktivityScreenshots(
   // Callers that derived the date from a schedule pass that same timezone; the
   // rest fall back to the employee's onboarding timezone.
   const timezone = options.timezone ?? await personTimezone(access.organizationId, personId);
-  const bounds = localDayBounds(date, timezone);
+  // EOD callers pass the workday window so out-of-shift frames never feed the
+  // report; the scheduled pipeline keeps its local-day bounds.
+  const bounds = options.window ?? localDayBounds(date, timezone);
   const [fetched, config, analyzed] = await Promise.all([
     fetchScreenshotsForDay(person.worktivity_employee_id, date, timezone),
     screenshotConfig(access.organizationId, personId),
@@ -556,9 +559,13 @@ export async function prepareEodScreenshots(
   if (existing) return existing;
   const run = (async (): Promise<EodPreparation> => {
     const batch = Math.max(1, Math.min(DEFAULT_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? PREPARE_SCREENSHOTS_PER_REQUEST)));
+    // Only the workday's frames matter to the report, so preparation never
+    // spends vision calls on activity outside the shift or session.
+    const window = await eodActivityWindowFor(access.organizationId, personId, date);
     const result = await summarizeWorktivityScreenshots(access, personId, date, {
       execution: options.execution ?? "feature",
       maxScreenshots: batch,
+      window,
     });
     const analyzed = result.summaries.filter((row: any) => ["processed", "excluded"].includes(String(row?.processing_status ?? ""))).length;
     const preparation: EodPreparation = {
@@ -1154,7 +1161,10 @@ export type EodScreenshotGallery = {
  * have no image left to show. */
 export async function listEodScreenshots(organizationId: string, personId: string, date: string, timezone?: string): Promise<EodScreenshotGallery> {
   const gallery: EodScreenshotGallery = { processed: 0, excludedPolicy: 0, excludedSensitive: 0, unavailable: 0, pending: 0, total: 0, viewable: [] };
-  const bounds = localDayBounds(date, timezone ?? await personTimezone(organizationId, personId));
+  const resolvedTimezone = timezone ?? await personTimezone(organizationId, personId);
+  // The EOD gallery follows the workday window, not the whole calendar day.
+  const window = await eodActivityWindowFor(organizationId, personId, date);
+  const bounds = window ? { startIso: window.startIso, endIso: window.endIso } : localDayBounds(date, resolvedTimezone);
   const events = await db().from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", organizationId).eq("person_id", personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")

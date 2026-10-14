@@ -86,15 +86,15 @@ test("the provider request uses the custom-range DateFilter with lowercase dates
   assert.doesNotMatch(lib, /StartDate: `\$\{date\}/, "the old ignored PascalCase range is gone");
 });
 
-test("screenshot processing derives every day window from the local bounds", async () => {
+test("screenshot processing derives every day window from the workday window or the local bounds", async () => {
   const lib = await source("src/lib/work-os-screenshots.ts");
-  assert.match(lib, /const bounds = localDayBounds\(date, timezone\)/);
+  assert.match(lib, /const bounds = options\.window \?\? localDayBounds\(date, timezone\)/, "an explicit workday window wins; otherwise the local day");
   assert.match(lib, /const shots = framesWithinBounds\(fetched, bounds\)/);
   assert.match(lib, /terminallyAnalyzedFrames\(access\.organizationId, personId, bounds\)/);
   assert.match(lib, /\.gte\("occurred_at", bounds\.startIso\)\.lt\("occurred_at", bounds\.endIso\)/, "terminal matching uses the local day");
   const eod = await source("src/lib/work-os-eod.ts");
   assert.match(eod, /listEodScreenshots\(access\.organizationId, personId, reportDate, timezone\)/, "the draft gallery resolves the employee's local day");
-  assert.match(lib, /const bounds = localDayBounds\(date, timezone \?\? await personTimezone\(organizationId, personId\)\)/);
+  assert.match(lib, /const bounds = window \? \{ startIso: window\.startIso, endIso: window\.endIso \} : localDayBounds\(date, resolvedTimezone\)/, "the EOD gallery follows the workday window with a local-day fallback");
   assert.match(lib, /mirrorSummary\(access, personId, event\.id, captureAt\(log\), observation\.summary, MODEL, timezone\)/, "the mirror day follows the capture instant, not the provider create date");
   assert.match(lib, /localDateForTimezone\(capturedAt, timezone\)/);
   assert.match(lib, /summarizeWorktivityScreenshots\(access, row\.person_id as string, shiftDate, \{ timezone \}\)/);
@@ -110,11 +110,12 @@ test("screenshot processing derives every day window from the local bounds", asy
   assert.doesNotMatch(unavailableBranch, /screenshot\.due_sync_completed/, "an empty day is never settled as completed");
 });
 
-test("draft context and hourly synthesis share the local day", async () => {
+test("draft context and hourly synthesis share the workday window", async () => {
   const aiEod = await source("src/lib/aiEod.ts");
-  assert.match(aiEod, /const bounds = localDayBounds\(date, resolvedTimezone\)/);
+  assert.match(aiEod, /const bounds = window \? \{ startIso: window\.startIso, endIso: window\.endIso \} : localDayBounds\(date, resolvedTimezone\)/);
   assert.match(aiEod, /\.gte\("occurred_at", bounds\.startIso\)\.lt\("occurred_at", bounds\.endIso\)/);
   const hours = await source("src/lib/work-os-screenshot-hours.ts");
+  assert.match(hours, /eodActivityWindowFor\(input\.organizationId, input\.personId, input\.date\)/, "hourly synthesis uses the same workday window");
   assert.match(hours, /const bounds = localDayBounds\(date, timezone \|\| "UTC"\)/);
   assert.match(hours, /import \{ personTimezone \} from "@\/lib\/work-os-screenshots"/);
 });

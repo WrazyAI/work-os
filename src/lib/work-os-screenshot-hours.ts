@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { INTERPRET_MODEL } from "@/lib/aiInterpret";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { db } from "@/lib/work-os-internal";
 import { personTimezone } from "@/lib/work-os-screenshots";
 import { localDayBounds } from "@/modules/work-os/companion";
@@ -246,7 +247,10 @@ export async function ensureHourlyScreenshotSummaries(input: {
   timezone?: string;
 }): Promise<EodScreenshotHour[]> {
   const timezone = input.timezone ?? await personTimezone(input.organizationId, input.personId);
-  const bounds = localDayUtcBounds(input.date, timezone);
+  // EOD activity context is bounded to the workday; a day with no usable
+  // schedule or session keeps the local-day bounds.
+  const window = await eodActivityWindowFor(input.organizationId, input.personId, input.date);
+  const bounds = window ? { start: window.startIso, end: window.endIso } : localDayUtcBounds(input.date, timezone);
   const events = await db().from("work_evidence_events").select("id,occurred_at")
     .eq("organization_id", input.organizationId).eq("person_id", input.personId).eq("provider", "worktivity")
     .like("external_event_id", "screenshot:%")
