@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.34 — 2026-10-14
+
 - Recaps in chat now load a few at a time: `Load more` brings in older ones, so opening the view is quick.
 - Open tasks now sit at the top of the floating Tasks view, and the task list and the Focus goal both collapse to a single line when you want the space.
 
