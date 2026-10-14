@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { inferArchetype, normalizeProfileItems, validateArchetypeSelection, WORK_ARCHETYPES } from "../src/modules/work-os/onboarding";
 import { projectWorktivityAttendance, projectWorktivityAttendanceWithActivity } from "../src/modules/work-os/attendance";
@@ -205,4 +206,35 @@ test("one edit converges to a serialized coalesced draft save without server-res
   assert.deepEqual(calls, ["name: first edit", "name: final typing"]);
   await queue.enqueue("timezone: Europe/London");
   assert.deepEqual(calls, ["name: first edit", "name: final typing", "timezone: Europe/London"]);
+});
+
+// The submit RPC rejects the whole onboarding payload unless these three exact
+// strings match its own literals. The form echoes the constants the server
+// served to it, so a one-character drift between the two sides would fail every
+// signup at the final step — visible only in production, at the worst moment.
+test("the onboarding payload's policy strings match the submit RPC's guards", () => {
+  const client = readFileSync(new URL("../src/lib/work-os-onboarding.ts", import.meta.url), "utf8");
+  const version = client.match(/export const WORK_OS_TRACKING_POLICY = \{\s*\n\s*version: "([^"]*)"/)?.[1];
+  const purpose = client.match(/export const WORK_OS_TRACKING_POLICY = \{\s*\n\s*version: "[^"]*",\s*\n\s*purpose: "([^"]*)"/)?.[1];
+  const screenshot = client.match(/export const WORK_OS_SCREENSHOT_CONSENT_PURPOSE = "([^"]*)"/)?.[1];
+  assert.ok(version && purpose && screenshot, "policy constants must be readable");
+
+  const migrations = readdirSync(new URL("../supabase/migrations", import.meta.url))
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8"))
+    .filter((sql) => sql.includes("invalid final onboarding payload"));
+  assert.ok(migrations.length > 0, "the submit RPC must exist in a migration");
+
+  const expected: Record<string, { value: string; reject: boolean }> = {
+    policyVersion: { value: version!, reject: true },
+    trackingPurpose: { value: purpose!, reject: true },
+    screenshotPurpose: { value: screenshot!, reject: true },
+  };
+  for (const sql of migrations) {
+    for (const [key, { value, reject }] of Object.entries(expected)) {
+      const guard = sql.match(new RegExp(`p_payload->>'${key}' ${reject ? "<>" : "="} '([^']*)'`));
+      assert.ok(guard, `the RPC must guard ${key}`);
+      assert.equal(guard![1], value, `the RPC's ${key} guard must match the served constant`);
+    }
+  }
 });
