@@ -492,9 +492,13 @@ selection must not be communicated by color alone.
 
 ### 6.4 Views and ordering
 
-My day is strictly day-scoped. Unfinished is open backlog, with overdue work
-first; the default order applies within each group. Completed is historical
-record. All tasks is the complete inspectable set. Every view loads 50 parent
+My day is strictly day-scoped and leads with its work split into urgency
+groups: Overdue, Due today, Later, then No date last, with one quiet header per
+group. The group order never changes with sorting so urgency can never be
+buried; the active column sort orders rows inside each group. Unfinished is
+open backlog, with overdue work first; the default order applies within each
+group. Completed is historical record. All tasks is the complete inspectable
+set. Every view loads 50 parent
 tasks at a time from the authorized server-side result set. `Load more` appends
 the next cursor page and keeps prior rows in place; it is explicit rather than
 automatic. Search, date filters, and sort apply before pagination and reset the
@@ -508,7 +512,12 @@ sentinel loading and mounted-row window belong to live, unbounded feeds such as
 the debugger trace.
 
 The default order is due date latest-first, with open work above completed and
-undated items last. The Tasks column row exposes Name, Date due, and Status
+undated items last. My day is assembled on the client, so its list, its view
+chip, and the agenda-strip counts all derive from the same day list (the
+canonical default order only applies where the server pages a view; a client
+view whose rows skip the active sort would make the column header lie). The
+strip counts name exactly what they measure — overdue, due today, done today —
+and never repeat a view chip under a different definition. The Tasks column row exposes Name, Date due, and Status
 sorting. Activating a column starts in its natural direction, toggles on the
 second activation, and restores the default on the third. The choice persists
 for the Tasks workspace, and paginated results must be sorted before pagination

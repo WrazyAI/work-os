@@ -228,13 +228,16 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
-  it("keeps My day open-only and states its counts from the complete day result", () => {
+  it("keeps My day open-only, urgency-grouped, and states one honest count", () => {
     expect(app).toContain("My day is open work only");
     expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
     expect(app).toContain("Today <em>{openToday.length}</em>");
     // My day is assembled on the client, so its chip, the strip counts, and
     // the list it opens all derive from dayTaskGroups over the same day list.
     expect(app).toContain("dayTaskGroups(myDayTasks, currentDate, taskSort)");
+    expect(app).toContain("dayTaskGroups(displayedTasks, currentDate, taskSort)");
+    expect(app).toContain('className="task-record-section"');
+    expect(app).toContain("historyOrder === \"server\" && serverBackedRows");
     expect(app).not.toContain('taskView === "today" && !historical && pageCounts ? pageCounts.open');    expect(app).toContain("My day is open work only");
   });
 
