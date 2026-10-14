@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.32 — 2026-10-14
+
+- The floating mascot's approval card is now as compact as the in-app one — same header, footer, and button sizes.
+- The collapsed chat button now says "Add a task" with "Chat with Otto about it" beneath it.
+
 ## 0.4.31 — 2026-10-14
 
 - The mascot can be dragged on the first try on macOS — clicking the companion from another app no longer needs a second attempt.
