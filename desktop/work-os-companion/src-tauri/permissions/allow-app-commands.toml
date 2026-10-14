@@ -8,6 +8,7 @@ commands.allow = [
   "ensure_local_settings",
   "focus_main",
   "notify_focus",
+  "focus_main",
   "arm_update_exit_watchdog",
   "disarm_update_exit_watchdog",
   "open_work_os_auth",

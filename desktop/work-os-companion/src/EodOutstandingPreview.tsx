@@ -41,7 +41,6 @@ export default function EodOutstandingPreview() {
   const masthead = <header className="masthead">
     <div><p>September 11</p><div className="masthead-title-row"><h1>{state === "selected" ? "EOD Review" : "My Day"}</h1>{days.length > 0 && <button type="button" className="eod-attention-pill"><AlertTriangle size={12} />{days.length} prior EOD{days.length === 1 ? "" : "s"} need attention</button>}</div></div>
     <div className="mast-actions">
-      <span className="provider nifty-state fresh">Nifty current</span>
       <NotificationsBell
         memoryCandidates={0}
         recap={null}

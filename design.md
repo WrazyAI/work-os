@@ -560,6 +560,13 @@ Tool surfaces must preserve:
 - reduced-motion behavior;
 - copy controls that do not crowd the message bubble.
 
+An approval batch is reviewed one action at a time. The card's top edge carries
+the batch progress rule, the header names the action with its position (`N of
+M`), and the footer keeps the quiet step arrows beside the two decisions on one
+single row at every width — the decisions flex to fill the card's remaining
+width instead of stacking under oversized step boxes — so nothing in the card
+reads heavier than the action being decided.
+
 ### 7.2 In-app launcher and sheet
 
 The closed in-app state is a compact Otto launcher fixed to the lower-right

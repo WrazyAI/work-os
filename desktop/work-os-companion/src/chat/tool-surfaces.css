@@ -529,7 +529,8 @@
 
 [data-workos-tool-surface="approval"] .approval-flow-progressbar {
   height: 3px;
-  background: #edf1e9;
+  border-radius: var(--tool-radius) var(--tool-radius) 0 0;
+  background: #e7ece3;
 }
 
 [data-workos-tool-surface="approval"] .approval-flow-progressbar span {
@@ -541,8 +542,8 @@
 }
 
 [data-workos-tool-surface="approval"] .approval-flow > header {
-  min-height: 66px;
-  padding: 13px 15px 11px;
+  min-height: 60px;
+  padding: 12px 15px 10px;
   border-bottom: 0;
   background: linear-gradient(180deg, #fffefa 0%, #fafcf7 100%);
 }
@@ -552,8 +553,8 @@
 }
 
 [data-workos-tool-surface="approval"] .approval-flow-body {
-  gap: 12px;
-  padding: 15px;
+  gap: 10px;
+  padding: 12px 15px;
 }
 
 [data-workos-tool-surface="approval"] .approval-flow-body .approval-unresolved {
@@ -614,14 +615,14 @@
 }
 
 [data-workos-tool-surface="approval"] .approval-step-nav button {
-  width: 34px;
-  border-color: var(--tool-line);
-  background: var(--tool-paper);
+  width: 36px;
+  border-color: transparent;
+  background: transparent;
   color: var(--tool-muted);
 }
 
 [data-workos-tool-surface="approval"] .approval-step-nav button:hover:not(:disabled) {
-  border-color: var(--tool-line-strong);
+  border-color: transparent;
   background: var(--tool-hover);
   color: var(--tool-ink);
 }
@@ -1394,16 +1395,9 @@
 }
 
 @media (max-width: 560px) {
-  [data-workos-tool-surface="approval"] .approval-flow > footer,
   [data-workos-tool-surface="batch"] .task-batch-foot {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  [data-workos-tool-surface="approval"] .approval-step-nav,
-  [data-workos-tool-surface="approval"] .approval-actions,
-  [data-workos-tool-surface="batch"] .task-batch-foot button {
-    width: 100%;
   }
 
   [data-workos-tool-surface="approval"] .approval-step-nav button,
@@ -1412,17 +1406,8 @@
     min-height: 40px;
   }
 
-  [data-workos-tool-surface="approval"] .approval-step-nav {
-    justify-content: space-between;
-  }
-
-  [data-workos-tool-surface="approval"] .approval-step-nav button {
-    flex: 1;
-  }
-
-  [data-workos-tool-surface="approval"] .approval-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  [data-workos-tool-surface="batch"] .task-batch-foot button {
+    width: 100%;
   }
 
   [data-workos-tool-surface="batch"] > .task-batch-head {

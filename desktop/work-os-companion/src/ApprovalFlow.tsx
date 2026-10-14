@@ -179,11 +179,11 @@ export function ApprovalFlow({
       data-workos-tool-surface="approval"
       data-workos-tool-state={busy ? "filing" : "review"}
     >
+      <div className="approval-flow-progressbar" aria-hidden="true"><span style={{ width: `${((step + 1) / pending.length) * 100}%` }} /></div>
       <header>
         <div className="approval-flow-title"><small>Review action</small><strong>{questionFor(current.op)}</strong></div>
         <span className="approval-flow-progress">{step + 1} of {pending.length}</span>
       </header>
-      <div className="approval-flow-progressbar" aria-hidden="true"><span style={{ width: `${((step + 1) / pending.length) * 100}%` }} /></div>
       <div className="approval-flow-body">
         {unresolvedTask ? <p className="approval-unresolved" role="status"><CircleAlert size={13} aria-hidden="true" /> This action has no task attached. Skip it, or ask again to rebuild the list.</p> : null}
         <details><summary><ChevronDown size={13} />Technical details</summary><code>{call.command}</code></details>

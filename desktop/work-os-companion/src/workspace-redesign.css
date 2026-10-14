@@ -943,23 +943,6 @@ body {
   font-weight: 600;
 }
 
-.provider.nifty-state {
-  border-color: var(--line);
-  color: var(--muted);
-}
-
-.provider.nifty-state.syncing {
-  background: var(--color-observed-soft, #edf6fd);
-  border-color: #cfe1ed;
-  color: var(--color-observed-ink, #235778);
-}
-
-.provider.nifty-state.degraded {
-  background: var(--warning-soft, #fff8e8);
-  border-color: #efd7a5;
-  color: #8a5a00;
-}
-
 .notice {
   width: min(100%, 1200px);
   max-width: none;

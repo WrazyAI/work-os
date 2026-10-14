@@ -1769,13 +1769,11 @@ export default function AvatarApp(): React.ReactElement {
     ? "Late start — add a reason"
     : !facts.loaded
       ? (daySyncState === "error" ? "Today is syncing" : "Loading today…")
-      : facts.niftySyncError
-        ? "Nifty sync delayed"
+      : facts.niftySyncError || daySyncState === "stale"
+        ? "Showing last update"
         : facts.niftySyncing
-          ? "Nifty syncing…"
-          : daySyncState === "stale"
-            ? "Showing last update"
-            : formatWorkOsDate(facts.shiftDate);
+          ? "Today is syncing"
+          : formatWorkOsDate(facts.shiftDate);
 
   // Agenda opens the composer once when it first becomes due; an explicit
   // collapse is respected until the shift or plan state actually changes.
