@@ -4741,6 +4741,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       {!historical && <div className="task-focus-stats" aria-label="Today’s counts"><span className={dayGroupCount("overdue") > 0 ? "attention" : undefined}><b>{dayGroupCount("overdue")}</b><small>overdue</small></span><span><b>{dayGroupCount("today")}</b><small>due today</small></span><span><b>{focusDoneTodayCount}</b><small>done today</small></span></div>}
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </section>
+    <div className="tasks-toolbar">
     {!historical && <nav className="agenda-strip-chips" role="tablist" aria-label="Task views">{chipCounts.map(({ id, label, count }) => <button key={id} role="tab" aria-selected={taskView === id} className={`agenda-strip-chip ${taskView === id ? "active" : ""}`} onClick={() => onTaskView(id)}>{label}<em>{count}</em></button>)}</nav>}
     <section className="task-search-toolbar" aria-label="Task search and date filters">
       <label className="task-search"><Search size={16} aria-hidden="true" /><input value={taskSearch} onChange={(event) => onTaskSearch?.(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" />{taskSearch && <button aria-label="Clear task search" onClick={() => onTaskSearch?.("")}><X size={14} /></button>}</label>
@@ -4757,6 +4758,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
       {!historical && <button className="primary task-add-button" onClick={onAddTask}><Plus size={15} /> Add task</button>}
       </div>
     </section>
+    </div>
     {(hasFilters || overflowNote) && <p className="task-filter-summary" role="status">{overflowNote ?? `${displayedTasks.length} result${displayedTasks.length === 1 ? "" : "s"}`}</p>}
     <section className="panel task-list-panel" aria-label="Task list"><h2 className="sr-only">{historical ? `Tasks from ${formatWorkOsDate(selectedDate)}` : viewLabel}</h2>
       <div className="evidence-list task-records" ref={listRef}>{historyError && <div className="task-history-error" role="alert"><span>{historyHasData ? "Task history could not be refreshed. Showing saved results." : "Task history could not be loaded."}</span>{onRetryHistory && <button type="button" onClick={onRetryHistory}>Try again</button>}</div>}{loading && !displayed.length ? <TaskListSkeleton rows={6} /> : displayedTasks.length ? <><SortHeaderRow columns={TASKS_WORKSPACE_SORT_COLUMNS} sort={taskSort} fallback={DEFAULT_TASK_SORT} onChange={onTaskSort} label={historical ? "Sort recorded tasks" : `Sort ${viewLabel.toLowerCase()} tasks`} className="tasks-column-sort" />{taskView === "today" && !historical

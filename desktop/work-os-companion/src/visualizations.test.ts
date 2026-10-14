@@ -369,6 +369,13 @@ describe("operational visualizations", () => {
     expect(styles).not.toContain(".tasks-workspace .page-intro");
     // Chips never wrap inside their pill above 900px; the strip reflows instead.
     expect(workspaceStyles).toMatch(/\.agenda-strip-chips \{[\s\S]*?flex-wrap: nowrap/);
+    // Views and the search/filter controls share one toolbar row; the controls
+    // wrap below the views only when the row runs out of width.
+    expect(app).toContain('className="tasks-toolbar"');
+    expect(dashboardStyles).toContain(".tasks-toolbar { display: flex; flex-wrap: wrap;");
+    expect(dashboardStyles).toContain(".tasks-toolbar > .task-search-toolbar { display: flex; flex-direction: row;");
+    // Status labels center inside their pill instead of hugging the top edge.
+    expect(dashboardStyles).toContain(".task-state { display: inline-flex; align-items: center; justify-content: center;");
     expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
     expect(dashboardStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?min-width: 0;/);
     expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"stats carry"/);

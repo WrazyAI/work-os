@@ -483,8 +483,14 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .agenda-strip-chip.active { border-color: #c9dabb; background: #edf5e7; color: #315d22; box-shadow: inset 0 0 0 1px rgba(94, 157, 39, 0.08); }
 .agenda-strip-carry { min-height: 32px; border-color: #ecd59e; border-radius: 9px; background: #fff9e9; color: #8b5c0b; font-size: 10px; }
 
-.task-search-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin: 14px 0; }
-.task-search-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+/* One toolbar row: the view chips, search, and the date/add controls. The
+   controls sit in the space the chips leave; when the row runs out of width
+   they wrap below the chips instead of leaving a permanently empty band. */
+.tasks-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
+.tasks-toolbar > .agenda-strip-chips { order: 0; flex: 0 1 auto; min-width: 0; margin: 0; }
+.tasks-toolbar > .task-search-toolbar { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; flex: 1 1 440px; min-width: 0; margin: 0; }
+.tasks-toolbar .task-search { flex: 1 1 200px; min-width: 200px; }
+.tasks-toolbar .task-search-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; flex: 0 0 auto; }
 .task-search { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); box-shadow: none; }
 .task-search:focus-within { border-color: #a9c79c; box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.13); }
 .task-filters-toggle { min-height: 46px; border-color: var(--dash-line); border-radius: 13px; background: rgba(255, 255, 252, 0.84); color: var(--dash-muted); }
@@ -539,7 +545,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-row-ring { justify-self: center; }
 .task-due { color: var(--dash-muted); font-size: 10px; font-weight: 700; }
 .task-due.danger, .task-state.overdue { color: var(--dash-danger); }
-.task-state { justify-self: start; min-height: 22px; padding: 0 8px; border-radius: 999px; background: #edf2e9; color: #62705e; font-size: 9px; font-weight: 800; }
+.task-state { display: inline-flex; align-items: center; justify-content: center; justify-self: start; min-height: 22px; padding: 0 8px; border-radius: 999px; background: #edf2e9; color: #62705e; font-size: 9px; font-weight: 800; }
 .task-record.workspace-task .task-state.open { border: 1px solid var(--dash-line); background: transparent; color: var(--dash-muted); }
 .task-state.complete { background: #e4f4d8; color: #3f7825; }
 .task-record.workspace-task .surfaced-tag { border: 1px solid #d8e2d2; border-radius: 999px; background: #eef3eb; color: #60715b; font-size: 9px; font-weight: 750; }
@@ -605,11 +611,6 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   .active-task-panel-header { display: grid; }
   .active-task-panel-actions { justify-content: flex-start; }
   .active-task-panel > .dashboard-panel-footer { margin-inline: -17px; }
-  .task-search-toolbar { grid-template-columns: 1fr; }
-  .task-search-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .task-search-actions > .task-filters-wrap,
-  .task-search-actions > .task-add-button { width: 100%; }
-  .task-filters-toggle { width: 100%; justify-content: center; }
   .task-records { padding-inline: 9px; }
   .task-record.workspace-task { grid-template-columns: 29px minmax(0, 1fr) 30px !important; gap: 9px; min-height: 67px; }
   .task-record.workspace-task .task-row-ring, .task-record.workspace-task .task-due, .task-record.workspace-task > .task-state { display: none; }

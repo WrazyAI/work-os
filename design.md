@@ -433,10 +433,11 @@ workspace than a list of cards.
 1. Masthead title/date and date navigator.
 2. One compact agenda strip: focus statement, save/provenance state, live count
    shortcuts, and Review unfinished work only when relevant.
-3. Four views: My day, Unfinished, Completed, All tasks.
-4. Search/date/filter toolbar with the local Add task action.
-5. One flat task-list panel.
-6. Shared anchored composer with reserved bottom clearance.
+3. One toolbar row: the four views (My day, Unfinished, Completed, All tasks),
+   the search field, the date-range filter, and the local Add task action. The
+   controls wrap below the views only when the row runs out of width.
+4. One flat task-list panel.
+5. Shared anchored composer with reserved bottom clearance.
 
 Do not put a permanent focus editor or oversized hero above the table. Focus
 editing belongs to the shared composer/editor.
@@ -447,10 +448,11 @@ Use a flat, readable list:
 
     completion | task + metadata | progress | due | status | actions
 
-The Tasks page has one date navigator in the masthead, one search/filter
-toolbar, and one task list. Do not repeat a Task queue heading or status section
-headers. The list begins with one quiet sortable column row for Name, Date due,
-and Status; it aligns to the task, due, and status tracks rather than introducing
+The Tasks page has one date navigator in the masthead, one toolbar row (the
+views, search, date filter, and Add task), and one task list. Do not repeat a
+Task queue heading or status section headers. The list begins with one quiet
+sortable column row for Name, Date due, and Status; it aligns to the task, due,
+and status tracks rather than introducing
 a second boxed toolbar. Keep the canonical default order visible through the row
 sequence: due date latest-first, open work above completed work, and undated
 items last.
@@ -703,7 +705,9 @@ Inputs have persistent labels where the field is not self-evident, visible
 focus, inline validation, and deliberate disabled/loading states. Placeholder
 text is not the only label.
 
-Tasks search is always visible. Date range is a compact peer control or
+Tasks search is always visible, sharing one toolbar row with the views, the
+compact Date range control, and Add task; the controls wrap below the views
+only when the row runs out of width. Date range stays a peer control or
 popover, with clear/reset behavior and a result count when active. Filtered
 empty says No tasks match these filters, never No tasks.
 

@@ -3422,17 +3422,11 @@ button:not(:disabled):active {
   }
 
   .agenda-strip-chips {
-    order: 3;
     flex-wrap: wrap;
   }
 
   .goal-card-head {
     margin-bottom: 10px;
-  }
-
-  .task-search-toolbar {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 
