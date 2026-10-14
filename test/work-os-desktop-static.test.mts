@@ -64,6 +64,12 @@ assert.match(onboardingStage, /import \{ MascotPet \} from "\.\/MascotPet"/);
 assert.match(onboardingStage, /export const STAGE_POSE/);
 assert.match(onboardingStage, /import \{ MASCOT \} from "\.\/mascot"/);
 assert.match(onboardingStage, /aria-live="polite"/);
+assert.match(onboardingStage, /topRight\?: ReactNode/);
+assert.match(onboardingStage, /\{topRight\}/);
+// Sign out lives in the stage's top-right corner, so it is reachable before
+// setup starts and does not move when the panel opens.
+assert.match(onboarding, /topRight=\{<SessionControls/);
+assert.match(onboarding, /if \(!hydrated\.current \|\| stage !== "form"/);
 assert.doesNotMatch(onboardingStage, /studio-otto\.svg|work-os-companion\.png/);
 assert.match(read("src/onboarding-stage.css"), /prefers-reduced-motion: reduce/);
 // `main` is read further down this file; read the entrypoint locally here.

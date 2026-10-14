@@ -134,10 +134,13 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
     hydrated.current = true;
   }, [data.draft.revision, hydrationKey]);
   useEffect(() => {
-    if (!hydrated.current || phase.id === "connected") return;
+    // Nothing is written while the welcome is still open: otherwise an
+    // employee who closes the app on the first screen would come back to a
+    // draft that has "been seen" and never be greeted again.
+    if (!hydrated.current || stage !== "form" || phase.id === "connected") return;
     const timer = window.setTimeout(() => void saveDraft(phase.id).catch(() => undefined), 700);
     return () => clearTimeout(timer);
-  }, [form, phase.id]);
+  }, [form, phase.id, stage]);
   // A new step is new content with new controls; move the reading position to
   // its heading (but never on first render, which would steal boot focus).
   useEffect(() => {
@@ -233,6 +236,7 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
       line={welcoming ? welcomeLine : line}
       journey={welcoming ? undefined : { total: PHASES.length, index: phaseIndex, label: phase.feeling }}
       replayKey={welcoming ? "welcome" : `${phase.id}:${entering ? "entering" : "step"}`}
+      topRight={<SessionControls busy={busy} onLogout={onLogout} onOpenDebug={onOpenDebug} />}
     >
       {welcoming && <div className="otto-bubble-actions">
         <button className="primary" onClick={() => setStage("form")}>Start setup <ArrowRight size={16} /></button>
@@ -240,7 +244,7 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
       </div>}
     </OnboardingStage>
     {!welcoming && <section className="onboarding-workspace">
-      <header><span>Workspace setup</span><div><button className="quiet-action" disabled={busy} onClick={onLogout}><LogOut size={15} /> Sign out</button><button className="debug-trigger" title="Open debug scenarios" aria-label="Open debug scenarios" onClick={onOpenDebug}><CircleAlert size={16} /></button></div></header>
+      <header><span>Workspace setup</span><SessionControls busy={busy} onLogout={onLogout} onOpenDebug={onOpenDebug} /></header>
       {simulated && <div className="debug-notice"><CircleAlert size={15} /> Scenario mode. Writes stay on this device.</div>}
       <div className="phase-content" key={phase.id} ref={panelRef}>
         {phase.id === "seen" && <Seen data={data} form={form} setForm={setForm} />}
@@ -260,6 +264,14 @@ export default function Onboarding({ data, simulated, busy, onSubmit, onSaveDraf
  *  repeats either of them. Focusable so a step change lands the reader on it. */
 function PhaseHeading({ title }: { title: string }) {
   return <div className="phase-intro"><h2 className="phase-heading" tabIndex={-1}>{title}</h2></div>;
+}
+/** Session chrome. It sits in the same corner whether or not the step panel is
+ *  open, so signing out is never behind a step and never moves between them. */
+function SessionControls({ busy, onLogout, onOpenDebug }: { busy: boolean; onLogout: () => void; onOpenDebug: () => void }) {
+  return <div className="session-controls">
+    <button className="quiet-action" disabled={busy} onClick={onLogout}><LogOut size={15} /> Sign out</button>
+    <button className="debug-trigger" title="Open debug scenarios" aria-label="Open debug scenarios" onClick={onOpenDebug}><CircleAlert size={16} /></button>
+  </div>;
 }
 function Seen({ data, form, setForm }: any) { return <><PhaseHeading title="Is this right?" /><div className="identity-grid"><label><span>Preferred name</span><input value={form.preferredName} onChange={(e) => setForm({ ...form, preferredName: e.target.value })} /></label><label><span>Work email</span><input value={form.email} readOnly /></label></div><div className="context-list"><Context label="Official role" value={data.organizationSetup.roleProfile?.name || "Pending manager setup"} /><Context label="Team" value={data.organizationSetup.teams.map((team: any) => team.name).join(", ") || "Pending manager setup"} /><Context label="Manager" value={data.organizationSetup.managers.map((manager: any) => manager.display_name).join(", ") || "Pending manager setup"} /></div><div className="provider-line"><span className={data.providerPrefill.nifty.mapped ? "ok" : ""}>Nifty {data.providerPrefill.nifty.mapped ? "connected" : "not mapped"}</span><span className={data.providerPrefill.worktivity.mapped ? "ok" : ""}>Worktivity {data.providerPrefill.worktivity.mapped ? "connected" : "not mapped"}</span></div></>; }
 function Understood({ data, form, setForm, select }: any) { const selected = data.catalog.archetypes.find((entry: any) => entry.id === form.archetypeId); return <><PhaseHeading title="Pick the closest fit." />{data.profile.workPreferences.inferredArchetypeId && <div className="suggestion-note"><Sparkles size={15} /> Suggested from your imported role</div>}<div className="archetype-grid">{data.catalog.archetypes.map((entry: any) => <button key={entry.id} className={form.archetypeId === entry.id ? "selected" : ""} onClick={() => select(entry.id)}><strong>{entry.name}</strong><small>{entry.description}</small>{form.archetypeId === entry.id && <Check size={16} />}</button>)}</div>{form.archetypeId === "custom" && <label className="wide-input"><span>Your role</span><input value={form.customRoleTitle} onChange={(e) => setForm({ ...form, customRoleTitle: e.target.value })} placeholder="Describe your work" /></label>}{(selected?.specialties ?? []).length > 0 && <div className="specialties"><span>Specialties</span><div>{selected.specialties.map((specialty: any) => <button className={form.specialtyIds.includes(specialty.id) ? "selected" : ""} key={specialty.id} onClick={() => setForm({ ...form, specialtyIds: form.specialtyIds.includes(specialty.id) ? form.specialtyIds.filter((id: string) => id !== specialty.id) : [...form.specialtyIds, specialty.id] })}>{specialty.name}</button>)}</div></div>}</>; }

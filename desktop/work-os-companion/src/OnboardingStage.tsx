@@ -54,7 +54,7 @@ export function OttoLine({ text }: { text: string }) {
   const words = useMemo(() => text.split(/\s+/).filter(Boolean), [text]);
   const reveal = words.length <= MAX_REVEAL_WORDS && !prefersReducedMotion();
   const settleMs = reveal ? words.length * WORD_MS + 180 : 0;
-  return <p className="otto-line" style={{ "--otto-settle": `${settleMs}ms` } as CSSProperties}>
+  return <p className="otto-line" data-reveal={reveal ? "true" : undefined} style={{ "--otto-settle": `${settleMs}ms` } as CSSProperties}>
     {/* The speaker is named here rather than in a visible label: the bubble's
         tail already shows who is talking. */}
     <span className="sr-only">{MASCOT.name}: {text}</span>
@@ -80,6 +80,9 @@ export interface OnboardingStageProps {
   journey?: { total: number; index: number; label: string };
   /** Changes per step so the entrance replays instead of morphing. */
   replayKey: string;
+  /** Stage chrome for the top-right corner, mirroring the masthead position so
+   *  the control does not move when the panel opens. */
+  topRight?: ReactNode;
   /** Actions that belong to what Otto just said. */
   children?: ReactNode;
 }
@@ -91,11 +94,15 @@ export function OnboardingStage({
   line,
   journey,
   replayKey,
+  topRight,
   children,
 }: OnboardingStageProps) {
   const recipe = STAGE_POSE[pose];
   return <aside className="onboarding-story" data-pose={pose}>
-    <div className="story-brand"><img src={assetUrl(wordmark)} alt="" /><strong>WORK <b>OS</b></strong></div>
+    <div className="stage-head">
+      <div className="story-brand"><img src={assetUrl(wordmark)} alt="" /><strong>WORK <b>OS</b></strong></div>
+      {topRight}
+    </div>
     {/* Otto stays mounted for the whole first run: only what he says changes.
         Keying the statement and the bubble replays their entrance per step
         without restarting the figure underneath them. */}

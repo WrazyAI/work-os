@@ -33,8 +33,15 @@ describe("first-run stage", () => {
 
   it("does not animate a line long enough to outlast the moment", () => {
     const long = stage({ line: Array.from({ length: 60 }, (_, index) => `word${index}`).join(" ") });
+    // No per-word delay *and* no reveal flag: the flat rule lives in CSS, so the
+    // flag is what keeps a long line from flashing in all at once.
     expect(long).not.toContain("animation-delay");
+    expect(long).not.toContain('data-reveal="true"');
     expect(long).toContain("word59");
+  });
+
+  it("flags a short line as revealing so the word animation can apply", () => {
+    expect(stage()).toContain('data-reveal="true"');
   });
 
   it("walks the journey rail and names the current step for assistive tech", () => {

@@ -37,6 +37,34 @@
   gap: clamp(22px, 4.5vh, 42px);
 }
 
+.stage-head {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+
+.session-controls {
+  display: flex;
+  gap: 7px;
+}
+
+/* The same controls sit on the light panel and on the dark stage, so the stage
+   only needs its border lifted off the dark ground. */
+.onboarding-story .quiet-action,
+.onboarding-story .debug-trigger {
+  border-color: rgba(248, 245, 234, 0.22);
+}
+
+.onboarding-story .quiet-action:not(:disabled):hover,
+.onboarding-story .debug-trigger:not(:disabled):hover {
+  border-color: rgba(248, 245, 234, 0.44);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .stage-statement {
   animation: onboarding-statement-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -133,7 +161,9 @@
   line-height: 1.62;
 }
 
-.otto-line-word {
+/* Only lines short enough to reveal get the reveal: a line past the word cap
+   renders flat rather than flashing every word in at once. */
+.otto-line[data-reveal="true"] .otto-line-word {
   display: inline-block;
   animation: otto-word-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

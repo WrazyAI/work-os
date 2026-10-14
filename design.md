@@ -936,10 +936,10 @@ there is never more than one guide per page.
   `How <page> works`) reopens the guide for the page on screen. Reopening by
   hand does not consume an unseen guide; acknowledgement happens on dismissal.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
-  described by its promise. Its header names the speaker once with the
-  configured companion mark, the same identity the chat surfaces use, so a
-  guide reads as the same companion the employee met in setup. It holds one
-  custom inline-SVG scene drawn on the
+  described by its promise. Its header names the speaker once, with the
+  configured companion mark for sighted readers and the configured name for
+  assistive technology, so a guide reads as the same companion the employee met
+  in setup. It holds one custom inline-SVG scene drawn on the
   workspace palette (`aria-hidden`; no raster art). The scene plays one
   bounded pass through the numbered steps; each step is also a real button that
   activates the matching scene phase on hover, focus, or click. Reduced-motion
@@ -1060,8 +1060,10 @@ product language: personality on the stage, discipline in the panel.
   offers one `Enter My Day`. Choosing it puts Otto in his working pose and
   shows the inline wait, and that state lasts exactly as long as the transition
   takes — never a fixed or invented delay.
-- **Leaving.** `Sign out` stays in the step masthead throughout, so a first run
-  that cannot complete is never a dead end.
+- **Leaving.** Session controls sit in the same top-right corner on the welcome
+  and on the step masthead, so `Sign out` is reachable from the first screen and
+  never moves between them. A first run that cannot complete is never a dead
+  end.
 
 ## 9. Data truth, provenance, and state
 The visual system must keep these evidence classes distinct:
