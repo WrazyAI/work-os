@@ -21,6 +21,7 @@ import SkeletonsPreview from "./SkeletonsPreview";
 import OttoPreview from "./OttoPreview";
 import MemoryPreview from "./MemoryPreview";
 import SettingsPreview from "./SettingsPreview";
+import ProfilePreview from "./ProfilePreview";
 import { diagnostics, installDiagnosticErrorHandlers } from "./diagnostics";
 import { installBootTrace } from "./bootTrace";
 import { NotificationProvider } from "./NotificationFlyouts";
@@ -65,6 +66,7 @@ const Root = params.get("window") === "avatar" ? AvatarApp
                 : import.meta.env.DEV && (params.has("preview-otto") || params.has("preview-mascot") || params.has("preview-signal-spirit")) ? OttoPreview
                 : import.meta.env.DEV && params.has("preview-memory") ? MemoryPreview
                 : import.meta.env.DEV && params.has("preview-settings") ? SettingsPreview
+                  : import.meta.env.DEV && params.has("preview-profile") ? ProfilePreview
                 : import.meta.env.DEV && params.has("preview-plan") ? PlanningPreview
             : import.meta.env.DEV && params.has("preview-eod") ? EodPreview
                 : import.meta.env.DEV && params.has("preview-admin") ? AdminPreview

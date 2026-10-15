@@ -1752,7 +1752,8 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   gap: 6px;
 }
 .profile-field > span,
-.profile-specialties legend {
+.profile-specialties legend,
+.profile-pill-group legend {
   color: #6e7369;
   font: 700 8.5px Manrope, Inter, sans-serif;
   letter-spacing: 0.09em;
@@ -1929,6 +1930,186 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 }
 .profile-specialties input {
   accent-color: #83bc45;
+}
+/* Work-profile signal groups. A signal is either picked (a solid green pill
+   with its own remove control) or offered (a dashed add chip built from the
+   selected scope's suggestions), so the modal never presents catalog picks as
+   typed text. */
+.profile-pill-group {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.profile-pill-group legend {
+  padding: 0;
+  margin-bottom: 0;
+}
+.profile-pill-picked,
+.profile-pill-offer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 5px 0 11px;
+  border: 1px solid #a3d966;
+  border-radius: 999px;
+  background: #edf7df;
+  color: #31531d;
+  font-size: 9.5px;
+  font-weight: 650;
+}
+.profile-pill button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5c7a41;
+  transition: background 150ms ease, color 150ms ease;
+}
+.profile-pill button:hover {
+  background: rgba(49, 83, 29, 0.12);
+  color: #26421a;
+}
+.profile-pill button:focus-visible {
+  outline: 2px solid #31531d;
+  outline-offset: 1px;
+}
+.profile-pill-add,
+.profile-pill-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px dashed #c6cbc0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5f665c;
+  font-size: 9.5px;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.profile-pill-add:hover,
+.profile-pill-custom:hover {
+  border-style: solid;
+  border-color: #a9afa2;
+  background: #fffef9;
+  color: #3f463c;
+}
+.profile-pill-custom {
+  border-color: transparent;
+  padding: 0 4px;
+}
+.profile-pill-custom-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-pill-custom-form input {
+  min-width: 190px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #d2d4ca;
+  border-radius: 999px;
+  background: #fffef9;
+  color: var(--ink);
+  font: 450 11px Inter, sans-serif;
+}
+.profile-pill-custom-form input:focus {
+  border-color: #8dbf54;
+  outline: 3px solid rgba(184, 255, 90, 0.18);
+}
+.profile-pill-custom-add {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #93d642;
+  border-radius: 999px;
+  background: var(--signal);
+  color: #172014;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.profile-pill-custom-add:disabled {
+  border-color: var(--line);
+  background: #f2f1eb;
+  color: #9aa094;
+  cursor: default;
+}
+.profile-pill-empty {
+  margin: 0;
+  color: #8b9086;
+  font-size: 9.5px;
+}
+/* Connected accounts are the workspace's mapping, not the employee's choice:
+   they stay quiet and cool where the picked signals are green, and they carry
+   no controls the employee cannot honor. */
+.profile-accounts {
+  display: grid;
+  gap: 9px;
+  padding-top: 13px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+.profile-account-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffef9;
+  color: #6e7369;
+  font-size: 9.5px;
+}
+.profile-account-pill strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+.profile-account-mark {
+  display: grid;
+  place-items: center;
+  color: #4a5248;
+}
+.profile-account-pill.is-worktivity .profile-account-mark {
+  color: #2e617d;
+}
+.profile-account-id {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-account-state {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff5dc;
+  color: #8a6212;
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.profile-account-note {
+  margin: 0;
+  color: #8b9086;
+  font-size: 9.5px;
+  line-height: 1.45;
 }
 .profile-editor-actions {
   display: flex;

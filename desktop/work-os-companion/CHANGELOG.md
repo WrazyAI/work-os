@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.45 — 2026-10-15
+
+- Your work profile is now picked, not typed: responsibilities, outputs, and evidence sources are chips you choose from your scope.
+- Profile settings now shows the Worktivity, GitHub, and Nifty accounts mapped to you as evidence, in place of the single GitHub username box.
+
 ## 0.4.44 — 2026-10-15
 
 - Fixed the app getting stuck on its loading screen on a newly set-up Mac: the local data folder is now created before it is needed.

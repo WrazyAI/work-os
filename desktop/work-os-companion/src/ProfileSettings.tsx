@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Camera, Check, Plus, Trash2, UserRound } from "lucide-react";
 import { apiRequestBlob } from "./api";
+import { ItemPillGroup, ProviderAccountPills } from "./ProfilePills";
 import { SettingsSwitch } from "./SettingsSwitch";
-import type { OnboardingData, OnboardingSchedule, ProfileItemKind, WorkProfileItem } from "./types";
+import type { OnboardingData, OnboardingSchedule, WorkProfileItem } from "./types";
 import { supportedTimezones, timezoneLabel } from "../../../src/modules/work-os/timezones";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
@@ -26,11 +27,10 @@ type ProfileFormState = {
   archetypeId: string;
   customRoleTitle: string;
   specialtyIds: string[];
-  responsibilities: string;
-  outputTypes: string;
-  evidenceSources: string;
+  /** Picked signals and your own additions, kept as one structured list so the
+   * save never re-parses typed text and ids stay stable across edits. */
+  items: WorkProfileItem[];
   voiceUpdatesEnabled: boolean;
-  githubUsername: string;
 };
 
 export type ProfileSettingsPatch = {
@@ -48,7 +48,6 @@ export type ProfileSettingsPatch = {
     specialtyIds: string[];
     items: WorkProfileItem[];
     voiceUpdatesEnabled: boolean;
-    githubUsername: string;
   };
   revision: number;
   clientMutationKey: string;
@@ -65,7 +64,6 @@ type ProfileSettingsProps = {
 
 const initials = (value: string | null | undefined) => (value ?? "Work OS").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "WO";
 const splitList = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 30);
-const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "custom";
 
 function formFromData(data: OnboardingData): ProfileFormState {
   const work = data.profile.workPreferences;
@@ -86,27 +84,9 @@ function formFromData(data: OnboardingData): ProfileFormState {
     archetypeId: work.archetypeId ?? work.inferredArchetypeId ?? "",
     customRoleTitle: work.customRoleTitle,
     specialtyIds: [...work.specialtyIds],
-    responsibilities: work.responsibilities.join(", "),
-    outputTypes: work.outputTypes.join(", "),
-    evidenceSources: work.evidenceSources.join(", "),
+    items: work.items.map((item) => ({ ...item })),
     voiceUpdatesEnabled: work.voiceUpdatesEnabled,
-    githubUsername: work.githubUsername,
   };
-}
-
-function profileItems(data: OnboardingData, form: ProfileFormState) {
-  const current = data.profile.workPreferences.items;
-  const categories: Array<[ProfileItemKind, string]> = [
-    ["responsibility", form.responsibilities],
-    ["deliverable", form.outputTypes],
-    ["evidence", form.evidenceSources],
-  ];
-  return categories.flatMap(([kind, value]) => splitList(value).map((label) => current.find((item) => item.kind === kind && item.label === label) ?? {
-    id: `custom:${kind}:${slug(label)}`,
-    kind,
-    label,
-    source: "user" as const,
-  }));
 }
 
 export function useProfileAvatar(avatarUrl: string | null | undefined) {
@@ -245,13 +225,15 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
         schedule: form.schedule,
         notifications: { desktopEnabled: form.desktopEnabled },
         privacy: { sensitiveAppExclusions: splitList(form.sensitiveAppExclusions) },
+        // github_username is seeded during onboarding and then managed with the
+        // workspace's provider mappings, so this modal omits it from the patch
+        // and the stored value stays untouched.
         workPreferences: {
           archetypeId: form.archetypeId,
           customRoleTitle: form.customRoleTitle.trim(),
           specialtyIds: form.specialtyIds,
-          items: profileItems(data, form),
+          items: form.items,
           voiceUpdatesEnabled: form.voiceUpdatesEnabled,
-          githubUsername: form.githubUsername.trim(),
         },
         revision: data.draft.revision,
         clientMutationKey: crypto.randomUUID(),
@@ -316,7 +298,12 @@ export function ProfileSettings({ data, mode, busy = false, onSave, onNotify }: 
     <Section title="Work profile" description="Give Otto enough context to understand the work you do.">
       <div className="profile-field-grid"><Field label="Work scope"><select value={form.archetypeId} onChange={(event) => selectArchetype(event.target.value)}>{data.catalog.archetypes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></Field><Field label="Custom role title"><input value={form.customRoleTitle} onChange={(event) => patchForm({ customRoleTitle: event.target.value })} placeholder={selectedArchetype?.id === "custom" ? "e.g. Customer operations" : "Optional"} /></Field></div>
       {selectedArchetype?.specialties.length ? <fieldset className="profile-specialties"><legend>Specialties</legend><div>{selectedArchetype.specialties.map((specialty) => <label key={specialty.id}><input type="checkbox" checked={form.specialtyIds.includes(specialty.id)} onChange={() => patchForm({ specialtyIds: form.specialtyIds.includes(specialty.id) ? form.specialtyIds.filter((id) => id !== specialty.id) : [...form.specialtyIds, specialty.id] })} /><span>{specialty.name}</span></label>)}</div></fieldset> : null}
-      <div className="profile-field-grid"><Field label="Responsibilities" hint="Comma-separated work signals."><input value={form.responsibilities} onChange={(event) => patchForm({ responsibilities: event.target.value })} /></Field><Field label="Outputs"><input value={form.outputTypes} onChange={(event) => patchForm({ outputTypes: event.target.value })} /></Field><Field label="Evidence sources"><input value={form.evidenceSources} onChange={(event) => patchForm({ evidenceSources: event.target.value })} /></Field><Field label="GitHub username"><input value={form.githubUsername} onChange={(event) => patchForm({ githubUsername: event.target.value })} autoComplete="username" /></Field></div>
+      <div className="profile-field-grid">
+        <ItemPillGroup kind="responsibility" legend="Responsibilities" legendId="profile-responsibilities-legend" items={form.items} options={selectedArchetype?.items ?? []} disabled={busy || saving} onChange={(items) => patchForm({ items })} />
+        <ItemPillGroup kind="deliverable" legend="Outputs" legendId="profile-outputs-legend" items={form.items} options={selectedArchetype?.items ?? []} disabled={busy || saving} onChange={(items) => patchForm({ items })} />
+      </div>
+      <ItemPillGroup kind="evidence" legend="Evidence sources" legendId="profile-evidence-legend" items={form.items} options={selectedArchetype?.items ?? []} disabled={busy || saving} onChange={(items) => patchForm({ items })} />
+      {data.providerAccounts ? <ProviderAccountPills accounts={data.providerAccounts} /> : null}
       <div className="profile-preference-row"><div><strong>Voice updates</strong><small>Use voice notes as drafts for work updates.</small></div><SettingsSwitch label="Voice updates" checked={form.voiceUpdatesEnabled} onChange={(value) => patchForm({ voiceUpdatesEnabled: value })} /></div>
     </Section>
   </>;

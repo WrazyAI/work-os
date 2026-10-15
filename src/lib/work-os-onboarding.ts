@@ -169,11 +169,52 @@ function currentScheduleShape(schedule: Json | null) {
   };
 }
 
+export type ProviderAccounts = {
+  nifty: { mapped: boolean; email: string | null };
+  worktivity: { mapped: boolean; email: string | null };
+  github: { accounts: Array<{ login: string; id: string; verified: boolean; bot: boolean }> };
+};
+
+const accountEmail = (value: unknown) => (typeof value === "string" && value.includes("@") ? value : null);
+
+/** The provider accounts an employee can see in their own settings: the Nifty
+ * and Worktivity identities synced onto their person record, and the GitHub
+ * source accounts the workspace has mapped to them. Read-only by design — the
+ * employee owns their work profile, the workspace owns provider mappings. */
+export function providerAccountsFor(input: {
+  niftyMemberId: unknown;
+  worktivityEmployeeId: unknown;
+  sourceAccounts: unknown[] | null | undefined;
+  raw: Json;
+}): ProviderAccounts {
+  const nifty = input.raw.nifty && typeof input.raw.nifty === "object" ? input.raw.nifty as Json : {};
+  const worktivity = input.raw.worktivity && typeof input.raw.worktivity === "object" ? input.raw.worktivity as Json : {};
+  const invitation = worktivity.Invitation && typeof worktivity.Invitation === "object" ? worktivity.Invitation as Json : {};
+  const accounts = (input.sourceAccounts ?? []).flatMap((row): ProviderAccounts["github"]["accounts"] => {
+    if (!row || typeof row !== "object") return [];
+    const record = row as Json;
+    if (record.provider !== "github") return [];
+    const id = typeof record.external_account_id === "string" ? record.external_account_id.trim() : "";
+    if (!id) return [];
+    const metadata = record.metadata && typeof record.metadata === "object" ? record.metadata as Json : {};
+    const login = typeof metadata.login === "string" && metadata.login.trim() ? metadata.login.trim() : id;
+    return [{ login, id, verified: record.verified === true, bot: /\[bot\]$/i.test(login) }];
+  });
+  // Real accounts lead and the shared Actions actor trails, so a bot never
+  // reads like the employee's own identity.
+  accounts.sort((left, right) => Number(left.bot) - Number(right.bot) || Number(right.verified) - Number(left.verified) || left.login.localeCompare(right.login));
+  return {
+    nifty: { mapped: !!input.niftyMemberId, email: accountEmail(nifty.email) },
+    worktivity: { mapped: !!input.worktivityEmployeeId, email: accountEmail(invitation.Email) },
+    github: { accounts: accounts.slice(0, 12) },
+  };
+}
+
 export async function getEmployeeOnboarding(access: WorkOsAccess) {
   if (!access.personId) throw new Error("Work OS person mapping required");
   const supabase = db();
   const today = new Date().toISOString().slice(0, 10);
-  const [profileResult, personResult, onboardingResult, consentResult, screenshotConsentResult, scheduleResult, teamResult] = await Promise.all([
+  const [profileResult, personResult, onboardingResult, consentResult, screenshotConsentResult, scheduleResult, teamResult, sourceAccountResult] = await Promise.all([
     supabase.from("profiles").select("id,email,display_name,avatar_url,role,created_at").eq("id", access.ctx.user.id).single(),
     supabase.from("work_people").select("id,display_name,email,role_profile_id,nifty_member_id,worktivity_employee_id,github_username,work_profile,raw,role_profile:work_role_profiles(id,slug,name)")
       .eq("organization_id", access.organizationId).eq("id", access.personId).single(),
@@ -185,6 +226,8 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
     supabase.from("work_schedules").select("*").eq("organization_id", access.organizationId).eq("person_id", access.personId).eq("active", true)
       .lte("effective_from", today).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("work_team_members").select("team_id,is_manager,team:work_teams(id,name,active)").eq("person_id", access.personId),
+    supabase.from("work_source_accounts").select("provider,external_account_id,verified,metadata")
+      .eq("organization_id", access.organizationId).eq("person_id", access.personId),
   ]);
   if (profileResult.error) throw new Error(`load account profile: ${profileResult.error.message}`);
   if (personResult.error) throw new Error(`load onboarding person: ${personResult.error.message}`);
@@ -193,6 +236,7 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
   if (screenshotConsentResult.error) throw new Error(`load employee screenshot consent: ${screenshotConsentResult.error.message}`);
   if (scheduleResult.error) throw new Error(`load employee schedule: ${scheduleResult.error.message}`);
   if (teamResult.error) throw new Error(`load employee teams: ${teamResult.error.message}`);
+  if (sourceAccountResult.error) throw new Error(`load employee source accounts: ${sourceAccountResult.error.message}`);
   const authoritativeBreaks = await worktivityAuthoritativeBreaks(access.organizationId);
 
   const profile = profileResult.data as Json;
@@ -301,6 +345,12 @@ export async function getEmployeeOnboarding(access: WorkOsAccess) {
         screenshotsBlurred: typeof worktivity.BlurScreenshots === "boolean" ? worktivity.BlurScreenshots : null,
       },
     },
+    providerAccounts: providerAccountsFor({
+      niftyMemberId: person.nifty_member_id,
+      worktivityEmployeeId: person.worktivity_employee_id,
+      sourceAccounts: sourceAccountResult.data as unknown[] | null,
+      raw,
+    }),
     organizationSetup: {
       roleProfile: roleProfile ? { id: (roleProfile as Json).id, slug: (roleProfile as Json).slug, name: (roleProfile as Json).name } : null,
       teams: teamRows.map((row) => row.team).filter(Boolean),

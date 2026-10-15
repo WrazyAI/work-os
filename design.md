@@ -1073,6 +1073,40 @@ Focus is visible on every interactive element. A focus outline must reach 3:1
 against its surroundings; the current signal-lime outline does not (§3.1).
 Dismissal never leaves focus on removed content.
 
+### 8.14 Profile signals and connected accounts
+
+The companion's Profile settings modal keeps two authorities apart and never
+blurs them.
+
+- **Work profile signals.** Responsibilities, Outputs, and Evidence sources are
+  picked, never typed. Each group lists its picked signals as solid green pills
+  with one remove control, the selected work scope's remaining suggestions as
+  dashed add chips, and one quiet `Add your own` control that opens a single
+  bounded input. A catalog pick keeps its catalog id and `suggested` source,
+  your own addition becomes a bounded `user` item, and a label is never kept
+  twice within its kind. Nothing is written until `Save changes`, and the group
+  is disabled while a save is in flight.
+- **Connected accounts.** The evidence accounts the workspace has mapped to the
+  person — Worktivity with its Worktivity email, each GitHub account by login,
+  Nifty with its Nifty email — are read-only pills on a hairline band: paper
+  surface, cool-neutral marks, no inputs and no controls, with the note
+  `Mapped to you by your workspace. Their activity appears in your recaps and
+  reports.` An unverified account is marked `Pending` instead of connected,
+  real accounts lead and a shared automation account such as an Actions bot
+  trails, and a person without mappings reads `No evidence accounts are mapped
+  to you yet.` The group renders only when the profile payload carries the
+  mapping block, so an older API can never produce an invented account.
+- **Empty, dense, and degraded states.** An empty group says
+  `Nothing picked yet.` and still offers its suggestions; long labels wrap the
+  pill row instead of truncating the label; an account identifier may truncate
+  with an ellipsis while the provider name stays readable; a missing mapping
+  block hides the group rather than guessing.
+- **Accessibility.** Each group is a fieldset named by its legend, a pick's
+  remove control carries `Remove <label>`, an offered label carries
+  `Add <label>`, the custom input is labelled for its group (Enter adds,
+  Escape closes), and account pills are static text so nothing offers a control
+  the employee cannot honor.
+
 ### 8.14 First run: the welcome, the setup, and the hand-off
 
 The employee has not met the product yet, so first run is the one surface where

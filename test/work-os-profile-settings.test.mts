@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { providerAccountsFor } from "../src/lib/work-os-onboarding";
 import {
   profileAvatarObjectPath,
   profileAvatarUrl,
@@ -52,4 +53,62 @@ test("profile routes require Work OS access and expose only authenticated media"
   assert.doesNotMatch(profileStyles, /profile-schedule\.is-locked/);
   assert.match(scheduleMigration, /work_schedules/);
   assert.match(scheduleMigration, /notify\s+pgrst/i);
+});
+
+test("the profile payload returns only the person's own mapped accounts", async () => {
+  const onboarding = await source("src/lib/work-os-onboarding.ts");
+  const profileSettings = await source("desktop/work-os-companion/src/ProfileSettings.tsx");
+  const pills = await source("desktop/work-os-companion/src/ProfilePills.tsx");
+  const styles = await source("desktop/work-os-companion/src/styles.css");
+
+  assert.match(onboarding, /work_source_accounts/);
+  assert.match(onboarding, /eq\("person_id", access\.personId\)/);
+  assert.match(onboarding, /providerAccounts: providerAccountsFor/);
+
+  // The three signal groups are pill pickers, never typed comma text.
+  assert.match(profileSettings, /<ItemPillGroup kind="responsibility"/);
+  assert.match(profileSettings, /<ItemPillGroup kind="deliverable"/);
+  assert.match(profileSettings, /<ItemPillGroup kind="evidence"/);
+  assert.doesNotMatch(profileSettings, /Comma-separated work signals/);
+  assert.doesNotMatch(profileSettings, /githubUsername/);
+  assert.doesNotMatch(profileSettings, /profileItems\(data, form\)/);
+
+  // Connected accounts are read-only provider pills owned by the workspace.
+  assert.match(profileSettings, /<ProviderAccountPills accounts=\{data\.providerAccounts\} \/>/);
+  assert.match(pills, /profile-account-pill/);
+  assert.match(pills, /Add your own/);
+  assert.match(styles, /\.profile-pill-group legend/);
+  assert.match(styles, /\.profile-account-pill\.is-worktivity/);
+});
+
+test("mapped provider accounts lead with real accounts and trail the shared bot", () => {
+  const accounts = providerAccountsFor({
+    niftyMemberId: "_HpMO3uhYI",
+    worktivityEmployeeId: "6a15c7d96d1dd938343a837c",
+    sourceAccounts: [
+      { provider: "github", external_account_id: "41898282", verified: true, metadata: { login: "wrazy-ci[bot]" } },
+      { provider: "github", external_account_id: "zahemen9900", verified: true, metadata: { login: "zahemen9900" } },
+      { provider: "github", external_account_id: "9001", verified: false, metadata: {} },
+      { provider: "nifty", external_account_id: "member-1", verified: true, metadata: { login: "not-github" } },
+    ],
+    raw: { nifty: { email: "david@maigreeks.com" }, worktivity: { Invitation: { Email: "david@maigreeks.com" } } },
+  });
+  assert.deepEqual(accounts.github.accounts.map((account) => account.login), ["zahemen9900", "9001", "wrazy-ci[bot]"]);
+  assert.equal(accounts.github.accounts[1].verified, false);
+  assert.equal(accounts.github.accounts.at(-1)?.bot, true);
+  assert.equal(accounts.github.accounts[0].id, "zahemen9900");
+  assert.deepEqual(accounts.worktivity, { mapped: true, email: "david@maigreeks.com" });
+  assert.deepEqual(accounts.nifty, { mapped: true, email: "david@maigreeks.com" });
+});
+
+test("a person without mappings reports empty accounts, never invented ones", () => {
+  const accounts = providerAccountsFor({ niftyMemberId: null, worktivityEmployeeId: null, sourceAccounts: null, raw: {} });
+  assert.deepEqual(accounts, {
+    nifty: { mapped: false, email: null },
+    worktivity: { mapped: false, email: null },
+    github: { accounts: [] },
+  });
+  const noEmail = providerAccountsFor({ niftyMemberId: "x", worktivityEmployeeId: "y", sourceAccounts: [], raw: { worktivity: { Invitation: { Email: "not-an-email" } } } });
+  assert.equal(noEmail.worktivity.email, null);
+  assert.equal(noEmail.nifty.email, null);
 });

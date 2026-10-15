@@ -1,7 +1,7 @@
 import Onboarding from "./Onboarding";
 import type { OnboardingData } from "./types";
 
-const PREVIEW_DATA: OnboardingData = {
+export const PREVIEW_DATA: OnboardingData = {
   onboardingRequired: true,
   policy: {
     version: "work-tracking-v1",

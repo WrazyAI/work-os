@@ -103,6 +103,18 @@ function onboardingFixture(): OnboardingData {
       nifty: { mapped: true, timezone: "Atlantic/Reykjavik", language: "en", team: "Product Engineering", role: "Software Engineer" },
       worktivity: { mapped: true, screenshotsConfigured: true, screenshotsBlurred: true },
     },
+    // Fixture accounts so the debugger's Profile settings shows the connected
+    // accounts band without touching the live API.
+    providerAccounts: {
+      nifty: { mapped: true, email: "david@example.com" },
+      worktivity: { mapped: true, email: "david@example.com" },
+      github: {
+        accounts: [
+          { login: "david-debug", id: "debug-1", verified: true, bot: false },
+          { login: "debug-actions[bot]", id: "debug-2", verified: true, bot: true },
+        ],
+      },
+    },
     organizationSetup: {
       roleProfile: { id: "debug-engineer", slug: "engineer", name: "Software Engineer" },
       teams: [{ id: "debug-team", name: "Product Engineering", active: true }],

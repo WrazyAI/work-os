@@ -213,6 +213,15 @@ export interface WorkArchetype {
   items: WorkProfileItem[];
 }
 
+/** Provider accounts the workspace has mapped to this person. Read-only in the
+ * companion: the workspace owns provider mappings, the employee owns the work
+ * profile. Absent from older API payloads, so never assert on its presence. */
+export interface ProviderAccounts {
+  nifty: { mapped: boolean; email: string | null };
+  worktivity: { mapped: boolean; email: string | null };
+  github: { accounts: Array<{ login: string; id: string; verified: boolean; bot: boolean }> };
+}
+
 export interface DesktopSession {
   token: string;
   expiresAt: string;
@@ -275,6 +284,7 @@ export interface OnboardingData {
     nifty: { mapped: boolean; timezone: string | null; language: string | null; team: string | null; role: string | null };
     worktivity: { mapped: boolean; screenshotsConfigured: boolean | null; screenshotsBlurred: boolean | null };
   };
+  providerAccounts?: ProviderAccounts;
   organizationSetup: {
     roleProfile: { id: string; slug: string; name: string } | null;
     teams: Array<{ id: string; name: string; active: boolean }>;
