@@ -8,6 +8,7 @@ import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
 import type { RecapNextStepsMoment } from "./RecapNextStepsCard";
 import { mergeConversationTurns } from "./avatarLogic";
+import { sessionStateFrom, type SessionState } from "./sessionState";
 import { APPEARANCE_DEFAULTS, appearanceFromChange, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import type { CachedGuideState, GuideState } from "./guideState";
 
@@ -156,13 +157,14 @@ async function browserSession(): Promise<DesktopSession | null> {
 }
 
 export const secureState = {
-  session: async () => {
-    if (!isTauri()) return browserSession();
-    const session = await get<DesktopSession>("session");
-    if (!session) return null;
-    try { return { ...session, apiBase: httpsOrigin(session.apiBase) }; }
-    catch { await remove("session"); return null; }
+  /** The stored session and why it is unusable when it is. The boot path uses
+   * the reason so the employee is told to connect the device again, instead of
+   * landing in a workspace whose every request the API layer refuses. */
+  sessionState: async (): Promise<SessionState> => {
+    if (!isTauri()) return { session: await browserSession(), reason: "none" };
+    return sessionStateFrom(await get<DesktopSession>("session"), httpsOrigin);
   },
+  session: async () => (await secureState.sessionState()).session,
   saveSession: (session: DesktopSession) => isTauri() ? set("session", session) : Promise.resolve(),
   clearSession: () => isTauri() ? remove("session") : Promise.resolve(),
   clearAccount: async () => {

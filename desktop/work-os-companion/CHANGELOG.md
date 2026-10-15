@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.47 — 2026-10-15
+
+- A device whose connection ran out is now asked to connect again instead of opening a workspace where every request failed.
+- Work OS signs the device out if the workspace no longer accepts it, so the screen matches reality.
+
 ## 0.4.46 — 2026-10-15
 
 - The chat composer no longer glows bright green while you type — it keeps a calm outline.

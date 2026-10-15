@@ -1,9 +1,20 @@
 import { secureState } from "./vault";
 import { diagnostics } from "./diagnostics";
 import { machineCadenceHeaders } from "./localSettings";
+import { isSessionExpired } from "./sessionState";
+import { emit } from "./tauriEvents";
 import type { OfflineAction } from "./types";
 
 const MAX_QUEUE_ATTEMPTS = 6;
+
+/** A 401 means the workspace no longer accepts this device's session (revoked,
+ * or expired while the two clocks disagreed). Signing it out here is what turns
+ * a wall of failed requests into the connect screen with a reason. */
+async function dropRejectedSession(path: string) {
+  diagnostics.warn("auth.session.rejected", `The workspace rejected this device's session (${path})`, { path });
+  await secureState.clearSession().catch(() => undefined);
+  void emit("work-os://desktop-session-rejected", { reason: "invalid" });
+}
 
 // Offline sync bypass (debugger scenario): when active, no network call may
 // leave the app. Reads are served by scenario fixtures at the view layer;
@@ -94,7 +105,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   return diagnostics.withSpan("api.request", async () => {
     if (syncBypassActive) throw new SyncBypassError();
     const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
-    if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+    if (!session || isSessionExpired(session)) {
       throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
     }
     const signal = init.signal ?? AbortSignal.timeout(20_000);
@@ -120,6 +131,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     }
     const result = response.status === 204 ? undefined : await response.json().catch(() => ({}));
     if (!response.ok) {
+      if (response.status === 401) await dropRejectedSession(path);
       const message = (result as { error?: string } | undefined)?.error || `Work OS request failed (${response.status})`;
       const reason = typeof (result as { reason?: unknown } | undefined)?.reason === "string"
         ? (result as { reason: string }).reason
@@ -135,7 +147,7 @@ export async function apiRequestBlob(path: string, label = "Media"): Promise<Blo
   return diagnostics.withSpan("api.requestBlob", async () => {
     if (syncBypassActive) throw new SyncBypassError();
     const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
-    if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
+    if (!session || isSessionExpired(session)) {
       throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
     }
     let response: Response;
@@ -153,6 +165,7 @@ export async function apiRequestBlob(path: string, label = "Media"): Promise<Blo
       throw new ApiRequestError(failure.message, null, true);
     }
     if (!response.ok) {
+      if (response.status === 401) await dropRejectedSession(path);
       throw new ApiRequestError(`${label} failed (${response.status})`, response.status, RETRYABLE_STATUS.has(response.status));
     }
     return response.blob();

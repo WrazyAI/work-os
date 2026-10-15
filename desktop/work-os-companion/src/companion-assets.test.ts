@@ -344,6 +344,29 @@ describe("floating companion integration", () => {
     expect(rust).toContain("vault_password::vault_open_trouble");
     expect(rust).toContain("vault_password::init(app.handle())");
   });
+
+  // An expired stored session used to open the workspace while the API layer
+  // refused it, so every request failed with "Connect this device to WrazyOS."
+  // and nothing said why. The screens and the API layer share one rule now, and
+  // a rejected session signs the device out.
+  it("keeps the screens and the API layer on one session rule", () => {
+    const api = readFileSync(resolve(root, "src/api.ts"), "utf8");
+    expect(api).toContain('import { isSessionExpired } from "./sessionState"');
+    expect(api).toContain("if (!session || isSessionExpired(session))");
+    expect(api).not.toContain("new Date(session.expiresAt).getTime() <=");
+    expect(api).toContain("dropRejectedSession(path)");
+    expect(api).toContain('"work-os://desktop-session-rejected"');
+    const vault = readFileSync(resolve(root, "src/vault.ts"), "utf8");
+    expect(vault).toContain("sessionStateFrom(await get<DesktopSession>(\"session\"), httpsOrigin)");
+    const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+    expect(app).toContain("secureState.sessionState()");
+    expect(app).toContain("setConnectNotice(sessionNotice(stored.reason))");
+    expect(app).toContain('listen("work-os://desktop-session-rejected"');
+    expect(app).toContain('notice={connectNotice}');
+    expect(app).toContain("otto-bubble-notice");
+    const preview = readFileSync(resolve(root, "src/LoadingPreview.tsx"), "utf8");
+    expect(preview).toContain("connect-signed-out");
+  });
 });
 
 describe("app quit", () => {

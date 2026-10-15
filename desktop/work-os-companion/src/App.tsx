@@ -53,6 +53,7 @@ import { ProgressRing } from "./ProgressRing";
 import { prefersReducedMotion, useListShift } from "./listShift";
 import type { DailyPlan, DailyPlanItem, DayData, DebugScenario, DesktopSession, EodScreenshotHour, InsightDay, InsightsData, OfflineAction, OnboardingData, OutstandingEodDay } from "./types";
 import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversationTurn } from "./vault";
+import { sessionNotice } from "./sessionState";
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
@@ -229,6 +230,8 @@ function writeSeenIds(key: string, ids: string[]): void {
 export default function App() {
   const notifications = useNotifications();
   const [session, setSession] = useState<DesktopSession | null>(null);
+  // Why this device was signed out, shown once on the connect screen.
+  const [connectNotice, setConnectNotice] = useState<string | null>(null);
   const [day, setDay] = useState<DayData | null>(null);
   /** True once a live server day payload has landed this session. The launch
    * snapshot can look like an unresolved plan; auto-open waits for this. */
@@ -1103,8 +1106,17 @@ export default function App() {
   // the previous attempt so a late answer cannot jump the screen the employee
   // is already looking at.
   const applyVaultState = useCallback(async () => {
-    const [saved, queue, settings, snapshot, enabled] = await Promise.all([secureState.session(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]);
-    const current = saved?.apiBase ? saved : null; setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
+    const [stored, queue, settings, snapshot, enabled] = await Promise.all([secureState.sessionState(), secureState.queue(), secureState.settings(), secureState.daySnapshot(), isTauri() ? isEnabled() : Promise.resolve(false)]);
+    const current = stored.session;
+    // An expired or unusable session is a signed-out state: the API layer
+    // refuses it, so the workspace must not open on it. The employee is told
+    // why on the connect screen instead of meeting a wall of failed requests.
+    if (stored.reason !== "none") {
+      setConnectNotice(sessionNotice(stored.reason));
+      diagnostics.warn("auth.session.dropped", "This device's stored session is no longer usable", { reason: stored.reason });
+      await secureState.clearSession().catch(() => undefined);
+    }
+    setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     void applyVoiceHotkey(settings.voiceHotkey);
     const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
@@ -1174,8 +1186,20 @@ export default function App() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    void listenForAuthentication((saved) => { setSession(saved); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
+    void listenForAuthentication((saved) => { setSession(saved); setConnectNotice(null); notifications.success("This device is connected to your workspace.", "Workspace connected"); void emit("work-os://main-session-changed"); void refresh({ refreshAttendance: true }); }, (value) => showError(value, "Desktop authorization failed.", "Authorization failed")).then((fn) => { cleanup = fn; }).catch((value) => showError(value, "Could not listen for desktop sign-in.", "Sign-in listener failed"));
     return () => cleanup?.();
+  }, [notifications, refresh, showError]);
+
+  // The workspace can reject this device's session at any time (revoked in the
+  // browser, or expired while the clocks disagreed). Following it out of the
+  // workspace is what keeps the screen honest about being signed out.
+  useEffect(() => {
+    const unlisten = listen("work-os://desktop-session-rejected", () => {
+      setSession(null);
+      setConnectNotice(sessionNotice("invalid"));
+      notifications.error("This device's connection is no longer accepted. Connect it again to keep working.", "Connect this device");
+    });
+    return () => { unlisten.then((fn) => fn()).catch(() => { /* noop */ }); };
   }, [notifications, refresh, showError]);
 
   useEffect(() => {
@@ -3539,7 +3563,7 @@ export default function App() {
       onReset={vaultGate.failure.requiresReset ? startFreshOnThisDevice : undefined}
       onDebug={() => void openDebugger()}
     />;
-  if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  if (!visibleSession) return <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
   if (workspace === "admin" && session && workSessionQuery.data?.role === "admin" && !syncBypass) {
     return <AdminWorkspace
       session={workSessionQuery.data}
@@ -4015,6 +4039,8 @@ type ConnectScreenProps = {
   connecting: boolean;
   onConnect: () => void;
   onSave: () => Promise<void>;
+  /** Why this device was signed out, when it was. */
+  notice?: string | null;
 };
 
 function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced settings" }: Pick<ConnectScreenProps, "apiBase" | "setApiBase" | "onSave"> & { summary?: string }) {
@@ -4035,7 +4061,7 @@ function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced sett
  *  he carries the sequence in his own voice, and the stage carries the one
  *  action. The advanced server override stays a quiet disclosure in the
  *  bubble, beside the action it changes. */
-export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave }: ConnectScreenProps) {
+export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave, notice }: ConnectScreenProps) {
   return <main className="guided-onboarding" data-stage="welcome">
     <OnboardingStage
       pose="waiting"
@@ -4048,6 +4074,7 @@ export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSa
         <button className="primary" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button>
         <span className="otto-bubble-note">About a minute.</span>
       </div>
+      {notice && <p className="otto-bubble-notice" role="status">{notice}</p>}
       <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
     </OnboardingStage>
   </main>;
