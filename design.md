@@ -1023,6 +1023,14 @@ there is never more than one guide per page.
 - **Opt-out** — Settings → Page guides switches automatic guides; the modal's
   quiet action writes the same account flag. The `?` keeps working either way,
   and the tour stays available from Settings whatever the flag says.
+- **Administration** — the seven administration sections carry the same guide
+  contract with their own keys (`admin_overview` … `admin_settings`): one
+  first-visit pass per section, the masthead `?` replays it, and the first
+  administration guide offers the workspace tour, which walks the seven
+  sections in order and moves the real workspace. Administration pages are not
+  filmed, so their guides render the drawn scene vocabulary instead of the
+  employee pages' film; the modal, flags, and opt-out are shared, never a
+  second copy.
 
 ### 8.12 Review notifications, the notifications panel, and suggestion review
 
