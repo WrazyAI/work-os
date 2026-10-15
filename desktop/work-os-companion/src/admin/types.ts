@@ -6,6 +6,16 @@
 
 export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
 
+/** Deep-link focus carried when navigating between administration sections:
+ * a person, report, or task opens its drawer, and the evidence section can
+ * land on its activity-recap tab. */
+export interface AdminSectionFocus {
+  personId?: string;
+  reportId?: string;
+  taskId?: string;
+  evidenceTab?: "evidence" | "recaps";
+}
+
 export type WorkOsOrgRole = "employee" | "manager" | "admin";
 
 export interface SessionResponse {

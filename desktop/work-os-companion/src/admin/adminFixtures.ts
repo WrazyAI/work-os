@@ -2,6 +2,8 @@ import type { QueryClient } from "@tanstack/react-query";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
 import type {
   AdminInsights,
+  AdminInsightRange,
+  AdminInsightTotals,
   AdminOverview,
   AdminTimeSeriesPoint,
   ConnectionsResponse,
@@ -18,7 +20,10 @@ import type {
 
 /** Deterministic fixtures for the dev-only `?preview-admin` harness. The data
  * is synthetic but shaped exactly like the API responses, so the rendered
- * states, empty states, and interactions can be verified without a live org. */
+ * states, empty states, and interactions can be verified without a live org.
+ * `state=sparse` deliberately serves partial payloads — the collections and
+ * embeds a live response can omit — so the normalizers and empty states are
+ * exercised against the shapes the workspace actually returns. */
 
 const PEOPLE = [
   { id: "p-1", name: "Amara Okafor", role: "Design", email: "amara@example.com" },
@@ -149,6 +154,10 @@ function peopleResponse(): PeopleResponse {
 
 function personDetail(personId: string): PersonDetailResponse {
   const person = PEOPLE.find((entry) => entry.id === personId) ?? PEOPLE[0];
+  // The day's report id matches reportsResponse for mapped people, so a
+  // People update's "Open EOD review" action opens the same report the
+  // Review queue serves.
+  const personReportIds: Record<string, string> = { "p-1": "r-2", "p-2": "r-1" };
   return {
     person: {
       id: person.id,
@@ -164,8 +173,22 @@ function personDetail(personId: string): PersonDetailResponse {
     schedules: [{ start: "09:00", end: "17:30", timezone: "Europe/Berlin", effective_from: DATES[0] }],
     exceptions: [{ date: DATES[3], kind: "adjusted" }],
     sessions: DATES.slice(-5).reverse().map((date, index) => ({ shift_date: date, state: "closed", observed_seconds: 21600 + index * 600, updates: 2 + (index % 3) })),
-    reports: DATES.slice(-4).reverse().map((date, index) => ({ report_date: date, status: ["approved", "pending_review", "rejected", "draft"][index] })),
-    updates: Array.from({ length: 4 }, (_, index) => ({ summary: ["Drafted the settings IA", "Reviewed the billing retries", "Paired on the migration script", "Blocked on staging credentials"][index], update_kind: ["progress", "completion_claim", "progress", "blocked"][index], occurred_at: `${DATES[DATES.length - 1]}T0${8 - index}:10:00.000Z` })),
+    reports: DATES.slice(-4).reverse().map((date, index) => {
+      const id = index === 0 ? personReportIds[personId] ?? `report-${personId}-${date}` : `report-${personId}-${date}`;
+      const status = index === 0 && personReportIds[personId] ? "pending_review" : ["approved", "pending_review", "rejected", "draft"][index];
+      return { id, report_date: date, status };
+    }),
+    // `work_check_ins` shape: the live column is `input_text`, with the kind,
+    // substance flag, and workday beside it.
+    updates: Array.from({ length: 4 }, (_, index) => ({
+      id: `chk-${personId}-${index}`,
+      shift_date: DATES[DATES.length - 1],
+      kind: "check_in",
+      substantive: [true, true, true, false][index],
+      input_text: ["Drafted the settings IA", "Reviewed the billing retries", "Paired on the migration script", "Blocked on staging credentials"][index],
+      update_kind: ["progress", "completion_claim", "progress", "blocked"][index],
+      occurred_at: `${DATES[DATES.length - 1]}T0${8 - index}:10:00.000Z`,
+    })),
     intervals: [],
     evidenceSummary: { total: 42, activity: 37, output: 5, disputed: personId === "p-5" ? 1 : 0 },
   };
@@ -263,10 +286,14 @@ function evidenceResponse(): EvidenceResponse {
   };
 }
 
-export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "empty") {
+export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "empty" | "sparse") {
   const today = todayIso();
   const evidenceFrom = isoDaysAgo(13);
   const reportFrom = isoDaysAgo(30);
+  if (state === "sparse") {
+    seedSparseFixtures(queryClient, today);
+    return;
+  }
   if (state === "empty") {
     queryClient.setQueryData(adminKeys.overview(today), {
       ...overview(),
@@ -281,6 +308,9 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }), { tasks: [], nextOffset: null, summary: { open: 0, overdue: 0, completedWeek: 0 } });
     queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } } satisfies ReportsResponse);
     queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), { evidence: [], summary: { sources: [], days: [] } } satisfies EvidenceResponse);
+    // Insights needs its own honest empty record; without it the page shows a
+    // load error instead of the empty state every other section renders.
+    for (const range of ["7d", "30d", "90d"] as const) queryClient.setQueryData(adminKeys.insights(range, ""), emptyInsights(range, today));
     return;
   }
 
@@ -421,7 +451,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
   queryClient.setQueryData(adminKeys.tasks(taskFilters), {
     tasks: Array.from({ length: 9 }, (_, index) => ({
       id: `t-${index + 1}`,
-      name: [
+      title: [
         "Retry handling for failed billing webhooks",
         "Settings information architecture",
         "Search indexing backfill",
@@ -436,7 +466,7 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
       due_date: new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
       priority: ["high", "medium", "low"][index % 3],
       labels: index % 2 === 0 ? ["platform"] : [],
-      project: { name: index % 3 === 0 ? "Platform" : index % 3 === 1 ? "Product" : "Operations" },
+      project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },
       assignees: [{ displayName: PEOPLE[index % PEOPLE.length].name }],
       updated_at: `${DATES[DATES.length - 1]}T08:${String(40 - index).padStart(2, "0")}:00.000Z`,
     })),
@@ -444,12 +474,181 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     summary: { open: 43, overdue: 5, completedWeek: 17 },
   });
   queryClient.setQueryData(adminKeys.taskDetails("t-1"), {
-    task: { id: "t-1", name: "Retry handling for failed billing webhooks", completed: false, due_date: `${today}`, priority: "high", description: "Add bounded retries with backoff for failed billing webhook deliveries.", updated_at: `${today}T08:40:00.000Z`, project: { name: "Platform" } },
+    task: { id: "t-1", title: "Retry handling for failed billing webhooks", completed: false, due_date: `${today}`, priority: "high", description: "Add bounded retries with backoff for failed billing webhook deliveries.", updated_at: `${today}T08:40:00.000Z`, project: { id: "proj-1", name: "Platform" } },
     subtasks: [
-      { id: "s-1", name: "Exponential backoff for 5xx responses", completed: true },
-      { id: "s-2", name: "Dead-letter queue for exhausted retries", completed: false },
+      { id: "s-1", title: "Exponential backoff for 5xx responses", completed: true },
+      { id: "s-2", title: "Dead-letter queue for exhausted retries", completed: false },
     ],
   });
   queryClient.setQueryData(adminKeys.projects(), { projects: [{ id: "proj-1", name: "Platform" }, { id: "proj-2", name: "Product" }, { id: "proj-3", name: "Operations" }] });
   void ADMIN_STALE_MS;
+}
+
+/* --- Sparse state -------------------------------------------------------- */
+
+/** The empty insights record: zero totals, no people, and the brief the record
+ * builder writes when nothing was recorded in the range. */
+function emptyInsights(range: AdminInsightRange, today: string): AdminInsights {
+  const totals: AdminInsightTotals = {
+    outcomesCompleted: 0, outcomesLate: 0, updates: 0, substantiveUpdates: 0, eodSubmitted: 0, eodApproved: 0, eodRejected: 0,
+    planned: 0, plannedCompleted: 0, trackedMinutes: 0, evidenceOutput: 0, evidenceActivity: 0, sessionsNeedingCorrection: 0, activePeople: 0,
+  };
+  return {
+    range,
+    from: DATES[0],
+    through: today,
+    totals,
+    previous: { ...totals },
+    people: [],
+    series: DATES.map((date) => ({ date, outcomesCompleted: 0, updates: 0, eodSubmitted: 0, trackedMinutes: 0 })),
+    timeSeries: DATES.map((date) => ({ date, totalMinutes: 0, people: [] })),
+    updateKinds: [],
+    topApps: [],
+    overdueOpen: 0,
+    notes: {
+      summary: `No completed outcomes or updates were recorded in ${DATES[0]} to ${today}.`,
+      wins: [],
+      attention: ["No completed task outcomes were recorded in this range."],
+      nextFocus: ["Keep the review queue clear and confirm the week's outcomes."],
+    },
+    freshness: { generatedAt: `${DATES[DATES.length - 1]}T09:42:00.000Z` },
+  };
+}
+
+/** Deliberately partial payloads for the same query keys as `dense`. The
+ * collections and embeds a live response can omit are left out here, so the
+ * normalizers at the data seam turn them into the honest empty states the
+ * pages already render. */
+function seedSparseFixtures(queryClient: QueryClient, today: string) {
+  const evidenceFrom = isoDaysAgo(13);
+  const reportFrom = isoDaysAgo(30);
+  const yesterday = DATES[DATES.length - 2];
+
+  // Overview: attention, recentActivity, series, timeSeries, and freshness are
+  // absent; counts are partial; person rows carry no roleProfile, schedule,
+  // session, or outstanding EOD.
+  queryClient.setQueryData(adminKeys.overview(today), {
+    date: today,
+    generatedAt: `${DATES[DATES.length - 1]}T09:42:00.000Z`,
+    counts: { people: 2, onShift: 1, unknown: 1, updatesToday: 3, tasksCompletedToday: 1 },
+    people: [
+      {
+        personId: "p-1",
+        displayName: "Amara Okafor",
+        email: "amara@example.com",
+        attendance: { state: "active", source: "worktivity", observedAt: `${today}T08:10:00.000Z`, freshness: "fresh", clockedInAt: null, clockedOutAt: null },
+        updatesToday: 2,
+        substantiveUpdatesToday: 1,
+        evidenceToday: 1,
+        tasksCompletedToday: 0,
+        lastUpdateAt: `${today}T08:10:00.000Z`,
+      },
+      { personId: "p-2", displayName: "Ben Sato", attendance: { state: "unknown", source: "none" } },
+    ],
+  });
+
+  // People: rows without role_profile or worktivity/nifty mappings; the
+  // role-profile collection is absent.
+  queryClient.setQueryData(adminKeys.people(), {
+    people: [
+      { id: "p-1", display_name: "Amara Okafor", email: "amara@example.com", active: true },
+      { id: "p-2", display_name: "Ben Sato", role_profile_id: null, active: false },
+    ],
+  });
+
+  // Person detail: no teams, schedules, exceptions, sessions, reports,
+  // updates, intervals, or evidence summary.
+  queryClient.setQueryData(adminKeys.person("p-1"), {
+    person: { id: "p-1", display_name: "Amara Okafor", email: "amara@example.com", active: true },
+  });
+  queryClient.setQueryData(adminKeys.person("p-2"), {
+    person: { id: "p-2", display_name: "Ben Sato" },
+  });
+
+  // Insights: no series, timeSeries, updateKinds, topApps, notes, or freshness;
+  // partial totals and a partial person row.
+  for (const range of ["7d", "30d", "90d"] as const) {
+    queryClient.setQueryData(adminKeys.insights(range, ""), {
+      range,
+      from: DATES[0],
+      through: today,
+      totals: { outcomesCompleted: 3, updates: 2 },
+      previous: { outcomesCompleted: 2 },
+      people: [{ personId: "p-1", displayName: "Amara Okafor", outcomesCompleted: 3, updates: 2 }],
+    });
+  }
+
+  // Reports: rows without versions, person, or metrics; one keeps person_id so
+  // its drawer still loads the day's sourced evidence and recaps.
+  queryClient.setQueryData(adminKeys.reports({ status: "pending_review", personId: "", from: reportFrom, to: today }), {
+    reports: [
+      {
+        id: "r-s1",
+        person_id: "p-2",
+        report_date: today,
+        status: "pending_review",
+        title: "EOD · Platform reliability",
+        markdown: ["# EOD · Platform reliability", "", "## Completed work", "- Shipped retry handling for failed billing webhooks"].join("\n"),
+      },
+      { id: "r-s2", person_id: null, report_date: yesterday, status: "approved" },
+    ],
+    counts: { draft: 0, pending_review: 1, approved: 1, rejected: 0, total: 2 },
+  });
+  for (const status of ["draft", "rejected", "approved", "all"]) {
+    queryClient.setQueryData(
+      adminKeys.reports({ status: status === "all" ? "" : status, personId: "", from: reportFrom, to: today }),
+      { reports: [], counts: { draft: 0, pending_review: 0, approved: 0, rejected: 0, total: 0 } },
+    );
+  }
+  queryClient.setQueryData(adminKeys.reportEvidence("p-2", today), {
+    evidence: [
+      { id: "e-s1", evidence_date: today, source: "github" },
+      { id: "e-s2", evidence_date: today, source: "worktivity" },
+    ],
+  });
+  queryClient.setQueryData(adminKeys.reportIntervals("p-2", today), {
+    intervals: [{ id: "i-s1", reviewStatus: "inferred" }],
+  });
+
+  // Evidence: rows without person, summary, event, or screenshot; no summary
+  // collection and no GitHub actor rows.
+  queryClient.setQueryData(adminKeys.evidence({ personId: "", source: "", from: evidenceFrom, to: today, correction: "", summary: "1", limit: "100" }), {
+    evidence: [
+      { id: "e-s1", evidence_date: today, source: "github" },
+      { id: "e-s2", evidence_date: yesterday, source: "worktivity" },
+    ],
+  });
+  queryClient.setQueryData(adminKeys.intervals({ personId: "", from: evidenceFrom, to: today, limit: "60" }), {
+    intervals: [
+      { id: "i-s2", reviewStatus: "confirmed", personName: "Ben Sato" },
+      { id: "i-s3" },
+    ],
+  });
+  queryClient.setQueryData(adminKeys.githubActors(), {});
+  queryClient.setQueryData(adminKeys.githubRepos(), { connection: null, organization: null });
+  // Connections without accounts.
+  queryClient.setQueryData(adminKeys.connections(), {
+    connections: [{ id: "conn-1", provider: "github", active: true, external_workspace_id: "wrazy" }],
+  });
+
+  // Tasks: rows without project, assignees, labels, or due dates; no summary.
+  queryClient.setQueryData(adminKeys.tasks({ filter: "open", personId: "", projectId: "", limit: "200", completed: "false" }), {
+    tasks: [
+      { id: "t-s1", name: "Retry handling for failed billing webhooks" },
+      { id: "t-s2", title: "Design review for the admin surface", completed: false },
+    ],
+  });
+  queryClient.setQueryData(adminKeys.taskDetails("t-s1"), {
+    task: { id: "t-s1", title: "Retry handling for failed billing webhooks", completed: false },
+  });
+  queryClient.setQueryData(adminKeys.projects(), { projects: [{ id: "proj-1", name: "Platform" }] });
+
+  // Settings: organization without slug, feature flags, memberships, teams, or
+  // team members; no field mappings or blueprints.
+  queryClient.setQueryData(adminKeys.organization(), {
+    organization: { id: "org-preview", name: "Wrazy Internal" },
+  });
+  queryClient.setQueryData(adminKeys.fieldMappings(), {});
+  queryClient.setQueryData(adminKeys.blueprints(), {});
+  queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } } satisfies SystemStatusResponse);
 }

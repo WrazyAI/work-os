@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cable, PlugZap, RefreshCw, ShieldCheck, Users, UsersRound } from "lucide-react";
+import { useNotifications } from "../NotificationFlyouts";
+import { ADMIN_STATUS_DEGRADED_KEY, adminRoleLabel, niftySyncReceipt, workspaceDegradedNotice } from "./adminNotifications";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -10,6 +12,12 @@ import {
   fetchOrganization,
   fetchPeople,
   fetchSystemStatus,
+  normalizeBlueprints,
+  normalizeConnections,
+  normalizeFieldMappings,
+  normalizeOrganization,
+  normalizePeople,
+  normalizeSystemStatus,
   organizationAction,
   organizationMembershipPatch,
   relativeTime,
@@ -34,6 +42,7 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
  * mapping writes stay in the web console; the desktop reads their state. */
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const notifications = useNotifications();
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("employee");
   const [teamName, setTeamName] = useState("");
@@ -41,33 +50,85 @@ export default function SettingsPage() {
   const [teamPersonId, setTeamPersonId] = useState("");
   const [teamManager, setTeamManager] = useState(false);
 
-  const organization = useQuery({ queryKey: adminKeys.organization(), queryFn: fetchOrganization, staleTime: ADMIN_STALE_MS });
-  const status = useQuery({ queryKey: adminKeys.status(), queryFn: fetchSystemStatus, staleTime: ADMIN_STALE_MS });
-  const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, staleTime: ADMIN_STALE_MS });
-  const mappings = useQuery({ queryKey: adminKeys.fieldMappings(), queryFn: fetchFieldMappings, staleTime: ADMIN_STALE_MS });
-  const blueprints = useQuery({ queryKey: adminKeys.blueprints(), queryFn: fetchBlueprints, staleTime: ADMIN_STALE_MS });
-  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, staleTime: ADMIN_STALE_MS });
+  const organization = useQuery({ queryKey: adminKeys.organization(), queryFn: fetchOrganization, select: normalizeOrganization, staleTime: ADMIN_STALE_MS });
+  const status = useQuery({ queryKey: adminKeys.status(), queryFn: fetchSystemStatus, select: normalizeSystemStatus, staleTime: ADMIN_STALE_MS });
+  const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, select: normalizeConnections, staleTime: ADMIN_STALE_MS });
+  const mappings = useQuery({ queryKey: adminKeys.fieldMappings(), queryFn: fetchFieldMappings, select: normalizeFieldMappings, staleTime: ADMIN_STALE_MS });
+  const blueprints = useQuery({ queryKey: adminKeys.blueprints(), queryFn: fetchBlueprints, select: normalizeBlueprints, staleTime: ADMIN_STALE_MS });
+  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["work-os", "admin"] });
+  // Receipts name exactly the persisted outcome: the feature the response saved,
+  // the member the patch targeted, or the counts the sync response reported.
   const features = useMutation({
     mutationFn: (next: Record<string, boolean>) => saveOrganizationFeatures(next),
-    onSuccess: invalidate,
+    onSuccess: (_result, variables) => {
+      invalidate();
+      const changed = Object.entries(variables)[0];
+      const feature = FEATURES.find((entry) => entry.key === changed?.[0]);
+      if (feature && changed) {
+        notifications.success(`“${feature.label}” is now ${changed[1] ? "on" : "off"} for every member.`, changed[1] ? "Feature turned on" : "Feature turned off");
+      }
+    },
   });
   const membership = useMutation({
     mutationFn: (body: Record<string, unknown>) => organizationMembershipPatch(body),
-    onSuccess: invalidate,
+    onSuccess: (_result, variables) => {
+      invalidate();
+      const memberId = String(variables.membership_id ?? "");
+      const member = (organization.data?.memberships ?? []).find((entry) => String(entry.id) === memberId);
+      const name = member?.person?.display_name ?? member?.person?.email ?? "The member";
+      if (typeof variables.role === "string") {
+        notifications.success(`${name} is now ${adminRoleLabel(variables.role)}.`, "Member role changed");
+      } else if (typeof variables.active === "boolean") {
+        notifications.success(`${name} is now ${variables.active ? "active" : "inactive"} in this workspace.`, variables.active ? "Member activated" : "Member deactivated");
+      }
+    },
   });
   const action = useMutation({
     mutationFn: (body: Record<string, unknown>) => organizationAction(body),
-    onSuccess: invalidate,
+    onSuccess: (result, variables) => {
+      invalidate();
+      if (variables.type === "membership") {
+        notifications.success(`${String(variables.email)} was added as ${adminRoleLabel(String(variables.role ?? ""))}.`, "Member added");
+      } else if (variables.type === "team") {
+        const team = (result as { team?: { name?: string } } | undefined)?.team;
+        notifications.success(`“${team?.name ?? String(variables.name ?? "The team")}” is ready for members.`, "Team created");
+      } else if (variables.type === "team_member") {
+        const person = (people.data?.people ?? []).find((entry) => String(entry.id) === String(variables.person_id));
+        const team = teams.find((entry) => String(entry.id) === String(variables.team_id));
+        const manager = variables.is_manager === true ? " as a team manager" : "";
+        notifications.success(`${String(person?.display_name ?? "The teammate")} was added to ${String(team?.name ?? "the team")}${manager}.`, "Team member added");
+      }
+    },
   });
+  // The sync is fire-and-forget — the operator presses it and moves on — so its
+  // failure raises a flyout as well; the card's inline notice stays for retry.
   const sync = useMutation({
     mutationFn: () => syncNiftyTasks(),
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      invalidate();
+      notifications.success(niftySyncReceipt(result), "Nifty sync finished");
+    },
+    onError: (error) => notifications.error((error as Error).message, "Nifty sync failed"),
   });
 
+  // One standing condition for this page: the workspace status endpoint says
+  // the schema or the Nifty connection is degraded. Stable key, cleared when
+  // the status is healthy again.
+  const degraded = workspaceDegradedNotice(status.data);
+  const degradedTitle = degraded?.title ?? null;
+  const degradedMessage = degraded?.message ?? null;
+  useEffect(() => {
+    if (!degradedTitle || !degradedMessage) {
+      notifications.clearPersistent(ADMIN_STATUS_DEGRADED_KEY);
+      return;
+    }
+    notifications.persistent(ADMIN_STATUS_DEGRADED_KEY, degradedMessage, degradedTitle, "warning");
+  }, [degradedTitle, degradedMessage, notifications]);
+
   const error = organization.error || status.error || connections.error || mappings.error || blueprints.error || features.error || membership.error || action.error;
-  const flags = (organization.data?.organization.feature_flags ?? {}) as Record<string, boolean>;
+  const flags = (organization.data?.organization?.feature_flags ?? {}) as Record<string, boolean>;
   const memberships = organization.data?.memberships ?? [];
   const teams = organization.data?.teams ?? [];
   const teamMembers = organization.data?.teamMembers ?? [];
@@ -83,7 +144,7 @@ export default function SettingsPage() {
         title="Workspace status"
         detail="Schema readiness and the Nifty connection behind the task record"
         action={
-          <AdminButton variant="secondary" icon={RefreshCw} disabled={sync.isPending || !status.data?.schema.ready} onClick={() => sync.mutate()}>
+          <AdminButton variant="secondary" icon={RefreshCw} disabled={sync.isPending || !status.data?.schema?.ready} onClick={() => sync.mutate()}>
             {sync.isPending ? "Syncing…" : "Sync Nifty"}
           </AdminButton>
         }
@@ -92,10 +153,10 @@ export default function SettingsPage() {
           <Skeleton className="h-16" />
         ) : (
           <div className="admin-chips">
-            <Pill tone={status.data?.schema.ready ? "ok" : "warn"}>{status.data?.schema.ready ? "Work OS schema ready" : "Migration required"}</Pill>
-            <Pill tone={status.data?.nifty.canCallApi ? "ok" : "warn"}>{status.data?.nifty.canCallApi ? "Nifty connected" : "Nifty needs a connection"}</Pill>
-            <Pill>{organization.data?.organization.name ?? "Workspace"}</Pill>
-            <Pill>slug {organization.data?.organization.slug ?? "—"}</Pill>
+            <Pill tone={status.data?.schema?.ready ? "ok" : "warn"}>{status.data?.schema?.ready ? "Work OS schema ready" : "Migration required"}</Pill>
+            <Pill tone={status.data?.nifty?.canCallApi ? "ok" : "warn"}>{status.data?.nifty?.canCallApi ? "Nifty connected" : "Nifty needs a connection"}</Pill>
+            <Pill>{organization.data?.organization?.name ?? "Workspace"}</Pill>
+            <Pill>slug {organization.data?.organization?.slug || "—"}</Pill>
           </div>
         )}
         {sync.error ? <Notice tone="err">{(sync.error as Error).message}</Notice> : null}

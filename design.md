@@ -1661,6 +1661,18 @@ not a second sidebar. The host shell keeps its chrome, and the Work OS surface
 paints its own `.work-os-surface` token scope (the §3.1 palette in light and
 dark) so the workspace reads as one material even inside a host application.
 
+**Notifications.** Administration uses the shared in-app flyouts (§8.12); the
+workspace adds no bell or panel of its own. Every confirmed write leaves one
+transient receipt naming the persisted outcome, failures keep the page's own
+inline notice and offer retry there, and the fired-and-forgotten Nifty sync is
+the one write that also raises a failure flyout. Nothing fires for a queued or
+uncertain write. Two standing conditions hold persistent cards under stable
+keys: an overview snapshot older than ten minutes, and a workspace status
+reporting a missing migration or an unusable Nifty connection. While the
+workspace is mounted the flyout stack starts below the masthead so a receipt
+can never cover the workspace switch; narrow layouts keep the shared top-right
+position, where the switch sits under the title block.
+
 ### 16.2 Page contracts
 
 - **Overview** is the command center: a needs-attention list (reviews pending,

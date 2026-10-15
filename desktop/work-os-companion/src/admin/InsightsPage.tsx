@@ -4,7 +4,7 @@ import { Activity, AlertTriangle, Gauge, RefreshCw, Sparkles, Users } from "luci
 import { KpiCard, PlanReliability, type ReliabilityRow } from "../InsightCharts";
 import type { DeltaStat } from "../insights";
 import { GroupedBars, ShareBars, StackedTimeBars } from "./charts";
-import { adminKeys, ADMIN_STALE_MS, fetchAdminInsights, formatMinutes, relativeTime, shortDate, statusLabel } from "./data";
+import { adminKeys, ADMIN_STALE_MS, fetchAdminInsights, formatMinutes, normalizeAdminInsights, relativeTime, shortDate, statusLabel } from "./data";
 import { AdminButton, AdminCard, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
 import type { AdminInsights, AdminInsightPersonRow, AdminInsightRange } from "./types";
 
@@ -23,6 +23,7 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
   const insights = useQuery<AdminInsights>({
     queryKey: adminKeys.insights(range, personId),
     queryFn: () => fetchAdminInsights(range, personId),
+    select: normalizeAdminInsights,
     staleTime: ADMIN_STALE_MS,
   });
 
@@ -105,9 +106,13 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
         <div className="admin-brief-columns">
           <div>
             <h3>What the record shows</h3>
-            <ul>
-              {data.notes.wins.map((line, index) => <li key={index}><span className="admin-dot ok" aria-hidden />{line}</li>)}
-            </ul>
+            {data.notes.wins.length ? (
+              <ul>
+                {data.notes.wins.map((line, index) => <li key={index}><span className="admin-dot ok" aria-hidden />{line}</li>)}
+              </ul>
+            ) : (
+              <p className="admin-quiet">Nothing was recorded in this range.</p>
+            )}
           </div>
           <div>
             <h3>Attention</h3>
@@ -188,7 +193,11 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
 
       <AdminCard icon={Activity} title="Time worked" detail="Observed work time per day, split by teammate" padded={false}>
         <div className="admin-card-body is-padded">
-          <StackedTimeBars ariaLabel="Observed work time per day in this range, split by teammate" points={data.timeSeries} />
+          <StackedTimeBars
+            ariaLabel="Observed work time per day in this range, split by teammate"
+            points={data.timeSeries}
+            onSelectPerson={(personId) => setSelectedRow(data.people.find((row) => row.personId === personId) ?? null)}
+          />
         </div>
       </AdminCard>
 

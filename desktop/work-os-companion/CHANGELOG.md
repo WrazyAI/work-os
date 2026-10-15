@@ -25,6 +25,15 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The administration workspace scrolls again after you open and close its drawers, and its page headers and task rows no longer crowd their controls.
+- Administration charts now answer back: point at a bar or use the arrow keys to read the exact day, teammate, and time, and filter the chart from its legend.
+- Administration activity and update rows now open the full record: who did what, when, and which person or section to open next.
+- An EOD report no longer restarts the administration workspace when one of its sourced lists is missing.
+- The administration workspace now tolerates partial records anywhere: a missing list or a sparse row reads as an empty state instead of stopping the page.
+- Administration actions now confirm themselves with a short flyout — approvals, task completions, toggles, syncs, and member changes each name what happened.
+- Connecting or removing a GitHub repository, and changing a person's role or active flag, now confirm with a flyout.
+- The administration workspace also keeps a pinned note when its overview has gone stale or the workspace needs a missing migration or a Nifty connection.
+
 ## 0.4.42 — 2026-10-15
 
 - Work OS opens straight into your workday again — the first launch no longer needs a refresh.

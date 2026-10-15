@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -13,10 +14,13 @@ import {
   Users,
 } from "lucide-react";
 import { KpiCard } from "../InsightCharts";
+import { useNotifications } from "../NotificationFlyouts";
+import { ActivityDetailDrawer, activityRecordFromOverview, type ActivityDetailRecord } from "./ActivityDetail";
+import { ADMIN_OVERVIEW_STALE_KEY, overviewStaleMessage } from "./adminNotifications";
 import { StackedTimeBars } from "./charts";
-import { adminKeys, attendanceLabel, attendanceTone, fetchAdminOverview, formatDuration, relativeTime, statusLabel, todayIso } from "./data";
+import { adminKeys, attendanceLabel, attendanceTone, fetchAdminOverview, formatDuration, normalizeAdminOverview, relativeTime, statusLabel, todayIso } from "./data";
 import { AdminButton, AdminCard, Avatar, Empty, Notice, Pill, Skeleton } from "./ui";
-import type { AdminOverview, AdminSection } from "./types";
+import type { AdminOverview, AdminSection, AdminSectionFocus } from "./types";
 
 /** Maps an overview attention href (a web console path) onto the desktop
  * section it belongs to, so a row always lands somewhere real. */
@@ -40,15 +44,33 @@ function activityTone(kind: string): "ok" | "observed" | "neutral" | "warn" {
 }
 
 export default function OverviewPage({ onOpenSection, onOpenPerson }: {
-  onOpenSection: (section: AdminSection) => void;
+  onOpenSection: (section: AdminSection, focus?: AdminSectionFocus) => void;
   onOpenPerson: (personId: string) => void;
 }) {
+  const [activity, setActivity] = useState<ActivityDetailRecord | null>(null);
+  const notifications = useNotifications();
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(todayIso()),
     queryFn: () => fetchAdminOverview(),
+    // The cache can hold a record a previous build persisted; the page reads
+    // the normalized shape either way.
+    select: normalizeAdminOverview,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
+
+  // A snapshot that stopped refreshing is a standing condition the page cannot
+  // otherwise show: one persistent card under a stable key, cleared when a
+  // fresh snapshot lands.
+  const generatedAt = overview.data?.generatedAt ?? null;
+  useEffect(() => {
+    const message = overviewStaleMessage(generatedAt);
+    if (!message) {
+      notifications.clearPersistent(ADMIN_OVERVIEW_STALE_KEY);
+      return;
+    }
+    notifications.persistent(ADMIN_OVERVIEW_STALE_KEY, message, "Overview snapshot is stale", "info");
+  }, [generatedAt, notifications]);
 
   if (overview.isLoading) {
     return (
@@ -220,17 +242,19 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
             <ul className="admin-activity">
               {data.recentActivity.slice(0, 10).map((item) => (
                 <li key={item.id}>
-                  <span className="admin-activity-icon" aria-hidden>
-                    {item.kind === "task_completed" ? <CheckCircle2 size={14} /> : item.kind === "evidence" ? <Camera size={14} /> : item.kind === "eod_submitted" ? <FileCheck2 size={14} /> : item.kind === "recap" ? <Activity size={14} /> : <MessageSquareText size={14} />}
-                  </span>
-                  <span className="min-w-0">
-                    <b>{item.title}</b>
-                    <small>{item.personName ?? "Unmapped person"}{item.detail ? ` · ${item.detail}` : ""}</small>
-                  </span>
-                  <span className="admin-activity-meta">
-                    {item.provenance ? <Pill tone="neutral">{statusLabel(item.provenance)}</Pill> : null}
-                    <small>{relativeTime(item.at, Date.parse(data.generatedAt))}</small>
-                  </span>
+                  <button type="button" onClick={() => setActivity(activityRecordFromOverview(item, Date.parse(data.generatedAt)))}>
+                    <span className="admin-activity-icon" aria-hidden>
+                      {item.kind === "task_completed" ? <CheckCircle2 size={14} /> : item.kind === "evidence" ? <Camera size={14} /> : item.kind === "eod_submitted" ? <FileCheck2 size={14} /> : item.kind === "recap" ? <Activity size={14} /> : <MessageSquareText size={14} />}
+                    </span>
+                    <span className="min-w-0">
+                      <b>{item.title}</b>
+                      <small>{item.personName ?? "Unmapped person"}{item.detail ? ` · ${item.detail}` : ""}</small>
+                    </span>
+                    <span className="admin-activity-meta">
+                      {item.provenance ? <Pill tone="neutral">{statusLabel(item.provenance)}</Pill> : null}
+                      <small>{relativeTime(item.at, Date.parse(data.generatedAt))}</small>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -273,6 +297,13 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
       <p className="admin-disclaimer">
         Activity context is descriptive and never proves attendance, productivity, or task completion. Worktivity owns attendance; Work OS mirrors provider-confirmed state.
       </p>
+
+      <ActivityDetailDrawer
+        record={activity}
+        onClose={() => setActivity(null)}
+        onOpenPerson={onOpenPerson}
+        onOpenSection={onOpenSection}
+      />
     </div>
   );
 }

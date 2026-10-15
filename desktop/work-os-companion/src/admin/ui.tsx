@@ -1,6 +1,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { isTopDrawerLayer, pushDrawerLayer, removeDrawerLayer } from "./drawerStack";
+import { acquirePageScrollLock } from "./scrollLock";
 
 /** Administration workspace primitives.
  *
@@ -153,8 +155,11 @@ export function KeyValue({ label, value, mono = false }: { label: string; value:
   );
 }
 
-/** Right-side drawer for one record. Keeps the list behind it in place, closes
- * on Escape and backdrop press, and returns focus to the opener. */
+/** Right-side drawer for one record. Keeps the list behind it in place, holds
+ * the shared page scroll lock while any drawer is open, closes on Escape and
+ * backdrop press, and returns focus to the opener. Drawers layer in the order
+ * they open: only the topmost answers Escape, so a detail drawer opened over
+ * another surface closes alone. */
 export function Drawer({ open, onClose, title, subtitle, children, footer, width = 560 }: {
   open: boolean;
   onClose: () => void;
@@ -174,27 +179,41 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
 
   useEffect(() => {
     if (!open) return;
+    const layer = Symbol("admin-drawer");
+    pushDrawerLayer(layer);
     lastFocus.current = document.activeElement;
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && isTopDrawerLayer(layer)) {
         event.stopPropagation();
         onCloseRef.current();
       }
     };
     document.addEventListener("keydown", onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Reference-counted: two drawers open at once share one lock, and the last
+    // one to close restores the body's original inline overflow.
+    const releaseScrollLock = acquirePageScrollLock();
     return () => {
+      removeDrawerLayer(layer);
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
       if (lastFocus.current instanceof HTMLElement) lastFocus.current.focus();
     };
   }, [open]);
 
   if (!open) return null;
   const content = (
-    <div className="admin-drawer-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div
+      className="admin-drawer-backdrop"
+      onPointerDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        // Closing from the backdrop must not move focus to the body: cancelling
+        // the pointer default stops the browser from blurring the opener, so
+        // the focus restore in the effect's cleanup lands back on the trigger.
+        event.preventDefault();
+        onClose();
+      }}
+    >
       <aside className="admin-drawer" role="dialog" aria-modal="true" aria-label={title} style={{ width }}>
         <header className="admin-drawer-head">
           <div className="min-w-0">

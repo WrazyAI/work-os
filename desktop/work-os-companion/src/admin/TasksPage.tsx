@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Check, ListChecks, Plus, Search } from "lucide-react";
+import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -10,6 +11,10 @@ import {
   fetchAdminTasks,
   fetchPeople,
   fetchProjects,
+  normalizeAdminTaskDetails,
+  normalizeAdminTaskList,
+  normalizePeople,
+  normalizeProjects,
   relativeTime,
   shortDate,
   statusLabel,
@@ -23,6 +28,7 @@ type TaskFilter = "open" | "completed" | "all";
  * that opens one task's detail with its subtasks. */
 export default function TasksPage({ initialTaskId }: { initialTaskId?: string }) {
   const queryClient = useQueryClient();
+  const notifications = useNotifications();
   const [filter, setFilter] = useState<TaskFilter>("open");
   const [personId, setPersonId] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -31,24 +37,31 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", projectId: "", assignee: "", dueDate: "", priority: "" });
 
-  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, staleTime: ADMIN_STALE_MS });
-  const projects = useQuery({ queryKey: adminKeys.projects(), queryFn: fetchProjects, staleTime: ADMIN_STALE_MS });
+  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
+  const projects = useQuery({ queryKey: adminKeys.projects(), queryFn: fetchProjects, select: normalizeProjects, staleTime: ADMIN_STALE_MS });
   const completedParam = filter === "open" ? "false" : filter === "completed" ? "true" : "";
   const taskFilters: Record<string, string> = { filter, personId, projectId, limit: "200", completed: completedParam };
   const tasks = useQuery({
     queryKey: adminKeys.tasks(taskFilters),
     queryFn: () => fetchAdminTasks(taskFilters),
+    select: normalizeAdminTaskList,
     staleTime: 30_000,
   });
   const detail = useQuery({
     queryKey: adminKeys.taskDetails(selectedId ?? ""),
     queryFn: () => fetchAdminTaskDetails(selectedId!),
+    select: normalizeAdminTaskDetails,
     enabled: !!selectedId,
     staleTime: 30_000,
   });
   const complete = useMutation({
     mutationFn: ({ id, completed }: { id: string; completed: boolean }) => completeAdminTask(id, completed),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] }),
+    onSuccess: (result, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
+      const row = (tasks.data?.tasks ?? []).find((entry) => String(entry.id) === variables.id);
+      const title = String(result?.task?.title ?? result?.task?.name ?? row?.title ?? row?.name ?? "The task");
+      notifications.success(`“${title}” was ${variables.completed ? "marked complete" : "reopened"}.`, variables.completed ? "Task completed" : "Task reopened");
+    },
   });
   const create = useMutation({
     mutationFn: () => createAdminTask({
@@ -59,10 +72,13 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
       due_date: form.dueDate || undefined,
       priority: form.priority || undefined,
     }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setCreateOpen(false);
       setForm({ name: "", description: "", projectId: "", assignee: "", dueDate: "", priority: "" });
       void queryClient.invalidateQueries({ queryKey: ["work-os", "admin", "tasks"] });
+      const submitted = result?.task?.title ?? result?.task?.name;
+      const title = String(submitted ?? (form.name.trim() || "The task"));
+      notifications.success(`“${title}” was added to the organization task record.`, "Task created");
     },
   });
 
@@ -120,8 +136,8 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   return (
                     <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
                       <td>
-                        <span className="min-w-0">
-                          <b className={task.completed ? "is-done" : undefined}>{String(task.name ?? task.title ?? "Task")}</b>
+                        <span className="admin-record">
+                          <b className={task.completed ? "is-done" : undefined}>{String(task.title ?? task.name ?? "Task")}</b>
                           <small>{task.project?.name ? String(task.project.name) : "No project"}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>
                         </span>
                       </td>
@@ -156,7 +172,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
       <Drawer
         open={!!selectedId}
         onClose={() => setSelectedId(null)}
-        title={detail.data?.task ? String(detail.data.task.name ?? detail.data.task.title ?? "Task") : "Task"}
+        title={detail.data?.task ? String(detail.data.task.title ?? detail.data.task.name ?? "Task") : "Task"}
         subtitle={detail.data?.task?.project?.name ? String(detail.data.task.project.name) : undefined}
         width={560}
       >
@@ -181,7 +197,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                 <ul className="admin-rows">
                   {detail.data.subtasks.map((subtask) => (
                     <li key={String(subtask.id)}>
-                      <span>{String(subtask.name ?? subtask.title ?? "Subtask")}</span>
+                      <span>{String(subtask.title ?? subtask.name ?? "Subtask")}</span>
                       <Pill tone={subtask.completed ? "ok" : "neutral"}>{subtask.completed ? "Done" : "Open"}</Pill>
                     </li>
                   ))}

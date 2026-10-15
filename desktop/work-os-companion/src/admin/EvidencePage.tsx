@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Camera, Check, GitBranch, RefreshCw, ShieldCheck } from "lucide-react";
+import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -13,6 +14,12 @@ import {
   fetchGithubActors,
   fetchGithubRepos,
   fetchPeople,
+  normalizeConnections,
+  normalizeEvidence,
+  normalizeGithubActors,
+  normalizeGithubRepos,
+  normalizeIntervals,
+  normalizePeople,
   relativeTime,
   requestScreenshotAccess,
   shortDate,
@@ -39,10 +46,12 @@ function screenshotOf(row: EvidenceRow) {
 
 /** Evidence keeps observation, output artifacts, and activity recaps visibly
  * apart; the raw-frame preview stays inside the flagged/disputed rule and
- * records a reason with every view. */
-export default function EvidencePage() {
+ * records a reason with every view. A caller can land directly on the
+ * activity-recap tab (the Overview recap action does). */
+export default function EvidencePage({ initialTab = "evidence" }: { initialTab?: EvidenceTab } = {}) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<EvidenceTab>("evidence");
+  const notifications = useNotifications();
+  const [tab, setTab] = useState<EvidenceTab>(initialTab);
   const [personId, setPersonId] = useState("");
   const [source, setSource] = useState("");
   const [disputedOnly, setDisputedOnly] = useState(false);
@@ -55,36 +64,61 @@ export default function EvidencePage() {
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<string | null>(null);
 
-  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, staleTime: ADMIN_STALE_MS });
+  const people = useQuery({ queryKey: adminKeys.people(), queryFn: fetchPeople, select: normalizePeople, staleTime: ADMIN_STALE_MS });
   const filters = { personId, source: tab === "evidence" ? source : "", from, to, correction: disputedOnly ? "disputed" : "", summary: "1", limit: "100" };
   const evidence = useQuery({
     queryKey: adminKeys.evidence(filters),
     queryFn: () => fetchAdminEvidence(filters),
+    select: normalizeEvidence,
     staleTime: ADMIN_STALE_MS,
   });
   const intervalsFilters = { personId, from, to, limit: "60" };
   const intervals = useQuery({
     queryKey: adminKeys.intervals(intervalsFilters),
     queryFn: () => fetchAdminIntervals(intervalsFilters),
+    select: normalizeIntervals,
     staleTime: ADMIN_STALE_MS,
     enabled: tab === "recaps",
   });
-  const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, staleTime: ADMIN_STALE_MS });
-  const githubActors = useQuery({ queryKey: adminKeys.githubActors(), queryFn: fetchGithubActors, staleTime: ADMIN_STALE_MS });
-  const githubRepos = useQuery({ queryKey: adminKeys.githubRepos(), queryFn: fetchGithubRepos, staleTime: ADMIN_STALE_MS, enabled: reposOpen });
+  const connections = useQuery({ queryKey: adminKeys.connections(), queryFn: fetchConnections, select: normalizeConnections, staleTime: ADMIN_STALE_MS });
+  const githubActors = useQuery({ queryKey: adminKeys.githubActors(), queryFn: fetchGithubActors, select: normalizeGithubActors, staleTime: ADMIN_STALE_MS });
+  const githubRepos = useQuery({ queryKey: adminKeys.githubRepos(), queryFn: fetchGithubRepos, select: normalizeGithubRepos, staleTime: ADMIN_STALE_MS, enabled: reposOpen });
 
   const access = useMutation({
     mutationFn: ({ summaryId, reason: why }: { summaryId: string; reason: string }) => requestScreenshotAccess(summaryId, why),
-    onSuccess: (result) => { setScreenshotError(null); setScreenshotUrl(result.url); },
+    onSuccess: (result) => {
+      setScreenshotError(null);
+      setScreenshotUrl(result.url);
+      // The route records the reason before it answers, so the receipt may say
+      // the view was logged; the frame itself is what the drawer then shows.
+      notifications.success("The retained frame is ready; this view was recorded with your reason.", "Screenshot access prepared");
+    },
     onError: (error) => setScreenshotError((error as Error).message),
   });
   const connect = useMutation({
     mutationFn: (repo: string) => connectGithubRepo(repo),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: adminKeys.githubRepos() }),
+    onSuccess: (result, repo) => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.githubRepos() });
+      // The route answers with what it actually did: it created a hook, or it
+      // adopted one that already pointed at this receiver.
+      const adopted = (result as { adopted?: unknown } | null)?.adopted === true;
+      const message = adopted
+        ? `An existing webhook for “${repo}” was aligned with this deployment.`
+        : `A Work OS webhook was created for “${repo}”.`;
+      setReceipt(message);
+      notifications.success(message, adopted ? "Webhook adopted" : "Repository connected");
+    },
+    onError: () => setReceipt(null),
   });
   const disconnect = useMutation({
     mutationFn: (repo: string) => disconnectGithubRepo(repo),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: adminKeys.githubRepos() }),
+    onSuccess: (_result, repo) => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.githubRepos() });
+      const message = `The Work OS webhook for “${repo}” was removed.`;
+      setReceipt(message);
+      notifications.success(message, "Repository removed");
+    },
+    onError: () => setReceipt(null),
   });
 
   const grouped = useMemo(() => {
@@ -126,7 +160,7 @@ export default function EvidencePage() {
             <div className="admin-kv"><span>GitHub</span><b>{githubConnection ? "Connected" : "Not connected"}</b></div>
             <div className="admin-kv"><span>Workspace</span><b className="is-mono">{githubConnection ? String(githubConnection.external_workspace_id ?? "—") : "—"}</b></div>
             <div className="admin-kv"><span>Mapped accounts</span><b>{githubAccounts.length}</b></div>
-            <div className="admin-kv"><span>Last event</span><b>{githubActors.data?.totals.lastEventAt ? relativeTime(githubActors.data.totals.lastEventAt) : "none yet"}</b></div>
+            <div className="admin-kv"><span>Last event</span><b>{githubActors.data?.totals?.lastEventAt ? relativeTime(githubActors.data.totals.lastEventAt) : "none yet"}</b></div>
           </div>
           {receipt ? <Notice tone="ok">{receipt}</Notice> : null}
         </div>
@@ -136,13 +170,13 @@ export default function EvidencePage() {
         <AdminCard
           icon={GitBranch}
           title="Unmapped GitHub accounts"
-          detail={`${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} waiting for a person · mapping also attributes earlier events`}
+          detail={`${githubActors.data?.totals?.unattributedEvents ?? 0} event${(githubActors.data?.totals?.unattributedEvents ?? 0) === 1 ? "" : "s"} waiting for a person · mapping also attributes earlier events`}
         >
           <ul className="admin-rows spaced">
             {actors.slice(0, 8).map((actor) => (
               <li key={actor.key} className="admin-actor">
                 <span className="min-w-0">
-                  <b>{actor.login ?? `GitHub id ${actor.id}`}</b>
+                  <b>{actor.login ?? (actor.id ? `GitHub id ${actor.id}` : "Unmapped GitHub account")}</b>
                   <small>{actor.events} event{actor.events === 1 ? "" : "s"} · last {relativeTime(actor.lastSeen)}{actor.titles[0] ? ` · ${actor.titles[0]}` : ""}</small>
                 </span>
                 <Pill tone="warn">Map &amp; backfill in the web console</Pill>
@@ -168,9 +202,13 @@ export default function EvidencePage() {
             />
             <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
             {tab === "evidence" ? <SelectField ariaLabel="Filter by source" value={source} onChange={setSource} placeholder="All sources" options={SOURCE_OPTIONS} /> : null}
-            <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Evidence from date" />
-            <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Evidence to date" />
-            {tab === "evidence" ? <CheckField label="Disputed only" checked={disputedOnly} onChange={setDisputedOnly} /> : null}
+            {/* The range and its disputed filter wrap as one group instead of
+                leaving a lone field or checkbox on a row of its own. */}
+            <div className="admin-inline-fields">
+              <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Evidence from date" />
+              <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Evidence to date" />
+              {tab === "evidence" ? <CheckField label="Disputed only" checked={disputedOnly} onChange={setDisputedOnly} /> : null}
+            </div>
           </div>
         }
       >
@@ -313,7 +351,10 @@ export default function EvidencePage() {
           <Notice tone="err">{(githubRepos.error as Error).message}</Notice>
         ) : (
           <div className="admin-grid">
-            {githubRepos.data?.configuration.repositoryManagementReady ? (
+            {connect.error || disconnect.error ? (
+              <Notice tone="err">{((connect.error || disconnect.error) as Error).message}</Notice>
+            ) : null}
+            {githubRepos.data?.configuration?.repositoryManagementReady ? (
               <ul className="admin-rows spaced">
                 {(githubRepos.data?.repos ?? []).map((repo) => {
                   const connected = (githubRepos.data?.connectedRepos ?? []).some((entry) => entry.full_name === repo.full_name);
@@ -331,9 +372,9 @@ export default function EvidencePage() {
               </ul>
             ) : (
               <>
-                <Notice tone="warn">{githubRepos.data?.configuration.reason ?? "Repository management is not configured; add repo webhooks manually."}</Notice>
+                <Notice tone="warn">{githubRepos.data?.configuration?.reason ?? "Repository management is not configured; add repo webhooks manually."}</Notice>
                 <p className="admin-quiet">Webhook endpoint: <code>{githubRepos.data?.webhookUrl}</code></p>
-                <p className="admin-quiet">{githubRepos.data?.connectedRepos.length ?? 0} repositories are already connected.</p>
+                <p className="admin-quiet">{githubRepos.data?.connectedRepos?.length ?? 0} repositories are already connected.</p>
               </>
             )}
           </div>

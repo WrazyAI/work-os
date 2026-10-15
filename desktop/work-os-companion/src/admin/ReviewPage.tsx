@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "lucide-react";
+import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -9,6 +10,10 @@ import {
   fetchPeople,
   fetchReportEvidence,
   fetchReportIntervals,
+  normalizeEvidence,
+  normalizeIntervals,
+  normalizePeople,
+  normalizeReports,
   relativeTime,
   reportTone,
   shortDate,
@@ -27,7 +32,11 @@ type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft"
  * sourced evidence and interval recaps, and the decision record. */
 export default function ReviewPage({ initialReportId }: { initialReportId?: string }) {
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<StatusFilter>("pending_review");
+  const notifications = useNotifications();
+  // A deep link (a report opened from a person's update) starts on the full
+  // list so the requested record is present whatever its status; the queue
+  // keeps its awaiting-review default otherwise.
+  const [status, setStatus] = useState<StatusFilter>(initialReportId ? "all" : "pending_review");
   const [personId, setPersonId] = useState("");
   const [from, setFrom] = useState(() => isoDaysAgo(30));
   const [to, setTo] = useState(() => todayIso());
@@ -46,11 +55,13 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
   const reports = useQuery<ReportsResponse>({
     queryKey: adminKeys.reports(filters),
     queryFn: () => fetchAdminReports(filters),
+    select: normalizeReports,
     staleTime: 30_000,
   });
   const people = useQuery({
     queryKey: adminKeys.people(),
     queryFn: fetchPeople,
+    select: normalizePeople,
     staleTime: ADMIN_STALE_MS,
   });
 
@@ -62,10 +73,18 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
   const review = useMutation({
     mutationFn: ({ reportId, next, managerNotes }: { reportId: string; next: "approved" | "rejected"; managerNotes: string }) =>
       reviewAdminReport(reportId, { status: next, manager_notes: managerNotes.trim() || undefined }),
-    onSuccess: (_result, variables) => {
+    onSuccess: (result, variables) => {
       setReceipt(variables.next === "approved" ? "The report was approved." : "Changes were requested from the employee.");
       setNotes("");
       void queryClient.invalidateQueries({ queryKey: ["work-os", "admin"] });
+      // The receipt names the person the persisted report carries, falling
+      // back to the row the decision was taken from.
+      const name = result.report?.person?.display_name ?? selected?.person?.display_name ?? null;
+      if (variables.next === "approved") {
+        notifications.success(name ? `${name}'s EOD report was approved.` : "The EOD report was approved.", "Report approved");
+      } else {
+        notifications.success(name ? `Changes were requested from ${name}.` : "Changes were requested from the employee.", "Changes requested");
+      }
     },
   });
   const draft = useMutation({
@@ -75,6 +94,7 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
       await queryClient.invalidateQueries({ queryKey: ["work-os", "admin"] });
       setStatus("all");
       if (result.report?.id) setSelectedId(result.report.id);
+      notifications.success(`A draft for ${shortDate(`${draftDate}T12:00:00Z`)} is ready to review.`, "EOD draft created");
     },
   });
 
@@ -105,8 +125,11 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
               ]}
             />
             <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-            <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
-            <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
+            {/* The date range wraps as one pair instead of leaving a lone field. */}
+            <div className="admin-inline-fields">
+              <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
+              <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
+            </div>
           </div>
         }
       >
@@ -204,12 +227,14 @@ function ReportBody({ report }: { report: WorkOsReportRow }) {
   const evidence = useQuery({
     queryKey: adminKeys.reportEvidence(report.person_id ?? "", report.report_date),
     queryFn: () => fetchReportEvidence(report.person_id!, report.report_date),
+    select: normalizeEvidence,
     enabled: !!report.person_id,
     staleTime: 60_000,
   });
   const intervals = useQuery({
     queryKey: adminKeys.reportIntervals(report.person_id ?? "", report.report_date),
     queryFn: () => fetchReportIntervals(report.person_id!, report.report_date),
+    select: normalizeIntervals,
     enabled: !!report.person_id,
     staleTime: 60_000,
   });
@@ -219,7 +244,7 @@ function ReportBody({ report }: { report: WorkOsReportRow }) {
       <div className="admin-chips">
         <Pill tone={reportTone(report.status)}>{statusLabel(report.status)}</Pill>
         {facts.map((fact) => <Pill key={fact.label}>{fact.label}: {fact.value}</Pill>)}
-        <Pill tone="observed" icon={Camera}>{evidence.data?.evidence.length ?? 0} evidence items</Pill>
+        <Pill tone="observed" icon={Camera}>{(evidence.data?.evidence ?? []).length} evidence items</Pill>
         {report.manager_notes ? <Pill tone="info">Notes on record</Pill> : null}
       </div>
 

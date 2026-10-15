@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
+import { parseSelect, splitTopLevel } from "../src/lib/db/query";
 
 const root = new URL("../", import.meta.url);
 
@@ -561,4 +562,102 @@ test("the evidence page blurs future integrations and surfaces github state", as
   assert.match(settings, /comingSoon/);
   assert.match(evidence, /Organization webhook active/);
   assert.match(evidence, /Covered by organization/);
+});
+
+/** Column names per table, unioned from every CREATE TABLE body and ALTER
+ * TABLE ... ADD COLUMN statement in the Work OS migration chain. The chain is
+ * what `npm run db:apply:work-os` feeds to the database, so a select column
+ * that passes here exists against an applied schema. */
+async function migrationTableColumns() {
+  const migrations = new URL("supabase/migrations/", root);
+  const files = (await readdir(migrations)).filter((name) => name.endsWith(".sql")).sort();
+  const tables = new Map<string, Set<string>>();
+  const columnsFor = (table: string): Set<string> => {
+    const existing = tables.get(table);
+    if (existing) return existing;
+    const created = new Set<string>();
+    tables.set(table, created);
+    return created;
+  };
+  for (const file of files) {
+    const sql = await readFile(new URL(file, migrations), "utf8");
+    const create = /create table(?: if not exists)?\s+([a-z_][a-z0-9_]*)\s*\(/gi;
+    for (let match = create.exec(sql); match; match = create.exec(sql)) {
+      const bodyStart = create.lastIndex;
+      let depth = 1;
+      let index = bodyStart;
+      while (index < sql.length && depth > 0) {
+        if (sql[index] === "(") depth += 1;
+        else if (sql[index] === ")") depth -= 1;
+        index += 1;
+      }
+      const columns = columnsFor(match[1]!.toLowerCase());
+      for (const part of splitTopLevel(sql.slice(bodyStart, index - 1))) {
+        const name = part.trim().split(/\s+/)[0]?.replace(/"/g, "").toLowerCase();
+        // Table-level constraint lines are not columns.
+        if (!name || /^(constraint|primary|foreign|unique|check|exclude)$/.test(name)) continue;
+        columns.add(name);
+      }
+      create.lastIndex = index;
+    }
+    const alter = /alter table\s+(?:only\s+)?([a-z_][a-z0-9_]*)\s+([\s\S]*?);/gi;
+    for (let match = alter.exec(sql); match; match = alter.exec(sql)) {
+      const columns = columnsFor(match[1]!.toLowerCase());
+      const added = /add column(?: if not exists)?\s+([a-z_][a-z0-9_]*)/gi;
+      for (let column = added.exec(match[2]!); column; column = added.exec(match[2]!)) {
+        columns.add(column[1]!.toLowerCase());
+      }
+    }
+  }
+  return tables;
+}
+
+/** The `.from(table).select("...")` specs a route sends, verbatim. */
+function selectSpecs(text: string, table: string) {
+  const specs: string[] = [];
+  const pattern = new RegExp(`\\.from\\("${table}"\\)[\\s\\S]{0,160}?\\.select\\("([^"]+)"`, "g");
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) specs.push(match[1]!);
+  return specs;
+}
+
+/** Fails on the first select column the migration DDL does not define, on the
+ * base table or on an embedded table, exactly like the Postgres shim fails at
+ * query time. Embeds are parsed with the shim's own parser so the check cannot
+ * drift from runtime behavior. */
+function assertSelectColumnsExist(spec: string, table: string, tables: Map<string, Set<string>>, route: string) {
+  const parsed = parseSelect(spec);
+  if (parsed.base !== "*") {
+    for (const column of splitTopLevel(parsed.base)) {
+      const name = column.trim().replace(/"/g, "");
+      assert.ok(tables.get(table)?.has(name), `${route}: ${table} has no column "${name}" (select "${spec}")`);
+    }
+  }
+  for (const embed of parsed.embeds) {
+    assert.ok(tables.has(embed.table), `${route}: unknown embedded table "${embed.table}"`);
+    if (embed.columns !== "*") {
+      for (const column of embed.columns) {
+        const name = column.trim().replace(/"/g, "");
+        assert.ok(tables.get(embed.table)?.has(name), `${route}: ${embed.table} has no column "${name}" (embed in "${spec}")`);
+      }
+    }
+  }
+}
+
+test("admin task routes only select columns that exist in the migration DDL", async () => {
+  const tables = await migrationTableColumns();
+  // The detail drawer's GET: a wrong column here surfaces as
+  // `load task subtasks: column "name" does not exist` in the drawer.
+  const detail = await source("src/app/api/work-os/tasks/[taskId]/route.ts");
+  const detailSpecs = selectSpecs(detail, "work_tasks");
+  assert.equal(detailSpecs.length, 1, "the admin task-detail GET selects work_tasks columns");
+  assert.match(detailSpecs[0]!, /project:work_projects\(id,name\)/, "the detail select keeps the project embed");
+  assertSelectColumnsExist(detailSpecs[0]!, "work_tasks", tables, "tasks/[taskId]");
+  // The list route's head-only workload counts select the same two tables.
+  const list = await source("src/app/api/work-os/tasks/route.ts");
+  assert.ok(selectSpecs(list, "work_tasks").length >= 1, "the admin task list counts work_tasks rows");
+  for (const spec of selectSpecs(list, "work_tasks")) assertSelectColumnsExist(spec, "work_tasks", tables, "tasks");
+  for (const spec of selectSpecs(list, "work_task_day_events")) assertSelectColumnsExist(spec, "work_task_day_events", tables, "tasks");
+  // A guard on the guard: the DDL parser must actually see the title column.
+  assert.ok(tables.get("work_tasks")?.has("title"), "work_tasks DDL parsed with its title column");
+  assert.ok(!tables.get("work_tasks")?.has("name"), "work_tasks has no name column");
 });

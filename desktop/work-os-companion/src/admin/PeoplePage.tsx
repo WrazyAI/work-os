@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
+import { useNotifications } from "../NotificationFlyouts";
+import { ActivityDetailDrawer, activityRecordFromUpdate, updateText, type ActivityDetailRecord } from "./ActivityDetail";
 import {
   adminKeys,
   ADMIN_DETAIL_STALE_MS,
@@ -11,6 +13,9 @@ import {
   fetchPeople,
   fetchPersonDetail,
   formatDuration,
+  normalizeAdminOverview,
+  normalizePeople,
+  normalizePersonDetail,
   relativeTime,
   reportTone,
   statusLabel,
@@ -24,35 +29,62 @@ type AttendanceFilter = "all" | "active" | "paused" | "off_shift" | "unknown";
 
 /** The roster: every mapped person with today's recorded state, and a drawer
  * that carries the person's own record — mappings, schedule, workdays,
- * reports, updates, and the evidence summary behind their row. */
-export default function PeoplePage({ initialPersonId }: { initialPersonId?: string }) {
+ * reports, updates, and the evidence summary behind their row. A recorded
+ * update opens its own full-record drawer above the person record. */
+export default function PeoplePage({ initialPersonId, onOpenReport }: { initialPersonId?: string; onOpenReport?: (reportId: string) => void }) {
   const queryClient = useQueryClient();
+  const notifications = useNotifications();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [attendance, setAttendance] = useState<AttendanceFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(initialPersonId ?? null);
+  const [updateRecord, setUpdateRecord] = useState<ActivityDetailRecord | null>(null);
+  const [receipt, setReceipt] = useState<string | null>(null);
 
   const overview = useQuery<AdminOverview>({
     queryKey: adminKeys.overview(todayIso()),
     queryFn: () => fetchAdminOverview(),
+    select: normalizeAdminOverview,
     staleTime: ADMIN_STALE_MS,
   });
   const roster = useQuery({
     queryKey: adminKeys.people(),
     queryFn: fetchPeople,
+    select: normalizePeople,
     staleTime: ADMIN_DETAIL_STALE_MS,
   });
   const detail = useQuery<PersonDetailResponse>({
     queryKey: adminKeys.person(selectedId ?? ""),
     queryFn: () => fetchPersonDetail(selectedId!),
+    select: normalizePersonDetail,
     enabled: !!selectedId,
     staleTime: ADMIN_DETAIL_STALE_MS,
   });
+  // The receipt names exactly the persisted change the response carried; the
+  // API is authoritative for the record it saved.
   const updatePerson = useMutation({
     mutationFn: (body: Record<string, unknown>) => updateAdminPerson(body),
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.people() });
       void queryClient.invalidateQueries({ queryKey: adminKeys.person(selectedId ?? "") });
+      const name = String(result?.person?.display_name ?? detail.data?.person.display_name ?? "The person");
+      if (typeof variables.active === "boolean") {
+        const message = `${name} is now ${variables.active ? "active" : "inactive"} for planning and evidence.`;
+        setReceipt(message);
+        notifications.success(message, variables.active ? "Person activated" : "Person deactivated");
+        return;
+      }
+      if ("role_profile_id" in variables) {
+        const roleId = variables.role_profile_id == null ? "" : String(variables.role_profile_id);
+        const role = roleId ? roster.data?.roleProfiles.find((profile) => profile.id === roleId)?.name ?? null : null;
+        const message = role
+          ? `${name} is now mapped to ${role}.`
+          : roleId
+            ? `${name}'s role profile was updated.`
+            : `${name} is now unmapped from any role profile.`;
+        setReceipt(message);
+        notifications.success(message, "Role profile updated");
+      }
     },
   });
 
@@ -74,9 +106,21 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
 
   const selectedStatus = selectedId ? statusById.get(selectedId) ?? null : null;
 
+  // A recorded update can point at its workday's EOD report when one is on
+  // file, so the update drawer can offer a real "Open EOD review" action.
+  const reportIdByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const report of detail.data?.reports ?? []) {
+      const date = String(report.report_date ?? "");
+      const id = String(report.id ?? "");
+      if (date && id) map.set(date, id);
+    }
+    return map;
+  }, [detail.data]);
+
   return (
     <div className="admin-grid">
-      <AdminCard icon={Users} title="Roster" detail={`${people.length} of ${roster.data?.people.length ?? 0} teammates shown · select a person to open their record`} padded={false}
+      <AdminCard icon={Users} title="Roster" detail={`${people.length} of ${roster.data?.people?.length ?? 0} teammates shown · select a person to open their record`} padded={false}
         action={
           <div className="admin-toolbar">
             <label className="admin-search">
@@ -149,8 +193,8 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
         ) : (
           <div className="admin-card-body is-padded">
             <Empty
-              title={roster.data?.people.length ? "No people match these filters" : "No people yet"}
-              body={roster.data?.people.length ? "Clear the search or filters to see the full roster." : "People are created through onboarding or membership mapping in Settings."}
+              title={roster.data?.people?.length ? "No people match these filters" : "No people yet"}
+              body={roster.data?.people?.length ? "Clear the search or filters to see the full roster." : "People are created through onboarding or membership mapping in Settings."}
             />
           </div>
         )}
@@ -158,14 +202,14 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
 
       <Drawer
         open={!!selectedId}
-        onClose={() => setSelectedId(null)}
-        title={detail.data?.person.display_name ?? selectedStatus?.displayName ?? "Person"}
-        subtitle={detail.data?.person.email ?? selectedStatus?.email ?? undefined}
+        onClose={() => { setSelectedId(null); setUpdateRecord(null); setReceipt(null); }}
+        title={detail.data?.person?.display_name ?? selectedStatus?.displayName ?? "Person"}
+        subtitle={detail.data?.person?.email ?? selectedStatus?.email ?? undefined}
         width={600}
       >
         {detail.isLoading ? (
           <div className="admin-grid"><Skeleton className="h-24" /><Skeleton className="h-48" /></div>
-        ) : detail.error || !detail.data ? (
+        ) : detail.error || !detail.data?.person ? (
           <Notice tone="err">{((detail.error as Error | null)?.message) ?? "The person record could not be loaded."}</Notice>
         ) : (
           <div className="admin-grid admin-drawer-grid">
@@ -196,6 +240,7 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
                 </label>
               </div>
               {updatePerson.error ? <Notice tone="err">{(updatePerson.error as Error).message}</Notice> : null}
+              {receipt ? <Notice tone="ok">{receipt}</Notice> : null}
               {detail.data.teams.length ? (
                 <div className="admin-chips">
                   {detail.data.teams.map((membership) => (
@@ -263,12 +308,21 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
               <h3><MessageSquareText size={14} aria-hidden /> Updates</h3>
               {detail.data.updates.length ? (
                 <ul className="admin-rows">
-                  {detail.data.updates.slice(0, 6).map((update, index) => (
-                    <li key={index}>
-                      <span>{String(update.summary ?? update.text ?? update.update_text ?? "Update")}</span>
-                      <small>{statusLabel(String(update.update_kind ?? "update"))} · {relativeTime(String(update.occurred_at ?? update.created_at ?? ""))}</small>
-                    </li>
-                  ))}
+                  {detail.data.updates.slice(0, 6).map((update, index) => {
+                    const at = String(update.occurred_at ?? update.created_at ?? "");
+                    const reportId = reportIdByDate.get(String(update.shift_date ?? at).slice(0, 10)) ?? null;
+                    return (
+                      <li key={String(update.id ?? index)}>
+                        <button
+                          type="button"
+                          onClick={() => setUpdateRecord(activityRecordFromUpdate(update, { id: detail.data!.person.id, name: detail.data!.person.display_name }, reportId))}
+                        >
+                          <span>{updateText(update) ?? "Update"}</span>
+                          <small>{statusLabel(String(update.update_kind ?? update.kind ?? "update"))} · {relativeTime(at)}</small>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="admin-empty-note">No recorded updates for this person yet.</p>
@@ -305,6 +359,12 @@ export default function PeoplePage({ initialPersonId }: { initialPersonId?: stri
           </div>
         )}
       </Drawer>
+
+      <ActivityDetailDrawer
+        record={updateRecord}
+        onClose={() => setUpdateRecord(null)}
+        onOpenReport={onOpenReport}
+      />
     </div>
   );
 }

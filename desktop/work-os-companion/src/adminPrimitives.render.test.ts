@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { seedAdminFixtures } from "./admin/adminFixtures";
-import { GroupedBars, ShareBars, StackedTimeBars } from "./admin/charts";
+import { GroupedBars, ShareBars, StackedTimeBars, chartReadoutPlacement } from "./admin/charts";
 import { adminKeys, isoDaysAgo, todayIso } from "./admin/data";
 import { Avatar, Drawer, Pill, Segmented } from "./admin/ui";
 
@@ -51,6 +51,66 @@ describe("administration primitives", () => {
     expect(markup).toContain("admin-stack-col");
     expect(markup).toContain("Amara Okafor");
     expect(markup).toContain("2h");
+  });
+
+  it("makes each chart plot one keyboard-reachable readout target", () => {
+    const stacked = renderToStaticMarkup(createElement(StackedTimeBars, {
+      ariaLabel: "Observed work time per day",
+      points: [
+        { date: "2026-10-13", totalMinutes: 120, people: [{ personId: "p-1", name: "Amara Okafor", minutes: 120 }] },
+        { date: "2026-10-14", totalMinutes: 60, people: [{ personId: "p-2", name: "Ben Sato", minutes: 60 }] },
+      ],
+    }));
+    expect(stacked).toContain('role="group"');
+    expect(stacked).toContain('tabindex="0"');
+    expect(stacked).toContain("aria-describedby=");
+    expect(stacked).toContain("2h observed");
+    expect(stacked).toContain('class="admin-legend-button"');
+    expect(stacked).toContain('aria-pressed="false"');
+    expect(stacked).toContain("admin-chart-live");
+    expect(stacked).toContain('role="status"');
+    // The readout is decoration: it only exists while a point is active.
+    expect(stacked).not.toContain("admin-chart-readout");
+
+    const grouped = renderToStaticMarkup(createElement(GroupedBars, {
+      ariaLabel: "counts",
+      points: [{ label: "Oct 14", values: { outcomes: 3, updates: 2 } }],
+      series: [{ key: "outcomes", label: "Outcomes", color: "var(--ink)" }, { key: "updates", label: "Updates", color: "#82bd39" }],
+    }));
+    expect(grouped).toContain('tabindex="0"');
+    expect(grouped).toContain("admin-grouped");
+    expect(grouped).toContain("admin-chart-live");
+
+    const share = renderToStaticMarkup(createElement(ShareBars, {
+      ariaLabel: "mix",
+      items: [{ label: "Progress", value: 4 }, { label: "Blockers", value: 1, note: "minutes" }],
+    }));
+    expect(share).toContain("admin-chart-share");
+    expect(share).toContain('tabindex="0"');
+    expect(share).toContain("admin-chart-live");
+  });
+
+  it("pins the readout to the plot edge and caps the centred ones", () => {
+    expect(chartReadoutPlacement(0, 14)).toEqual({ left: 0, edge: "start", maxWidth: "min(240px, 100%)" });
+    expect(chartReadoutPlacement(13, 14)).toEqual({ left: 100, edge: "end", maxWidth: "min(240px, 100%)" });
+    // 25% of the plot is outside the pinned fifth: the box stays on the column
+    // and only caps its width.
+    const quarter = chartReadoutPlacement(3, 14);
+    expect(quarter.edge).toBeNull();
+    expect(quarter.left).toBeCloseTo(25, 6);
+    expect(quarter.maxWidth).toBe("min(240px, 50.00%)");
+    const middle = chartReadoutPlacement(6, 14);
+    expect(middle.edge).toBeNull();
+    expect(middle.left).toBeCloseTo((6.5 / 14) * 100, 6);
+    expect(middle.maxWidth).toBe(`min(240px, ${(((6.5 / 14) * 100) * 2).toFixed(2)}%)`);
+    // A single column keeps the full plot width; a two-column chart keeps each
+    // readout on its own column, half the plot wide at most.
+    expect(chartReadoutPlacement(0, 1)).toEqual({ left: 50, edge: null, maxWidth: "min(240px, 100.00%)" });
+    expect(chartReadoutPlacement(0, 2)).toEqual({ left: 25, edge: null, maxWidth: "min(240px, 50.00%)" });
+    expect(chartReadoutPlacement(1, 2)).toEqual({ left: 75, edge: null, maxWidth: "min(240px, 50.00%)" });
+    // Four columns already reach into the pinned fifth on both sides.
+    expect(chartReadoutPlacement(0, 4).edge).toBe("start");
+    expect(chartReadoutPlacement(3, 4).edge).toBe("end");
   });
 
   it("stays quiet when a chart has nothing to draw", () => {

@@ -20,6 +20,80 @@
   line-height: 1.5;
 }
 
+/* --- Masthead ------------------------------------------------------------ */
+
+/* One calm header per page: eyebrow, title, and the page's purpose read as a
+   single block above the rule, the switch button sits on the title's line, and
+   the masthead grows with its copy instead of clipping it at a fixed height. */
+.admin-workspace .masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: center;
+  row-gap: 3px;
+  column-gap: 20px;
+  height: auto;
+  min-height: 98px;
+  padding: 16px 0 14px;
+}
+
+.admin-masthead-copy {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.admin-workspace .mast-actions {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  justify-self: end;
+}
+
+.admin-workspace .masthead .admin-purpose {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  max-width: 78ch;
+  font: 500 12.5px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Narrow widths: the masthead utilities move below the title block instead of
+   squeezing it into two lines (design.md §4.3). */
+@media (max-width: 720px) {
+  .admin-workspace .masthead {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    row-gap: 8px;
+    padding: 14px 0 12px;
+  }
+
+  .admin-workspace .mast-actions {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+  }
+}
+
+/* --- Notifications ------------------------------------------------------
+   The shared flyout stack is fixed to the viewport's top-right — exactly
+   where the workspace switch rides the masthead's title line. While this
+   workspace is mounted the stack starts below the masthead so a receipt can
+   never cover the switch; employee surfaces keep the shared home position.
+   The narrow layout moves the switch under the title block, so the stack
+   returns to the shared top there. */
+.admin-workspace ~ .notification-flyouts {
+  top: max(118px, calc(env(safe-area-inset-top) + 106px));
+}
+
+@media (max-width: 720px) {
+  .admin-workspace ~ .notification-flyouts {
+    top: max(12px, env(safe-area-inset-top));
+  }
+}
+
 .admin-grid {
   display: grid;
   gap: 14px;
@@ -121,11 +195,33 @@
   color: var(--muted);
 }
 
+/* The card's name never yields to its controls: it keeps one line, and the
+   detail + control cluster drops onto its own full-width row whenever the two
+   cannot share the title's. The cluster's base size stays its natural width for
+   that line-break decision, then it fills (and right-aligns) the row it lands
+   on, so wrapped controls get the whole card width instead of squeezing the
+   name. */
+.admin-card-title {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.admin-card-title > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .admin-card-meta {
   display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px 10px;
   min-width: 0;
+  margin-left: auto;
 }
 
 .admin-subhead {
@@ -373,6 +469,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
+  justify-content: flex-end;
   gap: 8px 10px;
 }
 
@@ -471,6 +568,15 @@
   min-width: 0;
 }
 
+/* Two-line record cell without an avatar: the name on its own line, the muted
+   detail beneath, in the same rhythm as .admin-person. */
+.admin-record {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.admin-record b,
 .admin-person b {
   display: block;
   font-weight: 650;
@@ -480,6 +586,7 @@
   text-overflow: ellipsis;
 }
 
+.admin-record small,
 .admin-person small {
   display: block;
   color: var(--muted);
@@ -574,6 +681,35 @@
   font-size: 11px;
 }
 
+/* A recorded row that opens its own detail (a person's updates) turns the
+   row content into one target while keeping the two-line rhythm. */
+.admin-rows > li > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease-product);
+}
+
+.admin-rows > li > button:hover,
+.admin-rows > li > button:focus-visible {
+  background: rgba(24, 32, 24, 0.035);
+}
+
+.admin-rows > li > button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
 .admin-actor {
   gap: 10px;
 }
@@ -618,15 +754,40 @@
 .admin-attention .admin-dot.err { background: var(--danger); }
 
 .admin-activity > li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 9px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 
 .admin-activity > li:last-child {
   border-bottom: 0;
+}
+
+/* Every activity row opens its full record: the whole row is one quiet button
+   with the evidence groups' hover language, and its icon/meta sit in the same
+   rhythm as before. */
+.admin-activity > li > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px 9px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms var(--ease-product);
+}
+
+.admin-activity > li > button:hover,
+.admin-activity > li > button:focus-visible {
+  background: rgba(24, 32, 24, 0.035);
+}
+
+.admin-activity > li > button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
 }
 
 .admin-activity-icon {
@@ -765,6 +926,34 @@
 
 .admin-drawer-grid {
   gap: 18px;
+}
+
+/* Activity detail: the person line, the full recorded text, and the facts
+   grid that carries the record's provenance. */
+.admin-activity-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-activity-person b {
+  display: block;
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.admin-activity-person small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-activity-detail-text {
+  margin: 0;
+  color: var(--ink-soft, #304033);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .admin-drawer-backdrop {
@@ -1393,7 +1582,217 @@
   .admin-toggle > span::after,
   .admin-button,
   .admin-switch,
-  .admin-switch-ghost {
+  .admin-switch-ghost,
+  .admin-activity > li > button,
+  .admin-rows > li > button {
+    transition: none;
+  }
+}
+
+/* --- Chart interaction ---------------------------------------------------
+   Shared hover/focus readout, legend focus, and keyboard traversal for the
+   administration charts. Hover and focus share one treatment, the readout is
+   decorative and stays inside the chart box, and every value also remains in
+   the visually hidden list — nothing is hover-only. Motion is a short opacity
+   change and is removed under reduced motion. */
+
+.admin-chart {
+  position: relative;
+}
+
+.admin-chart-readout {
+  position: absolute;
+  top: 6px;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(240px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--white);
+  box-shadow: 0 14px 40px rgba(18, 27, 17, 0.14);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: admin-readout-in 130ms var(--ease-product) both;
+}
+
+/* The first and last columns pin the readout to the plot's own edge instead of
+   centring it on the column, so it can never clip at the card or viewport. */
+.admin-chart-readout.edge-start { transform: none; }
+.admin-chart-readout.edge-end { right: 0; transform: none; }
+
+.admin-chart-readout strong {
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.admin-chart-readout > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-chart-readout i {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+/* Names and labels wrap rather than truncate: at narrow widths the readout is
+   clamped to the plot box, and an ellipsised teammate name would be worse than
+   a second line. Values never wrap. */
+.admin-chart-readout-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-chart-readout b {
+  margin-left: auto;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.admin-chart-readout > small {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+/* Row readouts (share bars) sit inside their row and flip above it near the
+   bottom of the list, so they stay within the chart's own band. */
+.admin-chart-readout.is-row {
+  top: auto;
+  right: 0;
+  bottom: calc(100% - 2px);
+  left: auto;
+  min-width: min(180px, 100%);
+  transform: none;
+}
+
+.admin-chart-readout.is-row.align-below {
+  top: calc(100% - 2px);
+  bottom: auto;
+}
+
+@keyframes admin-readout-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Plot focus: the whole plot is one keyboard target; the highlighted column
+   and segment say which point the readout describes. Each plot is its own
+   positioning context, so readout percentages resolve against the plot box. */
+.admin-stack,
+.admin-grouped {
+  position: relative;
+}
+
+.admin-stack:focus-visible,
+.admin-grouped:focus-visible,
+.admin-share:focus-visible {
+  outline: 2px solid #82bd39;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.admin-stack-col.is-active,
+.admin-grouped-col.is-active {
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, rgba(23, 25, 20, 0) 4%, rgba(23, 25, 20, 0.045));
+}
+
+.admin-stack-col i,
+.admin-grouped-col i {
+  transition: opacity 140ms var(--ease-product), box-shadow 140ms var(--ease-product);
+}
+
+.admin-stack-col i.is-highlighted,
+.admin-grouped-col i.is-highlighted {
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px rgba(94, 157, 39, 0.45);
+}
+
+.admin-stack-col i.is-dimmed,
+.admin-grouped-col i.is-dimmed {
+  opacity: 0.26;
+}
+
+.admin-stack-col i.is-active,
+.admin-grouped-col i.is-active {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3.5px rgba(23, 25, 20, 0.42);
+}
+
+/* The legend stays metadata: a soft field on hover, focus, and while pressed,
+   and a ringed swatch for the person the chart is filtered to. The six pixels
+   of negative inline start keep the first swatch on the chart's left edge while
+   the button keeps a comfortable target. */
+.admin-chart-legend.is-interactive {
+  margin-left: -6px;
+}
+
+.admin-legend-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-product), color 150ms var(--ease-product), box-shadow 150ms var(--ease-product);
+}
+
+.admin-legend-button:hover,
+.admin-legend-button:focus-visible,
+.admin-legend-button[aria-pressed="true"] {
+  background: rgba(23, 25, 20, 0.05);
+  color: var(--ink);
+  outline: none;
+}
+
+.admin-legend-button:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(94, 157, 39, 0.5);
+}
+
+.admin-legend-button[aria-pressed="true"] i {
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px rgba(94, 157, 39, 0.45);
+}
+
+/* Share bars: the active row's track and fill name the row the readout
+   describes, without dimming the text of its neighbours. */
+.admin-chart-share .admin-share li {
+  position: relative;
+  transition: box-shadow 140ms var(--ease-product);
+}
+
+.admin-chart-share .admin-share li.is-active .admin-share-track {
+  box-shadow: inset 0 0 0 1px rgba(23, 25, 20, 0.16);
+}
+
+.admin-chart-share .admin-share li.is-active .admin-share-track i {
+  box-shadow: 0 0 0 1px rgba(94, 157, 39, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-chart-readout,
+  .admin-legend-button,
+  .admin-stack-col i,
+  .admin-grouped-col i,
+  .admin-chart-share .admin-share li {
+    animation: none;
     transition: none;
   }
 }

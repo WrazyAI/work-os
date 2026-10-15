@@ -9,7 +9,7 @@ import InsightsPage from "./InsightsPage";
 import EvidencePage from "./EvidencePage";
 import SettingsPage from "./SettingsPage";
 import { AdminCard, Notice } from "./ui";
-import type { AdminSection, SessionResponse } from "./types";
+import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
 import "../insight-dashboard.css";
 import "./admin.css";
 
@@ -23,7 +23,7 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose: stri
   settings: { title: "Settings", purpose: "Workspace configuration, members, and provider connections." },
 };
 
-type Focus = { personId?: string; reportId?: string; taskId?: string };
+type Focus = AdminSectionFocus;
 
 /** The desktop administration workspace.
  *
@@ -35,7 +35,7 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
   onSwitchToEmployee: () => void;
   onSignOut: () => void;
   initialSection?: AdminSection;
-  initialFocus?: Focus;
+  initialFocus?: AdminSectionFocus;
 }) {
   const [section, setSection] = useState<AdminSection>(initialSection);
   const [focus, setFocus] = useState<Focus>(initialFocus ?? {});
@@ -46,9 +46,9 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
   const meta = ADMIN_SECTIONS[section];
 
   const content = section === "overview"
-    ? <OverviewPage onOpenSection={(next) => navigate(next)} onOpenPerson={(personId) => navigate("people", { personId })} />
+    ? <OverviewPage onOpenSection={(next, focus) => navigate(next, focus)} onOpenPerson={(personId) => navigate("people", { personId })} />
     : section === "people"
-      ? <PeoplePage key={focus.personId ?? "people"} initialPersonId={focus.personId} />
+      ? <PeoplePage key={focus.personId ?? "people"} initialPersonId={focus.personId} onOpenReport={(reportId) => navigate("review", { reportId })} />
       : section === "tasks"
         ? <TasksPage key={focus.taskId ?? "tasks"} initialTaskId={focus.taskId} />
         : section === "review"
@@ -56,7 +56,7 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
           : section === "insights"
             ? <InsightsPage key={focus.personId ?? "insights"} initialPersonId={focus.personId} />
             : section === "evidence"
-              ? <EvidencePage />
+              ? <EvidencePage key={focus.evidenceTab ?? "evidence"} initialTab={focus.evidenceTab} />
               : <SettingsPage />;
 
   return (
@@ -73,8 +73,8 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
         onSignOut={onSignOut}
       />
       <section className="stage admin-stage">
-        <header className="masthead">
-          <div>
+        <header className="masthead admin-masthead">
+          <div className="admin-masthead-copy">
             <p>Work OS · Administration</p>
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
@@ -87,13 +87,13 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
               <span className="admin-quiet">No personal workday is mapped to this account</span>
             )}
           </div>
+          {/* One calm header: the page's purpose sits inside the masthead
+              block, directly under its title, instead of under the rule. */}
+          {session.role === "admin" ? <p className="admin-purpose">{meta.purpose}</p> : null}
         </header>
         <main className="page admin-page">
           {session.role === "admin" ? (
-            <>
-              <p className="admin-purpose">{meta.purpose}</p>
-              {content}
-            </>
+            content
           ) : (
             <AdminCard title="Administration requires an admin membership">
               <Notice tone="warn">This account is not an administrator of the workspace. Switch back to the employee view to continue.</Notice>
