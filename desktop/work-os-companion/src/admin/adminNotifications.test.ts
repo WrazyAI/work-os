@@ -62,4 +62,12 @@ describe("administration notifications", () => {
     expect(css).toContain(".admin-workspace ~ .notification-flyouts");
     expect(css).toContain("top: max(118px");
   });
+
+  it("keeps the open notifications panel above the admin receipt stack", () => {
+    const css = readFileSync(new URL("./admin.css", import.meta.url), "utf8");
+    // The bell's panel is portaled to the document body, so the admin scope is
+    // reached through :has rather than the sibling selector the stack uses.
+    expect(css).toContain("body:has(.admin-workspace) .notifications-card");
+    expect(css).toContain("z-index: 5100");
+  });
 });

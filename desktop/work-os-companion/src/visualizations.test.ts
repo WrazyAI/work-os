@@ -22,6 +22,7 @@ const insightCharts = readText(resolve(root, "src/InsightCharts.tsx"));
 const insightDashboardStyles = readText(resolve(root, "src/insight-dashboard.css"));
 const adminWorkspace = readText(resolve(root, "src/admin/AdminWorkspace.tsx"));
 const adminData = readText(resolve(root, "src/admin/data.ts"));
+const adminShellSource = readText(resolve(root, "src/adminShell.ts"));
 const queryClientSource = readText(resolve(root, "src/queryClient.ts"));
 const insightMath = readText(resolve(root, "src/insights.ts"));
 const planningSession = readText(resolve(root, "src/PlanningSession.tsx"));
@@ -608,6 +609,20 @@ describe("operational visualizations", () => {
     expect(adminData).toContain('["work-os", "admin"');
     // Administration reads never enter the on-disk employee cache.
     expect(queryClientSource).toContain('key[1] !== "admin"');
+  });
+
+  it("mounts the account's own notifications bell on the administration masthead", () => {
+    // The same component as the employee masthead, wired by the shell: data
+    // and handoffs in App, rendering in the workspace. Recap and EOD rows
+    // resolve in the employee workspace, so they switch there first.
+    expect(adminWorkspace).toContain('import { NotificationsBell } from "../NotificationsBell"');
+    expect(adminWorkspace).toContain("<NotificationsBell {...notifications} />");
+    expect(adminWorkspace).toContain("notifications?: AdminNotifications");
+    expect(app).toContain("openRecapInEmployeeView");
+    expect(app).toContain("openEodDayInEmployeeView");
+    expect(app).toContain("openOverdueInEmployeeView");
+    expect(adminShellSource).toContain("adminShellNotificationStateFor");
+    expect(app).toContain("seedAdminShellNotifications");
   });
 
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {

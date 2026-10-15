@@ -83,11 +83,12 @@ import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
 import AdminWorkspace from "./admin/AdminWorkspace";
+import type { AdminNotifications } from "./admin/AdminWorkspace";
 import { bootSurface } from "./bootSurface";
-import { seedAdminFixtures } from "./admin/adminFixtures";
+import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFixtures";
 import { adminKeys, fetchSession } from "./admin/data";
 import type { SessionResponse } from "./admin/types";
-import { ADMIN_SHELL_SESSION, adminShellOverlayFor, isAdminShellBoot, type AdminShellOverlay } from "./adminShell";
+import { ADMIN_SHELL_SESSION, adminShellNotificationStateFor, adminShellOverlayFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOverlay } from "./adminShell";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { overlayScrollLockActive, useModalScrollLock } from "./modalScrollLock";
@@ -124,6 +125,11 @@ const WORKSPACE_MODE_KEY = "work-os.workspace-mode";
 const ADMIN_SHELL_BOOT = typeof window !== "undefined" && isAdminShellBoot(window.location.search, import.meta.env.DEV);
 const ADMIN_SHELL_OVERLAY: AdminShellOverlay | null = ADMIN_SHELL_BOOT
   ? adminShellOverlayFor(window.location.search, import.meta.env.DEV)
+  : null;
+/** The bell state the `?admin-shell` harness pins (see `adminShell.ts`); null
+ * in a packaged build and on every other boot. */
+const ADMIN_SHELL_NOTIFICATIONS: AdminShellNotificationState | null = ADMIN_SHELL_BOOT
+  ? adminShellNotificationStateFor(window.location.search, import.meta.env.DEV)
   : null;
 
 const worktivityControlTransport: WorktivityControlTransport = {
@@ -619,10 +625,16 @@ export default function App() {
   const queryClient = useQueryClient();
   /* Dev-only `?admin-shell` boot (see adminShell.ts): seed the administration
    * fixtures so the real shell renders its sections with data and without live
-   * calls, and open the requested overlay once. Inert in a packaged build. */
+   * calls, seed the masthead bell's own reads for the states that flow through
+   * the queries, and open the requested overlay once. Inert in a packaged
+   * build. */
   useMemo(() => {
-    if (ADMIN_SHELL_BOOT) seedAdminFixtures(queryClient, "dense");
-  }, [queryClient]);
+    if (!ADMIN_SHELL_BOOT) return;
+    seedAdminFixtures(queryClient, "dense");
+    if (ADMIN_SHELL_NOTIFICATIONS === "populated" || ADMIN_SHELL_NOTIFICATIONS === "empty") {
+      seedAdminShellNotifications(queryClient, ADMIN_SHELL_NOTIFICATIONS, visibleDay?.shiftDate ?? null);
+    }
+  }, [queryClient]); // eslint-disable-line react-hooks/exhaustive-deps -- one-shot fixture boot; the day scenario is fixed at boot
   useEffect(() => {
     if (!ADMIN_SHELL_BOOT || !ADMIN_SHELL_OVERLAY) return;
     if (ADMIN_SHELL_OVERLAY === "whats-new") setWhatsNew({ version: changelogHistory(CHANGELOG_RAW)[0]?.version ?? "0.0.0" });
@@ -868,6 +880,27 @@ export default function App() {
       // The preference is best-effort; the live state above still applies.
     }
   };
+  /* Cross-workspace bell handoffs: the memory row resolves in place, but the
+   * recap and EOD rows name employee surfaces, so administration switches
+   * there first and then opens the exact destination the row promises. The
+   * switch is never the only visible effect. */
+  const openRecapInEmployeeView = () => {
+    setNotificationsOpen(false);
+    setWorkspaceMode("employee");
+    openGoalComposer();
+  };
+  const openEodDayInEmployeeView = (day: OutstandingEodDay) => {
+    setNotificationsOpen(false);
+    setWorkspaceMode("employee");
+    setEodLanding(false);
+    setEodDate(day.date);
+    setView("review");
+  };
+  const openOverdueInEmployeeView = () => {
+    setNotificationsOpen(false);
+    setWorkspaceMode("employee");
+    openOverdueTasks();
+  };
   const historyQuery = useTaskHistoryQuery({
     enabled: signedIn && !syncBypass,
   });
@@ -931,11 +964,18 @@ export default function App() {
   const backlogQuery = useTaskBacklogQuery({ enabled: signedIn && !syncBypass, sortDate: visibleDay?.shiftDate });
   const insightsQuery = useInsightsQuery({ enabled: signedIn && !syncBypass && !debugScenario.enabled && view === "insights", range: insightRange, through: day?.shiftDate ?? "" });
   const historicalQuery = useHistoricalDayQuery({ date: planHistoryDate, currentDate: day?.shiftDate ?? "" });
-  const outstandingQuery = useOutstandingEodsQuery({ enabled: signedIn && !syncBypass });
+  // The masthead bell's owner-scoped reads run in both workspaces — the
+  // administration bell lists the signed-in account's own notifications — so
+  // they follow the session, not the rendered workspace. The dev-only shell
+  // harness seeds them; its loading/error states are pinned props instead,
+  // because there is no backend to answer a request.
+  const notificationReadsEnabled = (signedIn || ADMIN_SHELL_BOOT) && !syncBypass
+    && ADMIN_SHELL_NOTIFICATIONS !== "loading" && ADMIN_SHELL_NOTIFICATIONS !== "error";
+  const outstandingQuery = useOutstandingEodsQuery({ enabled: notificationReadsEnabled });
   // Review-notification sources: what Otto remembers waiting for review, and a
   // recap waiting to be confirmed. Both poll only while the app is open.
-  const memoryQuery = useMemoryQuery({ enabled: signedIn && !syncBypass, pollMs: NOTIFICATION_POLL_MS });
-  const notificationIntervalsQuery = useActivityIntervalsQuery({ enabled: signedIn && !syncBypass, date: visibleDay?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
+  const memoryQuery = useMemoryQuery({ enabled: notificationReadsEnabled, pollMs: NOTIFICATION_POLL_MS });
+  const notificationIntervalsQuery = useActivityIntervalsQuery({ enabled: notificationReadsEnabled, date: visibleDay?.shiftDate ?? null, pollMs: NOTIFICATION_POLL_MS });
   // The bell only needs the newest ready recap, which always lives on the
   // first page; later pages stay unloaded until the stream asks for them.
   const readyRecapInterval = useMemo(() => readyRecap(notificationIntervalsQuery.data?.pages[0]?.intervals), [notificationIntervalsQuery.data]);
@@ -3691,9 +3731,38 @@ export default function App() {
    * rendered owner here (design §9).
    */
   if (landing === "admin" && (session || ADMIN_SHELL_BOOT) && workSessionQuery.data?.role === "admin") {
+    /* The administration masthead's bell is the same surface the employee
+     * masthead mounts, reading the signed-in account's own notifications. The
+     * loading/error pins exist only in the dev-only shell harness, which has no
+     * backend to answer the bell's reads (see adminShell.ts). */
+    const adminNotifications: AdminNotifications = {
+      memoryCandidates: memoryCandidateCount,
+      recap: recapSummary,
+      overdueTasks: overdueTaskCount,
+      days: outstandingQuery.data?.days ?? [],
+      loading: ADMIN_SHELL_NOTIFICATIONS === "loading" || (outstandingQuery.isFetching && !outstandingQuery.data),
+      error: ADMIN_SHELL_NOTIFICATIONS === "error"
+        ? "Outstanding EODs could not be loaded."
+        : outstandingQuery.error ? errorMessage(outstandingQuery.error, "Outstanding EODs could not be loaded.") : null,
+      open: notificationsOpen,
+      onToggle: () => {
+        const next = !notificationsOpen;
+        setNotificationsOpen(next);
+        // The harness has no backend to refetch from; the live path re-reads
+        // the outstanding days whenever the panel opens.
+        if (next && !ADMIN_SHELL_BOOT) void outstandingQuery.refetch();
+      },
+      onClose: () => setNotificationsOpen(false),
+      onSelect: openEodDayInEmployeeView,
+      onOpenMemory: () => { setNotificationsOpen(false); setMemoryOpen(true); },
+      onOpenRecap: openRecapInEmployeeView,
+      onOpenOverdue: openOverdueInEmployeeView,
+      onRetry: () => void outstandingQuery.refetch(),
+    };
     return <>
       <AdminWorkspace
         session={workSessionQuery.data}
+        notifications={adminNotifications}
         onSwitchToEmployee={() => setWorkspaceMode("employee")}
         onSignOut={() => { void logout(); }}
       />

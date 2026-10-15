@@ -81,7 +81,11 @@ export function NotificationsBell({ memoryCandidates, recap, overdueTasks, days,
     const frame = window.requestAnimationFrame(() => {
       const firstRow = menuRef.current?.querySelector<HTMLElement>(".notifications-row");
       const close = menuRef.current?.querySelector<HTMLElement>(".notifications-close");
-      (firstRow ?? close)?.focus();
+      // The anchored-menu effect fixes the card only a frame after mount; until
+      // then it sits at the document's end, where a plain focus() would scroll
+      // the window there. A detached surface never shifts the user's scroll
+      // position (design §8.3).
+      (firstRow ?? close)?.focus({ preventScroll: true });
     });
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); onClose(); }

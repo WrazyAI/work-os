@@ -1708,17 +1708,22 @@ not a second sidebar. The host shell keeps its chrome, and the Work OS surface
 paints its own `.work-os-surface` token scope (the §3.1 palette in light and
 dark) so the workspace reads as one material even inside a host application.
 
-**Notifications.** Administration uses the shared in-app flyouts (§8.12); the
-workspace adds no bell or panel of its own. Every confirmed write leaves one
-transient receipt naming the persisted outcome, failures keep the page's own
-inline notice and offer retry there, and the fired-and-forgotten Nifty sync is
-the one write that also raises a failure flyout. Nothing fires for a queued or
-uncertain write. Two standing conditions hold persistent cards under stable
-keys: an overview snapshot older than ten minutes, and a workspace status
-reporting a missing migration or an unusable Nifty connection. While the
-workspace is mounted the flyout stack starts below the masthead so a receipt
-can never cover the workspace switch; narrow layouts keep the shared top-right
-position, where the switch sits under the title block.
+**Notifications.** The masthead carries the same notifications bell and panel
+as the employee workspace (§8.12), reading the signed-in administrator's own
+notifications: the memory row opens the memory modal in place, while recap and
+outstanding EOD rows switch to the employee view first and then open the exact
+surface they name. While the panel is open it owns the layer above the receipt
+stack, whose cards keep their position underneath. Administration also uses
+the shared in-app flyouts: every confirmed write leaves one transient receipt
+naming the persisted outcome, failures keep the page's own inline notice and
+offer retry there, and the fired-and-forgotten Nifty sync is the one write that
+also raises a failure flyout. Nothing fires for a queued or uncertain write.
+Two standing conditions hold persistent cards under stable keys: an overview
+snapshot older than ten minutes, and a workspace status reporting a missing
+migration or an unusable Nifty connection. While the workspace is mounted the
+flyout stack starts below the masthead so a receipt can never cover the
+workspace switch; narrow layouts keep the shared top-right position, where the
+switch sits under the title block.
 
 ### 16.2 Page contracts
 

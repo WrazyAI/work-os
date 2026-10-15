@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - Fixed scrolling freezing in the administration workspace when a companion dialog opened while you were there.
+- Admins now get the notifications bell in the administration workspace, with their own reminders, and opening it no longer moves the page.
 
 ## 0.4.51 — 2026-10-15
 

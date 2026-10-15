@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { setDebugSession } from "../api";
-import AdminWorkspace from "./AdminWorkspace";
-import { seedAdminFixtures } from "./adminFixtures";
+import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
+import { adminPreviewNotifications, seedAdminFixtures } from "./adminFixtures";
 import type { AdminSection, SessionResponse } from "./types";
 
 const PREVIEW_SESSION: SessionResponse = {
@@ -34,6 +34,22 @@ export default function AdminPreview() {
   const requestedState = params.get("state");
   const state = requestedState === "empty" ? "empty" : requestedState === "sparse" ? "sparse" : "dense";
   const stubApi = params.get("api") === "stub";
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  // The bell's rows resolve in the employee workspace, which this preview does
+  // not mount; the actions only close the panel and stay honest no-ops there.
+  const notifications: AdminNotifications = {
+    ...adminPreviewNotifications(state),
+    loading: false,
+    error: null,
+    open: notificationsOpen,
+    onToggle: () => setNotificationsOpen((current) => !current),
+    onClose: () => setNotificationsOpen(false),
+    onSelect: () => setNotificationsOpen(false),
+    onOpenMemory: () => setNotificationsOpen(false),
+    onOpenRecap: () => setNotificationsOpen(false),
+    onOpenOverdue: () => setNotificationsOpen(false),
+    onRetry: () => undefined,
+  };
   useMemo(() => {
     seedAdminFixtures(queryClient, state);
   }, [queryClient, state]);
@@ -50,6 +66,7 @@ export default function AdminPreview() {
   return (
     <AdminWorkspace
       session={PREVIEW_SESSION}
+      notifications={notifications}
       onSwitchToEmployee={() => undefined}
       onSignOut={() => undefined}
       initialSection={section}

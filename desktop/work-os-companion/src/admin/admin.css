@@ -88,6 +88,14 @@
   top: max(118px, calc(env(safe-area-inset-top) + 106px));
 }
 
+/* The account's own notifications panel opens below the masthead — the exact
+   band the admin receipt stack now occupies — so while it is open the panel
+   owns the layer: its rows stay reachable and receipts keep their stack
+   position underneath, readable again the moment the panel closes. */
+body:has(.admin-workspace) .notifications-card {
+  z-index: 5100;
+}
+
 @media (max-width: 720px) {
   .admin-workspace ~ .notification-flyouts {
     top: max(12px, env(safe-area-inset-top));

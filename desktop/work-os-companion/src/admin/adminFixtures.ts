@@ -1,5 +1,8 @@
-import type { QueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { adminKeys, ADMIN_STALE_MS, isoDaysAgo, todayIso } from "./data";
+import { workOsKeys } from "../queryClient";
+import type { ReadyRecapSummary } from "../NotificationsBell";
+import type { ActivityInterval, ActivityIntervalsData, MemoryView, OutstandingEodDay, OutstandingEodsData } from "../types";
 import type {
   AdminInsights,
   AdminInsightRange,
@@ -651,4 +654,97 @@ function seedSparseFixtures(queryClient: QueryClient, today: string) {
   queryClient.setQueryData(adminKeys.fieldMappings(), {});
   queryClient.setQueryData(adminKeys.blueprints(), {});
   queryClient.setQueryData(adminKeys.status(), { schema: { ready: true, migration: "0021" }, nifty: { canCallApi: true, hasRefreshToken: true } } satisfies SystemStatusResponse);
+}
+
+/* --- The account's own review notifications (the masthead bell) ----------
+   The administration bell lists the signed-in admin's own notifications, read
+   from the same owner-scoped employee queries the employee masthead uses. The
+   `?admin-shell` harness seeds those keys so the badge, sections, and rows
+   render from real query data; `?preview-admin` mounts the workspace alone and
+   takes the same data as props. */
+
+function notificationMemory(): MemoryView {
+  const today = todayIso();
+  return {
+    facts: [
+      { id: "mem-shell-1", content: "Prefers TypeScript for companion changes.", review_status: "candidate", fact_key: "prefers-typescript", local_date: today, occurred_at: `${today}T09:20:00.000Z` },
+      { id: "mem-shell-2", content: "Keeps Friday afternoons for review work.", review_status: "candidate", fact_key: "friday-reviews", local_date: isoDaysAgo(2), occurred_at: `${isoDaysAgo(2)}T15:40:00.000Z` },
+      { id: "mem-shell-3", content: "Owns the billing webhook retries.", review_status: "confirmed", fact_key: "owns-webhook-retries", local_date: isoDaysAgo(5), occurred_at: `${isoDaysAgo(5)}T11:00:00.000Z` },
+    ],
+    recent: [],
+  };
+}
+
+function notificationRecap(shiftDate: string): ActivityInterval {
+  return {
+    id: `recap-shell-${shiftDate}`,
+    windowStart: `${shiftDate}T10:00:00.000Z`,
+    windowEnd: `${shiftDate}T11:00:00.000Z`,
+    label: "10:00–11:00",
+    promptKind: "follow_up",
+    generationStatus: "ready",
+    reviewStatus: "inferred",
+    headline: "Worked through the webhook retry test suite and left review comments.",
+    detail: "The window shows one drafting block and one review pass; the record does not establish completion.",
+    employeeFeedback: null,
+    failureReason: null,
+    generatedAt: `${shiftDate}T11:05:00.000Z`,
+    reviewedAt: null,
+    evidenceExpired: false,
+    evidenceCount: 5,
+    evidence: [],
+  };
+}
+
+function notificationDays(): OutstandingEodDay[] {
+  return [
+    { date: isoDaysAgo(1), status: "draft_unsubmitted", reportId: "shell-report-1", observedMinutes: 296, completedTasks: 4, hasPlan: true },
+    { date: isoDaysAgo(4), status: "changes_requested", reportId: "shell-report-2", observedMinutes: 332, completedTasks: 6, hasPlan: true },
+  ];
+}
+
+/** Seed the bell's owner-scoped reads for the `?admin-shell` harness: two
+ * memory candidates, one ready undecided recap, and two outstanding EOD days
+ * for `populated`; honest empty payloads for `empty`. The shift date keeps the
+ * recap under the same activity-interval key the live query reads. */
+export function seedAdminShellNotifications(queryClient: QueryClient, state: "populated" | "empty", shiftDate: string | null) {
+  const empty = state === "empty";
+  queryClient.setQueryData(workOsKeys.memory(), empty ? { facts: [], recent: [] } satisfies MemoryView : notificationMemory());
+  if (shiftDate) {
+    // The recap stream is an infinite query: the seeded cache must carry the
+    // page container, not a single page, or the observer cannot read it.
+    queryClient.setQueryData<InfiniteData<ActivityIntervalsData, string | null>>(workOsKeys.activityIntervals(shiftDate), empty
+      ? { pages: [{ date: shiftDate, intervals: [], nextCursor: null, total: 0 }], pageParams: [null] }
+      : { pages: [{ date: shiftDate, intervals: [notificationRecap(shiftDate)], nextCursor: null, total: 1 }], pageParams: [null] });
+  }
+  queryClient.setQueryData(workOsKeys.outstandingEods(), empty
+    ? { from: isoDaysAgo(14), through: shiftDate ?? todayIso(), count: 0, days: [] } satisfies OutstandingEodsData
+    : { from: isoDaysAgo(14), through: shiftDate ?? todayIso(), count: 2, days: notificationDays() } satisfies OutstandingEodsData);
+}
+
+/** The bell's rendered data for `?preview-admin`: populated, empty, or the
+ * deliberately partial `sparse` day row the fallbacks must normalize. */
+export function adminPreviewNotifications(state: "dense" | "empty" | "sparse"): {
+  memoryCandidates: number;
+  recap: ReadyRecapSummary | null;
+  overdueTasks: number;
+  days: OutstandingEodDay[];
+} {
+  if (state === "empty") return { memoryCandidates: 0, recap: null, overdueTasks: 0, days: [] };
+  if (state === "sparse") {
+    return {
+      memoryCandidates: 1,
+      recap: null,
+      overdueTasks: 0,
+      days: [{ date: isoDaysAgo(1), status: "no_draft", reportId: null, observedMinutes: 0, completedTasks: 0, hasPlan: false }],
+    };
+  }
+  const memory = notificationMemory();
+  const recap = notificationRecap(todayIso());
+  return {
+    memoryCandidates: memory.facts.filter((fact) => fact.review_status === "candidate").length,
+    recap: { id: recap.id, label: recap.label },
+    overdueTasks: 2,
+    days: notificationDays(),
+  };
 }

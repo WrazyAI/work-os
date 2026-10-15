@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import SidebarNav from "../SidebarNav";
+import { NotificationsBell } from "../NotificationsBell";
 import OverviewPage from "./OverviewPage";
 import PeoplePage from "./PeoplePage";
 import TasksPage from "./TasksPage";
@@ -25,13 +26,23 @@ export const ADMIN_SECTIONS: Record<AdminSection, { title: string; purpose: stri
 
 type Focus = AdminSectionFocus;
 
+/** The masthead bell's data and row actions, owned by the shell exactly as the
+ * employee masthead owns them (see `NotificationsBell`): the app wires the
+ * queries and the cross-workspace handoffs, the workspace renders the panel. */
+export type AdminNotifications = Parameters<typeof NotificationsBell>[0];
+
 /** The desktop administration workspace.
  *
  * One signed-in account, two workspaces: this shell reads the organization's
  * record and never changes the signed-in admin's own employee state. The
- * switch back to the personal workday is a view change, not a role change. */
-export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut, initialSection = "overview", initialFocus }: {
+ * switch back to the personal workday is a view change, not a role change.
+ * The masthead carries the same notifications bell the employee workspace
+ * mounts — the account's own notifications — and the app supplies its data. */
+export default function AdminWorkspace({ session, notifications, onSwitchToEmployee, onSignOut, initialSection = "overview", initialFocus }: {
   session: SessionResponse;
+  /** Absent (or a session with no mapped personal workday) renders no bell:
+   * there is no employee record for it to report. */
+  notifications?: AdminNotifications | null;
   onSwitchToEmployee: () => void;
   onSignOut: () => void;
   initialSection?: AdminSection;
@@ -86,6 +97,7 @@ export default function AdminWorkspace({ session, onSwitchToEmployee, onSignOut,
             ) : (
               <span className="admin-quiet">No personal workday is mapped to this account</span>
             )}
+            {session.personId && notifications ? <NotificationsBell {...notifications} /> : null}
           </div>
           {/* One calm header: the page's purpose sits inside the masthead
               block, directly under its title, instead of under the rule. */}
