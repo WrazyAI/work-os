@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 import * as guideStateModule from "./guideState";
-import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, decideGuideOpen, guideAutoOpens, isGuideView, normalizeGuideState, reconcileGuideState, type CachedGuideState, type GuideState, type GuideView } from "./guideState";
+import {
+  ADMIN_GUIDE_VIEWS,
+  EMPTY_GUIDE_STATE,
+  EMPLOYEE_GUIDE_VIEWS,
+  GUIDE_VIEWS,
+  adminSectionForGuideView,
+  decideGuideOpen,
+  guideAutoOpens,
+  guideViewForAdminSection,
+  isAdminGuideView,
+  isEmployeeGuideView,
+  isGuideView,
+  normalizeGuideState,
+  reconcileGuideState,
+  type CachedGuideState,
+  type GuideState,
+  type GuideView,
+} from "./guideState";
+import type { AdminSection } from "./admin/types";
 
 const org = "org-1";
 
@@ -24,10 +42,34 @@ describe("page guide state", () => {
       .toEqual({ guides: { day: "2026-10-06T10:00:00.000Z" }, autoOpen: true });
   });
 
-  it("treats only the five workspace pages as guided", () => {
-    expect([...GUIDE_VIEWS]).toEqual(["day", "tasks", "review", "insights", "settings"]);
+  it("registers the employee pages and the administration sections as separate guided views", () => {
+    expect([...EMPLOYEE_GUIDE_VIEWS]).toEqual(["day", "tasks", "review", "insights", "settings"]);
+    expect([...ADMIN_GUIDE_VIEWS]).toEqual([
+      "admin_overview", "admin_people", "admin_tasks", "admin_review", "admin_insights", "admin_evidence", "admin_settings",
+    ]);
+    expect([...GUIDE_VIEWS]).toEqual([...EMPLOYEE_GUIDE_VIEWS, ...ADMIN_GUIDE_VIEWS]);
     expect(isGuideView("day")).toBe(true);
+    expect(isGuideView("admin_overview")).toBe(true);
+    expect(isEmployeeGuideView("day")).toBe(true);
+    expect(isEmployeeGuideView("admin_overview")).toBe(false);
+    expect(isAdminGuideView("admin_overview")).toBe(true);
+    expect(isAdminGuideView("day")).toBe(false);
     expect(isGuideView("evidence")).toBe(false);
+  });
+
+  it("gives every administration section its own guide flag", () => {
+    const sections: AdminSection[] = ["overview", "people", "tasks", "review", "insights", "evidence", "settings"];
+    const views = sections.map((section) => guideViewForAdminSection(section));
+    expect(new Set(views).size).toBe(sections.length);
+    // An administration guide key can never collide with an employee page's,
+    // so dismissing one workspace's guide never consumes the other's.
+    for (const view of views) expect(EMPLOYEE_GUIDE_VIEWS).not.toContain(view);
+    for (const section of sections) {
+      expect(isAdminGuideView(guideViewForAdminSection(section))).toBe(true);
+      expect(adminSectionForGuideView(guideViewForAdminSection(section))).toBe(section);
+    }
+    expect(adminSectionForGuideView("day")).toBe(null);
+    expect(adminSectionForGuideView("settings")).toBe(null);
   });
 
   it("auto-opens only an unseen guide while automatic guides are on", () => {

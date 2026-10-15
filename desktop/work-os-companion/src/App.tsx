@@ -74,9 +74,9 @@ import { MemoryModal, MemorySummary } from "./MemorySettings";
 import { SuggestionReview } from "./SuggestionReview";
 import { SettingsSwitch } from "./SettingsSwitch";
 import PageGuide from "./PageGuide";
-import GuideTour from "./GuideTour";
+import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
-import { guideViewForSidebar } from "./guideState";
+import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
 import { Setting } from "./Setting";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
@@ -87,8 +87,8 @@ import type { AdminNotifications } from "./admin/AdminWorkspace";
 import { bootSurface } from "./bootSurface";
 import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFixtures";
 import { adminKeys, fetchSession } from "./admin/data";
-import type { SessionResponse } from "./admin/types";
-import { ADMIN_SHELL_SESSION, adminShellNotificationStateFor, adminShellOverlayFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOverlay } from "./adminShell";
+import type { AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
+import { ADMIN_SHELL_GUIDE_STATE, ADMIN_SHELL_SESSION, adminShellNotificationStateFor, adminShellOverlayFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOverlay } from "./adminShell";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { overlayScrollLockActive, useModalScrollLock } from "./modalScrollLock";
@@ -393,9 +393,15 @@ export default function App() {
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [debugPageGuide, setDebugPageGuide] = useState<ReturnType<typeof guideViewForSidebar>>(null);
-  /** The whole-workspace walk-through, from a new workspace or from Settings. */
-  const [tourOpen, setTourOpen] = useState(false);
+  const [debugPageGuide, setDebugPageGuide] = useState<GuideView | null>(null);
+  /** The whole-workspace walk-through: which workspace's pages it walks, so
+   * its step list and navigation follow. Null while closed. */
+  const [tourScope, setTourScope] = useState<"employee" | "admin" | null>(null);
+  /** Where the administration workspace is. The app owns it because the
+   * page-guide seam keys first-visit flags by section and the tour drives the
+   * section for real; the workspace renders it and never keeps a second copy. */
+  const [adminSection, setAdminSection] = useState<AdminSection>("overview");
+  const [adminFocus, setAdminFocus] = useState<AdminSectionFocus>({});
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
@@ -470,6 +476,47 @@ export default function App() {
     ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
     : session;
 
+  const signedIn = !!session;
+
+  // Whether this account may open the administration workspace is read
+  // independently of the employee day payload, so an admin reaches
+  // administration even before their own onboarding or day query settles.
+  const workSessionQuery = useQuery<SessionResponse>({
+    queryKey: adminKeys.session(),
+    // The dev-only `?admin-shell` harness has no live account: it answers from
+    // a fabricated admin session and keeps the query enabled without one, so
+    // the real shell renders the administration branch (see adminShell.ts).
+    queryFn: ADMIN_SHELL_BOOT ? async () => ADMIN_SHELL_SESSION : fetchSession,
+    enabled: (signedIn || ADMIN_SHELL_BOOT) && !syncBypass,
+    staleTime: 5 * 60_000,
+  });
+  const workspaceDefaultApplied = useRef(false);
+  useEffect(() => {
+    if (workspaceDefaultApplied.current || !workSessionQuery.data) return;
+    workspaceDefaultApplied.current = true;
+    if (!localStorage.getItem(WORKSPACE_MODE_KEY) && workSessionQuery.data.role === "admin") setWorkspace("admin");
+  }, [workSessionQuery.data]);
+
+  /* Which workspace branch is on screen comes from the same boot decision the
+   * early returns use: the administration shell must never hold a lock for an
+   * employee-only overlay it does not mount, and the boot screens mount no
+   * overlays at all. It is resolved this early because the page-guide seam
+   * keys its flags by the surface on screen, and the admin section is a
+   * different guided surface from the employee pages. The dev-only shell
+   * fixture boots without a vault session, so its fabricated session counts as
+   * the settled one. */
+  const landing = bootSurface({
+    vault: vaultGate.status === "failed" ? "failed" : vaultGate.status === "pending" ? "pending" : "ready",
+    signedIn: !!visibleSession,
+    onboardingLoaded: !!visibleOnboarding,
+    onboardingRequired: visibleOnboarding?.onboardingRequired === true,
+    workspace,
+    role: workSessionQuery.data?.role ?? null,
+    syncBypass,
+  });
+  const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
+  const employeeWorkspaceBranch = landing === "workspace";
+
   /* The organization flag says the workspace may use voice input; the server
      capability says this deployment can actually transcribe. The record
      control appears only when both are true, so a companion that shipped ahead
@@ -502,14 +549,18 @@ export default function App() {
    * mount no overlays) can never freeze the window with no modal to close.
    * Employee-only flags are ignored, not closed, so a half-finished draft or
    * confirmation survives a visit to administration (design §9). */
-  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || tourOpen;
+  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || tourScope === "employee";
   /** The profile modal needs the onboarding record it edits; without it the
    * flag renders nothing and must therefore count for nothing. */
   const profileModalOpen = profileOpen && !!visibleOnboarding;
   /** Any overlay but the page guide itself; the guide's auto-open waits for a
-   * free screen, so counting an open guide here would be circular. */
-  const baseModalOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || employeeOnlyOverlaysOpen;
-  const pageGuideView = guideViewForSidebar(view);
+   * free screen, so counting an open guide here would be circular. The admin
+   * tour renders only in the administration branch, so it blocks the admin
+   * guide's auto-open without counting against the employee one. */
+  const baseModalOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || employeeOnlyOverlaysOpen || tourScope === "admin";
+  /** The guide that answers for the page on screen: the administration
+   * sections have their own guides, keyed and worded for that surface. */
+  const pageGuideView = adminWorkspaceBranch ? guideViewForAdminSection(adminSection) : guideViewForSidebar(view);
   const pageGuideLabel = views.find((item) => item.id === view)?.label ?? "this page";
   const {
     open: openPageGuide,
@@ -520,13 +571,31 @@ export default function App() {
     disableAutoOpen,
     setAutoOpen: setPageGuideAutoOpen,
   } = usePageGuides({
-    enabled: !!session && !syncBypass,
-    organizationId: session?.organizationId ?? null,
+    // The dev-only `?admin-shell` boot has no vault session, so the fabricated
+    // one stands in; its guide flags come from the harness fixture.
+    enabled: (!!session || ADMIN_SHELL_BOOT) && !syncBypass,
+    organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
     blocked: baseModalOpen,
+    fixture: ADMIN_SHELL_BOOT ? ADMIN_SHELL_GUIDE_STATE : undefined,
   });
-  /** The global layer mounts from both branches; it includes the page guide. */
-  const globalOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen;
+  const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
+    setAdminSection(next);
+    setAdminFocus(focus ?? {});
+  }, []);
+  /** The admin tour walks the sections for real, so it drives the workspace. */
+  const navigateAdminGuide = useCallback((guide: GuideView) => {
+    const section = adminSectionForGuideView(guide);
+    if (section) navigateAdmin(section);
+  }, [navigateAdmin]);
+  /** The employee tour lands on sidebar pages and leaves admin views alone. */
+  const navigateEmployeeGuide = useCallback((guide: GuideView) => {
+    if (!isAdminGuideView(guide)) setView(guide);
+  }, []);
+  /** The global layer mounts from both branches; it includes the page guide.
+   * The admin tour renders only in the administration branch, so it may only
+   * hold the lock there. */
+  const globalOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen || (tourScope === "admin" && adminWorkspaceBranch);
 
   useEffect(() => {
     let disposed = false;
@@ -563,7 +632,7 @@ export default function App() {
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
     if (debugPageGuide) { setDebugPageGuide(null); return; }
-    if (tourOpen) { setTourOpen(false); return; }
+    if (tourScope) { setTourScope(null); return; }
     if (openPageGuide) { closeGuide(); return; }
     if (moveMenuId) { setMoveMenuId(null); return; }
     if (subtaskMenuId) { setSubtaskMenuId(null); return; }
@@ -578,7 +647,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourOpen, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourScope, whatsNew]);
 
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
@@ -843,7 +912,6 @@ export default function App() {
     });
   }, [insertTaskIntoCaches]);
 
-  const signedIn = !!session;
   const detailsViews = view === "tasks" || view === "review" || view === "evidence";
   const selectedTaskDate = planHistoryDate || visibleDay?.shiftDate || "";
   const selectedTaskDateIsHistorical = !!visibleDay?.shiftDate && selectedTaskDate !== visibleDay.shiftDate;
@@ -854,26 +922,14 @@ export default function App() {
   const compactDayQuery = useDayQuery({ enabled: signedIn && !syncBypass, variant: "compact", pollMs: 60_000 });
   const detailsDayQuery = useDayQuery({ enabled: signedIn && !syncBypass && detailsViews, variant: "details" });
   const onboardingQuery = useOnboardingQuery({ enabled: signedIn && !syncBypass });
-  // Which workspace this account may open, read independently of the employee
-  // day payload so an admin reaches administration even before their own
-  // onboarding or day query settles.
-  const workSessionQuery = useQuery<SessionResponse>({
-    queryKey: adminKeys.session(),
-    // The dev-only `?admin-shell` harness has no live account: it answers from
-    // a fabricated admin session and keeps the query enabled without one, so
-    // the real shell renders the administration branch (see adminShell.ts).
-    queryFn: ADMIN_SHELL_BOOT ? async () => ADMIN_SHELL_SESSION : fetchSession,
-    enabled: (signedIn || ADMIN_SHELL_BOOT) && !syncBypass,
-    staleTime: 5 * 60_000,
-  });
-  const workspaceDefaultApplied = useRef(false);
-  useEffect(() => {
-    if (workspaceDefaultApplied.current || !workSessionQuery.data) return;
-    workspaceDefaultApplied.current = true;
-    if (!localStorage.getItem(WORKSPACE_MODE_KEY) && workSessionQuery.data.role === "admin") setWorkspace("admin");
-  }, [workSessionQuery.data]);
   const setWorkspaceMode = (next: "employee" | "admin") => {
     setWorkspace(next);
+    // Opening the administration workspace lands on Overview, the same way
+    // the shell did when it owned the section itself.
+    if (next === "admin") {
+      setAdminSection("overview");
+      setAdminFocus({});
+    }
     try {
       localStorage.setItem(WORKSPACE_MODE_KEY, next);
     } catch {
@@ -3615,26 +3671,9 @@ export default function App() {
     });
   }, [workspaceCadence?.checkInIntervalMinutes, workspaceCadence?.firstFollowUpMinutes]);
 
-  const landing = bootSurface({
-    vault: vaultGate.status === "failed" ? "failed" : vaultGate.status === "pending" ? "pending" : "ready",
-    signedIn: !!visibleSession,
-    onboardingLoaded: !!visibleOnboarding,
-    onboardingRequired: visibleOnboarding?.onboardingRequired === true,
-    workspace,
-    role: workSessionQuery.data?.role ?? null,
-    syncBypass,
-  });
-
-  /* Which workspace branch is on screen comes from the same boot decision the
-   * early returns use: the administration shell must never hold a lock for an
-   * employee-only overlay it does not mount, and the boot screens mount no
-   * overlays at all. The dev-only shell fixture boots without a vault session,
-   * so its fabricated session counts as the settled one. */
-  const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
-  const employeeWorkspaceBranch = landing === "workspace";
-  /* The whole-workspace tour walks the employee pages, so only the branch that
-   * renders it offers it (the admin guide port owns its own answer). */
-  const offerWorkspaceTour = employeeWorkspaceBranch && pageGuideAutoOpen && pageGuideFirstVisit;
+  /* The whole-workspace tour walks the pages of the branch that offers it:
+   * the employee pages or the administration sections. */
+  const offerWorkspaceTour = pageGuideAutoOpen && pageGuideFirstVisit && (employeeWorkspaceBranch || adminWorkspaceBranch);
 
   /* The global overlay layer: every branch that can show these surfaces mounts
    * this exact fragment — the employee workspace and the administration shell —
@@ -3644,7 +3683,12 @@ export default function App() {
   const renderGlobalOverlays = () => <>
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
     {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
-    {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={offerWorkspaceTour ? () => { closeGuide(); setTourOpen(true); } : undefined} />}
+    {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={offerWorkspaceTour ? () => { const scope = isAdminGuideView(openPageGuide) ? "admin" : "employee"; closeGuide(); setTourScope(scope); } : undefined} />}
+    {/* The tour walks the pages of the branch that offered it: the employee
+        sidebar or the administration sections, each of which it navigates for
+        real. It never mounts outside its own branch. */}
+    {tourScope === "employee" && employeeWorkspaceBranch && <GuideTour onNavigate={navigateEmployeeGuide} onClose={() => setTourScope(null)} />}
+    {tourScope === "admin" && adminWorkspaceBranch && <GuideTour pages={ADMIN_TOUR_PAGES} subject="the administration workspace" onNavigate={navigateAdminGuide} onClose={() => setTourScope(null)} />}
     {memoryOpen && <MemoryModal
       facts={memoryQuery.data?.facts ?? []}
       recent={memoryQuery.data?.recent ?? []}
@@ -3763,6 +3807,11 @@ export default function App() {
       <AdminWorkspace
         session={workSessionQuery.data}
         notifications={adminNotifications}
+        section={adminSection}
+        focus={adminFocus}
+        onNavigate={navigateAdmin}
+        guideView={pageGuideView}
+        onOpenGuide={openGuide}
         onSwitchToEmployee={() => setWorkspaceMode("employee")}
         onSignOut={() => { void logout(); }}
       />
@@ -4096,7 +4145,7 @@ export default function App() {
                  <SettingsSwitch label="Show page guides automatically" checked={pageGuideAutoOpen} onChange={setPageGuideAutoOpen} />
                </Setting>
                <Setting title="Walk through the workspace again" detail="Plays every page's film in order — the same pass a new workspace starts with. It moves the app to each page as it goes, and leaves you on the last one.">
-                 <button type="button" className="quiet-action" onClick={() => setTourOpen(true)}>Replay the full tour</button>
+                 <button type="button" className="quiet-action" onClick={() => setTourScope("employee")}>Replay the full tour</button>
                </Setting>
              </section>
            </section>
@@ -4197,7 +4246,6 @@ export default function App() {
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {renderGlobalOverlays()}
-      {tourOpen && <GuideTour onNavigate={setView} onClose={() => setTourOpen(false)} />}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}

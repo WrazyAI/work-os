@@ -25,6 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The administration workspace now has first-visit page guides: each section explains itself once, and the ? in its header replays it any time.
 - Fixed scrolling freezing in the administration workspace when a companion dialog opened while you were there.
 - Admins now get the notifications bell in the administration workspace, with their own reminders, and opening it no longer moves the page.
 

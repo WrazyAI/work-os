@@ -4,8 +4,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import PageGuide from "./PageGuide";
-import { GUIDE_FILMS } from "./guideFilms";
-import { GUIDE_VIEWS } from "./guideState";
+import GuideTour from "./GuideTour";
+import { GUIDE_FILMS, guideFilmsFor } from "./guideFilms";
+import { ADMIN_GUIDE_VIEWS, EMPLOYEE_GUIDE_VIEWS, GUIDE_VIEWS } from "./guideState";
 import { PAGE_GUIDES } from "./guides";
 
 const publicFile = (path: string) => fileURLToPath(new URL(`../public/${path}`, import.meta.url));
@@ -29,8 +30,8 @@ describe("page guide modal", () => {
     // plays before anything is chosen.
     expect(markup).toContain('id="page-guide-art"');
     expect(markup).toContain('data-guide-view="day"');
-    expect(markup).toContain(`src="${GUIDE_FILMS.day[0]!.file}"`);
-    expect(markup).toContain(`src="${GUIDE_FILMS.day[0]!.poster}"`);
+    expect(markup).toContain(`src="${GUIDE_FILMS.day![0]!.file}"`);
+    expect(markup).toContain(`src="${GUIDE_FILMS.day![0]!.poster}"`);
     expect(markup).toContain('aria-controls="page-guide-art"');
 
     // The film is decorative to assistive technology: the steps state
@@ -71,8 +72,8 @@ describe("page guide modal", () => {
     expect(markup).not.toContain("Automatic guides are off.");
   });
 
-  it("renders every guided page with its own film", () => {
-    for (const view of GUIDE_VIEWS) {
+  it("renders every filmed page with its own film", () => {
+    for (const view of EMPLOYEE_GUIDE_VIEWS) {
       const markup = renderToStaticMarkup(createElement(PageGuide, {
         view,
         autoOpen: true,
@@ -81,9 +82,75 @@ describe("page guide modal", () => {
       }));
       expect(markup).toContain(PAGE_GUIDES[view].title);
       expect(markup).toContain(`data-guide-view="${view}"`);
-      expect(markup).toContain(`src="${GUIDE_FILMS[view][0]!.file}"`);
+      expect(markup).toContain(`src="${guideFilmsFor(view)[0]!.file}"`);
       expect(markup).not.toContain("guide-film is-missing");
     }
+  });
+
+  it("renders a drawn scene for every administration guide", () => {
+    for (const view of ADMIN_GUIDE_VIEWS) {
+      const markup = renderToStaticMarkup(createElement(PageGuide, {
+        view,
+        autoOpen: true,
+        onClose: () => undefined,
+        onDisableAutoOpen: () => undefined,
+      }));
+      expect(markup).toContain(PAGE_GUIDES[view].title);
+      expect(markup).toContain(`data-guide-view="${view}"`);
+      expect(markup).toContain('id="page-guide-art"');
+      expect(markup).toContain('class="guide-art"');
+      expect(markup).not.toContain("<video");
+      expect(markup).not.toContain("guide-film is-missing");
+      // One phase per step, with the first selected; the scene is decorative
+      // and the steps state everything it shows in words.
+      expect((markup.match(/class="guide-phase/g) ?? []).length).toBe(PAGE_GUIDES[view].steps.length);
+      expect(markup).toContain('aria-hidden="true"');
+      expect(markup).toContain('aria-controls="page-guide-art"');
+    }
+  });
+
+  it("offers the tour on the first guide and the opt-out once one is seen", () => {
+    const withTour = renderToStaticMarkup(createElement(PageGuide, {
+      view: "admin_overview",
+      autoOpen: true,
+      onClose: () => undefined,
+      onDisableAutoOpen: () => undefined,
+      onStartTour: () => undefined,
+    }));
+    expect(withTour).toContain("Show me the whole workspace");
+    expect(withTour).not.toContain("show these automatically");
+  });
+});
+
+describe("the workspace tour", () => {
+  it("walks the administration sections in order with their own scenes", () => {
+    const markup = renderToStaticMarkup(createElement(GuideTour, {
+      pages: [...ADMIN_GUIDE_VIEWS],
+      subject: "the administration workspace",
+      onNavigate: () => undefined,
+      onClose: () => undefined,
+    }));
+    expect(markup).toContain("tour of the administration workspace");
+    expect(markup).toContain("How Overview works");
+    expect(markup).toContain('data-guide-view="admin_overview"');
+    expect((markup.match(/class="guide-tour-rail"/g) ?? []).length).toBe(1);
+    // Every stop is named in the rail, in the workspace's own order.
+    for (const title of ["Overview", "People", "Tasks", "EOD Review", "Insights", "Evidence", "Settings"]) {
+      expect(markup).toContain(`>${title}</button>`);
+    }
+    expect(markup).not.toContain("<video");
+  });
+
+  it("keeps walking the five employee pages by default", () => {
+    const markup = renderToStaticMarkup(createElement(GuideTour, {
+      onNavigate: () => undefined,
+      onClose: () => undefined,
+    }));
+    expect(markup).toContain("tour of your workspace");
+    expect(markup).toContain('data-guide-view="day"');
+    expect(markup).toContain("<video");
+    expect(markup).toContain("My Day");
+    expect(markup).not.toContain(">Evidence</button>");
   });
 });
 
@@ -91,19 +158,24 @@ describe("page guide modal", () => {
  * The film list is generated from what was actually shot, so these three checks
  * are what keep the generated list honest: one clip per step, every clip really
  * on disk beside its still, and every clip long enough to have been a take
- * rather than a stub.
+ * rather than a stub. The administration guides were never filmed, so they are
+ * excluded here — their drawn scenes are asserted above.
  */
 describe("guide films", () => {
-  it("has exactly one clip per step of every guide", () => {
-    for (const view of GUIDE_VIEWS) {
-      expect(GUIDE_FILMS[view], `${view} has no films`).toBeDefined();
-      expect(GUIDE_FILMS[view].length, `${view} has ${GUIDE_FILMS[view].length} clips for ${PAGE_GUIDES[view].steps.length} steps`).toBe(PAGE_GUIDES[view].steps.length);
+  it("has exactly one clip per step of every filmed guide", () => {
+    for (const view of EMPLOYEE_GUIDE_VIEWS) {
+      const films = GUIDE_FILMS[view];
+      expect(films, `${view} has no films`).toBeDefined();
+      expect(films!.length, `${view} has ${films!.length} clips for ${PAGE_GUIDES[view].steps.length} steps`).toBe(PAGE_GUIDES[view].steps.length);
+    }
+    for (const view of ADMIN_GUIDE_VIEWS) {
+      expect(guideFilmsFor(view), `${view} must render its drawn scene, not a clip`).toEqual([]);
     }
   });
 
   it("has every clip and still on disk", () => {
-    for (const view of GUIDE_VIEWS) {
-      for (const film of GUIDE_FILMS[view]) {
+    for (const view of EMPLOYEE_GUIDE_VIEWS) {
+      for (const film of GUIDE_FILMS[view]!) {
         expect(existsSync(publicFile(film.file)), `missing ${film.file}`).toBe(true);
         expect(existsSync(publicFile(film.poster)), `missing ${film.poster}`).toBe(true);
       }
@@ -111,8 +183,8 @@ describe("guide films", () => {
   });
 
   it("names each clip after the step it illustrates", () => {
-    for (const view of GUIDE_VIEWS) {
-      GUIDE_FILMS[view].forEach((film, index) => {
+    for (const view of EMPLOYEE_GUIDE_VIEWS) {
+      GUIDE_FILMS[view]!.forEach((film, index) => {
         expect(film.chapter, `${view} clip ${index + 1}`).toBe(PAGE_GUIDES[view].steps[index]!.title);
         expect(film.seconds, `${view} clip ${index + 1} is too short to be a take`).toBeGreaterThan(1.5);
       });
@@ -122,11 +194,11 @@ describe("guide films", () => {
   it("keeps the whole set inside the budget the blueprint states", () => {
     let total = 0;
     for (const view of GUIDE_VIEWS) {
-      for (const film of GUIDE_FILMS[view]) {
+      for (const film of guideFilmsFor(view)) {
         total += statSync(publicFile(film.file)).size + statSync(publicFile(film.poster)).size;
       }
     }
-    // §14.1: the five-page set stays under 4 MB, because it ships in the
+    // §14.1: the filmed set stays under 4 MB, because it ships in the
     // installer and is downloaded chapter by chapter afterwards.
     expect(total, `${(total / 1024 / 1024).toFixed(2)} MB of guide film`).toBeLessThan(4 * 1024 * 1024);
   });

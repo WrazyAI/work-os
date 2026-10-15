@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, CircleHelp } from "lucide-react";
 import SidebarNav from "../SidebarNav";
 import { NotificationsBell } from "../NotificationsBell";
 import OverviewPage from "./OverviewPage";
@@ -10,6 +9,7 @@ import InsightsPage from "./InsightsPage";
 import EvidencePage from "./EvidencePage";
 import SettingsPage from "./SettingsPage";
 import { AdminCard, Notice } from "./ui";
+import type { GuideView } from "../guideState";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
 import "../insight-dashboard.css";
 import "./admin.css";
@@ -37,23 +37,28 @@ export type AdminNotifications = Parameters<typeof NotificationsBell>[0];
  * record and never changes the signed-in admin's own employee state. The
  * switch back to the personal workday is a view change, not a role change.
  * The masthead carries the same notifications bell the employee workspace
- * mounts — the account's own notifications — and the app supplies its data. */
-export default function AdminWorkspace({ session, notifications, onSwitchToEmployee, onSignOut, initialSection = "overview", initialFocus }: {
+ * mounts — the account's own notifications — and the app supplies its data.
+ *
+ * The current section is a prop rather than local state: the app's page-guide
+ * seam keys its first-visit flags by section, and the workspace tour drives
+ * the section for real, so both need one source of truth for where the
+ * workspace is. The guide itself is the same modal the employee workspace
+ * uses; administration never owns a second copy of its state. */
+export default function AdminWorkspace({ session, notifications, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
   notifications?: AdminNotifications | null;
+  section: AdminSection;
+  focus: AdminSectionFocus;
+  onNavigate: (section: AdminSection, focus?: AdminSectionFocus) => void;
   onSwitchToEmployee: () => void;
   onSignOut: () => void;
-  initialSection?: AdminSection;
-  initialFocus?: AdminSectionFocus;
+  /** The page guide for the current section, and how to reopen it. */
+  guideView?: GuideView | null;
+  onOpenGuide?: (view: GuideView) => void;
 }) {
-  const [section, setSection] = useState<AdminSection>(initialSection);
-  const [focus, setFocus] = useState<Focus>(initialFocus ?? {});
-  const navigate = (next: AdminSection, nextFocus?: Focus) => {
-    setSection(next);
-    setFocus(nextFocus ?? {});
-  };
+  const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
   const meta = ADMIN_SECTIONS[section];
 
   const content = section === "overview"
@@ -90,6 +95,17 @@ export default function AdminWorkspace({ session, notifications, onSwitchToEmplo
             <div className="masthead-title-row"><h1>{meta.title}</h1></div>
           </div>
           <div className="mast-actions">
+            {session.role === "admin" && guideView && onOpenGuide ? (
+              <button
+                type="button"
+                className="icon guide-launch"
+                title={`How ${meta.title} works`}
+                aria-label={`How ${meta.title} works`}
+                onClick={() => onOpenGuide(guideView)}
+              >
+                <CircleHelp size={17} />
+              </button>
+            ) : null}
             {session.personId ? (
               <button type="button" className="admin-switch" onClick={onSwitchToEmployee} title="Open your own workday">
                 <ArrowLeftRight size={14} aria-hidden /> Switch to employee view

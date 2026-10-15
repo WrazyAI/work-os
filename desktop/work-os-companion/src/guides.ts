@@ -1,19 +1,33 @@
 import {
+  Activity,
+  AlertTriangle,
   Archive,
   Bell,
   CalendarRange,
+  ClipboardCheck,
   Eye,
   FileCheck2,
+  FileText,
+  Filter,
+  Flag,
+  Gauge,
+  Images,
   Layers,
+  Link2,
   ListChecks,
   ListTodo,
+  MessageSquareText,
   MonitorSmartphone,
+  Plug,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   SquarePen,
   Sun,
+  Table2,
   UserRound,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import type { GuideView } from "./guideState";
@@ -34,8 +48,10 @@ export interface GuideDefinition {
 }
 
 /**
- * The page guides, one per workspace page. Copy is employee-facing, short,
- * and truthful: it describes what the surface does, never scores or promises.
+ * The page guides, one per workspace page: the five employee pages and the
+ * seven administration sections. Copy is short and truthful — it describes
+ * what the surface does, never scores or promises. The employee pages are
+ * filmed; the administration scenes are drawn (see PageGuideArt).
  */
 export const PAGE_GUIDES: Record<GuideView, GuideDefinition> = {
   day: {
@@ -140,6 +156,153 @@ export const PAGE_GUIDES: Record<GuideView, GuideDefinition> = {
         icon: Bell,
         title: "Workday",
         body: "Scheduled check-ins appear with Otto when due; snooze them from the floating companion.",
+      },
+    ],
+  },
+  admin_overview: {
+    title: "How Overview works",
+    promise: "The team's day and everything that needs a decision, in one place.",
+    steps: [
+      {
+        icon: Gauge,
+        title: "See who is working",
+        body: "The roster shows each teammate's attendance state and how fresh their record is.",
+      },
+      {
+        icon: AlertTriangle,
+        title: "Clear what needs attention",
+        body: "Pending reviews, outstanding EODs, overdue tasks, disputed evidence, and blockers lead the page.",
+      },
+      {
+        icon: Activity,
+        title: "Follow the activity",
+        body: "Recent updates, recaps, completions, evidence, and submissions stream beside today's counts.",
+      },
+    ],
+  },
+  admin_people: {
+    title: "How People works",
+    promise: "The roster, and each person's recent record in one drawer.",
+    steps: [
+      {
+        icon: Users,
+        title: "Find the person",
+        body: "The roster lists everyone with their role, schedule, and attendance state.",
+      },
+      {
+        icon: UserRound,
+        title: "Open the record",
+        body: "The drawer carries mappings, schedule and exceptions, and recent workdays.",
+      },
+      {
+        icon: FileText,
+        title: "Read what they filed",
+        body: "Reports, updates and recaps, and a seven-day evidence summary stay beside the person.",
+      },
+    ],
+  },
+  admin_tasks: {
+    title: "How Tasks works",
+    promise: "The organization's task record, with bounded filters and the local add flow.",
+    steps: [
+      {
+        icon: Filter,
+        title: "Filter the record",
+        body: "Narrow by status, assignee, and date; the filters stay bounded to the loaded record.",
+      },
+      {
+        icon: ListChecks,
+        title: "Open a task",
+        body: "A task opens its own detail with status, assignees, and due date intact.",
+      },
+      {
+        icon: ListTodo,
+        title: "Add work for the team",
+        body: "The add-task flow writes a local task into the organization record.",
+      },
+    ],
+  },
+  admin_review: {
+    title: "How EOD Review works",
+    promise: "Submitted reports, read as documents, and the decision each one needs.",
+    steps: [
+      {
+        icon: MessageSquareText,
+        title: "Work the queue",
+        body: "Every submitted end-of-day waits in the queue until it is decided.",
+      },
+      {
+        icon: FileText,
+        title: "Read the document",
+        body: "The report renders as sections beside its sourced evidence and interval recaps.",
+      },
+      {
+        icon: ClipboardCheck,
+        title: "Decide",
+        body: "Manager notes and an optional manager version are recorded with the decision.",
+      },
+    ],
+  },
+  admin_insights: {
+    title: "How Insights works",
+    promise: "The written brief, measured ranges, and each person's facts — never a score.",
+    steps: [
+      {
+        icon: Gauge,
+        title: "Set the range",
+        body: "Fixed ranges compare the selected period with the equal period before it.",
+      },
+      {
+        icon: Sparkles,
+        title: "Read the brief and measurements",
+        body: "A written brief and a metric strip sit above the daily-record chart.",
+      },
+      {
+        icon: Table2,
+        title: "Open a person's facts",
+        body: "The per-person table opens a detail drawer; activity stays context, never a productivity score.",
+      },
+    ],
+  },
+  admin_evidence: {
+    title: "How Evidence works",
+    promise: "The organization's record, its integrations, and when a frame may be opened.",
+    steps: [
+      {
+        icon: Images,
+        title: "Filter the record",
+        body: "Filter by date, person, source, and disputed state; rows group by day.",
+      },
+      {
+        icon: Plug,
+        title: "Check the integrations",
+        body: "Provider cards, unmapped account queues, and repositories show where rows come from.",
+      },
+      {
+        icon: Flag,
+        title: "Open a flagged frame",
+        body: "Screenshot access is limited to flagged or disputed items, with a recorded reason and an audit entry.",
+      },
+    ],
+  },
+  admin_settings: {
+    title: "How Settings works",
+    promise: "Features, members, teams, and connections, one decision area at a time.",
+    steps: [
+      {
+        icon: SlidersHorizontal,
+        title: "Features and status",
+        body: "System status and feature switches live at the top of the workspace settings.",
+      },
+      {
+        icon: Users,
+        title: "Members and teams",
+        body: "Memberships, roles, and teams group people for the record and assignments.",
+      },
+      {
+        icon: Link2,
+        title: "Provider connections",
+        body: "Connections, field mappings, and blueprints decide what flows into the workspace.",
       },
     ],
   },

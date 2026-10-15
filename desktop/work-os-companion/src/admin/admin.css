@@ -1804,3 +1804,43 @@ body:has(.admin-workspace) .notifications-card {
     transition: none;
   }
 }
+
+/* --- Administration page-guide scenes ------------------------------------
+   The seven administration sections were never filmed, so their guides carry
+   the drawn scene vocabulary instead of the employee pages' film: one inline
+   SVG on the workspace palette, decorative to assistive technology, with one
+   visible phase per numbered step. The modal itself is the shared page guide
+   (styles.css); only the art lives here, where the administration surface's
+   stylesheet already loads. The scene copy in the steps carries the meaning,
+   so the drawing never needs to animate under reduced motion. */
+.guide-art {
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper, #f5f4ed);
+  border: 1px solid var(--line, #dcdcd3);
+}
+.guide-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* One phase is on screen at a time: the numbered steps are the chapter
+   control, and a dimmed set of earlier drawings behind the live one reads as
+   clutter rather than context. The transition carries the change. */
+.guide-phase {
+  opacity: 0;
+  transform: translateY(3px) scale(0.985);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.guide-phase.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-phase {
+    transition: none;
+  }
+}

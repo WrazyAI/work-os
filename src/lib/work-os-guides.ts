@@ -8,9 +8,25 @@ import { WorkOsValidationError, type WorkOsAccess } from "@/lib/work-os-api";
  * account across devices and stay out of feature entitlements and onboarding
  * consent. The server owns the key allowlist; a client that ships ahead of the
  * server can only mark keys this list knows, and reads normalize whatever the
- * row holds back into this shape.
+ * row holds back into this shape. The five employee pages and the seven
+ * administration sections carry separate keys, so dismissing one surface's
+ * guide never consumes the other's. Keys stay lowercase with underscores
+ * because the member-state RPC validates that shape.
  */
-export const WORK_OS_GUIDE_KEYS = ["day", "tasks", "review", "insights", "settings"] as const;
+export const WORK_OS_GUIDE_KEYS = [
+  "day",
+  "tasks",
+  "review",
+  "insights",
+  "settings",
+  "admin_overview",
+  "admin_people",
+  "admin_tasks",
+  "admin_review",
+  "admin_insights",
+  "admin_evidence",
+  "admin_settings",
+] as const;
 export type WorkOsGuideKey = (typeof WORK_OS_GUIDE_KEYS)[number];
 
 export interface WorkOsGuideState {

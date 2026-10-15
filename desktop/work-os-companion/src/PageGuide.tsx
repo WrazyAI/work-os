@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
-import { GUIDE_FILMS } from "./guideFilms";
+import { guideFilmsFor } from "./guideFilms";
 import GuideFilm, { clockLabel } from "./GuideFilm";
+import PageGuideArt from "./PageGuideArt";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
@@ -28,7 +29,8 @@ function useReducedMotion() {
  * its chapters. Opened for the first time it plays straight through — step one
  * runs, its clip ends, step two takes over — so a first visit is carried rather
  * than clicked at. Choosing a step jumps the film there, and arrow keys step
- * between chapters.
+ * between chapters. Pages that were never filmed (administration) carry the
+ * drawn scene instead: the same chapters, the same steps, no playback.
  *
  * Two things are deliberate:
  *
@@ -63,11 +65,13 @@ export default function PageGuide({
   onStartTour?: (() => void) | undefined;
 }) {
   const guide = PAGE_GUIDES[view];
-  const films = GUIDE_FILMS[view] ?? [];
+  const films = guideFilmsFor(view);
   const reduced = useReducedMotion();
   const [activeStep, setActiveStep] = useState(0);
 
-  const chapter = Math.min(activeStep, Math.max(0, films.length - 1));
+  /** The film chapter for the selected step. A guide without film has no clip
+   * to clamp to, so its drawn scene follows the step directly. */
+  const chapter = films.length > 0 ? Math.min(activeStep, Math.max(0, films.length - 1)) : activeStep;
 
   /** The end of a clip hands over to the next step, so the guide plays itself. */
   const advance = useCallback(() => {
@@ -116,13 +120,17 @@ export default function PageGuide({
           <button type="button" aria-label="Close page guide" title="Close page guide" onClick={onClose}><X size={17} /></button>
         </header>
         <div className="task-modal-body guide-modal-body">
-          <GuideFilm
-            view={view}
-            film={films[chapter] ?? null}
-            chapterKey={`${view}:${chapter}`}
-            autoplay={!reduced}
-            onEnded={advance}
-          />
+          {films.length > 0 ? (
+            <GuideFilm
+              view={view}
+              film={films[chapter] ?? null}
+              chapterKey={`${view}:${chapter}`}
+              autoplay={!reduced}
+              onEnded={advance}
+            />
+          ) : (
+            <PageGuideArt view={view} activeStep={chapter} />
+          )}
           <ol className="guide-steps">
             {guide.steps.map((step, index) => {
               const active = activeStep === index;

@@ -1,4 +1,5 @@
 import type { SessionResponse } from "./admin/types";
+import { EMPTY_GUIDE_STATE, type GuideState } from "./guideState";
 
 /**
  * DEV-only boot harness for the real App shell in the administration
@@ -58,3 +59,9 @@ export const ADMIN_SHELL_SESSION: SessionResponse = {
   userId: "user-admin-shell",
   featureFlags: { employee_companion: true, desktop_companion: true },
 };
+
+/** The guide flags the harness boots with: a brand-new account's, so the
+ * administration guides auto-open once each exactly as they would for a first
+ * visit. The harness has no backend to hold a durable record, which is the
+ * point — a reload is a fresh account. */
+export const ADMIN_SHELL_GUIDE_STATE: GuideState = EMPTY_GUIDE_STATE;

@@ -42,6 +42,9 @@ export interface PageGuides {
  *   it for the account; opening by hand never consumes that acknowledgement.
  * - Opening by hand always works, even in offline bypass mode; only the
  *   automatic path and syncing are disabled there.
+ * - `fixture` is the dev-only boot harness (`?admin-shell`, see adminShell.ts):
+ *   it stands in for the server answer so first-visit behavior can be rendered
+ *   without a backend or a vault. A packaged build never passes it.
  */
 export function usePageGuides(options: {
   enabled: boolean;
@@ -50,8 +53,10 @@ export function usePageGuides(options: {
   /** True while another drawer, sheet, or modal is on screen. */
   blocked: boolean;
   delayMs?: number;
+  /** Dev-only: the guide flags the server would answer with. */
+  fixture?: GuideState;
 }): PageGuides {
-  const { enabled, organizationId, activeView, blocked, delayMs = 800 } = options;
+  const { enabled, organizationId, activeView, blocked, delayMs = 800, fixture } = options;
   const [state, setState] = useState<GuideState>(EMPTY_GUIDE_STATE);
   const [trusted, setTrusted] = useState(false);
   const [open, setOpen] = useState<GuideView | null>(null);
@@ -97,6 +102,13 @@ export function usePageGuides(options: {
   useEffect(() => {
     let cancelled = false;
     if (!enabled || !organizationId) return;
+    if (fixture) {
+      // Dev-only boot harness: the fixture is the server answer, so the flags
+      // are known and first-visit behavior can run without a backend.
+      setState(fixture);
+      setTrusted(true);
+      return;
+    }
     void (async () => {
       const cache = await secureState.guideState();
       if (cancelled) return;
@@ -140,7 +152,7 @@ export function usePageGuides(options: {
       }
     })();
     return () => { cancelled = true; };
-  }, [enabled, organizationId, push, saveCache]);
+  }, [enabled, fixture, organizationId, push, saveCache]);
 
   const openGuide = useCallback((view: GuideView) => {
     setOpen(view);

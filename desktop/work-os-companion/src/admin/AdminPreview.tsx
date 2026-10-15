@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { setDebugSession } from "../api";
 import AdminWorkspace, { type AdminNotifications } from "./AdminWorkspace";
 import { adminPreviewNotifications, seedAdminFixtures } from "./adminFixtures";
-import type { AdminSection, SessionResponse } from "./types";
+import type { AdminSection, AdminSectionFocus, SessionResponse } from "./types";
 
 const PREVIEW_SESSION: SessionResponse = {
   organizationId: "org-preview",
@@ -30,10 +30,12 @@ export default function AdminPreview() {
   const queryClient = useQueryClient();
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("section");
-  const section = SECTIONS.find((value) => value === requested) ?? "overview";
+  const initialSection = SECTIONS.find((value) => value === requested) ?? "overview";
   const requestedState = params.get("state");
   const state = requestedState === "empty" ? "empty" : requestedState === "sparse" ? "sparse" : "dense";
   const stubApi = params.get("api") === "stub";
+  const [section, setSection] = useState<AdminSection>(initialSection);
+  const [focus, setFocus] = useState<AdminSectionFocus>({});
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   // The bell's rows resolve in the employee workspace, which this preview does
   // not mount; the actions only close the panel and stay honest no-ops there.
@@ -67,9 +69,11 @@ export default function AdminPreview() {
     <AdminWorkspace
       session={PREVIEW_SESSION}
       notifications={notifications}
+      section={section}
+      focus={focus}
+      onNavigate={(next, nextFocus) => { setSection(next); setFocus(nextFocus ?? {}); }}
       onSwitchToEmployee={() => undefined}
       onSignOut={() => undefined}
-      initialSection={section}
     />
   );
 }

@@ -1,14 +1,35 @@
 import type { SidebarView } from "./SidebarNav";
+import type { AdminSection } from "./admin/types";
 
 /**
  * First-visit page guides.
  *
- * The five workspace pages each carry one short guide. Flags are per account
+ * The five employee workspace pages each carry one short guide, and the seven
+ * administration sections carry their own set: different surfaces, different
+ * copy, and different flags, so dismissing the employee Tasks guide never
+ * consumes the administration Tasks guide. Flags are per account
  * (`work_org_members.ui_state` through `/api/work-os/me/guides`) so a guide
- * opens once wherever the employee signs in, and the header `?` replays it on
- * demand. The evidence view has no sidebar destination and therefore no guide.
+ * opens once wherever the account signs in, and the header `?` replays it on
+ * demand. The employee evidence view has no sidebar destination and therefore
+ * no guide of its own; administration reads evidence from its own section.
+ *
+ * Keys stay lowercase with underscores because the server's member-state RPC
+ * owns them, and its key check only accepts `[a-z][a-z0-9_]*`.
  */
-export const GUIDE_VIEWS = ["day", "tasks", "review", "insights", "settings"] as const;
+export const EMPLOYEE_GUIDE_VIEWS = ["day", "tasks", "review", "insights", "settings"] as const;
+export const ADMIN_GUIDE_VIEWS = [
+  "admin_overview",
+  "admin_people",
+  "admin_tasks",
+  "admin_review",
+  "admin_insights",
+  "admin_evidence",
+  "admin_settings",
+] as const;
+/** Every guided page, employee and administration alike. */
+export const GUIDE_VIEWS = [...EMPLOYEE_GUIDE_VIEWS, ...ADMIN_GUIDE_VIEWS] as const;
+export type EmployeeGuideView = (typeof EMPLOYEE_GUIDE_VIEWS)[number];
+export type AdminGuideView = (typeof ADMIN_GUIDE_VIEWS)[number];
 export type GuideView = (typeof GUIDE_VIEWS)[number];
 
 export interface GuideState {
@@ -29,9 +50,19 @@ export interface CachedGuideState {
 export const EMPTY_GUIDE_STATE: GuideState = { guides: {}, autoOpen: true };
 
 const GUIDE_VIEW_SET = new Set<string>(GUIDE_VIEWS);
+const EMPLOYEE_GUIDE_VIEW_SET = new Set<string>(EMPLOYEE_GUIDE_VIEWS);
+const ADMIN_GUIDE_VIEW_SET = new Set<string>(ADMIN_GUIDE_VIEWS);
 
 export function isGuideView(value: unknown): value is GuideView {
   return typeof value === "string" && GUIDE_VIEW_SET.has(value);
+}
+
+export function isEmployeeGuideView(value: unknown): value is EmployeeGuideView {
+  return typeof value === "string" && EMPLOYEE_GUIDE_VIEW_SET.has(value);
+}
+
+export function isAdminGuideView(value: unknown): value is AdminGuideView {
+  return typeof value === "string" && ADMIN_GUIDE_VIEW_SET.has(value);
 }
 
 /** Unknown views, malformed values, and non-object payloads are dropped; a
@@ -141,8 +172,42 @@ export function reconcileGuideState(
   return { state: { guides, autoOpen }, pushGuides, pushAutoOpen };
 }
 
+/** The administration sections were named to read well on their own; their
+ * guide keys are the same names under an `admin_` prefix, so a flag can never
+ * be mistaken for an employee page's. */
+const ADMIN_GUIDE_FOR_SECTION: Record<AdminSection, AdminGuideView> = {
+  overview: "admin_overview",
+  people: "admin_people",
+  tasks: "admin_tasks",
+  review: "admin_review",
+  insights: "admin_insights",
+  evidence: "admin_evidence",
+  settings: "admin_settings",
+};
+
+const ADMIN_SECTION_FOR_GUIDE: Record<AdminGuideView, AdminSection> = {
+  admin_overview: "overview",
+  admin_people: "people",
+  admin_tasks: "tasks",
+  admin_review: "review",
+  admin_insights: "insights",
+  admin_evidence: "evidence",
+  admin_settings: "settings",
+};
+
+/** The guide that answers for an administration section. */
+export function guideViewForAdminSection(section: AdminSection): AdminGuideView {
+  return ADMIN_GUIDE_FOR_SECTION[section];
+}
+
+/** Where an administration guide belongs; null for employee views, so the
+ * tour's navigation can tell the two workspaces apart. */
+export function adminSectionForGuideView(view: GuideView): AdminSection | null {
+  return isAdminGuideView(view) ? ADMIN_SECTION_FOR_GUIDE[view] : null;
+}
+
 /** Narrow a sidebar view to a guided one; the workspace header uses this so an
- * unguided destination never shows or opens a guide. */
-export function guideViewForSidebar(view: SidebarView): GuideView | null {
-  return isGuideView(view) ? view : null;
+ * unguided destination (employee Evidence) never shows or opens a guide. */
+export function guideViewForSidebar(view: SidebarView): EmployeeGuideView | null {
+  return isEmployeeGuideView(view) ? view : null;
 }
