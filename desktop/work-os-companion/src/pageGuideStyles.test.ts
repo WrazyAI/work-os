@@ -12,6 +12,17 @@ describe("page guide interaction styles", () => {
     expect(styles).toMatch(/\.guide-step-control \{[\s\S]*?min-height:\s*40px;/);
   });
 
+  it("keeps the film's grid row from being squeezed into the step list", () => {
+    // The body is a definite-height scroll region and the film is the only row
+    // in it whose item clips, so its row was the one track an `auto` grid would
+    // shrink whenever the modal's max-height could not hold the whole guide —
+    // and the 2:1 frame then overflowed its own row, painting over the first
+    // step's tinted background. `max-content` rows cannot be squeezed: the
+    // frame keeps its height, the 16px above the step list holds, and the
+    // guide scrolls its body instead (§8.11).
+    expect(styles).toMatch(/\.task-modal\.guide-modal > \.task-modal-body\.guide-modal-body \{[\s\S]*?gap:\s*16px;[\s\S]*?grid-auto-rows:\s*max-content;/);
+  });
+
   it("keeps the film frame wide, layered, and still under reduced motion", () => {
     // The frame is the guide's illustration: the still guarantees a first paint
     // and the clip sits over it, so a slow decode shows the page rather than a

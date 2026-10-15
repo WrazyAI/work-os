@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.48 — 2026-10-15
+
+- The guide and tour no longer crowd the illustration against the steps below it, and the tour now fits without scrolling.
+
 ## 0.4.47 — 2026-10-15
 
 - Administrators now finish workspace setup first instead of skipping it, so an admin account is set up like everyone else's.

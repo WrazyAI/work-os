@@ -4195,6 +4195,17 @@ body.modal-open {
   border-radius: 22px;
   background: #f8f7f1;
 }
+/*
+ * The tour carries one more row than a page guide — the rail of pages — so it
+ * needs a taller cap to fit its own content. Without this it fit by exactly the
+ * amount it overlapped the step list, which the row fix above removed: the last
+ * step then sat a few pixels below the fold and the guide looked crammed again
+ * for a different reason. Below this cap the body scrolls, which §8.11 allows,
+ * and at every window shorter than the tour the cap still tracks the viewport.
+ */
+.task-modal.guide-modal.guide-tour {
+  max-height: min(780px, calc(100vh - 32px));
+}
 .task-modal.guide-modal > header {
   align-items: flex-start;
   padding: 20px 24px 16px;
@@ -4250,9 +4261,24 @@ body.modal-open {
   box-shadow: none;
   transform: none;
 }
+/*
+ * The guide body is a definite-height scroll region, and the film is the only
+ * row in it whose item clips — `overflow: hidden` is what rounds its corners —
+ * so it is also the only row with an automatic minimum size of zero. Left on
+ * `auto`, that made the film's row the one track that could absorb a shortfall
+ * whenever the modal's max-height could not hold the whole guide: the track
+ * collapsed below the film's 2:1 frame, the frame kept its own height and
+ * overflowed the row, and — being positioned above the static step buttons — it
+ * painted over the active step's tinted background by the size of the
+ * shortfall, worst where a step's copy wraps to two lines. `max-content` rows
+ * cannot be squeezed: the frame keeps its height, the 16px above the first step
+ * holds, and a guide taller than its cap scrolls the body instead, which §8.11
+ * already makes the only scroll region.
+ */
 .task-modal.guide-modal > .task-modal-body.guide-modal-body {
   padding: 18px 24px 20px;
   gap: 16px;
+  grid-auto-rows: max-content;
 }
 /*
  * The guide film.
