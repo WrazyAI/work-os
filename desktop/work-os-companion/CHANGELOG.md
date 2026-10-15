@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.39 — 2026-10-15
+
 - Your Tasks list now leads with what's urgent — overdue, due today, later, and no date — and its counts always agree with the views above it.
 - Task rows read cleaner: the project line only appears in mixed lists, and the due date stays visible at any window size.
 - The view tabs, search, date range, and Add task now share one toolbar row, so your task list starts higher.
