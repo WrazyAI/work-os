@@ -97,8 +97,9 @@
   background: #f5f7f2;
 }
 
-/* Action results collapse to one summary line. The toggle is the whole header
-   row so the hit target stays generous at the companion's 400px width. */
+/* Action results collapse to one compact summary line. The toggle is the whole
+   header row so the hit target stays generous even at the companion's 400px
+   width, where the chevron itself is a quiet 24px glyph. */
 .approval-results-head { border-bottom: 1px solid #e2e6df; background: #f5f7f2; }
 .approval-results:has(.approval-results-body[hidden]) .approval-results-head { border-bottom: 0; }
 .approval-results-toggle {
@@ -116,7 +117,7 @@
   text-align: left;
 }
 .approval-results-toggle:hover { background: #eef2ea; }
-.approval-results-toggle:focus-visible { outline: 2px solid #7cc936; outline-offset: -2px; }
+.approval-results-toggle:focus-visible { outline: 2px solid var(--conversation-focus, #4a7d22); outline-offset: -2px; }
 .approval-results-toggle strong { min-width: 0; overflow: hidden; font-size: 12px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .approval-results-chevron { flex: 0 0 auto; color: #7b8278; transition: transform 160ms ease; }
 .approval-results-chevron.is-open { transform: rotate(180deg); }

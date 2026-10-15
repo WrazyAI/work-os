@@ -640,10 +640,18 @@
 }
 
 .conversation-surface .chat-task-head,
-.conversation-surface .approval-flow > header,
-.conversation-surface .approval-results > header {
+.conversation-surface .approval-flow > header {
   min-height: 48px;
   padding: 11px 14px;
+  border-bottom-color: var(--conversation-line);
+  background: transparent;
+}
+
+/* The action receipt's head is its toggle row: the toggle owns the row's
+ * padding and height, so the head adds none of its own. */
+.conversation-surface .approval-results > header {
+  min-height: 0;
+  padding: 0;
   border-bottom-color: var(--conversation-line);
   background: transparent;
 }

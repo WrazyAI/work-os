@@ -488,6 +488,17 @@ describe("operational visualizations", () => {
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region::after\s*\{[^}]*backdrop-filter:\s*blur/s);
   });
 
+  it("keeps the action receipt a compact toggle row", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    const toolSurfaceStyles = readText(resolve(root, "src/chat/tool-surfaces.css"));
+    // The receipt head adds no padding or height of its own; the toggle owns
+    // the whole row, so the card collapses to one compact line.
+    expect(conversationStyles).toMatch(/\.conversation-surface \.approval-results > header\s*\{[^}]*min-height:\s*0;[^}]*padding:\s*0;/s);
+    expect(conversationStyles).not.toMatch(/\.approval-results > header[^}]*padding:\s*11px 14px/);
+    expect(toolSurfaceStyles).toMatch(/\.approval-results-toggle\s*\{[^}]*min-height:\s*44px;[^}]*padding:\s*7px 12px;/s);
+    expect(toolSurfaceStyles).toMatch(/\.approval-results-chevron\s*\{[^}]*width:\s*24px;[^}]*height:\s*24px;[^}]*border:\s*1px solid transparent;/s);
+  });
+
   it("keeps chat focus calm and the active tab quiet", () => {
     const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
     const chatStyles = readText(resolve(root, "src/chat/chat.css"));

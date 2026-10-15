@@ -667,15 +667,15 @@
 }
 
 [data-workos-tool-surface="action-results"] .approval-results-toggle {
-  min-height: 60px;
+  min-height: 44px;
   align-items: center;
-  padding: 10px 14px;
+  padding: 7px 12px;
 }
 
 [data-workos-tool-surface="action-results"] .approval-results-toggle > span {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
 [data-workos-tool-surface="action-results"] .approval-results-toggle strong {
@@ -687,11 +687,11 @@
 }
 
 [data-workos-tool-surface="action-results"] .approval-results-chevron {
-  width: 28px;
-  height: 28px;
-  padding: 6px;
-  border: 1px solid var(--tool-line);
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   color: var(--tool-muted);
 }
 
@@ -700,15 +700,15 @@
 }
 
 [data-workos-tool-surface="action-results"] .approval-results article {
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 9px;
-  padding: 13px 14px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid #e8ede4;
 }
 
 [data-workos-tool-surface="action-results"] .approval-results article > span {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1px solid #dbe9d0;
   border-radius: 8px;
   background: var(--tool-success-soft);
