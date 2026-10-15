@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.41 — 2026-10-15
+
 - Your first launch now opens on the same stage as setup: Otto welcomes you, and one button takes you into the secure browser sign-in.
 
 ## 0.4.40 — 2026-10-15
