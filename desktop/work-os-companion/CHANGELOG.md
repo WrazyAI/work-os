@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.47 — 2026-10-15
+
+- Administrators now finish workspace setup first instead of skipping it, so an admin account is set up like everyone else's.
+
 ## 0.4.46 — 2026-10-15
 
 - The chat composer no longer glows bright green while you type — it keeps a calm outline.

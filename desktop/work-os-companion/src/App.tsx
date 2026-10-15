@@ -82,6 +82,7 @@ import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
 import AdminWorkspace from "./admin/AdminWorkspace";
+import { bootSurface } from "./bootSurface";
 import { adminKeys, fetchSession } from "./admin/data";
 import type { SessionResponse } from "./admin/types";
 import { Empty, PageIntro } from "./SharedUi";
@@ -3531,6 +3532,16 @@ export default function App() {
     });
   }, [workspaceCadence?.checkInIntervalMinutes, workspaceCadence?.firstFollowUpMinutes]);
 
+  const landing = bootSurface({
+    vault: vaultGate.status === "failed" ? "failed" : vaultGate.status === "pending" ? "pending" : "ready",
+    signedIn: !!visibleSession,
+    onboardingLoaded: !!visibleOnboarding,
+    onboardingRequired: visibleOnboarding?.onboardingRequired === true,
+    workspace,
+    role: workSessionQuery.data?.role ?? null,
+    syncBypass,
+  });
+
   if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} stage="Opening this device’s saved session" onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (vaultGate.status === "failed") return <LoadingScreen
       failed
@@ -3540,13 +3551,6 @@ export default function App() {
       onDebug={() => void openDebugger()}
     />;
   if (!visibleSession) return <ConnectScreen apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
-  if (workspace === "admin" && session && workSessionQuery.data?.role === "admin" && !syncBypass) {
-    return <AdminWorkspace
-      session={workSessionQuery.data}
-      onSwitchToEmployee={() => setWorkspaceMode("employee")}
-      onSignOut={() => { void logout(); }}
-    />;
-  }
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
       retry={() => void refresh()}
@@ -3555,6 +3559,20 @@ export default function App() {
       onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
     />;
   if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+
+  /*
+   * Administration sits below setup, and that order is the contract: see
+   * bootSurface. Until this moved, an administrator on a fresh device landed
+   * here first and never completed onboarding, so the account went on reporting
+   * that setup was required for the rest of its life.
+   */
+  if (landing === "admin" && session && workSessionQuery.data?.role === "admin") {
+    return <AdminWorkspace
+      session={workSessionQuery.data}
+      onSwitchToEmployee={() => setWorkspaceMode("employee")}
+      onSignOut={() => { void logout(); }}
+    />;
+  }
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
   const startNewChat = () => {
