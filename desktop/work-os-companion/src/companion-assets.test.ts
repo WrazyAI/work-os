@@ -19,11 +19,17 @@ describe("companion artwork", () => {
 
   it("composites the mascot over dark UI without screen blending", () => {
     const css = readFileSync(resolve(root, "src/otto.css"), "utf8");
-    expect(css).toMatch(/\.mascot-connect\s*\{/);
     expect(css).not.toMatch(/mix-blend-mode:\s*screen/);
+    const stageCss = readFileSync(resolve(root, "src/onboarding-stage.css"), "utf8");
+    expect(stageCss).toMatch(/\.mascot-stage\s*\{/);
+    expect(stageCss).toMatch(/\.mascot-stage-art\s*\{/);
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
     expect(app).toContain('from "./MascotPet"');
-    expect(app).toContain('className="mascot-connect"');
+    // The connect screen is the first-run stage's first frame, so its mascot is
+    // the stage's figure — one art path, not a second hero that could drift.
+    expect(app).toContain('import { OnboardingStage } from "./OnboardingStage"');
+    expect(app).toContain('pose="waiting"');
+    expect(app).not.toContain("mascot-connect");
     expect(app).not.toContain("work-os-task-stack");
   });
 

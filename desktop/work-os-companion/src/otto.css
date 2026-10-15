@@ -368,25 +368,6 @@
   filter: drop-shadow(0 16px 28px rgba(24, 32, 24, 0.12));
 }
 
-.mascot-connect {
-  width: clamp(180px, 22vw, 260px);
-}
-
-.mascot-connect-art {
-  width: 100%;
-  height: auto;
-  filter: drop-shadow(0 24px 44px rgba(0, 0, 0, 0.35));
-}
-
-.mascot-connect-art.otto {
-  --otto-ink: #f3f1e9;
-}
-
-.mascot-connect-art .otto-bulb,
-.mascot-connect-art .otto-eye {
-  filter: drop-shadow(0 0 7px rgba(168, 241, 91, 0.55));
-}
-
 .mascot-celebrate {
   width: 64px;
   height: 64px;

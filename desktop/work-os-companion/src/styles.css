@@ -887,87 +887,47 @@ button:disabled {
   margin: 0;
   line-height: 1.5;
 }
-.connect {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  background: #171914;
-  color: #f3f1e9;
-  position: relative;
-  overflow: hidden;
-}
-
-.connect > section {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: clamp(40px, 6vw, 76px);
-  z-index: 1;
-}
-
-.wordmark.large {
-  margin: 0;
-}
-
-.wordmark.large img {
-  width: 38px;
-  height: 38px;
-}
-
-.connect-stack {
-  display: grid;
-  max-width: 560px;
-  gap: 14px;
-  margin-bottom: clamp(24px, 9vh, 84px);
-}
-
-.connect .kicker {
-  color: #8ea07f;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.connect h1 {
-  font: 600 clamp(40px, 5.4vw, 68px)/1.02 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
-  letter-spacing: -0.055em;
-  margin: 0;
-}
-
-.connect p {
-  margin: 0;
-  color: #a8aaa2;
-  font-size: 14px;
-  line-height: 1.6;
-  max-width: 440px;
-}
-
-.connect-button {
-  margin-top: 10px;
-  min-height: 46px;
-  width: max-content;
-  padding: 0 20px;
-}
-
-.connect-settings {
-  margin-top: 8px;
-  color: #898d83;
+/* First-run connect screen: the stage's first frame -------------------------
+ * The connect screen is the welcome's first frame: the same dark stage, with
+ * Otto carrying the secure sign-in in his own voice. The only surface it adds
+ * is the advanced server override, which belongs to the connect action and
+ * lives in the bubble — so its controls wear the bubble's dark treatment. */
+.otto-bubble .connect-settings {
+  margin-top: 12px;
+  color: #a9ad9f;
   font-size: 11px;
+  animation: onboarding-action-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: var(--otto-settle, 0ms);
 }
 
-.connect-settings summary {
+.otto-bubble .connect-settings summary {
   cursor: pointer;
   color: #9aa093;
 }
 
-.connect-settings-row {
-  display: flex;
-  gap: 8px;
+.otto-bubble .connect-settings summary:hover {
+  color: #c6cabb;
+}
+
+.otto-bubble .connect-settings-row {
+  display: grid;
+  gap: 7px;
   margin-top: 10px;
 }
 
-.connect-settings-row input {
+.otto-bubble .connect-settings-row label {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.otto-bubble .connect-settings-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.otto-bubble .connect-settings-controls input {
+  min-width: 0;
   flex: 1;
   max-width: 300px;
   padding: 10px;
@@ -977,7 +937,7 @@ button:disabled {
   color: #fff;
 }
 
-.connect-settings-row button {
+.otto-bubble .connect-settings-controls button {
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid #3a3d34;
@@ -987,244 +947,9 @@ button:disabled {
   cursor: pointer;
 }
 
-.connect-settings-row button:hover {
+.otto-bubble .connect-settings-controls button:hover {
   border-color: #5a5f4f;
   color: #fff;
-}
-
-/* Focused connect composition. */
-.connect.connect-focus {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.74fr);
-  background: #f0f1ea;
-  color: var(--ink);
-}
-
-.connect.connect-focus > section {
-  justify-content: initial;
-  padding: clamp(28px, 5vw, 72px);
-}
-
-.connect-brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.connect.connect-focus .wordmark.large {
-  justify-content: flex-start;
-}
-
-.connect.connect-focus .wordmark.large span {
-  display: inline;
-}
-
-.connect-brand-label {
-  color: #7c8378;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.connect.connect-focus .connect-content {
-  display: flex;
-  flex-direction: column;
-}
-
-.connect.connect-focus .connect-stack {
-  max-width: 500px;
-  margin: auto 0;
-  gap: 16px;
-}
-
-.connect.connect-focus h1 {
-  max-width: 590px;
-  font-size: clamp(42px, 4.8vw, 64px);
-  line-height: 1.02;
-}
-
-.connect.connect-focus p {
-  color: #626a61;
-}
-
-.connect-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  margin: 3px 0 4px;
-  padding: 0;
-  list-style: none;
-}
-
-.connect-steps li {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #7a8176;
-  font-size: 11px;
-}
-
-.connect-steps li span {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid #cbd2c4;
-  border-radius: 50%;
-  color: #5d675a;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.connect.connect-focus .connect-button {
-  margin-top: 4px;
-}
-
-.connect.connect-focus .connect-settings {
-  color: #626a61;
-}
-
-.connect.connect-focus .connect-settings summary {
-  color: #687264;
-}
-
-.connect.connect-focus .connect-settings-row {
-  display: grid;
-  gap: 7px;
-}
-
-.connect-settings-row label {
-  color: inherit;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.connect-settings-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.connect-settings-controls input {
-  min-width: 0;
-  flex: 1;
-}
-
-.connect.connect-focus > aside {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.connect.connect-focus > aside {
-  background: #dfe7d5;
-}
-
-.connect-atmosphere {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.86;
-}
-
-.connect > aside img.connect-atmosphere {
-  width: 100%;
-  max-width: none;
-}
-
-.connect.connect-focus > aside::after {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  content: "";
-  background: radial-gradient(circle at 50% 50%, transparent 0 25%, rgba(24, 32, 24, 0.08) 78%, rgba(24, 32, 24, 0.26));
-}
-
-.connect-art-content {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  padding: clamp(28px, 5vw, 70px);
-}
-
-.connect-art-content .otto-connect {
-  width: clamp(250px, 28vw, 360px);
-}
-
-.connect-art-copy {
-  position: absolute;
-  left: clamp(28px, 5vw, 70px);
-  bottom: clamp(28px, 5vw, 70px);
-  display: grid;
-  gap: 5px;
-  color: #52604e;
-}
-
-.connect-art-copy span {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.connect-art-copy strong {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-@media (max-width: 850px) {
-  .connect.connect-focus {
-    grid-template-columns: 1fr;
-  }
-
-  .connect.connect-focus > aside {
-    display: grid;
-    min-height: 280px;
-  }
-
-  .connect.connect-focus > section {
-    min-height: 540px;
-  }
-
-  .connect.connect-focus .connect-stack {
-    margin: auto 0;
-  }
-}
-
-@media (max-width: 560px) {
-  .connect.connect-focus > section {
-    min-height: auto;
-    padding: 28px 24px 36px;
-  }
-
-  .connect.connect-focus .connect-stack {
-    margin-top: 72px;
-  }
-
-  .connect.connect-focus h1 {
-    font-size: clamp(38px, 12vw, 52px);
-  }
-
-  .connect-art-content {
-    min-height: 260px;
-  }
-}
-
-.connect > aside {
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(168, 241, 91, 0.09), transparent 26rem),
-    #1b1d18;
-}
-
-.connect > aside img {
-  width: min(72%, 560px);
-  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.45));
 }
 .loading {
   min-height: 100vh;
@@ -1341,12 +1066,6 @@ button:disabled {
   .hero-copy {
     max-width: 70%;
   }
-  .connect {
-    grid-template-columns: 1fr;
-  }
-  .connect > aside {
-    display: none;
-  }
 }
 @media (max-width: 560px) {
   .workspace {
@@ -1423,12 +1142,6 @@ button:disabled {
   .signal-bars b {
     grid-column: 1;
     grid-row: 2;
-  }
-  .connect > section {
-    padding: 34px 24px;
-  }
-  .wordmark.large {
-    margin-bottom: 70px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

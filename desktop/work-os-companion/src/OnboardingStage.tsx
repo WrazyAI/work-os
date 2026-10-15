@@ -42,6 +42,17 @@ function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
+/** The line's timing: which words to reveal, and how long the line takes to
+ *  settle. The bubble owns the settle value — the line element and the actions
+ *  that belong to it are siblings, so the custom property has to live on their
+ *  shared parent to reach the actions. */
+export function ottoLineTiming(text: string) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const reveal = words.length <= MAX_REVEAL_WORDS && !prefersReducedMotion();
+  const settleMs = reveal ? words.length * WORD_MS + 180 : 0;
+  return { words, reveal, settleMs };
+}
+
 /**
  * One line of Otto's speech.
  *
@@ -51,10 +62,8 @@ function prefersReducedMotion() {
  * compete with another animation. Reduced motion renders it flat.
  */
 export function OttoLine({ text }: { text: string }) {
-  const words = useMemo(() => text.split(/\s+/).filter(Boolean), [text]);
-  const reveal = words.length <= MAX_REVEAL_WORDS && !prefersReducedMotion();
-  const settleMs = reveal ? words.length * WORD_MS + 180 : 0;
-  return <p className="otto-line" data-reveal={reveal ? "true" : undefined} style={{ "--otto-settle": `${settleMs}ms` } as CSSProperties}>
+  const { words, reveal } = useMemo(() => ottoLineTiming(text), [text]);
+  return <p className="otto-line" data-reveal={reveal ? "true" : undefined}>
     {/* The speaker is named here rather than in a visible label: the bubble's
         tail already shows who is talking. */}
     <span className="sr-only">{MASCOT.name}: {text}</span>
@@ -98,6 +107,9 @@ export function OnboardingStage({
   children,
 }: OnboardingStageProps) {
   const recipe = STAGE_POSE[pose];
+  // The bubble carries the line's settle timing so the actions that belong to
+  // the line (and anything beside them) arrive after it settles.
+  const { settleMs } = useMemo(() => ottoLineTiming(line), [line]);
   return <aside className="onboarding-story" data-pose={pose}>
     <div className="stage-head">
       <div className="story-brand"><img src={assetUrl(wordmark)} alt="" /><strong>WORK <b>OS</b></strong></div>
@@ -112,7 +124,7 @@ export function OnboardingStage({
         <h1>{title}</h1>
       </div>
       <div className="otto-scene">
-        <div className="otto-bubble" key={replayKey}>
+        <div className="otto-bubble" key={replayKey} style={{ "--otto-settle": `${settleMs}ms` } as CSSProperties}>
           <OttoLine text={line} />
           {children}
         </div>

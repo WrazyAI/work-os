@@ -27,6 +27,7 @@ import { FEATURES } from "./features";
 import { formatWorkOsDate, formatWorkOsDateTime, formatWorkOsTime as formatTime, shiftWorkOsDate } from "./dateFormat";
 import { useNotifications } from "./NotificationFlyouts";
 import Onboarding from "./Onboarding";
+import { OnboardingStage } from "./OnboardingStage";
 import { applyDayScenario, applyOnboardingScenario, DEFAULT_DEBUG_SCENARIO, insightsFixture } from "./scenarios";
 import { sessionGate } from "./sessionGate";
 import { shiftPulse } from "./shiftPulse";
@@ -55,7 +56,6 @@ import { secureState, abandonVaultOpen, resetLocalVault, type WorkOsConversation
 import { runVaultGate, type VaultGateSettled, type VaultGateState, type VaultAttempt } from "./vaultGate";
 import { TASK_OPTIONS_STALE_MS, workOsKeys } from "./queryClient";
 import { fetchDay, fetchOnboarding, fetchTaskDetails, prepareEodScreenshots, reviewMemoryFact, forgetMemoryFact, useActivityIntervalsQuery, useDayQuery, useEodScreenshotsQuery, useHistoricalDayQuery, useInsightsQuery, useMemoryQuery, useOnboardingQuery, useOutstandingEodsQuery, useReportDayQuery, useTaskBacklogQuery, useTaskDetailsQuery, useTaskHistoryQuery, type TaskBacklog, type TaskDetails, type TaskHistoryPage } from "./workOsQueries";
-import wordmark from "./assets/work-os-mark.png";
 import { MascotPet } from "./MascotPet";
 import { mascotFactsFromDay, useMascotRuntime } from "./useMascotRuntime";
 import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "./NotificationsBell";
@@ -93,16 +93,12 @@ import { buildWorkdayDashboardModel } from "./dashboardModel";
 import SidebarNav, { type SidebarView } from "./SidebarNav";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { TaskDateNavigator } from "./TaskDateNavigator";
-import connectWarmPaper from "./assets/connect-warm-paper.webp";
 import { resolveDashboardShift } from "./dashboardModel";
 import { shouldAutoOpenPlanning, shouldCloseAutoOpenedPlanning } from "./planningGate";
 import { attendanceWatchExpectation, attendanceWatchInput } from "./attendanceWatch";
 import { useAttendanceWatch } from "./useAttendanceWatch";
 import "./plan-insights.css";
 import "./insight-charts.css";
-
-type AssetSource = string | { src: string };
-const assetUrl = (asset: AssetSource) => typeof asset === "string" ? asset : asset.src;
 
 type View = SidebarView;
 type TaskView = "today" | "unfinished" | "completed" | "all";
@@ -4028,37 +4024,26 @@ function ConnectSettings({ apiBase, setApiBase, onSave, summary = "Advanced sett
   </details>;
 }
 
-function ConnectSteps() {
-  return <ol className="connect-steps" aria-label="Connection steps">
-    <li><span>1</span><strong>Connect</strong></li>
-    <li><span>2</span><strong>Authorize</strong></li>
-    <li><span>3</span><strong>Return</strong></li>
-  </ol>;
-}
-
+/** The first frame of first run. The connect screen is the same stage the
+ *  setup flow opens on, so the sign-in round-trip never leaves Otto's world:
+ *  he carries the sequence in his own voice, and the stage carries the one
+ *  action. The advanced server override stays a quiet disclosure in the
+ *  bubble, beside the action it changes. */
 export function ConnectScreen({ apiBase, setApiBase, connecting, onConnect, onSave }: ConnectScreenProps) {
-  return <main className="connect connect-focus">
-    <section className="connect-content">
-      <header className="connect-brand">
-        <div className="wordmark large"><img src={assetUrl(wordmark)} alt="" /><span>WORK <b>OS</b></span></div>
-        <span className="connect-brand-label">Work OS</span>
-      </header>
-      <div className="connect-stack">
-        <span className="kicker">Desktop companion</span>
-        <h1>Connect your workspace.</h1>
-        <p>Open secure sign-in in your browser. After you authorize this device, Work OS returns here and brings your day into focus.</p>
-        <ConnectSteps />
-        <button className="primary connect-button" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button>
-        <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
+  return <main className="guided-onboarding" data-stage="welcome">
+    <OnboardingStage
+      pose="waiting"
+      eyebrow="Desktop companion"
+      title="Connect your workspace."
+      line="I’m Otto. First, let me get you in — I’ll open your browser for a secure sign-in. Approve this device, and I’ll be right here when you’re back."
+      replayKey="connect"
+    >
+      <div className="otto-bubble-actions">
+        <button className="primary" disabled={connecting} onClick={onConnect}>{connecting ? <FadeArc size={17} /> : <LogIn size={17} />} {connecting ? "Opening browser…" : "Connect workspace"}</button>
+        <span className="otto-bubble-note">About a minute.</span>
       </div>
-    </section>
-    <aside className="connect-art" aria-label="A calmer way to begin">
-      <img className="connect-atmosphere" src={assetUrl(connectWarmPaper)} alt="" />
-      <div className="connect-art-content">
-        <div className="connect-art-copy"><span>A calmer way to begin</span><strong>Your workday, in one place.</strong></div>
-        <MascotPet workday="disconnected" className="mascot-connect" artClassName="mascot-connect-art" />
-      </div>
-    </aside>
+      <ConnectSettings apiBase={apiBase} setApiBase={setApiBase} onSave={onSave} />
+    </OnboardingStage>
   </main>;
 }
 export function LoadingScreen({ failed, retry, note, stage, onReset, onDebug, onOffline }: {

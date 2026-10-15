@@ -177,7 +177,7 @@ describe("operational visualizations", () => {
     expect(app).toContain("Share an update, a blocker, or add a task…");
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
     expect(app).toContain("mascot-hero");
-    expect(app).toContain("mascot-connect");
+    expect(app).toContain("OnboardingStage");
     // The EOD confirmation keeps the page and plays the checked animation.
     expect(app).toContain("CheckedMoment");
     expect(app).toContain("All EODs");

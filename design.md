@@ -1080,6 +1080,12 @@ the companion carries the experience instead of annotating it. Otto is on stage
 from the first frame to the last, and the panel beside him stays in the quiet
 product language: personality on the stage, discipline in the panel.
 
+- **The connect screen.** The stage's first frame, before any session exists:
+  one statement, Otto's line carrying the secure browser sign-in in his own
+  voice, and one `Connect workspace` action with a short `About a minute.`
+  note. The advanced server override stays a quiet disclosure in the bubble,
+  beside the action it changes, and the screen carries no journey rail; the
+  sign-in round-trip returns to the same world setup opens on.
 - **The welcome.** A full-width stage holding one statement, Otto, and his
   spoken line, with one `Start setup` action and a short `Six short steps.`
   note. It appears only for a draft that has never been written
@@ -1510,10 +1516,10 @@ The mascot is a quiet guide, not a dashboard card and not a status replacement.
 It may appear as:
 
 - a small head mark beside agent speech;
-- a restrained full figure in a connect/ready hero;
-- a full figure on the first-run stage, where he hosts setup, and on the pre-app
-  loading screen and its failure state, where he is honestly working or
-  recovering;
+- a restrained full figure in a ready hero;
+- a full figure on the first-run stage — the connect screen, the welcome, and
+  the setup steps — and on the pre-app loading screen and its failure state,
+  where he is honestly working or recovering;
 - a compact orb in the floating companion;
 - a thinking/recovering/celebrating state when the corresponding event is real.
 

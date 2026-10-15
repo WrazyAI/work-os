@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Your first launch now opens on the same stage as setup: Otto welcomes you, and one button takes you into the secure browser sign-in.
+
 ## 0.4.40 — 2026-10-15
 
 - Page guides now play short film of the real app, so you can see where something is instead of a drawing of it.

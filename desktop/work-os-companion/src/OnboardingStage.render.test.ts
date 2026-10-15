@@ -58,6 +58,15 @@ describe("first-run stage", () => {
     expect(stage()).not.toContain("otto-journey");
   });
 
+  it("times the bubble so the actions that belong to the line arrive after it", () => {
+    const markup = stage();
+    // Four words: 4 × 26ms plus the 180ms settle. The value lives on the
+    // bubble — the shared parent of the line and its actions — because the
+    // line element is their sibling and could never hand it to them.
+    expect(markup).toMatch(/class="otto-bubble" style="[^"]*--otto-settle:284ms/);
+    expect(markup).not.toMatch(/class="otto-line"[^>]*--otto-settle/);
+  });
+
   it("renders the configured mascot with the pose the real state calls for", () => {
     // The stage owns its pose sequence: there is no workspace to mirror yet, so
     // each recipe has to name a genuine agent/workday pair.
