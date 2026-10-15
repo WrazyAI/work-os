@@ -956,25 +956,56 @@ there is never more than one guide per page.
 - **Any time** — one icon-only `?` control in the masthead (accessible name
   `How <page> works`) reopens the guide for the page on screen. Reopening by
   hand does not consume an unseen guide; acknowledgement happens on dismissal.
+- **The film** — the modal's illustration is film of the real companion: one clip
+  per numbered step, shot by `scripts/shoot-guide-films.mjs`. The gates and the
+  shape are the contract:
+  - Clips are recorded against the offline fixture boot and never against a live
+    account. Nothing is written, and no footage shows a state an employee cannot
+    reach.
+  - Every click in a clip is a real click on a real control, and what the
+    interface did about it is what lands in the film. No state is staged and no
+    behaviour is mocked.
+  - One clip per page per step, encoded H.264 MP4 at 1000×500 with a still
+    beside it. H.264 because every runtime this ships to plays it; MP4 rather
+    than WebM because the packaged webviews are the constraint, not the browser.
+  - The camera and the pointer are the shooter's, not the product's. Neither is
+    a feature of the interface and neither appears outside a guide.
+  - `src/guideFilms.ts` is generated from the encoded files, and a test asserts
+    one clip per step, both files on disk, and each chapter label matching its
+    step title. A guide whose steps changed without a re-shoot fails the build.
 - **The modal** — `role="dialog"` with `aria-modal`, labelled by its title and
   described by its promise. Its header names the speaker once, with the
   configured companion mark for sighted readers and the configured name for
   assistive technology, so a guide reads as the same companion the employee met
-  in setup. It holds one custom inline-SVG scene drawn on the
-  workspace palette (`aria-hidden`; no raster art). The scene plays one
-  bounded pass through the numbered steps; each step is also a real button that
-  activates the matching scene phase on hover, focus, or click. Reduced-motion
-  skips the automatic sequence and keeps the same selectable states. It has at
-  most three numbered
-  steps as an ordered list, and one primary `Got it`. While automatic guides are
-  on it also offers one quiet `Don't show these automatically`; once off, the
-  footer states that automatic guides are off and points at the `?` instead.
+  in setup. It plays straight through on open: step one's clip runs and its end
+  hands over to step two. The numbered steps are the film's chapters — choosing
+  one jumps the film there and it carries on from there. It has at most three
+  numbered steps as an ordered list, each showing its clip's length, and one
+  primary `Got it`. There is no seek and no transport control beyond choosing a
+  chapter, so no clip depends on range requests. While automatic guides are on
+  it also offers one quiet `Don't show these automatically`; once off, the footer
+  states that automatic guides are off and points at the `?` instead.
+  - Hovering a step does not start it. Hover is how you read a list, not how you
+    ask to watch six seconds of film.
+  - The film is `aria-hidden`: the step copy states everything the clip shows, in
+    words, and that is the accessible path. No meaning is film-only.
+- **The tour** — `GuideTour` plays all five films as one pass, started either by
+  the first guide a new workspace shows (`Show me the whole workspace`) or by
+  `Replay the full tour` in Settings. Choosing a page in its rail navigates the
+  real application to that page, so the walk is through the product rather than a
+  carousel laid over it, and closing it leaves the employee on the last page it
+  showed. It never changes page on its own; within a page its chapters advance as
+  the page guide's do.
 - **Dismissal** — Escape, backdrop press, and the close control dismiss it; the
   body is the only scroll region; focus lands inside on open and returns to the
-  `?` after. Below 560px the modal takes the viewport inset. Under reduced
-  motion nothing in the scene animates.
+  `?` after. Below 560px the modal takes the viewport inset, and on the tour the
+  progress track is dropped before any page name is truncated.
+- **Reduced motion** — nothing plays. The still frame stands in for the clip,
+  every chapter stays selectable, and one control plays a chapter on request.
+  Labels, order, and copy are unchanged.
 - **Opt-out** — Settings → Page guides switches automatic guides; the modal's
-  quiet action writes the same account flag. The `?` keeps working either way.
+  quiet action writes the same account flag. The `?` keeps working either way,
+  and the tour stays available from Settings whatever the flag says.
 
 ### 8.12 Review notifications, the notifications panel, and suggestion review
 
@@ -1423,6 +1454,11 @@ what changed.
 Respect prefers-reduced-motion. Remove transforms, shimmer, and nonessential
 animation while preserving state, labels, and final geometry.
 
+The guide film answers to the same rule, which for video means not playing it at
+all: under reduced motion the still frame stands in, every chapter stays
+selectable, and one control plays a chapter on request. Film never autoplays on
+its own outside a guide the employee opened, and no clip ever loops.
+
 ## 11. Responsive matrix
 
 Every changed surface is reviewed at these classes:
@@ -1500,6 +1536,13 @@ Art uses the existing ink/paper/signal palette and never becomes a generic stock
 illustration. Do not create a new raster asset where the configured original
 asset can be referenced. Mascot motion is removed under reduced motion.
 
+The one place raster art is required is the page-guide film (§8.11), and it is
+allowed there for the opposite of decorative reasons: it is footage of this
+product's own interface rather than an illustration of it, so a guide can show
+where a control is instead of describing it. It is generated, never drawn, and it
+is bound by the version test in §14.1 — a film that no longer matches the
+interface it depicts fails the build rather than quietly going stale.
+
 The compact companion's drag handle is a visible, subtle dark capsule centered
 above the mascot with a generous grab area. The ordinary handle is 72×30px and
 the due-prompt handle is 78×30px, without covering the separate hide control.
@@ -1547,6 +1590,16 @@ Each surface states its budgets, and visual QA checks them.
   avatar windows. Bursts coalesce to the latest sequence at most every 250ms; the
   trace pulls the rows it shows instead of receiving whole events.
 - Polling cadence follows §8.7. No surface polls faster than its contract states.
+- Guide film: 1,000×500 H.264 at 30fps, and the whole five-page set stays under
+  4 MB. Each clip is encoded for its own length only — nothing loops, nothing
+  auto-repeats — and the generated manifest records the exact encoded length, so
+  the module can never claim a duration the file does not have.
+- Guide film is loaded per chapter on demand, not all at once. Opening a guide
+  fetches one clip and one still, and a chapter that is never chosen is never
+  downloaded.
+- The film list is checked against the interface it depicts: one clip per step,
+  every clip and still present on disk, and every chapter label equal to its
+  step's title. A step that changed without a re-shoot fails that check.
 
 ## 15. Visual QA and release acceptance
 

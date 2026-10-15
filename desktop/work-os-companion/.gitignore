@@ -4,3 +4,6 @@ src-tauri/target/
 src-tauri/gen/
 *.key
 *.pfx
+
+# The capture rig used by scripts/shoot-guide-films.mjs. Never shipped.
+dist-film/

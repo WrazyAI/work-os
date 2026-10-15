@@ -4295,7 +4295,7 @@ body.modal-open {
    header). The scene is inline SVG on the workspace palette. It plays one
    bounded three-step sequence and each numbered step can drive it directly. */
 .task-modal.guide-modal {
-  width: min(560px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 22px;
@@ -4360,25 +4360,93 @@ body.modal-open {
   padding: 18px 24px 20px;
   gap: 16px;
 }
-.guide-art {
+/*
+ * The guide film.
+ *
+ * The frame is 2:1 — wider than a video player and closer to a letterbox —
+ * because what it shows is a dense, wide interface being travelled over rather
+ * than a scene being watched. On the workspace palette the still keeps a hairline
+ * so an unusually pale frame does not dissolve into the modal, and the clip
+ * sits above it so the still is the guaranteed first paint.
+ */
+.guide-film {
+  position: relative;
+  aspect-ratio: 2 / 1;
   border-radius: 14px;
   overflow: hidden;
+  background: var(--color-inset, #f0f3ed);
+  border: 1px solid var(--color-line, #d9ded5);
+  outline: 1px solid rgba(24, 32, 24, 0.05);
+  outline-offset: -3px;
 }
-.guide-art svg {
+.guide-film-still,
+.guide-film-video {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
 }
-.guide-phase {
-  opacity: 0.34;
-  transform: translateY(3px) scale(0.985);
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+.guide-film-video {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 220ms ease;
 }
-.guide-phase.is-active {
+.guide-film-video.is-revealed {
   opacity: 1;
-  transform: none;
+}
+.guide-film-play {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid var(--color-line, #d9ded5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-ink, #182018);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20, 30, 18, 0.08), 0 8px 24px rgba(20, 30, 18, 0.12);
+}
+.guide-film-play:hover {
+  background: #fff;
+}
+.guide-film-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(24, 32, 24, 0.1);
+}
+.guide-film-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-signal-deep, #5e9d27);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.guide-film.is-missing {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+}
+.guide-film.is-missing p {
+  margin: 0;
+  color: var(--color-muted, #687267);
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-film-video {
+    transition: none;
+  }
 }
 .guide-steps {
   list-style: none;
@@ -4386,6 +4454,123 @@ body.modal-open {
   padding: 0;
   display: grid;
   gap: 4px;
+}
+/* How long the step's clip runs. Quiet, but it sets an honest expectation. */
+.guide-step-time {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--color-muted, #687267);
+  font-size: 11px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The whole-workspace tour.
+ *
+ * The rail answers "where am I in this walk" without spending a second surface
+ * on it, and every stop is a real control: choosing one moves the film and takes
+ * the application with it. Wrapping is allowed because the five names are the
+ * content and none of them may be truncated to fit.
+ */
+.guide-tour-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.guide-tour-rail button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted, #687267);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.guide-tour-rail button > span {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line, #d9ded5);
+  background: var(--color-raised, #ffffff);
+  color: var(--color-muted, #687267);
+  font-size: 9.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.guide-tour-rail button:hover {
+  color: var(--color-ink, #182018);
+  background: var(--color-inset, #f0f3ed);
+}
+.guide-tour-rail button.is-done {
+  color: var(--color-ink-soft, #304033);
+}
+.guide-tour-rail button.is-done > span {
+  border-color: transparent;
+  background: var(--color-inset, #f0f3ed);
+  color: var(--color-signal-deep, #5e9d27);
+}
+.guide-tour-rail button.is-current {
+  border-color: var(--color-line, #d9ded5);
+  background: var(--color-raised, #ffffff);
+  color: var(--color-ink, #182018);
+}
+.guide-tour-rail button.is-current > span {
+  border-color: transparent;
+  background: var(--color-signal, #a8f15b);
+  color: var(--color-ink, #182018);
+}
+.guide-tour-footer {
+  align-items: center;
+}
+.guide-tour-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  padding: 0 4px;
+}
+.guide-tour-track > i {
+  display: block;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-line, #d9ded5);
+}
+.guide-tour-track > i.is-past {
+  background: var(--color-signal-deep, #5e9d27);
+}
+/* The invitation reads as an offer, not as the decision. */
+.guide-tour-invite::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 999px;
+  background: var(--color-signal, #a8f15b);
+  box-shadow: 0 0 0 3px rgba(168, 241, 91, 0.22);
+}
+@media (max-width: 560px) {
+  .guide-tour-rail button {
+    padding-right: 9px;
+  }
+  .guide-tour-track {
+    display: none;
+  }
 }
 .guide-step {
   min-width: 0;

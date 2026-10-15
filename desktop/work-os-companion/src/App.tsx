@@ -73,6 +73,7 @@ import { MemoryModal, MemorySummary } from "./MemorySettings";
 import { SuggestionReview } from "./SuggestionReview";
 import { SettingsSwitch } from "./SettingsSwitch";
 import PageGuide from "./PageGuide";
+import GuideTour from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
 import { guideViewForSidebar } from "./guideState";
 import { Setting } from "./Setting";
@@ -376,6 +377,8 @@ export default function App() {
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [debugPageGuide, setDebugPageGuide] = useState<ReturnType<typeof guideViewForSidebar>>(null);
+  /** The whole-workspace walk-through, from a new workspace or from Settings. */
+  const [tourOpen, setTourOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [taskHistory, setTaskHistory] = useState<Array<Record<string, any>>>([]);
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
@@ -461,12 +464,13 @@ export default function App() {
   useEffect(() => { voiceRef.current = voice; }, [voice]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const baseModalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen || !!debugPageGuide;
+  const baseModalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen || !!debugPageGuide || tourOpen;
   const pageGuideView = guideViewForSidebar(view);
   const pageGuideLabel = views.find((item) => item.id === view)?.label ?? "this page";
   const {
     open: openPageGuide,
     autoOpen: pageGuideAutoOpen,
+    firstVisit: pageGuideFirstVisit,
     openGuide,
     closeGuide,
     disableAutoOpen,
@@ -515,6 +519,7 @@ export default function App() {
   const dismissTopLayer = useCallback(() => {
     if (busy) return;
     if (debugPageGuide) { setDebugPageGuide(null); return; }
+    if (tourOpen) { setTourOpen(false); return; }
     if (openPageGuide) { closeGuide(); return; }
     if (moveMenuId) { setMoveMenuId(null); return; }
     if (subtaskMenuId) { setSubtaskMenuId(null); return; }
@@ -529,7 +534,7 @@ export default function App() {
     if (carryOverOpen) { setCarryOverOpen(false); return; }
     if (profileOpen) { setProfileOpen(false); return; }
     if (whatsNew) setWhatsNew(null);
-  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, whatsNew]);
+  }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourOpen, whatsNew]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -3874,6 +3879,9 @@ export default function App() {
                <Setting title="Show page guides automatically" detail="Each page's guide opens once the first time you visit it. Open any page's guide again from the ? in the header.">
                  <SettingsSwitch label="Show page guides automatically" checked={pageGuideAutoOpen} onChange={setPageGuideAutoOpen} />
                </Setting>
+               <Setting title="Walk through the workspace again" detail="Plays every page's film in order — the same pass a new workspace starts with. It moves the app to each page as it goes, and leaves you on the last one.">
+                 <button type="button" className="quiet-action" onClick={() => setTourOpen(true)}>Replay the full tour</button>
+               </Setting>
              </section>
            </section>
 
@@ -3974,7 +3982,8 @@ export default function App() {
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
     {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
       {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
-      {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} />}
+      {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={pageGuideAutoOpen && pageGuideFirstVisit ? () => { closeGuide(); setTourOpen(true); } : undefined} />}
+      {tourOpen && <GuideTour onNavigate={setView} onClose={() => setTourOpen(false)} />}
       {memoryOpen && <MemoryModal
         facts={memoryQuery.data?.facts ?? []}
         recent={memoryQuery.data?.recent ?? []}

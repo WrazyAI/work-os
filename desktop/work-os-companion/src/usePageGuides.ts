@@ -19,6 +19,12 @@ export interface PageGuides {
   /** The page guide currently open, if any. */
   open: GuideView | null;
   autoOpen: boolean;
+  /**
+   * True once any guide has been acknowledged on this account. The first guide a
+   * new workspace shows is what offers the whole-workspace tour, so the offer
+   * belongs to that moment rather than to every page's first visit.
+   */
+  firstVisit: boolean;
   openGuide: (view: GuideView) => void;
   closeGuide: () => void;
   disableAutoOpen: () => void;
@@ -195,5 +201,5 @@ export function usePageGuides(options: {
   }, [acknowledgeGuide, open]);
   const disableAutoOpen = useCallback(() => setAutoOpen(false), [setAutoOpen]);
 
-  return { open, autoOpen: state.autoOpen, openGuide, closeGuide, disableAutoOpen, setAutoOpen };
+  return { open, autoOpen: state.autoOpen, firstVisit: Object.keys(state.guides).length === 0, openGuide, closeGuide, disableAutoOpen, setAutoOpen };
 }
