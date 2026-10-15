@@ -44,7 +44,7 @@ export function ChatTabs({
             onClick={() => onSelect(tab.id)}
             onKeyDown={(event) => move(event, index)}
             className={cx(
-              "chat-tab inline-flex w-auto items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 py-1 text-[13px] font-semibold leading-[1.4] text-ink transition-[background-color,opacity] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong",
+              "chat-tab inline-flex w-auto items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2.5 py-1 text-[13px] font-semibold leading-[1.4] text-ink transition-[background-color,opacity] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
               selected ? "bg-field opacity-100" : "opacity-50 hover:opacity-75",
             )}
           >

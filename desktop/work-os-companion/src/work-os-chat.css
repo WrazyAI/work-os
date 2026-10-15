@@ -254,7 +254,7 @@
 .workos-menu-name {
   flex: 0 0 auto;
   color: var(--ink, #182018);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 

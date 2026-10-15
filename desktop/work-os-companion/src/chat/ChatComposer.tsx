@@ -389,7 +389,7 @@ export function ChatComposer({
 
       <div
         className={`chat-composer relative isolate flex flex-col overflow-hidden border border-line bg-white shadow-card transition-[border-color,border-radius] duration-150 focus-within:border-line-strong ${
-          wide ? "gap-2.5 rounded-[18px] p-3" : "gap-1.5 rounded-[16px] p-1.5"
+          wide ? "gap-2.5 rounded-[16px] p-3" : "gap-1.5 rounded-[16px] p-1.5"
         }`}
         data-sweep-signal={sweepSignal}
         data-voice-state={voiceState}
@@ -417,7 +417,7 @@ export function ChatComposer({
                   type="button"
                   aria-label="Cancel recording"
                   onClick={() => voice?.cancel()}
-                  className="col-start-1 row-start-1 flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[9px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong"
+                  className="col-start-1 row-start-1 flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[10px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
                 >
                   <X size={16} strokeWidth={2} aria-hidden="true" />
                 </button>
@@ -439,7 +439,7 @@ export function ChatComposer({
                   type="button"
                   aria-label="Stop recording"
                   onClick={() => voice?.stop()}
-                  className="col-start-3 row-start-1 flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-ink text-white transition-[background-color,color,transform] duration-200 active:scale-[0.96] hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong"
+                  className="col-start-3 row-start-1 flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-ink text-white transition-[background-color,color,transform] duration-200 active:scale-[0.96] hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 >
                   <Square size={14} strokeWidth={2.4} fill="currentColor" aria-hidden="true" />
                 </button>
@@ -461,7 +461,7 @@ export function ChatComposer({
                   setPlusOpen((current) => !current);
                   inputRef.current?.focus();
                 }}
-                className={`flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[9px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-strong ${
+                className={`flex size-9 shrink-0 items-center justify-center justify-self-start rounded-[10px] text-ink-2 transition-[background-color,color,transform] duration-150 hover:bg-hover hover:text-ink active:scale-[0.94] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus ${
                   plusOpen ? "bg-hover text-ink" : ""
                 } ${wide ? "col-start-1 row-start-2" : "col-start-1 row-start-1"}`}
               >
@@ -512,7 +512,7 @@ export function ChatComposer({
                 aria-keyshortcuts={showRecord && hotkeyLabel ? "Control+M" : "Enter"}
                 disabled={showRecord ? false : (!canSend || busy)}
                 onClick={showRecord ? () => voice?.start() : send}
-                className={`flex size-9 shrink-0 items-center justify-center rounded-[11px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-strong disabled:cursor-default ${
+                className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] transition-[background-color,color,transform] duration-200 enabled:active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-default ${
                   wide
                     ? hasFooter ? "col-start-4 row-start-2" : "col-start-3 row-start-2"
                     : hasFooter ? "col-start-4 row-start-1" : "col-start-3 row-start-1"

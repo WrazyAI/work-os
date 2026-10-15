@@ -137,7 +137,11 @@ confirmed. Observation remains blue/cool-neutral even when activity is present.
 
 Known gaps: `--color-faint` (2.7:1 on paper) must not carry text. `--color-danger`
 (4.3:1 on paper) and `--color-warning` (3.0:1 on white) fail AA as text on light
-surfaces, and the signal focus outline is 1.3:1 on paper. `--color-muted` passes
+surfaces, and the signal focus outline is 1.3:1 on paper. The conversation
+surfaces resolve the focus gap with one chat focus color — `--conversation-focus`
+(#4a7d22, 4.5:1 on paper), exposed to the chat Tailwind theme as `--color-focus` —
+used for composer rings and every chat focus outline; the bright signal lime
+stays for actions, progress, and confirmed states. `--color-muted` passes
 on paper (4.8:1) and is borderline on inset (4.47:1). Until a palette decision
 adds text-safe variants and a focus color, these tokens are for icons, borders,
 and fills, and text uses `--color-ink-soft` or a darker muted value.
@@ -181,6 +185,12 @@ Manrope, Inter, Segoe UI Variable Text, Segoe UI, sans-serif.
 
 Use tabular numerals for elapsed time, counts, due dates, and values that
 change in place. Use negative tracking only for display/page statements.
+
+The two chat surfaces (the in-app sheet and the floating companion) map onto
+these roles with one five-step scale — 10 eyebrow, 11 metadata, 12 control,
+13 body and card strong, 14 turn and pane title — and introduce no fractional
+sizes; 800 weight belongs to the 10px eyebrow alone. The active chat tab is a
+quiet inset surface (§4.2); ink fills are reserved for the real decisions.
 
 ## 4. Shell and navigation
 
@@ -582,8 +592,8 @@ Tool surfaces must preserve:
 An approval batch is reviewed one action at a time. The card's top edge carries
 the batch progress rule, the header names the action with its position (`N of
 M`), and the footer keeps the quiet step arrows beside the two decisions on one
-single row at every width — the decisions flex to fill the card's remaining
-width instead of stacking under oversized step boxes — so nothing in the card
+compact row at every width — content-sized decisions that wrap beneath the
+arrows only when the card is genuinely too narrow — so nothing in the card
 reads heavier than the action being decided.
 
 ### 7.2 In-app launcher and sheet
@@ -594,7 +604,10 @@ behind or consumes task-list space.
 
 The open state is a bounded white sheet, approximately 480px wide and 680px
 tall at desktop, with safe insets on narrow screens. Header, thread, and
-auto-growing composer are one coherent surface. The thread is the only scrolling
+auto-growing composer are one coherent surface. The composer row carries only
+the add menu, the field, and the send/record control; the day's goal lives in
+the Focus tab rather than as a third control in the row, and the placeholder
+fits on one line at the sheet's width. The thread is the only scrolling
 region on the chat tab. The sheet closes on Escape and returns focus to the
 launcher.
 

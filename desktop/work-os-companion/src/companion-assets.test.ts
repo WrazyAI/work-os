@@ -163,7 +163,7 @@ describe("floating companion integration", () => {
     expect(avatarStyles).not.toContain(".avatar-orb-state");
     expect(avatarStyles).toContain(".avatar-day-time");
     expect(avatarStyles).toMatch(/\.avatar-prompt-bubble strong\s*\{[^}]*font-size:\s*12px;/);
-    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*font-size:\s*10\.5px;/);
+    expect(avatarStyles).toMatch(/\.avatar-prompt-bubble span\s*\{[^}]*font-size:\s*11px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface\s*\{[^}]*top:\s*22px;[^}]*left:\s*50%;[^}]*width:\s*52px;[^}]*height:\s*28px;[^}]*transform:\s*translateX\(-50%\);[^}]*background:\s*transparent;[^}]*font-size:\s*7px;/);
     expect(avatarStyles).toMatch(/\.avatar-drag-surface::before\s*\{[^}]*width:\s*36px;[^}]*height:\s*15px;[^}]*background:\s*rgba\(32, 36, 33, \.9\);/);
     expect(avatarStyles).toMatch(/\.avatar-hide\s*\{[^}]*top:\s*20px;[^}]*right:\s*9px;[^}]*width:\s*21px;[^}]*height:\s*21px;/);

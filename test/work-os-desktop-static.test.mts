@@ -165,7 +165,9 @@ assert.match(app, /mode=\{sessionActive && view === "day" \? "progress" : "agend
 assert.match(app, /onOpenGoal/);
 assert.match(app, /onEditFocus/);
 assert.match(app, /Queued offline/);
-assert.match(app, /focus-dock-button/);
+// The composer row keeps only the add menu, the field, and the send/record
+// control; the day's goal lives in the Focus tab, never as a third control.
+assert.doesNotMatch(app, /focus-dock-button/);
 assert.match(app, /Review unfinished work/);
 assert.match(app, /function TaskLifecycleMenu/);
 assert.match(taskSurfaces, /Delete permanently/);

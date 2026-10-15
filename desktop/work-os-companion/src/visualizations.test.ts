@@ -174,7 +174,10 @@ describe("operational visualizations", () => {
     expect(app).not.toContain('sendOrQueue("/api/work-os/me/workday", "POST"');
     expect(app).toContain("Add a task — planning doesn't clock you in…");
     expect(app).toContain("Added from the Work OS daily composer.");
-    expect(app).toContain("Share an update, a blocker, or add a task…");
+    expect(app).toContain("Share an update or add a task…");
+    // The composer row carries only the add menu, the field, and the
+    // send/record control; the day's goal stays in the Focus tab.
+    expect(app).not.toContain("focus-dock-button");
     for (const label of ["Progress", "Completed work", "Blocker", "Priority change", "New task"]) expect(app).toContain(label);
     expect(app).toContain("mascot-hero");
     expect(app).toContain("OnboardingStage");
@@ -483,6 +486,22 @@ describe("operational visualizations", () => {
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.avatar-chat\s*\{[^}]*overflow-anchor:\s*none/s);
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region\s*>\s*\.avatar-chat\s*\{[^}]*mask-image:\s*none/s);
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region::after\s*\{[^}]*backdrop-filter:\s*blur/s);
+  });
+
+  it("keeps chat focus calm and the active tab quiet", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    const chatStyles = readText(resolve(root, "src/chat/chat.css"));
+    // One focus color for the chat surfaces; the bright signal lime stays for
+    // actions, progress, and confirmed states.
+    expect(conversationStyles).toContain("--conversation-focus: #4a7d22;");
+    expect(chatStyles).toContain("--color-focus: #4a7d22;");
+    // Neither composer's focus ring is the acid-lime halo.
+    expect(conversationStyles).not.toMatch(/progress-input-shell:focus-within[^}]*213, 255, 84/);
+    expect(conversationStyles).not.toMatch(/chat-composer:focus-within[^}]*213, 255, 84/);
+    // The active tab is a quiet inset surface, not an ink pill.
+    expect(conversationStyles).not.toMatch(/chat-tab\[aria-selected="true"\][^}]*background: var\(--conversation-ink\)/);
+    // The chat type scale carries no fractional sizes.
+    for (const css of [conversationStyles, chatStyles]) expect(css).not.toMatch(/font(-size)?:\s*[^;{}]*\d+\.5px/);
   });
 
   it("bounds floating task cards and lets thread scrolling continue past the task list", () => {

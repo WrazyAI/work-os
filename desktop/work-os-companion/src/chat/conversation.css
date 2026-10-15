@@ -12,11 +12,15 @@
   --conversation-ink: #171a18;
   --conversation-graphite: #202421;
   --conversation-signal: #d5ff54;
+  /* One focus color for the chat surfaces: a deep signal green that reaches
+   * 4.5:1 on paper, so keyboard focus is always visible. The bright signal
+   * lime stays reserved for actions, progress, and confirmed states. */
+  --conversation-focus: #4a7d22;
   --conversation-muted: #71766f;
   --conversation-line: #d9dad2;
   --conversation-danger: #b94343;
   --conversation-shadow: 0 24px 70px rgba(18, 21, 18, 0.18);
-  --conversation-radius: 24px;
+  --conversation-radius: 18px;
 }
 
 [data-conversation-surface="in-app"].progress-dock {
@@ -53,7 +57,7 @@
   gap: 10px;
   padding: 9px 10px 9px 9px;
   border: 1px solid rgba(23, 26, 24, 0.14);
-  border-radius: 19px;
+  border-radius: 18px;
   background: rgba(255, 252, 246, 0.96);
   color: var(--conversation-ink);
   box-shadow: 0 16px 36px rgba(18, 21, 18, 0.15), 0 2px 7px rgba(18, 21, 18, 0.06);
@@ -72,7 +76,7 @@
 .conversation-launcher:active { transform: translateY(0) scale(0.99); }
 
 .conversation-launcher:focus-visible {
-  outline: 3px solid rgba(213, 255, 84, 0.72);
+  outline: 2px solid var(--conversation-focus);
   outline-offset: 3px;
 }
 
@@ -84,7 +88,7 @@
   place-items: center;
   overflow: hidden;
   border: 1px solid rgba(23, 26, 24, 0.12);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--conversation-paper);
 }
 
@@ -105,8 +109,8 @@
 
 .conversation-launcher-copy strong {
   overflow: hidden;
-  font-size: 12.5px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -115,7 +119,8 @@
 .conversation-launcher-copy small {
   overflow: hidden;
   color: var(--conversation-muted);
-  font-size: 10.5px;
+  font-size: 11px;
+  font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,8 +267,8 @@
 
 [data-conversation-surface="in-app"] .conversation-pane-title {
   color: var(--conversation-ink);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
@@ -289,13 +294,16 @@
   border-radius: 999px;
   color: var(--conversation-muted);
   font-size: 12px;
+  font-weight: 650;
   letter-spacing: 0.01em;
 }
 
+/* The active tab is a quiet inset surface; ink fills stay reserved for the
+ * real primary actions (approve, send). */
 [data-conversation-surface="in-app"] .workos-chat-head .chat-tab[aria-selected="true"] {
-  border-color: var(--conversation-ink);
-  background: var(--conversation-ink);
-  color: var(--conversation-surface);
+  border-color: transparent;
+  background: rgba(23, 26, 24, 0.06);
+  color: var(--conversation-ink);
   opacity: 1;
 }
 
@@ -328,6 +336,7 @@
   padding: 11px 24px 0;
   color: var(--conversation-muted);
   font-size: 11px;
+  font-weight: 500;
 }
 
 [data-conversation-surface="in-app"] .progress-conversation {
@@ -359,7 +368,7 @@
   align-items: stretch;
   padding: 7px 8px;
   border: 1px solid rgba(23, 26, 24, 0.18);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--conversation-surface);
   box-shadow: 0 10px 30px rgba(23, 26, 24, 0.08);
 }
@@ -369,7 +378,7 @@
   margin: 12px 16px 16px;
   padding: 7px 8px;
   border: 1px solid rgba(23, 26, 24, 0.18);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--conversation-surface);
   box-shadow: 0 10px 30px rgba(23, 26, 24, 0.08);
   transform: none;
@@ -397,22 +406,8 @@
 }
 
 [data-conversation-surface="in-app"] .progress-input-shell:focus-within {
-  border-color: var(--conversation-ink);
-  box-shadow: 0 0 0 4px rgba(213, 255, 84, 0.32), 0 12px 34px rgba(23, 26, 24, 0.12);
-}
-
-[data-conversation-surface="in-app"] .focus-dock-button {
-  min-height: 34px;
-  border: 1px solid var(--conversation-line);
-  border-radius: 999px;
-  background: var(--conversation-paper);
-  color: var(--conversation-muted);
-}
-
-[data-conversation-surface="in-app"] .focus-dock-button.active {
-  border-color: var(--conversation-ink);
-  background: var(--conversation-ink);
-  color: var(--conversation-surface);
+  border-color: var(--conversation-focus);
+  box-shadow: 0 0 0 3px rgba(74, 125, 34, 0.14), 0 12px 34px rgba(23, 26, 24, 0.12);
 }
 
 /* Shared message rhythm. */
@@ -464,7 +459,8 @@
   margin-bottom: 5px;
   color: var(--conversation-muted);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -511,6 +507,8 @@
   padding: 0 8px;
   background: rgba(255, 252, 246, 0.78);
   box-shadow: 0 2px 7px rgba(23, 26, 24, 0.05);
+  font-size: 12px;
+  font-weight: 650;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
@@ -534,6 +532,7 @@
   margin-left: 2px;
   color: var(--conversation-muted);
   font-size: 11px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
@@ -548,6 +547,7 @@
   margin: 12px 0 10px;
   color: var(--conversation-muted);
   font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
@@ -722,9 +722,16 @@
 .conversation-surface-floating .avatar-tabs .workos-chat-tabs,
 .conversation-surface-floating .avatar-nav .chat-tabs { gap: 5px; }
 .conversation-surface-floating .avatar-nav .chat-tab,
-.conversation-surface-floating .avatar-tabs .workos-chat-tabs button { color: var(--conversation-muted); }
+.conversation-surface-floating .avatar-tabs .workos-chat-tabs button {
+  color: var(--conversation-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
 .conversation-surface-floating .avatar-nav .chat-tab[aria-selected="true"],
-.conversation-surface-floating .avatar-tabs .workos-chat-tabs button.active { background: var(--conversation-ink); color: var(--conversation-surface); }
+.conversation-surface-floating .avatar-tabs .workos-chat-tabs button.active {
+  background: rgba(23, 26, 24, 0.06);
+  color: var(--conversation-ink);
+}
 
 .conversation-surface-floating .avatar-chat {
   width: 100%;
@@ -780,7 +787,7 @@
 .conversation-surface-floating [data-workos-tool-surface="task-selection"] .chat-task-footer { flex: 0 0 auto; }
 .conversation-surface-floating .chat-turn-user { max-width: 82%; }
 .conversation-surface-floating .chat-turn .chat-markdown p { font-size: 13px; }
-.conversation-surface-floating .chat-turn-user .chat-markdown p { font-size: 12px; }
+.conversation-surface-floating .chat-turn-user .chat-markdown p { font-size: 13px; }
 
 .conversation-surface-floating .avatar-composer-v2 {
   min-width: 0;
@@ -795,14 +802,14 @@
   width: 100%;
   min-width: 0;
   border-color: rgba(23, 26, 24, 0.18);
-  border-radius: 19px;
+  border-radius: 16px;
   background: var(--conversation-surface);
   box-shadow: 0 8px 24px rgba(23, 26, 24, 0.08);
 }
 
 .conversation-surface-floating .avatar-composer-v2 .chat-composer:focus-within {
-  border-color: var(--conversation-ink);
-  box-shadow: 0 0 0 4px rgba(213, 255, 84, 0.28), 0 8px 24px rgba(23, 26, 24, 0.1);
+  border-color: var(--conversation-focus);
+  box-shadow: 0 0 0 3px rgba(74, 125, 34, 0.14), 0 8px 24px rgba(23, 26, 24, 0.1);
 }
 
 .conversation-surface-floating .chat-task-card .chat-task-list {
@@ -893,7 +900,7 @@
     max-height: calc(100dvh - 20px);
   }
 
-  [data-conversation-surface="in-app"] .chat-surface { border-radius: 22px; }
+  [data-conversation-surface="in-app"] .chat-surface { border-radius: 18px; }
   [data-conversation-surface="in-app"] .workos-chat-head { min-height: 62px; padding: 11px 14px; }
   [data-conversation-surface="in-app"] .progress-conversation { padding: 20px 14px 14px; }
   [data-conversation-surface="in-app"] .progress-input-shell { margin: 10px 10px 12px; }
