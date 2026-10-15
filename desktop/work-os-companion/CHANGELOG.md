@@ -25,6 +25,13 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.46 — 2026-10-15
+
+- The chat composer no longer glows bright green while you type — it keeps a calm outline.
+- The active chat tab is a quiet grey pill instead of a solid black one, so the real buttons stand out.
+- Chat text sizes are consistent across the in-app sheet and the floating companion.
+- The in-app composer is one clean line; the goal button now lives in the Focus tab.
+
 ## 0.4.45 — 2026-10-15
 
 - Your work profile is now picked, not typed: responsibilities, outputs, and evidence sources are chips you choose from your scope.
