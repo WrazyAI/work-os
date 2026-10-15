@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.50 — 2026-10-15
+
+- The Action receipt card is now one compact row — the recorded actions expand only when you ask.
+
 ## 0.4.49 — 2026-10-15
 
 - A device whose connection ran out is now asked to connect again instead of opening a workspace where every request failed.
