@@ -39,7 +39,7 @@ function render(overrides: Partial<Parameters<typeof AdminWorkspace>[0]> = {}) {
   return renderToStaticMarkup(
     createElement(QueryClientProvider, { client },
       createElement(NotificationProvider, null,
-        createElement(Component, { session, notifications, onSwitchToEmployee: noop, onSignOut: noop, ...overrides }))),
+        createElement(Component, { session, notifications, section: "overview", focus: {}, onNavigate: noop, onSwitchToEmployee: noop, onSignOut: noop, ...overrides }))),
   );
 }
 

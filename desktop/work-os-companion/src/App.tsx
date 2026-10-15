@@ -3764,13 +3764,6 @@ export default function App() {
       onDebug={() => void openDebugger()}
     />;
   if (!visibleSession) return <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
-  if (workspace === "admin" && session && workSessionQuery.data?.role === "admin" && !syncBypass) {
-    return <AdminWorkspace
-      session={workSessionQuery.data}
-      onSwitchToEmployee={() => setWorkspaceMode("employee")}
-      onSignOut={() => { void logout(); }}
-    />;
-  }
   if (!visibleOnboarding) return <LoadingScreen
       failed={!!error}
       retry={() => void refresh()}
