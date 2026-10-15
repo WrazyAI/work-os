@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.43 — 2026-10-15
+
 - The administration workspace scrolls again after you open and close its drawers, and its page headers and task rows no longer crowd their controls.
 - Administration charts now answer back: point at a bar or use the arrow keys to read the exact day, teammate, and time, and filter the chart from its legend.
 - Administration activity and update rows now open the full record: who did what, when, and which person or section to open next.
