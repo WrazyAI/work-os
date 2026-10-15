@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.49 — 2026-10-15
+
+- A device whose connection ran out is now asked to connect again instead of opening a workspace where every request failed.
+- Work OS signs the device out if the workspace no longer accepts it, so the screen matches reality.
+
 ## 0.4.48 — 2026-10-15
 
 - The guide and tour no longer crowd the illustration against the steps below it, and the tour now fits without scrolling.
