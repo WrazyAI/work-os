@@ -78,28 +78,15 @@
 }
 
 /* --- Notifications ------------------------------------------------------
-   The shared flyout stack is fixed to the viewport's top-right — exactly
-   where the workspace switch rides the masthead's title line. While this
-   workspace is mounted the stack starts below the masthead so a receipt can
-   never cover the switch; employee surfaces keep the shared home position.
-   The narrow layout moves the switch under the title block, so the stack
-   returns to the shared top there. */
-.admin-workspace ~ .notification-flyouts {
-  top: max(118px, calc(env(safe-area-inset-top) + 106px));
-}
-
-/* The account's own notifications panel opens below the masthead — the exact
-   band the admin receipt stack now occupies — so while it is open the panel
-   owns the layer: its rows stay reachable and receipts keep their stack
-   position underneath, readable again the moment the panel closes. */
+   Administration uses the shared flyout stack unchanged: one position, one
+   set of viewport insets on every surface, so a receipt lands in the window's
+   top-right corner here exactly as it does in the employee view. The account's
+   notifications panel opens below the masthead's bell in that same corner, so
+   while it is open the panel owns the layer: its rows stay reachable and
+   receipts keep their stack position underneath, readable again the moment the
+   panel closes (design.md §16.1). */
 body:has(.admin-workspace) .notifications-card {
   z-index: 5100;
-}
-
-@media (max-width: 720px) {
-  .admin-workspace ~ .notification-flyouts {
-    top: max(12px, env(safe-area-inset-top));
-  }
 }
 
 .admin-grid {

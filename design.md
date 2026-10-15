@@ -1724,10 +1724,9 @@ offer retry there, and the fired-and-forgotten Nifty sync is the one write that
 also raises a failure flyout. Nothing fires for a queued or uncertain write.
 Two standing conditions hold persistent cards under stable keys: an overview
 snapshot older than ten minutes, and a workspace status reporting a missing
-migration or an unusable Nifty connection. While the workspace is mounted the
-flyout stack starts below the masthead so a receipt can never cover the
-workspace switch; narrow layouts keep the shared top-right position, where the
-switch sits under the title block.
+migration or an unusable Nifty connection. The flyout stack keeps the shared
+viewport position here: a receipt lands in the window's top-right corner with
+the same insets as the employee view, at every width.
 
 ### 16.2 Page contracts
 
