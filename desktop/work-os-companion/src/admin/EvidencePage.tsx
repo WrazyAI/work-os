@@ -29,7 +29,7 @@ import {
 } from "./data";
 import { ShareBars } from "./charts";
 import { one, type ActivityIntervalView, type EvidenceRow } from "./types";
-import { AdminButton, AdminCard, Avatar, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, CheckField, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type EvidenceTab = "evidence" | "recaps";
 
@@ -192,24 +192,37 @@ export default function EvidencePage({ initialTab = "evidence" }: { initialTab?:
         title="The record"
         detail="Evidence rows and activity recaps stay separate"
         padded={false}
-        action={
-          <div className="admin-toolbar">
-            <Segmented<EvidenceTab>
-              ariaLabel="Evidence view"
-              value={tab}
-              onChange={(next) => { setTab(next); setSelected(null); setScreenshotUrl(null); }}
-              options={[{ value: "evidence", label: "Evidence" }, { value: "recaps", label: "Activity recaps" }]}
-            />
-            <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-            {tab === "evidence" ? <SelectField ariaLabel="Filter by source" value={source} onChange={setSource} placeholder="All sources" options={SOURCE_OPTIONS} /> : null}
-            {/* The range and its disputed filter wrap as one group instead of
-                leaving a lone field or checkbox on a row of its own. */}
-            <div className="admin-inline-fields">
-              <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Evidence from date" />
-              <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Evidence to date" />
-              {tab === "evidence" ? <CheckField label="Disputed only" checked={disputedOnly} onChange={setDisputedOnly} /> : null}
-            </div>
-          </div>
+        controls={
+          <>
+            {/* The view, the person, and the source share the first controls
+                row; the range travels as one pair with its disputed filter on
+                the row below it. */}
+            <AdminControls>
+              <AdminControlsGroup>
+                <Segmented<EvidenceTab>
+                  ariaLabel="Evidence view"
+                  value={tab}
+                  onChange={(next) => { setTab(next); setSelected(null); setScreenshotUrl(null); }}
+                  options={[{ value: "evidence", label: "Evidence" }, { value: "recaps", label: "Activity recaps" }]}
+                />
+              </AdminControlsGroup>
+              <AdminControlsGroup>
+                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+              </AdminControlsGroup>
+              {tab === "evidence" ? (
+                <AdminControlsGroup>
+                  <SelectField ariaLabel="Filter by source" value={source} onChange={setSource} placeholder="All sources" options={SOURCE_OPTIONS} />
+                </AdminControlsGroup>
+              ) : null}
+            </AdminControls>
+            <AdminControls>
+              <AdminControlsGroup>
+                <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Evidence from date" />
+                <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Evidence to date" />
+                {tab === "evidence" ? <CheckField label="Disputed only" checked={disputedOnly} onChange={setDisputedOnly} /> : null}
+              </AdminControlsGroup>
+            </AdminControls>
+          </>
         }
       >
         {tab === "evidence" ? (

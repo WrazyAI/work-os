@@ -718,9 +718,13 @@ Inputs have persistent labels where the field is not self-evident, visible
 focus, inline validation, and deliberate disabled/loading states. Placeholder
 text is not the only label.
 
-Tasks search is always visible, sharing one toolbar row with the views, the
-compact Date range control, and Add task; the controls wrap below the views
-only when the row runs out of width. Date range stays a peer control or
+Tasks search is always visible, sharing its controls row with the views; the
+person/project selects and Add task follow on the row below. A card never
+shares its title row with controls: the name and its one-line detail own the
+first row, and filters and toolbar controls group into rows beneath it
+(`.admin-controls`, grouped by `.admin-controls-group`) in reading order —
+filters first, the primary action last, right-aligned while its row has room
+and full-width once the row wraps. Date range stays a peer control or
 popover, with clear/reset behavior and a result count when active. Filtered
 empty says No tasks match these filters, never No tasks.
 
@@ -1726,6 +1730,12 @@ workspace switch; narrow layouts keep the shared top-right position, where the
 switch sits under the title block.
 
 ### 16.2 Page contracts
+
+Every section keeps one header rhythm: the card's name and its one-line detail
+own the first row, and the card's filters and toolbar controls sit in grouped
+rows beneath it (`.admin-controls`, design.md §8.2) — segmented views, then
+search, then selects, then the primary action. Overview stays quiet meta only;
+Settings keeps each field group inside its own card instead of the header.
 
 - **Overview** is the command center: a needs-attention list (reviews pending,
   outstanding EODs, overdue tasks, disputed evidence, configuration blockers),

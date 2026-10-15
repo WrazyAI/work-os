@@ -22,7 +22,7 @@ import {
   todayIso,
   updateAdminPerson,
 } from "./data";
-import { AdminButton, AdminCard, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Empty, KeyValue, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 import type { AdminOverview, PersonDetailResponse } from "./types";
 
 type AttendanceFilter = "all" | "active" | "paused" | "off_shift" | "unknown";
@@ -121,26 +121,32 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
   return (
     <div className="admin-grid">
       <AdminCard icon={Users} title="Roster" detail={`${people.length} of ${roster.data?.people?.length ?? 0} teammates shown · select a person to open their record`} padded={false}
-        action={
-          <div className="admin-toolbar">
-            <label className="admin-search">
-              <Search size={14} aria-hidden />
-              <input type="search" value={search} placeholder="Search people" aria-label="Search people" onChange={(event) => setSearch(event.target.value)} />
-            </label>
-            <SelectField ariaLabel="Filter by role profile" value={roleFilter} onChange={setRoleFilter} placeholder="All roles" options={[...roleOptions, { value: "unmapped", label: "Unmapped" }]} />
-            <Segmented<AttendanceFilter>
-              ariaLabel="Filter by attendance"
-              value={attendance}
-              onChange={setAttendance}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "On shift" },
-                { value: "paused", label: "Paused" },
-                { value: "off_shift", label: "Off shift" },
-                { value: "unknown", label: "Not observed" },
-              ]}
-            />
-          </div>
+        controls={
+          <AdminControls>
+            <AdminControlsGroup>
+              <label className="admin-search">
+                <Search size={14} aria-hidden />
+                <input type="search" value={search} placeholder="Search people" aria-label="Search people" onChange={(event) => setSearch(event.target.value)} />
+              </label>
+            </AdminControlsGroup>
+            <AdminControlsGroup>
+              <SelectField ariaLabel="Filter by role profile" value={roleFilter} onChange={setRoleFilter} placeholder="All roles" options={[...roleOptions, { value: "unmapped", label: "Unmapped" }]} />
+            </AdminControlsGroup>
+            <AdminControlsGroup>
+              <Segmented<AttendanceFilter>
+                ariaLabel="Filter by attendance"
+                value={attendance}
+                onChange={setAttendance}
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "On shift" },
+                  { value: "paused", label: "Paused" },
+                  { value: "off_shift", label: "Off shift" },
+                  { value: "unknown", label: "Not observed" },
+                ]}
+              />
+            </AdminControlsGroup>
+          </AdminControls>
         }
       >
         {overview.isLoading || roster.isLoading ? (

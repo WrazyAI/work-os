@@ -5,7 +5,7 @@ import { KpiCard, PlanReliability, type ReliabilityRow } from "../InsightCharts"
 import type { DeltaStat } from "../insights";
 import { GroupedBars, ShareBars, StackedTimeBars } from "./charts";
 import { adminKeys, ADMIN_STALE_MS, fetchAdminInsights, formatMinutes, normalizeAdminInsights, relativeTime, shortDate, statusLabel } from "./data";
-import { AdminButton, AdminCard, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
 import type { AdminInsights, AdminInsightPersonRow, AdminInsightRange } from "./types";
 
 function deltaStat(key: string, label: string, current: number, previous: number, unit: DeltaStat["unit"], goodDirection: boolean): DeltaStat {
@@ -79,27 +79,35 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
         icon={Gauge}
         title="Brief"
         detail={`${shortDate(`${data.from}T12:00:00Z`)} – ${shortDate(`${data.through}T12:00:00Z`)} · generated ${relativeTime(data.freshness.generatedAt)}`}
-        action={
-          <div className="admin-toolbar">
-            <Segmented<AdminInsightRange>
-              ariaLabel="Insight range"
-              value={range}
-              onChange={setRange}
-              options={[
-                { value: "7d", label: "7 days" },
-                { value: "30d", label: "30 days" },
-                { value: "90d", label: "90 days" },
-              ]}
-            />
-            <SelectField
-              ariaLabel="Filter insights by person"
-              value={personId}
-              onChange={setPersonId}
-              placeholder="All people"
-              options={data.people.map((row) => ({ value: row.personId, label: row.displayName }))}
-            />
-            {data.overdueOpen ? <Pill tone="warn">{data.overdueOpen} open overdue</Pill> : null}
-          </div>
+        controls={
+          <AdminControls>
+            <AdminControlsGroup>
+              <Segmented<AdminInsightRange>
+                ariaLabel="Insight range"
+                value={range}
+                onChange={setRange}
+                options={[
+                  { value: "7d", label: "7 days" },
+                  { value: "30d", label: "30 days" },
+                  { value: "90d", label: "90 days" },
+                ]}
+              />
+            </AdminControlsGroup>
+            <AdminControlsGroup>
+              <SelectField
+                ariaLabel="Filter insights by person"
+                value={personId}
+                onChange={setPersonId}
+                placeholder="All people"
+                options={data.people.map((row) => ({ value: row.personId, label: row.displayName }))}
+              />
+            </AdminControlsGroup>
+            {data.overdueOpen ? (
+              <AdminControlsGroup>
+                <Pill tone="warn">{data.overdueOpen} open overdue</Pill>
+              </AdminControlsGroup>
+            ) : null}
+          </AdminControls>
         }
       >
         <p className="admin-brief-lead">{data.notes.summary}</p>

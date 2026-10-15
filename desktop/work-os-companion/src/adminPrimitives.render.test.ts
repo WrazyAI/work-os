@@ -5,9 +5,44 @@ import { describe, expect, it } from "vitest";
 import { seedAdminFixtures } from "./admin/adminFixtures";
 import { GroupedBars, ShareBars, StackedTimeBars, chartReadoutPlacement } from "./admin/charts";
 import { adminKeys, isoDaysAgo, todayIso } from "./admin/data";
-import { Avatar, Drawer, Pill, Segmented } from "./admin/ui";
+import { AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Pill, Segmented } from "./admin/ui";
 
 describe("administration primitives", () => {
+  it("gives a card's controls their own band under the title", () => {
+    const markup = renderToStaticMarkup(createElement(AdminCard, {
+      title: "Organization tasks",
+      detail: "43 open · 5 overdue",
+      controls: createElement(AdminControls, {
+        children: [
+          createElement(AdminControlsGroup, { key: "views", children: createElement("button", { type: "button" }, "Open") }),
+          createElement(AdminControlsGroup, { key: "action", end: true, children: createElement("button", { type: "button" }, "Add task") }),
+        ],
+      }),
+      children: "rows",
+    }));
+    const titleRow = markup.slice(markup.indexOf("admin-card-title"), markup.indexOf("admin-card-controls"));
+    // The first row is the name and its one-line detail only.
+    expect(titleRow).toContain("Organization tasks");
+    expect(titleRow).toContain("43 open · 5 overdue");
+    expect(titleRow).not.toContain("<button");
+    expect(titleRow).not.toContain("<select");
+    expect(titleRow).not.toContain("<input");
+    expect(titleRow).not.toContain('role="group"');
+    // The controls band renders between the title and the body, and the
+    // group that carries the primary action keeps its is-end marker so it
+    // stays last and right-aligns while the row has room.
+    expect(markup.indexOf("admin-card-title")).toBeLessThan(markup.indexOf("admin-card-controls"));
+    expect(markup.indexOf("admin-card-controls")).toBeLessThan(markup.indexOf("admin-card-body"));
+    expect(markup).toContain('class="admin-controls"');
+    expect(markup).toContain('class="admin-controls-group"');
+    expect(markup).toContain('class="admin-controls-group is-end"');
+    expect(markup.indexOf("Open")).toBeLessThan(markup.indexOf("Add task"));
+  });
+
+  it("omits the controls band entirely when a card has none", () => {
+    const markup = renderToStaticMarkup(createElement(AdminCard, { title: "Data sources", detail: "quiet meta", children: "body" }));
+    expect(markup).not.toContain("admin-card-controls");
+  });
   it("renders pills with their tone and avatar initials", () => {
     const markup = renderToStaticMarkup(createElement("div", null,
       createElement(Pill, { tone: "ok", children: "On shift" }),

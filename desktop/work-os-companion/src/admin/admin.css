@@ -481,6 +481,95 @@ body:has(.admin-workspace) .notifications-card {
   gap: 8px 10px;
 }
 
+/* --- Card controls band --------------------------------------------------
+   Every toolbar page renders its filters and actions in `.admin-card-controls`
+   under the title, so the card's name and its one-line detail own the first
+   row instead of sharing it with controls (design.md §2.2 premium composition,
+   §8.2 toolbar rule). Rows stack in reading order; each `.admin-controls-group`
+   keeps related controls together and reflows as one unit when a row runs out
+   of width. */
+.admin-card-controls {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.admin-card-controls .admin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.admin-card-controls .admin-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+/* The row's primary action stays the last thing in the band and takes the
+   trailing edge while the row has room; the narrow block below gives it the
+   full width instead. */
+.admin-card-controls .admin-controls-group.is-end {
+  margin-left: auto;
+}
+
+/* A status chip beside the fields centres on them instead of hanging on their
+   baseline. */
+.admin-card-controls .admin-controls-group > .admin-pill {
+  margin-bottom: 6px;
+}
+
+.admin-card:has(> .admin-card-controls) > .admin-card-title {
+  margin-bottom: 10px;
+}
+
+/* Narrow layout: one row per group, full-width fields, and 40px touch targets
+   where the controls stack (design.md §11 small class). */
+@media (max-width: 560px) {
+  .admin-card-controls .admin-controls,
+  .admin-card-controls .admin-controls-group {
+    width: 100%;
+  }
+
+  .admin-card-controls .admin-controls-group.is-end {
+    margin-left: 0;
+  }
+
+  .admin-card-controls .admin-field,
+  .admin-card-controls .admin-search {
+    flex: 1 1 160px;
+  }
+
+  .admin-card-controls .admin-seg {
+    flex-wrap: wrap;
+    width: 100%;
+    border-radius: 14px;
+  }
+
+  .admin-card-controls .admin-seg button {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .admin-card-controls .admin-button {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .admin-card-controls .admin-field select,
+  .admin-card-controls .admin-field input,
+  .admin-card-controls .admin-search,
+  .admin-card-controls .admin-check {
+    min-height: 40px;
+  }
+}
+
 .admin-inline-fields {
   display: flex;
   flex-wrap: wrap;
@@ -1292,9 +1381,15 @@ body:has(.admin-workspace) .notifications-card {
 
 /* --- Evidence groups ---------------------------------------------------- */
 
+/* The group list is a grid item inside the card body: without an explicit
+   min-width and a shrinkable column it refuses to shrink below its nowrap
+   detail line and clips at narrow widths; the detail line ellipsises once the
+   item can shrink. */
 .admin-groups {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
+  min-width: 0;
 }
 
 .admin-groups h3 {

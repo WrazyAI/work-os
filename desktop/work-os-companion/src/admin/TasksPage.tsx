@@ -20,7 +20,7 @@ import {
   statusLabel,
   todayIso,
 } from "./data";
-import { AdminButton, AdminCard, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
 
@@ -99,26 +99,40 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
         title="Organization tasks"
         detail={summary ? `${summary.open} open · ${summary.overdue} overdue · ${summary.completedWeek} completed in the last 7 days` : undefined}
         padded={false}
-        action={
-          <div className="admin-toolbar">
-            <Segmented<TaskFilter>
-              ariaLabel="Task filter"
-              value={filter}
-              onChange={(next) => setFilter(next)}
-              options={[
-                { value: "open", label: "Open" },
-                { value: "completed", label: "Completed" },
-                { value: "all", label: "All" },
-              ]}
-            />
-            <label className="admin-search">
-              <Search size={14} aria-hidden />
-              <input type="search" value={search} placeholder="Search tasks" aria-label="Search tasks" onChange={(event) => setSearch(event.target.value)} />
-            </label>
-            <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-            <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />
-            <AdminButton variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add task</AdminButton>
-          </div>
+        controls={
+          <>
+            {/* Views and search share the first controls row; the selects and
+                the primary Add task action sit on the row below it. */}
+            <AdminControls>
+              <AdminControlsGroup>
+                <Segmented<TaskFilter>
+                  ariaLabel="Task filter"
+                  value={filter}
+                  onChange={(next) => setFilter(next)}
+                  options={[
+                    { value: "open", label: "Open" },
+                    { value: "completed", label: "Completed" },
+                    { value: "all", label: "All" },
+                  ]}
+                />
+              </AdminControlsGroup>
+              <AdminControlsGroup>
+                <label className="admin-search">
+                  <Search size={14} aria-hidden />
+                  <input type="search" value={search} placeholder="Search tasks" aria-label="Search tasks" onChange={(event) => setSearch(event.target.value)} />
+                </label>
+              </AdminControlsGroup>
+            </AdminControls>
+            <AdminControls>
+              <AdminControlsGroup>
+                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+                <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />
+              </AdminControlsGroup>
+              <AdminControlsGroup end>
+                <AdminButton variant="primary" icon={Plus} onClick={() => setCreateOpen(true)}>Add task</AdminButton>
+              </AdminControlsGroup>
+            </AdminControls>
+          </>
         }
       >
         {tasks.isLoading ? (

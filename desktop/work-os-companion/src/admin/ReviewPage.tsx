@@ -23,7 +23,7 @@ import {
   reviewAdminReport,
 } from "./data";
 import { parseEodMarkdown, eodMetricFacts, eodSnippet } from "./eod";
-import { AdminButton, AdminCard, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
+import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 import type { ReportsResponse, WorkOsReportRow } from "./types";
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
@@ -110,27 +110,37 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
         title="Review queue"
         detail={counts ? `${counts.pending_review} awaiting review · ${counts.draft} draft${counts.draft === 1 ? "" : "s"} · ${counts.approved} approved · ${counts.rejected} returned` : undefined}
         padded={false}
-        action={
-          <div className="admin-toolbar">
-            <Segmented<StatusFilter>
-              ariaLabel="Report status"
-              value={status}
-              onChange={(next) => { setStatus(next); setSelectedId(null); setReceipt(null); }}
-              options={[
-                { value: "pending_review", label: "Awaiting review", count: counts?.pending_review },
-                { value: "draft", label: "Drafts", count: counts?.draft },
-                { value: "rejected", label: "Changes requested", count: counts?.rejected },
-                { value: "approved", label: "Approved", count: counts?.approved },
-                { value: "all", label: "All", count: counts?.total },
-              ]}
-            />
-            <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-            {/* The date range wraps as one pair instead of leaving a lone field. */}
-            <div className="admin-inline-fields">
-              <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
-              <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
-            </div>
-          </div>
+        controls={
+          <>
+            {/* The status views own their row; the person and date filters
+                group on the filters row below it. The dates travel as one
+                pair. */}
+            <AdminControls>
+              <AdminControlsGroup>
+                <Segmented<StatusFilter>
+                  ariaLabel="Report status"
+                  value={status}
+                  onChange={(next) => { setStatus(next); setSelectedId(null); setReceipt(null); }}
+                  options={[
+                    { value: "pending_review", label: "Awaiting review", count: counts?.pending_review },
+                    { value: "draft", label: "Drafts", count: counts?.draft },
+                    { value: "rejected", label: "Changes requested", count: counts?.rejected },
+                    { value: "approved", label: "Approved", count: counts?.approved },
+                    { value: "all", label: "All", count: counts?.total },
+                  ]}
+                />
+              </AdminControlsGroup>
+            </AdminControls>
+            <AdminControls>
+              <AdminControlsGroup>
+                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+              </AdminControlsGroup>
+              <AdminControlsGroup>
+                <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
+                <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
+              </AdminControlsGroup>
+            </AdminControls>
+          </>
         }
       >
         {reports.isLoading ? (

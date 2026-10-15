@@ -16,11 +16,15 @@ export function cx(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
 }
 
-export function AdminCard({ icon: Icon, title, detail, action, padded = true, children, className }: {
+export function AdminCard({ icon: Icon, title, detail, action, controls, padded = true, children, className }: {
   icon?: typeof X;
   title?: string;
   detail?: string;
   action?: ReactNode;
+  /** The card's filter and toolbar controls. They render in their own band
+   * under the title, so the name and its one-line detail own the first row
+   * and the controls below it group in reading order (design.md §2.2, §8.2). */
+  controls?: ReactNode;
   padded?: boolean;
   children: ReactNode;
   className?: string;
@@ -36,9 +40,24 @@ export function AdminCard({ icon: Icon, title, detail, action, padded = true, ch
           </div>
         </div>
       ) : null}
+      {controls ? <div className="admin-card-controls">{controls}</div> : null}
       <div className={cx("admin-card-body", padded && "is-padded")}>{children}</div>
     </section>
   );
+}
+
+/** One row of a card's controls band. Rows sit under the card title and wrap
+ * their groups in a deliberate order instead of crowding the name. */
+export function AdminControls({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("admin-controls", className)}>{children}</div>;
+}
+
+/** A logical group of controls inside one controls row: a segmented view, a
+ * search field, a select, or a date pair. A group reflows to the next line as
+ * one unit; the group marked `end` carries the row's primary action, which
+ * stays the last thing in the band and right-aligns while the row has room. */
+export function AdminControlsGroup({ children, end = false, className }: { children: ReactNode; end?: boolean; className?: string }) {
+  return <div className={cx("admin-controls-group", end && "is-end", className)}>{children}</div>;
 }
 
 export type PillTone = "ok" | "warn" | "err" | "info" | "neutral" | "observed";
