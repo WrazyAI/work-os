@@ -25,13 +25,13 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.52 — 2026-10-15
+
 - The administration workspace now has first-visit page guides: each section explains itself once, and the ? in its header replays it any time.
 - Fixed scrolling freezing in the administration workspace when a companion dialog opened while you were there.
 - Admins now get the notifications bell in the administration workspace, with their own reminders, and opening it no longer moves the page.
 - In the administration workspace, reminder cards now appear in the window's top-right corner, the same place as everywhere else in the app.
-
 - Administration pages now give their title and summary the top row, with the filters grouped neatly on the rows below them.
-
 - The administration workspace now opens your profile settings from the avatar and the changelog from the workspace menu.
 
 ## 0.4.51 — 2026-10-15
