@@ -823,5 +823,12 @@ const companionPackage = JSON.parse(read("package.json"));
 const cargoLock = read("src-tauri/Cargo.lock");
 const companionLockVersion = /name = "work-os-companion"\nversion = "([^"]+)"/.exec(cargoLock)?.[1] ?? null;
 assert.equal(companionLockVersion, companionPackage.version, "Cargo.lock's work-os-companion version must match package.json");
+// The release bump must touch the companion's own entry, never a dependency
+// whose version happens to look the same.
+assert.equal(
+  cargoLock.split(`version = "${companionPackage.version}"`).length - 1,
+  1,
+  "exactly one Cargo.lock entry may carry the companion's version",
+);
 assert.match(read("src-tauri/Cargo.toml"), new RegExp(`^version = "${companionPackage.version}"$`, "m"));
 assert.match(read("src-tauri/tauri.conf.json"), new RegExp(`"version": "${companionPackage.version}"`));
