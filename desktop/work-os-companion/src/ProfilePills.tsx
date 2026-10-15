@@ -5,7 +5,7 @@ import type { ProfileItemKind, ProviderAccounts, WorkProfileItem } from "./types
 
 /** One work-profile signal group: what is picked, what the selected scope still
  * suggests, and one bounded way to add something the catalog does not list.
- * The component owns the shared interaction contract (§8.14) for all three
+ * The component owns the shared interaction contract (§8.15) for all three
  * groups — Responsibilities, Outputs, and Evidence sources — so they can never
  * drift apart. */
 export function ItemPillGroup({ kind, legend, legendId, items, options, disabled = false, onChange }: {
