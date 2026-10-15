@@ -9,6 +9,7 @@ const VIEWBOX = { full: "0 0 160 180", head: "9 10 142 110" } as const;
 function TerminalFace({ pose }: { pose: MascotPose }) {
   switch (pose) {
     case "think":
+    case "review":
       return <g className="studio-terminal-working">
         <path d="m56 49 14 11-14 11" />
         <path className="studio-cursor" d="M83 73h16" />

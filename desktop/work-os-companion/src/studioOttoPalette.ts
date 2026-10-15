@@ -14,6 +14,6 @@ export type StudioPalette = keyof typeof STUDIO_PALETTES;
 export function studioOttoPalette(pose: MascotPose, tone: MascotTone): StudioPalette {
   if (pose === "recover") return "blocked";
   if (pose === "celebrate") return "ready";
-  if (pose === "think" || pose === "alert") return "working";
+  if (pose === "think" || pose === "alert" || pose === "review") return "working";
   return tone === "late" ? "blocked" : "neutral";
 }

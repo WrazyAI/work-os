@@ -6,6 +6,7 @@ import type { DayData, DebugScenario } from "./types";
 import { DEFAULT_DEBUG_SCENARIO } from "./scenarios";
 import { acceptMascotActivity, mascotActivityFromSignals, resolveMascotRuntime, type MascotActivityMessage, type MascotPlatformFacts, type MascotSignals } from "./mascotRuntimeModel";
 import { publishMascotRuntime } from "./mascotRuntimeStore";
+import { createMascotReceiptCursor } from "./mascotReceiptCursor";
 
 const emit = (event: string, payload?: unknown) => emitEvent(event, payload).catch(() => undefined);
 const LEASE_MS = 20_000;
@@ -56,6 +57,9 @@ interface RuntimeInput extends MascotSignals {
 export function useMascotRuntime(input: RuntimeInput) {
   const [peer, setPeer] = useState<MascotActivityMessage | null>(null);
   const [receiptReady, setReceiptReady] = useState(false);
+  const [receiptRevision, setReceiptRevision] = useState(0);
+  const [receiptSource] = useState(() => crypto.randomUUID());
+  const [peerReceiptRevision, setPeerReceiptRevision] = useState(0);
   const receiptRef = useRef({ scope: input.scope, value: input.receipt, pending: false });
   useEffect(() => {
     const previous = receiptRef.current;
@@ -67,6 +71,7 @@ export function useMascotRuntime(input: RuntimeInput) {
     // waits until its request settles, so slow refreshes cannot eat the pulse.
     if (scopeChanged || !pending || input.working) return;
     receiptRef.current.pending = false;
+    setReceiptRevision(value => value + 1);
     setReceiptReady(true);
     const timer = window.setTimeout(() => setReceiptReady(false), READY_MS);
     return () => window.clearTimeout(timer);
@@ -74,10 +79,11 @@ export function useMascotRuntime(input: RuntimeInput) {
 
   const localActivity = mascotActivityFromSignals({ ...input, completed: input.completed || receiptReady, failed: input.failed || !!input.facts.niftySyncError });
   const peerActivity = peer && acceptMascotActivity(peer, input.window, input.scope, Date.now()) ? peer.activity : undefined;
-  const state = resolveMascotRuntime(input.facts, { ...input, completed: input.completed || receiptReady }, input.scenario, peerActivity);
+  const state = { ...resolveMascotRuntime(input.facts, { ...input, reviewing: input.reviewing || (!!peerActivity && peer?.reviewing), completed: input.completed || receiptReady }, input.scenario, peerActivity),
+    receiptRevision: receiptRevision + peerReceiptRevision };
   const stateKey = JSON.stringify(state);
-  const latest = useRef({ ...input, localActivity, state });
-  latest.current = { ...input, localActivity, state };
+  const latest = useRef({ ...input, localActivity, state, receiptRevision });
+  useEffect(() => { latest.current = { ...input, localActivity, state, receiptRevision }; });
   useEffect(() => {
     publishMascotRuntime(latest.current.state);
     void emit("work-os://mascot-resolved", { window: input.window, state: latest.current.state });
@@ -91,6 +97,9 @@ export function useMascotRuntime(input: RuntimeInput) {
 
   useEffect(() => {
     setPeer(null);
+    setPeerReceiptRevision(0);
+    const consumed = createMascotReceiptCursor();
+    let receivedAt = -Infinity;
     let disposed = false;
     const cleaners: Array<() => void> = [];
     const register = (off: () => void) => { if (disposed) off(); else cleaners.push(off); };
@@ -99,12 +108,15 @@ export function useMascotRuntime(input: RuntimeInput) {
       if (!value.scope || disposed) return;
       const now = Date.now();
       // Send local facts only, not the combined peer activity or debug override.
-      void emit("work-os://mascot-activity", { window: value.window, scope: value.scope, activity: value.localActivity, sentAt: now, expiresAt: now + (value.localActivity === "ready" ? READY_MS : LEASE_MS) });
+      void emit("work-os://mascot-activity", { window: value.window, scope: value.scope, activity: value.localActivity, receiptSource, receiptRevision: value.receiptRevision, reviewing: !!value.reviewing, sentAt: now, expiresAt: now + (value.localActivity === "ready" ? READY_MS : LEASE_MS) });
     };
     void Promise.all([
       listen<unknown>("work-os://mascot-activity", ({ payload }) => {
         if (disposed || !acceptMascotActivity(payload, input.window, input.scope, Date.now())) return;
-        setPeer((previous) => previous && previous.sentAt > payload.sentAt ? previous : payload);
+        if (payload.sentAt < receivedAt) return;
+        receivedAt = payload.sentAt;
+        setPeer(payload);
+        if (payload.activity === "ready") setPeerReceiptRevision(consumed.observe(payload.receiptSource ?? payload.window, payload.receiptRevision ?? 0));
       }).then(register),
       listen<{ window?: string }>("work-os://mascot-request", ({ payload }) => {
         if (disposed || payload?.window === input.window) return;
@@ -124,13 +136,13 @@ export function useMascotRuntime(input: RuntimeInput) {
       const now = Date.now();
       if (input.scope) void emit("work-os://mascot-activity", { window: input.window, scope: input.scope, activity: "idle", sentAt: now, expiresAt: now + 1_000 });
     };
-  }, [input.scope, input.window]);
+  }, [input.scope, input.window, receiptSource]);
 
   useEffect(() => {
     if (!input.scope) return;
     const now = Date.now();
-    void emit("work-os://mascot-activity", { window: input.window, scope: input.scope, activity: localActivity, sentAt: now, expiresAt: now + (localActivity === "ready" ? READY_MS : LEASE_MS) });
-  }, [localActivity, input.scope, input.window]);
+    void emit("work-os://mascot-activity", { window: input.window, scope: input.scope, activity: localActivity, receiptSource, receiptRevision, reviewing: !!input.reviewing, sentAt: now, expiresAt: now + (localActivity === "ready" ? READY_MS : LEASE_MS) });
+  }, [localActivity, input.scope, input.window, input.reviewing, receiptRevision, receiptSource]);
   useEffect(() => () => publishMascotRuntime(null), []);
   return state;
 }

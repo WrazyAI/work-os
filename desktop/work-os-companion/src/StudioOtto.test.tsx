@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { StudioOtto } from "./StudioOtto";
+import { SpriteOtto } from "./SpriteOtto";
 import { MASCOT_POSES } from "./mascotTypes";
 import { MASCOT } from "./mascot";
 import { MascotPet } from "./MascotPet";
@@ -15,7 +16,7 @@ describe("Studio Otto", () => {
     expect(MASCOT.id).toBe("otto");
     expect(MASCOT.name).toBe("Otto");
     expect(MASCOT.Mark).toBe(StudioOtto);
-    expect(MASCOT.Pet).toBe(StudioOtto);
+    expect(MASCOT.Pet).toBe(SpriteOtto);
   });
 
   it.each(MASCOT_POSES)("renders %s across both crops and tones", (pose) => {
@@ -95,6 +96,17 @@ describe("Studio Otto", () => {
     expect(html).toContain("custom-art");
     expect(html).toContain("width:96px;height:108px");
     expect(html).toContain('aria-label="Otto is working"');
+  });
+  it("renders one configured character and accessible image while the atlas loads", () => {
+    const html = renderToStaticMarkup(<SpriteOtto pose="think" motion={{ clip: "running", row: 7, frame: 0, src: MASCOT.assets.atlas }} ariaLabel="Otto working" />);
+    expect([...html.matchAll(/class="studio-otto\b/g)]).toHaveLength(1);
+    expect([...html.matchAll(/role="img"/g)]).toHaveLength(1);
+  });
+  it("retains the red late-start expression before work begins", () => {
+    const html = renderToStaticMarkup(<SpriteOtto pose="focus" tone="late" motion={{ clip: "idle", row: 0, frame: 0, src: MASCOT.assets.atlas }} />);
+    expect(html).toContain('data-palette="blocked"');
+    expect(html).toContain("studio-late");
+    expect(html).not.toContain("otto-atlas-loader");
   });
 
   it("integrates through the reviewed state adapter", () => {

@@ -2400,6 +2400,7 @@ export default function App() {
     working: !!composerThinking || interpretation?.status === "loading" || busy || eodRedrafting || !!eodPreparing
       || !!interpretation?.results?.some((result) => result.status === "processing")
       || completingTaskIds.size > 0 || pendingTasks.some((task) => task.status === "syncing"),
+    reviewing: !!eodPreparing,
     failed: !!error || (!!aiUnavailable && !syncBypass) || pendingTasks.some((task) => task.status === "failed")
       || !!interpretation?.results?.some((result) => result.status === "failed"),
     needsInput: interpretation?.status === "ready" && hasPendingMascotApproval(interpretation.operations, interpretation.results),

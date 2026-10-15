@@ -15,7 +15,7 @@ const read = (path: string) => readFileSync(resolve(companion, path), "utf8");
 const mascot = read("mascot.ts");
 assert.match(mascot, /export const MASCOT = \{/);
 assert.match(mascot, /Mark: StudioOtto/);
-assert.match(mascot, /Pet: StudioOtto/);
+assert.match(mascot, /Pet: SpriteOtto/);
 assert.match(mascot, /name: "Otto"/);
 assert.match(mascot, /chatPose:/);
 assert.match(mascot, /thinkingPose:/);
