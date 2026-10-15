@@ -9,14 +9,18 @@ No agent, approval, receipt, notification timer, or attendance logic changes.
 
 ## Current renderer
 
-`StudioOtto.tsx` is the actual SVG renderer, not a raster concept sheet. `MASCOT`
-selects it for both pet and mark. The component imports its own scoped styles,
+`StudioOtto.tsx` is the SVG mark, resting pose and failure fallback. `MASCOT`
+selects `SpriteOtto` for the animated full pet and `StudioOtto` for the mark.
+The full figure uses the bundled, validated 73-frame atlas documented in
+`brand/otto/README.md`; authored source strips and review previews are retained.
+The components import their own scoped styles,
 so every entrypoint that imports it gets the same artwork. The pet wrapper
 sets `data-motion="renderer"` to prevent the old generic wrapper animations
 from doubling the new rig's motions. Existing production sizes are preserved.
 
-The design is a vector interpretation of the approved 3D concept, not a 3D
-model or a Rive asset. No new production dependency or network request is added.
+The design preserves the approved ivory retro-terminal identity. It is not a
+3D model or Rive asset. No new production dependency or external network request
+is added; the local atlas is loaded once and cached by the browser.
 
 ## Palette and state contract
 
@@ -24,9 +28,10 @@ model or a Rive asset. No new production dependency or network request is added.
 | --- | --- | --- |
 | idle / focus | Ivory, white terminal eyes and prompt | Slow blink; grounded body |
 | think | Yellow terminal prompt, dots, workpad | Small typing gesture |
-| alert | Yellow question glyph | One hand raise, then a static wait |
-| celebrate | Green expression and check | One nod and acknowledgement |
-| recover | Coral-red error glyph | Settled head tilt, no shaking |
+| alert | Yellow question glyph | Bounded attention sequence, then a static wait |
+| celebrate | Green expression and check | One hop, then a held landing |
+| recover | Coral-red error glyph | Short reaction, then a persistent red expression |
+| review | Yellow inspection expression | Careful scan while evidence/EOD preparation is in flight |
 | sleep / rest | White dimmed eyes | Static relaxed posture |
 
 Color is never the only cue. `tone=late` remains a red clock on the full pet;
@@ -58,6 +63,19 @@ At repository root, also run the existing mascot architecture guard in the
 Work OS test suite. Static SVGs are generated from the component; do not redraw
 an independent mark. The sandbox HTML is a separate offline review harness,
 not an app route or a replacement for native Tauri validation.
+
+## Playback contract
+
+`mascotPlayback.ts` maps semantic states to clips and quantizes sixteen gaze
+directions. `useMascotPlayback.ts` owns visibility, system reduced motion and
+the frame clock. A replay key combines explicit preview/snooze replay with new
+confirmed receipt revisions; restored receipts do not increment it. Attention
+uses that same replay key. The compact mark never loads a sprite atlas.
+
+The native movement adapter consumes existing Tauri move events only after a
+drag-handle gesture. Programmatic placement does not trigger travel. Gaze is
+window-local; no OS-wide cursor access is requested. Work, input and failure
+retain priority over incidental pointer/drag motion.
 
 ## Rive contract (future, not installed)
 

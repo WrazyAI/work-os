@@ -1,4 +1,5 @@
 import { StudioOtto } from "./StudioOtto";
+import { SpriteOtto } from "./SpriteOtto";
 import type { MascotCrop, MascotPose } from "./mascotTypes";
 
 /** The agent's identity and art, in one place.
@@ -26,9 +27,10 @@ export const MASCOT = {
   /** Compact identity renderer for chat turns, badges, and tiny surfaces. */
   Mark: StudioOtto,
   /** Full-figure renderer used by behavior-aware MascotPet surfaces. */
-  Pet: StudioOtto,
+  Pet: SpriteOtto,
   /** Bundled art for surfaces that need a raster or file reference. */
   assets: {
+    atlas: "/otto/otto-v2.webp",
     mark: "/studio-otto-mark.svg",
     companion: "/studio-otto.svg",
   },

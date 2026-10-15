@@ -4,6 +4,7 @@ import { MascotPet } from "./MascotPet";
 import { MASCOT } from "./mascot";
 import type { MascotAgentActivity, MascotWorkdayState } from "./mascotState";
 import { MASCOT_POSES, type MascotPose } from "./mascotTypes";
+import { PET_CLIPS, type PetAnimation } from "./mascotPlayback";
 import SidebarNav from "./SidebarNav";
 
 const POSES: MascotPose[] = [...MASCOT_POSES];
@@ -22,6 +23,8 @@ export default function OttoPreview() {
   const [dark, setDark] = useState(false);
   const [scale, setScale] = useState<1 | 2>(1);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [previewAnimation, setPreviewAnimation] = useState<PetAnimation | undefined>();
+  const [replay, setReplay] = useState(0);
   const timers = useRef<number[]>([]);
 
   /** Cancels any in-flight state sequence before a new preview starts. */
@@ -61,7 +64,7 @@ export default function OttoPreview() {
     <section className="stage">
       <main className={`page mascot-lab studio-lab${reducedMotion ? " reduced-motion" : ""}`}>
         <section className="panel otto-preview-panel">
-          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Studio Otto · retro-terminal vector renderer</small></div>
+          <div className="card-title"><span>Mascot Lab — {MASCOT.name}</span><small>Studio Otto · sprite animation with SVG fallback</small></div>
           <div className="mascot-lab-controls" aria-label="Agent lifecycle">
             {CORE_STATES.map((state) => <button key={state} aria-pressed={agent === state} onClick={() => { clearSequence(); setAgent(state); }}>{titleCase(state)}</button>)}
           </div>
@@ -74,10 +77,17 @@ export default function OttoPreview() {
             <button aria-pressed={reducedMotion} onClick={() => setReducedMotion((value) => !value)}>Reduced motion</button>
             <button onClick={runNotificationSequence}>Run notification</button>
             <button onClick={runInterruptionSequence}>Interrupt work</button>
+            <button onClick={() => setReplay(value => value + 1)}>Replay animation</button>
+            <label>Animation clip <select aria-label="Animation clip" value={previewAnimation ?? ""}
+              onChange={event => { setPreviewAnimation((event.target.value || undefined) as PetAnimation | undefined); setReplay(value => value + 1); }}>
+              <option value="">Live state</option>
+              {Object.keys(PET_CLIPS).map(clip => <option key={clip} value={clip}>{titleCase(clip)}</option>)}
+            </select></label>
           </div>
           <div className={`mascot-lab-live ${dark ? "dark" : ""} scale-${scale}`}>
-            <MascotPet isolated agent={agent} workday={workday} />
+            <MascotPet isolated agent={agent} workday={workday} reducedMotion={reducedMotion} replayKey={replay} previewAnimation={previewAnimation} />
           </div>
+          <small>Move the pointer around this window to see sixteen look directions. Clip previews do not change live work or attendance.</small>
         </section>
 
         <section className="panel otto-preview-panel">

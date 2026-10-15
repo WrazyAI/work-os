@@ -1,4 +1,5 @@
 import { hasPendingMascotApproval } from "./mascotApproval";
+import { useAvatarMascotMovement } from "./useAvatarMascotMovement";
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
@@ -1198,6 +1199,8 @@ export default function AvatarApp(): React.ReactElement {
     void toggleExpanded(true);
   }, [toggleExpanded]);
 
+  const mascotMovement = useAvatarMascotMovement(win, expanded);
+
   // ── Persist position after drags settle ──
   useEffect(() => {
     if (!win) return;
@@ -1774,6 +1777,7 @@ export default function AvatarApp(): React.ReactElement {
     facts: { ...facts, connected: connected === true && facts.loaded,
       promptKind: contextualPrompt.kind, promptRequired: attentionDue, eodOutstanding: eodDue },
     working: thinking || filing || activityPreparing || !!lastEntry?.toolResults?.some((result) => result.status === "processing"),
+    reviewing: activityPreparing,
     failed: daySyncState === "error" || !!lastEntry?.toolResults?.some((result) => result.status === "failed")
       || (lastEntry?.role === "system" && /^(e-|agenda-error-)/.test(lastEntry.id)),
     needsInput: avatarAttentionFixture || attentionDue || facts.lateReasonRequired || !!agendaReview
@@ -1902,7 +1906,7 @@ export default function AvatarApp(): React.ReactElement {
           <div className="avatar-compact">
           <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
           <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window" aria-label={`Open ${MASCOT.name} companion to connect Work OS`}>
-            <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
+            <MascotPet workday="disconnected" movement={mascotMovement} className="avatar-pet" artClassName="avatar-pet-art" />
           </button>
           </div>
         )}
@@ -1948,7 +1952,7 @@ export default function AvatarApp(): React.ReactElement {
           title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
-          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
+          <MascotPet agent={agentActivity} workday={workdayState} movement={mascotMovement} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
           {(showShiftTime || showBadge) && <span
             className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
             style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}

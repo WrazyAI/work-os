@@ -34,12 +34,15 @@ export interface MascotPlatformFacts {
   niftySyncError?: string | null;
 }
 export interface MascotSignals {
+  reviewing?: boolean;
   working?: boolean;
   failed?: boolean;
   needsInput?: boolean;
   completed?: boolean;
 }
 export interface MascotRuntimeState extends MascotVisualState {
+  /** A newly confirmed local outcome, never a restored transcript. */
+  receiptRevision?: number;
   source: "live" | "scenario";
   reason: string;
   reducedMotion: boolean;
@@ -56,7 +59,7 @@ export function isMascotWorkday(value: unknown): value is MascotWorkdayState {
 /** A retry in flight replaces its previous failure. Waiting and confirmed
  * success cannot interrupt an active request. Queued writes never set completed. */
 export function mascotActivityFromSignals(signals: MascotSignals): MascotAgentActivity {
-  return signals.working ? "working" : signals.failed ? "blocked" : signals.needsInput ? "needs-input" : signals.completed ? "ready" : "idle";
+  return signals.working || signals.reviewing ? "working" : signals.failed ? "blocked" : signals.needsInput ? "needs-input" : signals.completed ? "ready" : "idle";
 }
 export function mergeMascotActivities(local: MascotAgentActivity, peer?: MascotAgentActivity): MascotAgentActivity {
   return mascotActivityFromSignals({
@@ -129,6 +132,10 @@ export function resolveMascotRuntime(facts: MascotPlatformFacts, signals: Mascot
       ? "Explicit mascot override" : scenario.companionForce ? `Companion force: ${scenario.companionForce}` : "Effective scenario workday";
   }
   const visual = deriveMascotVisualState({ agent: activity, workday });
+  if (activity === "working" && signals.reviewing && !enabled) {
+    visual.pose = "review";
+    visual.label = "Reviewing";
+  }
   return {
     ...visual, source, reason,
     reducedMotion: enabled && scenario.mascotMotion === "reduced",
@@ -137,6 +144,9 @@ export function resolveMascotRuntime(facts: MascotPlatformFacts, signals: Mascot
 }
 
 export interface MascotActivityMessage {
+  receiptSource?: string;
+  receiptRevision?: number;
+  reviewing?: boolean;
   window: "main" | "avatar";
   scope: string;
   activity: MascotAgentActivity;
@@ -148,7 +158,10 @@ export interface MascotActivityMessage {
 export function acceptMascotActivity(value: unknown, ownWindow: string, scope: string, now: number): value is MascotActivityMessage {
   if (!value || typeof value !== "object" || !scope) return false;
   const v = value as Partial<MascotActivityMessage>;
-  return (v.window === "main" || v.window === "avatar") && v.window !== ownWindow && v.scope === scope && isMascotActivity(v.activity)
+  return (v.receiptSource === undefined || (typeof v.receiptSource === "string" && v.receiptSource.length > 0 && v.receiptSource.length <= 80))
+    && (v.receiptRevision === undefined || (Number.isSafeInteger(v.receiptRevision) && v.receiptRevision! >= 0))
+    && (v.reviewing === undefined || typeof v.reviewing === "boolean")
+    && (v.window === "main" || v.window === "avatar") && v.window !== ownWindow && v.scope === scope && isMascotActivity(v.activity)
     && typeof v.sentAt === "number" && Number.isFinite(v.sentAt) && v.sentAt <= now + 2_000
     && typeof v.expiresAt === "number" && Number.isFinite(v.expiresAt) && v.expiresAt > now && v.expiresAt > v.sentAt && v.expiresAt - v.sentAt <= 30_000;
 }

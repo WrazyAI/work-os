@@ -1,0 +1,12 @@
+.otto-sprite { position: relative; display: block; width: 100%; height: 100%; isolation: isolate; }
+.otto-sprite-frame {
+  display: block;
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 100%; aspect-ratio: 192 / 208;
+  background-image: var(--pet-atlas);
+  background-repeat: no-repeat;
+  background-size: 800% 1100%;
+  background-position: calc(var(--pet-column) * 100% / 7) calc(var(--pet-row) * 100% / 10);
+}
+.otto-atlas-loader { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.otto-sprite-late { position: absolute; width: 18%; height: 18%; right: 7%; top: 55%; }

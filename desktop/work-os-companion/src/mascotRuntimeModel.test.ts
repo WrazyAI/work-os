@@ -107,6 +107,12 @@ describe("cross-window activity leases", () => {
   const now = 10_000;
   const valid = { window: "avatar", scope: "org/person/day", activity: "working", sentAt: now, expiresAt: now + 20_000 };
   it("accepts a current other-window event", () => expect(acceptMascotActivity(valid, "main", valid.scope, now)).toBe(true));
+  it("accepts bounded outcome revisions and rejects malformed replay counters", () => {
+    expect(acceptMascotActivity({ ...valid, receiptRevision: 2 }, "main", valid.scope, now)).toBe(true);
+    for (const receiptRevision of [-1, 1.5, NaN, Infinity, "2"]) {
+      expect(acceptMascotActivity({ ...valid, receiptRevision }, "main", valid.scope, now)).toBe(false);
+    }
+  });
   it("rejects echo, other scope, expired, malformed and unbounded events", () => {
     expect(acceptMascotActivity(valid, "avatar", valid.scope, now)).toBe(false);
     expect(acceptMascotActivity(valid, "main", "other/person/day", now)).toBe(false);

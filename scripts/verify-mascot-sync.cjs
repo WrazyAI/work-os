@@ -3,10 +3,12 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const baseUrl = process.env.OTTO_PREVIEW_URL || 'http://127.0.0.1:5173';
 (async () => {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   context.setDefaultTimeout(12000);
+  context.setDefaultNavigationTimeout(60000);
   const errors = []; const writes = []; let checks = 0;
   await context.route('**/*', route => {
     const u = new URL(route.request().url());
@@ -25,19 +27,20 @@ const fs = require('node:fs');
   }
   const pet = '.dashboard-shell .mascot-pet';
   try {
-    await orb.goto('http://127.0.0.1:5173/?preview-chat&isolate=orb&prompt');
+    await orb.goto(baseUrl + '/?preview-chat&isolate=orb&prompt');
     await orb.locator('.avatar-pet .studio-otto').waitFor();
     const orbFigure = await orb.locator('.avatar-pet .studio-otto').boundingBox();
     assert(orbFigure.width >= 116 && orbFigure.height >= 130, JSON.stringify(orbFigure)); checks++;
     assert.equal((await orb.locator('.avatar-day-time').innerText()).trim(), '3h 12m left'); checks++;
-    const orbMotion = await orb.locator('.studio-rig').evaluate(el => {
-      const style = getComputedStyle(el);
-      return { name: style.animationName, timing: style.animationTimingFunction };
-    });
-    assert(orbMotion.name.includes('studio-attention-rig'), JSON.stringify(orbMotion)); checks++;
-    assert(orbMotion.timing.includes('steps(5'), JSON.stringify(orbMotion)); checks++;
+    const sprite = orb.locator('.otto-sprite[data-loaded="true"]');
+    await sprite.waitFor();
+    assert.equal(await sprite.getAttribute('data-clip'), 'waiting'); checks++;
+    // Cold compilation can outlast the bounded attention sequence. This
+    // integration check permits its held wait; the clocked playback verifier
+    // independently checks every clip's actual changing pixels.
+    assert.match(await sprite.locator('.otto-sprite-frame').evaluate(el => getComputedStyle(el).backgroundImage), /otto-v2\.webp/); checks++;
     // Exercise the deterministic token-free fixture that uses the live shift badge.
-    await progress.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=shift-progress');
+    await progress.goto(baseUrl + '/?window=avatar&avatar-fixture=shift-progress');
     await progress.locator('.avatar-badge.avatar-badge-progress').waitFor();
     const shiftProgress = await progress.locator('.avatar-badge-progress').evaluate(el => ({
       value: getComputedStyle(el).getPropertyValue('--shift-progress').trim(),
@@ -48,17 +51,17 @@ const fs = require('node:fs');
     assert.equal((await progress.locator('.avatar-day-time').innerText()).trim(), '1h 30m elapsed'); checks++;
     // Existing deterministic fixture renders the real OffShiftDashboard without
     // pretending the offline playground's Worktivity observation is off shift.
-    await readiness.goto('http://127.0.0.1:5173/?preview-today&preview-state=pre-shift');
+    await readiness.goto(baseUrl + '/?preview-today&preview-state=pre-shift');
     await readiness.locator('.dashboard-otto .studio-otto').waitFor();
     assert.equal(await readiness.locator('.dashboard-readiness-art .otto').count(), 0); checks++;
     const size = await readiness.locator('.dashboard-otto .studio-otto').boundingBox();
     assert(size.width >= 108 && size.height >= 108); checks++;
-    await main.goto('http://127.0.0.1:5173/?offline&day=optional');
+    await main.goto(baseUrl + '/?offline&day=optional');
     await main.locator('.dashboard-otto-active .studio-otto').waitFor();
-    await debug.goto('http://127.0.0.1:5173/debug.html');
+    await debug.goto(baseUrl + '/debug.html');
     await debug.getByLabel('Mascot activity', { exact: true }).waitFor();
     await debug.waitForFunction(() => document.querySelector('.debug-mascot-controls')?.disabled === false, null, { timeout: 12000 });
-    await avatar.goto('http://127.0.0.1:5173/?window=avatar&avatar-fixture=recorded-completion');
+    await avatar.goto(baseUrl + '/?window=avatar&avatar-fixture=recorded-completion');
     await avatar.getByRole('button', { name: 'Collapse companion', exact: true }).click();
     await avatar.locator('.avatar-pet .studio-otto').waitFor();
     for (const [activity, pose] of [['idle','focus'],['working','think'],['needs-input','alert'],['ready','celebrate'],['blocked','recover']]) {
@@ -85,6 +88,11 @@ const fs = require('node:fs');
         await attr(avatar, '.avatar-pet', 'data-activity', activity);
       }
     }
+    await debug.getByLabel('Mascot activity', { exact: true }).selectOption('needs-input');
+    await main.waitForTimeout(18000);
+    assert.equal(await main.locator(pet).getAttribute('data-attention-playing'), null); checks++;
+    await debug.getByRole('button', { name: 'Replay gesture', exact: true }).click();
+    await attr(main, pet, 'data-attention-playing', 'true');
     await debug.getByLabel('Mascot motion', { exact: true }).selectOption('reduced');
     await attr(main, pet, 'data-reduced-motion', 'true');
     await debug.getByLabel('Mascot activity', { exact: true }).selectOption('working');

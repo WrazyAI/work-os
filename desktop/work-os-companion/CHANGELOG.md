@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Otto now follows your pointer and reacts with clearer work, review, attention, and result animations while respecting reduced motion.
+
 ## 0.4.50 — 2026-10-15
 
 - The Action receipt card is now one compact row — the recorded actions expand only when you ask.

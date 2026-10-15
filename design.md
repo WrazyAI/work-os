@@ -1555,6 +1555,22 @@ Accessibility is part of each module's interface:
 
 ## 13. Mascot and custom assets
 
+The full Otto figure uses a bundled transparent sprite atlas through
+`MASCOT.Pet`; the compact mark, resting poses and asset-load fallback use
+Studio Otto's SVG. This approved animation upgrade adds generated raster art
+for the existing identity. Source strips, shared registration, exact output
+hashes and review previews live in `brand/otto/`; no remote pet service is used.
+The atlas has nine clips and sixteen clockwise look directions. Work and
+review loop only while corresponding work is in flight; success plays one hop
+and holds its landing. Failure keeps its red expression after its reaction.
+Pointer gaze stays inside the app window and yields to operational states;
+drag travel requires a real handle gesture, never programmatic repositioning.
+Reduced motion retains a readable still. Hidden/offscreen figures stop frame
+sampling without replaying expired result gestures on return. The lab's
+explicit clip and replay controls remain DEV-only. Validation must check
+actual changing pixels, direction selection, one-shot completion, reduced
+motion, fallback, atlas transparency and the shared workday/activity matrix.
+
 Otto is configured once in
 desktop/work-os-companion/src/mascot.ts: name, poses, art, and crop. Render
 the configured identity through Otto or MascotMark according to surface.

@@ -61,7 +61,7 @@ describe("companion artwork", () => {
     expect(avatar).toContain('showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.`');
     expect(avatar).toContain('className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress"');
     expect(avatar).toContain("style={showShiftTime && !showBadge && progressAvailable");
-    expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replayKey)');
+    expect(pet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replay)');
     expect(avatar).toContain("facts.lateReasonRequired || !!agendaReview");
     expect(avatar).toContain("chat.some((entry) => hasPendingMascotApproval");
     expect(avatarCss).toMatch(/animation: avatarAttention 550ms cubic-bezier\(0\.2, 0\.8, 0\.2, 1\) infinite;/);
@@ -151,7 +151,7 @@ describe("floating companion integration", () => {
     expect(avatar).toContain("setSnoozeReplayId((value) => value + 1)");
     expect(avatar).toContain("replayKey={snoozeReplayId}");
     const mascotPet = readFileSync(resolve(root, "src/MascotPet.tsx"), "utf8");
-    expect(mascotPet).toContain("useAttentionSequence(visual.pose === \"alert\", reduced, replayKey)");
+    expect(mascotPet).toContain('useAttentionSequence(visual.pose === "alert", reduced, replay)');
     const attentionSequence = readFileSync(resolve(root, "src/attentionSequence.ts"), "utf8");
     expect(attentionSequence).toContain("[enabled, reducedMotion, replayKey]");
     const avatarStyles = readFileSync(resolve(root, "src/avatar.css"), "utf8");
