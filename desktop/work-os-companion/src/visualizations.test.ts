@@ -344,6 +344,10 @@ describe("operational visualizations", () => {
     expect(app).toContain("moveMenuFocus");
     expect(taskSurfaces).toContain("function moveMenuFocus");
     expect(app).toContain("useModalScrollLock(modalOpen)");
+    expect(app).toContain("overlayScrollLockActive(employeeWorkspaceBranch");
+    // The global overlay layer mounts from both workspace branches, so every
+    // flag the lock counts has a rendered owner wherever the shell is.
+    expect(app.match(/renderGlobalOverlays\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(modalScrollLock).toContain('target.documentElement.classList.add("modal-open")');
     expect(modalScrollLock).toContain('target.body.classList.add("modal-open")');
     expect(styles).toContain("html.modal-open");

@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Fixed scrolling freezing in the administration workspace when a companion dialog opened while you were there.
+
 ## 0.4.51 — 2026-10-15
 
 - Today's focus and the daily plan window are tidier: the question leads, the fields fit what you write, and each button sits with the thing it acts on.

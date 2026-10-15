@@ -47,3 +47,23 @@ export function useModalScrollLock(active: boolean) {
     return acquireModalScrollLock();
   }, [active]);
 }
+
+/** Overlay flags split by the branch that renders them. */
+export interface OverlayLockScope {
+  /** Overlays rendered in every workspace branch (changelog, profile, page
+   * guide, memory): they always have an owner on screen. */
+  global: boolean;
+  /** Overlays only the employee workspace mounts (task modals, planning,
+   * tour). The administration shell returns before them. */
+  employeeOnly: boolean;
+}
+
+/** Whether the App-level modal lock may apply at all.
+ *
+ * The lock may only count overlays the branch on screen actually renders;
+ * counting an employee-only flag while the admin shell is up would freeze
+ * window scrolling with no modal to close (design §9). The screens before the
+ * workspace (vault, connect, onboarding) mount no overlays either. */
+export function overlayScrollLockActive(employeeBranchOnScreen: boolean, scope: OverlayLockScope): boolean {
+  return scope.global || (employeeBranchOnScreen && scope.employeeOnly);
+}

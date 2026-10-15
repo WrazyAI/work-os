@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acquireModalScrollLock, type ModalDocument } from "./modalScrollLock";
+import { acquireModalScrollLock, overlayScrollLockActive, type ModalDocument } from "./modalScrollLock";
 
 function classTarget() {
   const values = new Set<string>();
@@ -55,5 +55,24 @@ describe("modal scroll lock", () => {
 
     expect(html.values.has("modal-open")).toBe(true);
     expect(body.values.has("modal-open")).toBe(true);
+  });
+});
+
+describe("overlay lock scoping", () => {
+  it("applies for a global overlay in either workspace branch", () => {
+    expect(overlayScrollLockActive(false, { global: true, employeeOnly: false })).toBe(true);
+    expect(overlayScrollLockActive(true, { global: true, employeeOnly: false })).toBe(true);
+  });
+
+  it("applies for an employee-only overlay only while the employee branch renders", () => {
+    expect(overlayScrollLockActive(true, { global: false, employeeOnly: true })).toBe(true);
+    // The administration shell (and the boot screens) render no employee
+    // overlay, so their flags must never hold the lock.
+    expect(overlayScrollLockActive(false, { global: false, employeeOnly: true })).toBe(false);
+  });
+
+  it("stays released when nothing is open", () => {
+    expect(overlayScrollLockActive(true, { global: false, employeeOnly: false })).toBe(false);
+    expect(overlayScrollLockActive(false, { global: false, employeeOnly: false })).toBe(false);
   });
 });

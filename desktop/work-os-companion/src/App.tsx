@@ -84,11 +84,13 @@ import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./Pro
 import { PersonalInsights } from "./InsightsView";
 import AdminWorkspace from "./admin/AdminWorkspace";
 import { bootSurface } from "./bootSurface";
+import { seedAdminFixtures } from "./admin/adminFixtures";
 import { adminKeys, fetchSession } from "./admin/data";
 import type { SessionResponse } from "./admin/types";
+import { ADMIN_SHELL_SESSION, adminShellOverlayFor, isAdminShellBoot, type AdminShellOverlay } from "./adminShell";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
-import { useModalScrollLock } from "./modalScrollLock";
+import { overlayScrollLockActive, useModalScrollLock } from "./modalScrollLock";
 import { ScrollFadeRegion } from "./ScrollFadeRegion";
 import { ActiveWorkdayDashboard, OffShiftDashboard } from "./DashboardSurface";
 import { buildWorkdayDashboardModel } from "./dashboardModel";
@@ -114,6 +116,15 @@ const EOD_PREPARE_ROUNDS = 4;
 /** Remembers which workspace this device last opened. The choice is a view
  * preference; the account's role stays the authority on what it may open. */
 const WORKSPACE_MODE_KEY = "work-os.workspace-mode";
+
+/** DEV-only boot harness for the real shell in the administration workspace;
+ * see `adminShell.ts` for the `?admin-shell[&overlay=…]` contract. Resolved
+ * once at module load and inert in a packaged build (and in node tests, where
+ * there is no window). */
+const ADMIN_SHELL_BOOT = typeof window !== "undefined" && isAdminShellBoot(window.location.search, import.meta.env.DEV);
+const ADMIN_SHELL_OVERLAY: AdminShellOverlay | null = ADMIN_SHELL_BOOT
+  ? adminShellOverlayFor(window.location.search, import.meta.env.DEV)
+  : null;
 
 const worktivityControlTransport: WorktivityControlTransport = {
   preflight: (request) => apiRequest<WorktivityPreflight>("/api/work-os/me/workday/worktivity-control", {
@@ -241,7 +252,7 @@ export default function App() {
   const [dayDetailsLoaded, setDayDetailsLoaded] = useState(false);
   const [onboarding, setOnboarding] = useState<OnboardingData | null>(null);
   const [view, setView] = useState<View>("day");
-  const [workspace, setWorkspace] = useState<"employee" | "admin">(() => (localStorage.getItem(WORKSPACE_MODE_KEY) === "admin" ? "admin" : "employee"));
+  const [workspace, setWorkspace] = useState<"employee" | "admin">(() => (ADMIN_SHELL_BOOT || localStorage.getItem(WORKSPACE_MODE_KEY) === "admin" ? "admin" : "employee"));
   const [input, setInput] = useState("");
   const [progressComposerOpen, setProgressComposerOpen] = useState(false);
   const [progressPanel, setProgressPanel] = useState<ProgressPanel>("update");
@@ -412,6 +423,13 @@ export default function App() {
   const [missedClockOutAt, setMissedClockOutAt] = useState("");
   const [missedClockOutReason, setMissedClockOutReason] = useState("");
   const [debugScenario, setDebugScenario] = useState<DebugScenario>(() => {
+    // Dev-only boot harness: /?admin-shell renders the administration branch
+    // of the real shell (see adminShell.ts). The fixture scenario keeps the
+    // global overlays supplied with profile and day data without a live
+    // backend, while syncBypass stays off so the branch gate matches prod.
+    if (ADMIN_SHELL_BOOT) {
+      return { ...DEFAULT_DEBUG_SCENARIO, enabled: true, liveWrites: false, authState: "real", onboardingState: "complete", dayState: "clocked_in" };
+    }
     // Dev-only bootstrap: /?offline boots straight into the offline playground
     // (same scenario the debugger's "Offline playground" preset applies).
     const devParams = import.meta.env.DEV ? new URLSearchParams(window.location.search) : null;
@@ -438,6 +456,13 @@ export default function App() {
   const syncBypassRef = useRef(syncBypass);
   syncBypassRef.current = syncBypass;
   const visibleDay = useMemo(() => applyDayScenario(day, debugScenario), [day, debugScenario]);
+  /* The onboarding record and the session that gates the shell are read early:
+   * which workspace branch is on screen decides which overlays mount, and that
+   * decision feeds the App-level scroll lock below (design §9). */
+  const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
+  const visibleSession = debugScenario.enabled
+    ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
+    : session;
 
   /* The organization flag says the workspace may use voice input; the server
      capability says this deployment can actually transcribe. The record
@@ -464,7 +489,20 @@ export default function App() {
   useEffect(() => { voiceRef.current = voice; }, [voice]);
   const planEditVersion = useRef(0);
   const shiftStartScenarioOpened = useRef(false);
-  const baseModalOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || !!whatsNew || profileOpen || !!debugPageGuide || tourOpen;
+  /* Overlay flags split by the branch that renders them. The App-level scroll
+   * lock may only count overlays the branch on screen actually mounts; the
+   * administration shell returns before the employee-only overlays, so a stale
+   * or auto-opened employee flag there (and equally on the boot screens, which
+   * mount no overlays) can never freeze the window with no modal to close.
+   * Employee-only flags are ignored, not closed, so a half-finished draft or
+   * confirmation survives a visit to administration (design §9). */
+  const employeeOnlyOverlaysOpen = taskComposerOpen || !!taskDetails || !!deleteRequest || !!editRequest || !!clockInConfirmation || !!missedClockOut || !!clockOutConfirmation || carryOverOpen || planningSessionOpen || tourOpen;
+  /** The profile modal needs the onboarding record it edits; without it the
+   * flag renders nothing and must therefore count for nothing. */
+  const profileModalOpen = profileOpen && !!visibleOnboarding;
+  /** Any overlay but the page guide itself; the guide's auto-open waits for a
+   * free screen, so counting an open guide here would be circular. */
+  const baseModalOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || memoryOpen || employeeOnlyOverlaysOpen;
   const pageGuideView = guideViewForSidebar(view);
   const pageGuideLabel = views.find((item) => item.id === view)?.label ?? "this page";
   const {
@@ -481,8 +519,8 @@ export default function App() {
     activeView: pageGuideView,
     blocked: baseModalOpen,
   });
-  const modalOpen = baseModalOpen || openPageGuide !== null;
-  useModalScrollLock(modalOpen);
+  /** The global layer mounts from both branches; it includes the page guide. */
+  const globalOverlaysOpen = !!whatsNew || profileModalOpen || !!debugPageGuide || openPageGuide !== null || memoryOpen;
 
   useEffect(() => {
     let disposed = false;
@@ -536,37 +574,6 @@ export default function App() {
     if (whatsNew) setWhatsNew(null);
   }, [busy, carryOverOpen, clockInConfirmation, clockOutConfirmation, closeGuide, debugPageGuide, deleteRequest, editRequest, missedClockOut, moveMenuId, openPageGuide, planningSessionOpen, profileOpen, subtaskMenuId, taskComposerOpen, taskDetails, tourOpen, whatsNew]);
 
-  useEffect(() => {
-    if (!modalOpen) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => {
-      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-      const dialog = dialogs.item(dialogs.length - 1);
-      if (!dialog || dialog.contains(document.activeElement)) return;
-      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])')?.focus();
-    });
-    const onKey = (event: KeyboardEvent) => {
-      if (moveMenuFocus(event)) return;
-      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
-      const dialog = dialogs.item(dialogs.length - 1);
-      if (!dialog) return;
-      if (event.key === "Escape") { event.preventDefault(); dismissTopLayer(); return; }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((item) => item.offsetParent !== null);
-      if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey);
-      if (previousFocus?.isConnected) previousFocus.focus();
-    };
-  }, [dismissTopLayer, modalOpen]);
-
   // A compact refresh returns empty history/evidence/proposals arrays; the
   // details payload owns those records. Merge so a cheap poll never wipes
   // loaded detail data, and a details load never regresses fresher scalars.
@@ -610,6 +617,20 @@ export default function App() {
   useEffect(() => { planDirtyRef.current = planDirty; }, [planDirty]);
 
   const queryClient = useQueryClient();
+  /* Dev-only `?admin-shell` boot (see adminShell.ts): seed the administration
+   * fixtures so the real shell renders its sections with data and without live
+   * calls, and open the requested overlay once. Inert in a packaged build. */
+  useMemo(() => {
+    if (ADMIN_SHELL_BOOT) seedAdminFixtures(queryClient, "dense");
+  }, [queryClient]);
+  useEffect(() => {
+    if (!ADMIN_SHELL_BOOT || !ADMIN_SHELL_OVERLAY) return;
+    if (ADMIN_SHELL_OVERLAY === "whats-new") setWhatsNew({ version: changelogHistory(CHANGELOG_RAW)[0]?.version ?? "0.0.0" });
+    else if (ADMIN_SHELL_OVERLAY === "profile") setProfileOpen(true);
+    else if (ADMIN_SHELL_OVERLAY === "guide") setDebugPageGuide(guideViewForSidebar("day"));
+    else if (ADMIN_SHELL_OVERLAY === "memory") setMemoryOpen(true);
+    else setTaskComposerOpen(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one-shot fixture boot; only stable setters are used
   /** Invalidate the day, backlog, and insight surfaces that depend on task mutations. */
   const invalidateDayData = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: workOsKeys.day("compact") });
@@ -826,8 +847,11 @@ export default function App() {
   // onboarding or day query settles.
   const workSessionQuery = useQuery<SessionResponse>({
     queryKey: adminKeys.session(),
-    queryFn: fetchSession,
-    enabled: signedIn && !syncBypass,
+    // The dev-only `?admin-shell` harness has no live account: it answers from
+    // a fabricated admin session and keeps the query enabled without one, so
+    // the real shell renders the administration branch (see adminShell.ts).
+    queryFn: ADMIN_SHELL_BOOT ? async () => ADMIN_SHELL_SESSION : fetchSession,
+    enabled: (signedIn || ADMIN_SHELL_BOOT) && !syncBypass,
     staleTime: 5 * 60_000,
   });
   const workspaceDefaultApplied = useRef(false);
@@ -2233,8 +2257,6 @@ export default function App() {
     setOnboarding(next);
   }
 
-  const visibleOnboarding = useMemo(() => applyOnboardingScenario(onboarding, debugScenario), [onboarding, debugScenario]);
-
   // Only the record for the selected range and shift day may render: switching
   // tabs shows the skeleton instead of the previous range's data.
   const activeInsights = useMemo(() => {
@@ -2261,9 +2283,6 @@ export default function App() {
     }
   }, [view, insightRange, visibleDay]);
 
-  const visibleSession = debugScenario.enabled
-    ? debugScenario.authState === "unauthenticated" ? null : session ?? { token: "debug-local", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), organizationId: "debug", apiBase: "Local scenario" }
-    : session;
   useEffect(() => {
     if (!visibleDay || syncBypassRef.current || queuedInterpretationId) return;
     void secureState.queue().then((queue) => {
@@ -3566,6 +3585,75 @@ export default function App() {
     syncBypass,
   });
 
+  /* Which workspace branch is on screen comes from the same boot decision the
+   * early returns use: the administration shell must never hold a lock for an
+   * employee-only overlay it does not mount, and the boot screens mount no
+   * overlays at all. The dev-only shell fixture boots without a vault session,
+   * so its fabricated session counts as the settled one. */
+  const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
+  const employeeWorkspaceBranch = landing === "workspace";
+  /* The whole-workspace tour walks the employee pages, so only the branch that
+   * renders it offers it (the admin guide port owns its own answer). */
+  const offerWorkspaceTour = employeeWorkspaceBranch && pageGuideAutoOpen && pageGuideFirstVisit;
+
+  /* The global overlay layer: every branch that can show these surfaces mounts
+   * this exact fragment — the employee workspace and the administration shell —
+   * so a flag the scroll lock counts always has a rendered owner on screen
+   * (design §9). Employee-only overlays stay in the employee return, and the
+   * lock scoping below keeps them out of the admin branch. */
+  const renderGlobalOverlays = () => <>
+    {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
+    {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
+    {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={offerWorkspaceTour ? () => { closeGuide(); setTourOpen(true); } : undefined} />}
+    {memoryOpen && <MemoryModal
+      facts={memoryQuery.data?.facts ?? []}
+      recent={memoryQuery.data?.recent ?? []}
+      busy={memoryBusy}
+      error={memoryError}
+      onReview={(id, status) => void reviewMemory(id, status)}
+      onForget={(id) => void forgetMemory(id)}
+      onClose={() => { setMemoryOpen(false); setMemoryError(null); }}
+    />}
+    {profileModalOpen && visibleOnboarding && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Workspace settings</span><h2 id="profile-settings-title">Profile settings</h2><p id="profile-settings-description">Identity, schedule, privacy, notifications, and work context.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
+  </>;
+
+  /* Only a branch that mounts an overlay may hold the lock or trap focus for
+   * it: nothing counts on the boot screens, and within a workspace branch the
+   * employee-only flags count only where they render (design §9). */
+  const modalOpen = (adminWorkspaceBranch || employeeWorkspaceBranch) && overlayScrollLockActive(employeeWorkspaceBranch, { global: globalOverlaysOpen, employeeOnly: employeeOnlyOverlaysOpen });
+  useModalScrollLock(modalOpen);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => {
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const dialog = dialogs.item(dialogs.length - 1);
+      if (!dialog || dialog.contains(document.activeElement)) return;
+      dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])')?.focus();
+    });
+    const onKey = (event: KeyboardEvent) => {
+      if (moveMenuFocus(event)) return;
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+      const dialog = dialogs.item(dialogs.length - 1);
+      if (!dialog) return;
+      if (event.key === "Escape") { event.preventDefault(); dismissTopLayer(); return; }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((item) => item.offsetParent !== null);
+      if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKey);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [dismissTopLayer, modalOpen]);
+
   if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} stage="Opening this device’s saved session" onDebug={() => void openDebugger()} onOffline={() => undefined} />;
   if (vaultGate.status === "failed") return <LoadingScreen
       failed
@@ -3596,13 +3684,21 @@ export default function App() {
    * bootSurface. Until this moved, an administrator on a fresh device landed
    * here first and never completed onboarding, so the account went on reporting
    * that setup was required for the rest of its life.
+   *
+   * The dev-only `?admin-shell` fixture boots without a vault session, so the
+   * fabricated admin session stands in for one (see adminShell.ts); the global
+   * overlay layer mounts on this branch too, so a counted flag always has a
+   * rendered owner here (design §9).
    */
-  if (landing === "admin" && session && workSessionQuery.data?.role === "admin") {
-    return <AdminWorkspace
-      session={workSessionQuery.data}
-      onSwitchToEmployee={() => setWorkspaceMode("employee")}
-      onSignOut={() => { void logout(); }}
-    />;
+  if (landing === "admin" && (session || ADMIN_SHELL_BOOT) && workSessionQuery.data?.role === "admin") {
+    return <>
+      <AdminWorkspace
+        session={workSessionQuery.data}
+        onSwitchToEmployee={() => setWorkspaceMode("employee")}
+        onSignOut={() => { void logout(); }}
+      />
+      {renderGlobalOverlays()}
+    </>;
   }
 
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
@@ -4031,20 +4127,8 @@ export default function App() {
         {taskDetails && <TaskDetailsModal details={taskDetails} loading={taskDetailsLoading} readOnly={taskDetailsReadOnly} currentDate={visibleDay?.shiftDate ?? ""} busy={busy} subtaskTitle={subtaskTitle} subtaskDescription={subtaskDescription} subtaskMenuId={subtaskMenuId} moveMenuId={moveMenuId} onSubtaskTitle={setSubtaskTitle} onSubtaskDescription={setSubtaskDescription} onSubtaskMenu={setSubtaskMenuId} onMoveMenu={setMoveMenuId} onSubtaskCreate={submitInlineSubtask} onEditTask={editTask} onCompleteTask={() => setTaskCompletion(taskDetails.task as TaskRow, true, true)} onMoveSubtask={moveSubtask} onToggleSubtask={(subtask) => setTaskCompletion(subtask, !subtask.completed, true)} onArchiveSubtask={(subtask) => requestTaskRemoval(subtask, false, "archive")} onDeleteSubtask={(subtask) => requestTaskRemoval(subtask, false, "delete")} onClose={() => setTaskDetails(null)} />}
     {deleteRequest && <TaskRemovalConfirmation mode={deleteRequest.mode} scope={deleteRequest.closeParent ? "task" : "subtask"} title={String(deleteRequest.task.title ?? "Untitled task")} subtaskCount={deleteRequest.closeParent && taskDetails?.subtasks?.length ? taskDetails.subtasks.length : 0} busy={busy} localTask={String(deleteRequest.task.provider ?? "") === "local"} onCancel={() => setDeleteRequest(null)} onConfirm={confirmTaskRemoval} />}
     {editRequest && <TaskEditModal kind={editRequest.kind} title={editTitle} description={editDescription} busy={busy} localTask={String(editRequest.task.provider ?? "") === "local"} onTitle={setEditTitle} onDescription={setEditDescription} onClose={() => setEditRequest(null)} onSubmit={submitTaskEdit} />}
-    {whatsNew && <WhatsNewModal displayVersion={displayUpdateVersion(whatsNew.version)} bullets={changelogBulletsFor(CHANGELOG_RAW, whatsNew.version)} history={changelogHistory(CHANGELOG_RAW, whatsNew.version)} onClose={() => setWhatsNew(null)} />}
-      {debugPageGuide && <PageGuide view={debugPageGuide} autoOpen={pageGuideAutoOpen} developerPreview onClose={() => setDebugPageGuide(null)} onDisableAutoOpen={() => undefined} />}
-      {!debugPageGuide && openPageGuide && <PageGuide view={openPageGuide} autoOpen={pageGuideAutoOpen} onClose={closeGuide} onDisableAutoOpen={disableAutoOpen} onStartTour={pageGuideAutoOpen && pageGuideFirstVisit ? () => { closeGuide(); setTourOpen(true); } : undefined} />}
+    {renderGlobalOverlays()}
       {tourOpen && <GuideTour onNavigate={setView} onClose={() => setTourOpen(false)} />}
-      {memoryOpen && <MemoryModal
-        facts={memoryQuery.data?.facts ?? []}
-        recent={memoryQuery.data?.recent ?? []}
-        busy={memoryBusy}
-        error={memoryError}
-        onReview={(id, status) => void reviewMemory(id, status)}
-        onForget={(id) => void forgetMemory(id)}
-        onClose={() => { setMemoryOpen(false); setMemoryError(null); }}
-      />}
-      {profileOpen && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Workspace settings</span><h2 id="profile-settings-title">Profile settings</h2><p id="profile-settings-description">Identity, schedule, privacy, notifications, and work context.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
      <PlanningSession open={planningSessionOpen} plan={visibleDay?.plan ?? null} active={active} busy={busy} seedInput={planningSeed ?? undefined} onClose={() => { planningAutoOpenedRef.current = false; setPlanningSessionOpen(false); }} onInterpret={interpretPlanning} onRefine={refinePlanning} onConfirm={confirmPlanning} lateReasonRequired={lateReasonMissing} onSaveLateReason={saveLateReason} loomEnabled={visibleDay?.access?.featureFlags?.loom_updates === true} onLoomPreview={(url) => previewLoomLink(url, visibleDay?.shiftDate)} />
     {clockInConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{clockInConfirmation.kind === "late" ? "Confirm late start" : "Confirm exception start"}</h2><p>{clockInConfirmation.kind === "late" ? clockInLateProlonged ? "This clock-in is 30+ minutes after the scheduled start. Add the reason now, or from the reminder in your dashboard." : "This clock-in is after the scheduled start. Your acknowledgement will be retained in the audit record." : "There is no startable scheduled shift right now. Explain the exception before Work OS starts a separate exception session."}</p>{(clockInConfirmation.kind === "exception" || clockInLateProlonged) && <textarea autoFocus maxLength={1000} value={clockInConfirmation.reason} onChange={(event) => setClockInConfirmation({ ...clockInConfirmation, reason: event.target.value })} placeholder={clockInConfirmation.kind === "late" ? "Reason for the late start (optional)" : "Reason for starting outside the scheduled window"} />}<div><button disabled={busy} onClick={() => setClockInConfirmation(null)}>Cancel</button><button className="primary" disabled={busy || (clockInConfirmation.kind === "exception" && !clockInConfirmation.reason.trim())} onClick={confirmClockIn}>Confirm clock-in</button></div></section></div>}
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}

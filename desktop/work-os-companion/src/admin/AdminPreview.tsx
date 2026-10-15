@@ -22,7 +22,10 @@ const SECTIONS: AdminSection[] = ["overview", "people", "tasks", "review", "insi
  * normalize. With `&api=stub`, a fabricated desktop session is registered so
  * write flows (review decisions, toggles, screenshot reasons) reach the API
  * layer, where rendered QA can stub the response; without it, writes stay
- * honestly "not connected" and no request leaves the preview. */
+ * honestly "not connected" and no request leaves the preview. This page mounts
+ * the workspace alone, so shell-level surfaces cannot be exercised here; boot
+ * the real shell with `?admin-shell[&overlay=whats-new|profile|guide|memory]`
+ * instead (see `src/adminShell.ts`). */
 export default function AdminPreview() {
   const queryClient = useQueryClient();
   const params = new URLSearchParams(window.location.search);
