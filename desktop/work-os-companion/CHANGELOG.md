@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.42 — 2026-10-15
+
+- Work OS opens straight into your workday again — the first launch no longer needs a refresh.
+
 ## 0.4.41 — 2026-10-15
 
 - Your first launch now opens on the same stage as setup: Otto welcomes you, and one button takes you into the secure browser sign-in.

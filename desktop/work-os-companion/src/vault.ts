@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { Client, Stronghold } from "@tauri-apps/plugin-stronghold";
 import { loadStrongholdWhenReady } from "./strongholdStartup";
+import { openVaultWhenReady, reportVaultRetry } from "./vaultStartup";
 import { diagnostics } from "./diagnostics";
 import type { DayData, DesktopSession, OfflineAction } from "./types";
 import type { PendingToolReview, ProposedOperation, ToolCallResult } from "./interpretation";
@@ -62,21 +63,30 @@ function httpsOrigin(value: string) {
   return url.origin;
 }
 
+/** One vault open: the saved key from the host, then the Stronghold file. */
+async function openVault() {
+  const path = await join(await appDataDir(), "work-os-vault.hold");
+  const password = await invoke<string>("get_vault_password");
+  const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
+  let client: Client;
+  try { client = await stronghold.loadClient("work-os"); }
+  catch { client = await stronghold.createClient("work-os"); }
+  return { stronghold, client };
+}
+
 async function vault() {
   if (!context) {
     const pending = (async () => {
       const startedAt = Date.now();
       diagnostics.info("vault.open.started", "Opening the local vault");
-      const path = await join(await appDataDir(), "work-os-vault.hold");
-      const password = await invoke<string>("get_vault_password");
-      const stronghold = await loadStrongholdWhenReady(() => Stronghold.load(path, password));
-      let client: Client;
-      try { client = await stronghold.loadClient("work-os"); }
-      catch { client = await stronghold.createClient("work-os"); }
+      // The host registers the password worker and the Stronghold plugin while
+      // it starts; a first launch that loses that race must not cost the
+      // employee a refresh, so the open retries inside this one attempt.
+      const opened = await openVaultWhenReady(openVault, { onRetry: reportVaultRetry });
       // The gate above this is the only thing the employee sees while this
       // runs, so a slow open has to leave a trail to diagnose.
       diagnostics.info("vault.open.ready", `Opened the local vault in ${Date.now() - startedAt}ms`);
-      return { stronghold, client };
+      return opened;
     })();
     context = pending;
     void pending.catch((error) => {
