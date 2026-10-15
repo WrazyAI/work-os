@@ -1,6 +1,7 @@
 import { ArrowLeftRight, CircleHelp } from "lucide-react";
 import SidebarNav from "../SidebarNav";
 import { NotificationsBell } from "../NotificationsBell";
+import { ProfileAvatar } from "../ProfileSettings";
 import OverviewPage from "./OverviewPage";
 import PeoplePage from "./PeoplePage";
 import TasksPage from "./TasksPage";
@@ -31,24 +32,40 @@ type Focus = AdminSectionFocus;
  * queries and the cross-workspace handoffs, the workspace renders the panel. */
 export type AdminNotifications = Parameters<typeof NotificationsBell>[0];
 
+/** The signed-in admin's own profile, the same record and modal the employee
+ * masthead's avatar opens. The shell owns the modal; the workspace renders the
+ * control and calls `onOpen`. */
+export type AdminProfileEntry = {
+  name: string;
+  avatarUrl?: string | null;
+  onOpen: () => void;
+};
+
 /** The desktop administration workspace.
  *
  * One signed-in account, two workspaces: this shell reads the organization's
  * record and never changes the signed-in admin's own employee state. The
  * switch back to the personal workday is a view change, not a role change.
  * The masthead carries the same notifications bell the employee workspace
- * mounts — the account's own notifications — and the app supplies its data.
+ * mounts — the account's own notifications — and the app supplies its data,
+ * alongside the account's own profile avatar.
  *
  * The current section is a prop rather than local state: the app's page-guide
  * seam keys its first-visit flags by section, and the workspace tour drives
  * the section for real, so both need one source of truth for where the
  * workspace is. The guide itself is the same modal the employee workspace
  * uses; administration never owns a second copy of its state. */
-export default function AdminWorkspace({ session, notifications, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide }: {
+export default function AdminWorkspace({ session, notifications, profile, onOpenWhatsNew, section, focus, onNavigate, onSwitchToEmployee, onSignOut, guideView, onOpenGuide }: {
   session: SessionResponse;
   /** Absent (or a session with no mapped personal workday) renders no bell:
    * there is no employee record for it to report. */
   notifications?: AdminNotifications | null;
+  /** Absent renders no avatar: the page-fixture preview mounts the workspace
+   * without the account's profile record (see AdminPreview). */
+  profile?: AdminProfileEntry | null;
+  /** Administration-only changelog entry: the workspace menu wears one
+   * "What's new" item when the shell supplies this. */
+  onOpenWhatsNew?: (() => void) | undefined;
   section: AdminSection;
   focus: AdminSectionFocus;
   onNavigate: (section: AdminSection, focus?: AdminSectionFocus) => void;
@@ -86,6 +103,7 @@ export default function AdminWorkspace({ session, notifications, section, focus,
         onNewChat={() => undefined}
         onSwitchWorkspace={onSwitchToEmployee}
         switchLabel="Switch to employee view"
+        onWhatsNew={onOpenWhatsNew}
         onSignOut={onSignOut}
       />
       <section className="stage admin-stage">
@@ -114,6 +132,11 @@ export default function AdminWorkspace({ session, notifications, section, focus,
               <span className="admin-quiet">No personal workday is mapped to this account</span>
             )}
             {session.personId && notifications ? <NotificationsBell {...notifications} /> : null}
+            {profile ? (
+              <button type="button" className="avatar" aria-label={`Profile for ${profile.name}`} title="Open profile settings" onClick={profile.onOpen}>
+                <ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />
+              </button>
+            ) : null}
           </div>
           {/* One calm header: the page's purpose sits inside the masthead
               block, directly under its title, instead of under the rule. */}

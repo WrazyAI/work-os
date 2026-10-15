@@ -3701,6 +3701,23 @@ export default function App() {
     {profileModalOpen && visibleOnboarding && <div className="task-modal-backdrop profile-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProfileOpen(false); }}><section className="task-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-settings-title" aria-describedby="profile-settings-description"><header><div><span>Workspace settings</span><h2 id="profile-settings-title">Profile settings</h2><p id="profile-settings-description">Identity, schedule, privacy, notifications, and work context.</p></div><button type="button" aria-label="Close profile settings" onClick={() => setProfileOpen(false)}><X size={18} /></button></header><ProfileSettings data={visibleOnboarding} mode="modal" busy={busy} onSave={saveProfileSettings} onNotify={notifications.notify} /></section></div>}
   </>;
 
+  /* The administration masthead and its workspace menu reach the same global
+   * overlays the employee surfaces do: the account's own profile settings from
+   * the avatar, and the bundled changelog from the menu's What's new item.
+   * Both close the bell panel first — in administration that panel owns the
+   * layer above the receipt stack while open, so an open panel could otherwise
+   * float above the modal scrim. The menu has no installed version to name on a
+   * browser preview or in the dev shell harness, so it opens the newest logged
+   * release there; the desktop reports one and opens exactly that. */
+  const openProfileFromAdmin = () => {
+    setNotificationsOpen(false);
+    setProfileOpen(true);
+  };
+  const openChangelogFromAdmin = () => {
+    setNotificationsOpen(false);
+    setWhatsNew({ version: installedVersionRaw ?? changelogHistory(CHANGELOG_RAW)[0]?.version ?? "0.0.0" });
+  };
+
   /* Only a branch that mounts an overlay may hold the lock or trap focus for
    * it: nothing counts on the boot screens, and within a workspace branch the
    * employee-only flags count only where they render (design §9). */
@@ -3812,6 +3829,8 @@ export default function App() {
         onNavigate={navigateAdmin}
         guideView={pageGuideView}
         onOpenGuide={openGuide}
+        profile={{ name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }}
+        onOpenWhatsNew={openChangelogFromAdmin}
         onSwitchToEmployee={() => setWorkspaceMode("employee")}
         onSignOut={() => { void logout(); }}
       />

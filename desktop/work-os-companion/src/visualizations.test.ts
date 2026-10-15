@@ -625,6 +625,32 @@ describe("operational visualizations", () => {
     expect(app).toContain("seedAdminShellNotifications");
   });
 
+  it("ports the changelog and profile entry points into the administration shell", () => {
+    // Profile: the admin masthead's avatar is the employee control's exact
+    // contract — same label, same title, same globally rendered modal.
+    expect(adminWorkspace).toContain('import { ProfileAvatar } from "../ProfileSettings"');
+    expect(adminWorkspace).toContain('aria-label={`Profile for ${profile.name}`}');
+    expect(adminWorkspace).toContain('title="Open profile settings"');
+    expect(adminWorkspace).toContain("<ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />");
+    expect(app).toContain("profile={{ name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }}");
+    // Changelog: one administration-only workspace-menu item. The employee
+    // rail reaches the changelog from Settings and never receives this.
+    expect(sidebar).toContain("What's new");
+    expect(sidebar).toContain("anchor.focus(); onClose(); onWhatsNew()");
+    expect(sidebar).toContain("{onWhatsNew ? (");
+    expect(adminWorkspace).toContain("onWhatsNew={onOpenWhatsNew}");
+    expect(app).toContain("onOpenWhatsNew={openChangelogFromAdmin}");
+    expect((app.match(/onOpenWhatsNew/g) ?? []).length).toBe(1);
+    // The menu names the running build when the desktop reports one; offline
+    // and in the browser preview it opens the newest logged release instead of
+    // an empty modal.
+    expect(app).toContain("installedVersionRaw ?? changelogHistory(CHANGELOG_RAW)[0]?.version");
+    // Both handlers close the bell panel first: in administration that panel
+    // owns the layer above the receipt stack while open, so it could otherwise
+    // float above the modal scrim.
+    expect((app.match(/setNotificationsOpen\(false\);\n    set(?:ProfileOpen\(true\)|WhatsNew\()/g) ?? []).length).toBe(2);
+  });
+
   it("uses an editorial Insights hierarchy with progressive disclosure", () => {
     expect(insightsView).toContain('className="insight-kpi-strip"');
     expect(insightsView).toContain("<PlanReliability rows={reliabilityRows} />");

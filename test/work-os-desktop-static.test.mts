@@ -298,6 +298,20 @@ assert.doesNotMatch(app, /task-record-columns/);
 assert.doesNotMatch(app, /task-view-tabs/);
 assert.match(app, /PersonalInsights/);
 assert.match(app, /AdminWorkspace/);
+// The administration shell reaches the same global overlays as the employee
+// workspace: the account's own profile settings from the masthead avatar, and
+// one administration-only changelog item in the workspace menu. The employee
+// rail keeps reaching the changelog from Settings and never receives it.
+const adminWorkspace = read("src/admin/AdminWorkspace.tsx");
+assert.match(adminWorkspace, /import \{ ProfileAvatar \} from "\.\.\/ProfileSettings"/);
+assert.match(adminWorkspace, /aria-label=\{`Profile for \$\{profile\.name\}`\}/);
+assert.match(adminWorkspace, /title="Open profile settings"/);
+assert.match(adminWorkspace, /onOpenWhatsNew/);
+const sidebarNav = read("src/SidebarNav.tsx");
+assert.match(sidebarNav, /What's new/);
+assert.match(sidebarNav, /onWhatsNew/);
+assert.match(app, /onOpenWhatsNew=\{openChangelogFromAdmin\}/);
+assert.equal((app.match(/onOpenWhatsNew/g) ?? []).length, 1);
 assert.match(app, /work-os\.workspace-mode/);
 assert.match(app, /observedSeconds/);
 assert.doesNotMatch(app, /width: "(?:76|52|34)%"/);

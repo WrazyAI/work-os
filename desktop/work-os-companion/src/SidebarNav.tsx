@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Sparkles,
   SquarePen,
   Users,
   type LucideIcon,
@@ -36,6 +37,10 @@ export type SidebarNavProps = {
   /** When present, the workspace menu offers the workspace switch. */
   onSwitchWorkspace?: () => void;
   switchLabel?: string;
+  /** Administration only: the workspace menu offers one "What's new" item that
+   * opens the bundled changelog. The employee rail reaches it from Settings,
+   * so it never passes this. */
+  onWhatsNew?: (() => void) | undefined;
 };
 
 type Destination = {
@@ -152,6 +157,7 @@ function WorkspaceMenu({
   onSignOut,
   onSwitchWorkspace,
   switchLabel,
+  onWhatsNew,
 }: {
   anchor: HTMLElement;
   onClose: () => void;
@@ -159,6 +165,7 @@ function WorkspaceMenu({
   onSignOut?: () => void;
   onSwitchWorkspace?: (() => void) | undefined;
   switchLabel?: string | undefined;
+  onWhatsNew?: (() => void) | undefined;
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState(() => {
@@ -229,6 +236,12 @@ function WorkspaceMenu({
         <span>Workspace settings</span>
         <ChevronRight size={15} aria-hidden="true" />
       </button>
+      {onWhatsNew ? (
+        <button type="button" role="menuitem" onClick={() => { anchor.focus(); onClose(); onWhatsNew(); }}>
+          <Sparkles size={16} aria-hidden="true" />
+          <span>What's new</span>
+        </button>
+      ) : null}
       {onSignOut && (
         <button type="button" role="menuitem" onClick={() => { onClose(); onSignOut(); }}>
           <LogOut size={16} aria-hidden="true" />
@@ -251,6 +264,7 @@ export default function SidebarNav({
   onAdminNavigate,
   onSwitchWorkspace,
   switchLabel,
+  onWhatsNew,
 }: SidebarNavProps) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -404,6 +418,7 @@ export default function SidebarNav({
           onSignOut={onSignOut}
           onSwitchWorkspace={onSwitchWorkspace}
           switchLabel={switchLabel}
+          onWhatsNew={onWhatsNew}
         />
       )}
     </aside>
