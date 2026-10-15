@@ -815,3 +815,13 @@ assert.match(cursorTaskMigration, /p_excluded_task_ids/);
 assert.match(cursorTaskMigration, /p_overdue_first/);
 assert.match(cursorTaskMigration, /revoke all on function public\.work_list_person_task_page/);
 assert.match(cursorTaskMigration, /least\(greatest\(coalesce\(p_limit, 50\), 1\), 50\)/);
+
+// Release metadata stays in sync: Cargo.lock carries both the companion's own
+// version and its dependencies', and bumping the wrong line breaks the packaged
+// build (the chrono 0.4.52 incident, 2026-10-15).
+const companionPackage = JSON.parse(read("package.json"));
+const cargoLock = read("src-tauri/Cargo.lock");
+const companionLockVersion = /name = "work-os-companion"\nversion = "([^"]+)"/.exec(cargoLock)?.[1] ?? null;
+assert.equal(companionLockVersion, companionPackage.version, "Cargo.lock's work-os-companion version must match package.json");
+assert.match(read("src-tauri/Cargo.toml"), new RegExp(`^version = "${companionPackage.version}"$`, "m"));
+assert.match(read("src-tauri/tauri.conf.json"), new RegExp(`"version": "${companionPackage.version}"`));
