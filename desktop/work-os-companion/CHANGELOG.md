@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Page guides and the workspace tour now show still frames under reduced motion, with playback available when you choose a step.
+
 ## 0.4.43 — 2026-10-15
 
 - The administration workspace scrolls again after you open and close its drawers, and its page headers and task rows no longer crowd their controls.

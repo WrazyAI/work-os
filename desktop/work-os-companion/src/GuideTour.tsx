@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { GUIDE_FILMS } from "./guideFilms";
-import GuideFilm, { clockLabel } from "./GuideFilm";
+import GuideFilm, { clockLabel, nextGuideChapter } from "./GuideFilm";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
@@ -13,6 +13,14 @@ import type { GuideView } from "./guideState";
  * know what you want to change.
  */
 export const TOUR_PAGES: GuideView[] = ["day", "tasks", "review", "insights", "settings"];
+
+/** Keep page and chapter together so a page jump never briefly shows its old chapter. */
+export interface TourPosition { page: number; chapter: number; }
+
+export function navigateTour(position: TourPosition, targetPage: number): TourPosition {
+  if (!Number.isInteger(targetPage) || targetPage < 0 || targetPage >= TOUR_PAGES.length) return position;
+  return targetPage === position.page ? position : { page: targetPage, chapter: 0 };
+}
 
 /** "How My Day works" reads as "My Day" on a rail. */
 const shortTitle = (view: GuideView) => PAGE_GUIDES[view].title.replace(/^How /, "").replace(/ works$/, "");
@@ -38,8 +46,7 @@ export default function GuideTour({
   onNavigate: (view: GuideView) => void;
   onClose: () => void;
 }) {
-  const [page, setPage] = useState(0);
-  const [chapter, setChapter] = useState(0);
+  const [{ page, chapter }, setPosition] = useState<TourPosition>({ page: 0, chapter: 0 });
   const view = TOUR_PAGES[page]!;
   const guide = PAGE_GUIDES[view];
   const films = GUIDE_FILMS[view] ?? [];
@@ -47,15 +54,17 @@ export default function GuideTour({
 
   // The application follows the tour.
   useEffect(() => { onNavigate(view); }, [onNavigate, view]);
-  useEffect(() => { setChapter(0); }, [page]);
 
   const advance = useCallback(() => {
-    setChapter((current) => (current + 1 < guide.steps.length ? current + 1 : current));
-  }, [guide.steps.length]);
+    setPosition((current) => {
+      const count = PAGE_GUIDES[TOUR_PAGES[current.page]!].steps.length;
+      const next = nextGuideChapter(current.chapter, count);
+      return next === current.chapter ? current : { ...current, chapter: next };
+    });
+  }, []);
 
   const goTo = (index: number) => {
-    if (index < 0 || index >= TOUR_PAGES.length) return;
-    setPage(index);
+    setPosition((current) => navigateTour(current, index));
   };
 
   return (
@@ -116,7 +125,7 @@ export default function GuideTour({
                   className="guide-step-control"
                   aria-controls="page-guide-art"
                   aria-pressed={chapter === index}
-                  onClick={() => setChapter(index)}
+                  onClick={() => setPosition((current) => current.chapter === index ? current : { ...current, chapter: index })}
                 >
                   <span className="guide-step-mark" aria-hidden="true"><step.icon size={15} strokeWidth={1.9} /></span>
                   <span className="guide-step-copy">

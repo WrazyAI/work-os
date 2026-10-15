@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import type { GuideFilm as Film } from "./guideFilms";
+import { guideMayAutoplay, useGuideReducedMotion } from "./guideMotion";
 
 /** Clip lengths are read off the encoded files, so they can exceed a minute. */
 export const clockLabel = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
+
+/** Clip completion can advance a chapter, but must never move past the last. */
+export function nextGuideChapter(current: number, count: number): number {
+  return current + 1 < count ? current + 1 : current;
+}
 
 /**
  * The film well inside a page guide.
@@ -46,10 +52,15 @@ export default function GuideFilm({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [progress, setProgress] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  // Guard autoplay at the player, not just at its callers: this also handles
+  // the preference changing while a guide is already open.
+  const reducedMotion = useGuideReducedMotion();
+  const automaticPlayback = guideMayAutoplay(autoplay, reducedMotion);
 
   const play = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
+    if (video.ended) video.currentTime = 0;
     setRevealed(true);
     void video.play().catch(() => undefined);
   }, []);
@@ -63,9 +74,9 @@ export default function GuideFilm({
     if (!video) return;
     video.pause();
     video.currentTime = 0;
-    if (autoplay) play();
+    if (automaticPlayback) play();
     else setRevealed(false);
-  }, [chapterKey, autoplay, play]);
+  }, [chapterKey, automaticPlayback, play]);
 
   if (!film) {
     return (
@@ -94,9 +105,16 @@ export default function GuideFilm({
           setProgress(Math.min(1, video.currentTime / video.duration));
         }}
         onPlaying={() => setRevealed(true)}
-        onEnded={onEnded}
+        onEnded={() => {
+          // Manually playing one clip is not permission to start the next.
+          if (automaticPlayback) onEnded();
+          else {
+            setProgress(0);
+            setRevealed(false);
+          }
+        }}
       />
-      {!autoplay && !revealed ? (
+      {!automaticPlayback && !revealed ? (
         <button type="button" className="guide-film-play" onClick={play}>
           <Play size={15} aria-hidden="true" />
           Play this step

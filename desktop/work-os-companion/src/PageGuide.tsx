@@ -2,24 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { GUIDE_FILMS } from "./guideFilms";
-import GuideFilm, { clockLabel } from "./GuideFilm";
+import GuideFilm, { clockLabel, nextGuideChapter } from "./GuideFilm";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
-
-/** Whether the employee has asked the system not to animate things at them. */
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(query.matches);
-    const update = () => setReduced(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return reduced;
-}
 
 /**
  * The one page-guide modal.
@@ -64,14 +50,13 @@ export default function PageGuide({
 }) {
   const guide = PAGE_GUIDES[view];
   const films = GUIDE_FILMS[view] ?? [];
-  const reduced = useReducedMotion();
   const [activeStep, setActiveStep] = useState(0);
 
   const chapter = Math.min(activeStep, Math.max(0, films.length - 1));
 
   /** The end of a clip hands over to the next step, so the guide plays itself. */
   const advance = useCallback(() => {
-    setActiveStep((current) => (current + 1 < guide.steps.length ? current + 1 : current));
+    setActiveStep((current) => nextGuideChapter(current, guide.steps.length));
   }, [guide.steps.length]);
 
   useEffect(() => {
@@ -120,7 +105,7 @@ export default function PageGuide({
             view={view}
             film={films[chapter] ?? null}
             chapterKey={`${view}:${chapter}`}
-            autoplay={!reduced}
+            autoplay
             onEnded={advance}
           />
           <ol className="guide-steps">
