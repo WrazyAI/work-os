@@ -604,7 +604,6 @@ export function PlanningSession({
         {view === "compose" ? <>
         <div className="planning-intent-heading">
           <label htmlFor="planning-intent">What should today's plan focus on?</label>
-          <span>{loomEnabled ? "Optional when you use a Loom" : "Start with a clear outcome"}</span>
         </div>
         <textarea id="planning-intent" autoFocus maxLength={4000} value={input} disabled={busy || state === "saving" || state === "interpreting" || state === "refining"} onChange={(event) => { setInput(event.target.value); resetDraftState(); if (state !== "drafting") setState("drafting"); }} placeholder={loomEnabled ? "Add a direction, or build directly from your Loom below." : "Fix the failing integration test, then get the migration ready for review."} />
         {loomEnabled && <div className="planning-loom">

@@ -18,7 +18,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 18px;
   background: var(--surface-raised);
   box-shadow: 0 24px 70px rgba(18, 27, 17, 0.22), 0 2px 8px rgba(18, 27, 17, 0.08);
   animation: modalRise 0.22s ease both;
@@ -82,9 +82,11 @@
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
+/* 34px matches the in-app composer's header actions and the §12 compact
+   desktop floor. */
 .planning-session > header button {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -116,17 +118,20 @@
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 .planning-session-body > label { display: block; margin-bottom: 8px; color: var(--ink); font-size: 13px; font-weight: 650; }
+/* The input view is the intent field and its attached source (§8.9): the field
+   is sized to the intent it holds, and the corner keeps room for the resizer so
+   the focus ring is never clipped. */
 .planning-session-body > textarea {
   width: 100%;
-  min-height: 124px;
+  min-height: 72px;
   resize: vertical;
-  padding: 12px 14px;
+  padding: 11px 13px;
   border: 1px solid #cfd5c9;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--white);
   color: var(--ink);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   box-shadow: inset 0 1px 2px rgba(20, 30, 18, 0.05);
   transition: border-color 150ms ease, box-shadow 150ms ease;
@@ -137,12 +142,16 @@
   border-color: var(--signal-strong);
   box-shadow: 0 0 0 3px rgba(124, 201, 54, 0.22);
 }
+/* The UA resizer is a square box at the padding-box corner: it overhangs the
+   field's radius and cuts the focus ring. A smaller centred mark keeps the
+   resize affordance inside the rounded corner. */
+.planning-session-body > textarea::-webkit-resizer {
+  background: linear-gradient(135deg, transparent 0 42%, #b9c2b3 42% 58%, transparent 58% 100%) center / 9px 9px no-repeat;
+}
 .planning-session-body > textarea:disabled { background: var(--surface); color: var(--muted); }
 .planning-intent-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 4px;
   margin-bottom: 8px;
 }
 .planning-intent-heading label { margin: 0; color: var(--ink); font-size: 13px; font-weight: 650; }
@@ -151,7 +160,7 @@
 .planning-status { color: var(--muted); background: var(--surface); }
 .planning-notice { border: 1px solid #e7c887; background: #fff8e8; color: #755515; }
 .planning-confirmed { background: #e4f4d3; color: #244513; }
-.planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #f3f5ef; }
+.planning-review { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: #f3f5ef; }
 /* The review section takes programmatic focus when its view opens, so the
    scrollable card never paints a focus ring. */
 .planning-review:focus { outline: none; }
@@ -212,14 +221,18 @@
   border-bottom: 0;
   background: #f1f3ed;
 }
+/* One control-label step for every footer decision, so the primary is
+   distinguished by its signal surface rather than by size or weight (§3.3,
+   §8.1). Secondaries keep the paper surface; a disabled decision drops to the
+   inset surface and reads inert instead of washed out (§8.2). */
 .planning-session > footer > button {
-  min-height: 38px;
+  min-height: 40px;
   flex: 0 0 auto;
   padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
@@ -229,32 +242,48 @@
   outline-offset: 2px;
 }
 .planning-session > footer > button:not(:disabled):active { transform: translateY(1px); }
-.planning-session > footer > button:disabled { opacity: 0.45; cursor: not-allowed; }
 .planning-session > footer > button.secondary {
   background: #fff;
   border-color: var(--line);
-  color: var(--ink);
+  color: var(--muted);
 }
 .planning-session > footer > button.secondary:hover:not(:disabled) {
   border-color: #c3ccbb;
   background: #fbfcf8;
+  color: var(--ink);
 }
 .planning-session > footer > button.primary {
   background: var(--signal);
   border-color: #a6e852;
   color: #141611;
-  box-shadow: 0 5px 14px rgba(143, 203, 64, 0.22);
+  box-shadow: 0 3px 10px rgba(143, 203, 64, 0.2);
 }
 .planning-session > footer > button.primary:hover:not(:disabled) {
   background: #b4f76c;
   border-color: #8bd248;
   box-shadow: 0 6px 18px rgba(117, 187, 56, 0.24);
 }
+/* Declared last so an unavailable decision drops the live surface at every
+   state, instead of washing the whole button out (§8.2). The primary keeps its
+   signal identity as a tint so the footer still reads as having a forward
+   action; a disabled secondary is plainly neutral. */
+.planning-session > footer > button:disabled {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+.planning-session > footer > button.primary:disabled {
+  border-color: rgba(143, 203, 64, 0.4);
+  background: rgba(168, 241, 91, 0.16);
+}
 
 .planning-loom {
   margin-top: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: #f8faf5;
   overflow: hidden;
 }
@@ -266,7 +295,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -290,15 +319,54 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 9px;
+  gap: 11px;
   color: #315f17;
 }
 
-.planning-loom-toggle-label > svg { flex: 0 0 auto; }
+/* The source's own anchor: a tile that matches the two-line label block
+   instead of a 15px glyph floating beside it. */
+.planning-loom-toggle-label > svg {
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 7px;
+  border-radius: 10px;
+  background: #e6efe0;
+}
+
 .planning-loom-toggle-label > span { display: grid; gap: 2px; min-width: 0; }
 .planning-loom-toggle-label strong { font-size: 12px; font-weight: 750; }
-.planning-loom-toggle-label small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
-.planning-loom-toggle-action { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 700; }
+.planning-loom-toggle-label small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+
+/* The row is the control; the trailing chip is its boundary, so "Add" is
+   visibly attached to the source it adds. */
+.planning-loom-toggle-action {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.planning-loom-toggle:hover:not(:disabled) .planning-loom-toggle-action,
+.planning-loom-toggle.active .planning-loom-toggle-action {
+  border-color: #bfc9b8;
+  color: var(--ink);
+}
+
+.planning-loom-toggle.active .planning-loom-toggle-action {
+  width: 32px;
+  padding: 0;
+}
 
 .planning-loom-panel {
   display: grid;
@@ -394,7 +462,7 @@
   gap: 7px;
   margin: 0;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -402,8 +470,10 @@
 .planning-loom-message.is-error { color: #963a2d; }
 
 .planning-loom-transcript { border-top: 1px solid #e1e8dc; padding-top: 9px; }
-.planning-loom-transcript summary { width: max-content; max-width: 100%; color: #315f17; cursor: pointer; font-size: 11px; font-weight: 750; }
-.planning-loom-transcript textarea { min-height: 76px; margin-top: 8px; padding: 9px 10px; resize: vertical; }
+/* The disclosure keeps list-item so its marker stays, and gains vertical
+   padding so the row is a 34px target instead of a 12px line box (§12). */
+.planning-loom-transcript summary { width: max-content; max-width: 100%; padding-block: 11px; color: #315f17; cursor: pointer; font-size: 11px; font-weight: 750; }
+.planning-loom-transcript textarea { min-height: 76px; margin-top: 0; padding: 9px 10px; resize: vertical; }
 
 .planning-loom-use {
   display: inline-flex;
@@ -414,7 +484,7 @@
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid #c7dcb9;
-  border-radius: 9px;
+  border-radius: 10px;
   background: #e8f4da;
   color: #315f17;
   font: inherit;
@@ -435,7 +505,6 @@
   .planning-session-body { padding-block: 14px 16px; }
   .planning-session > footer { flex-wrap: wrap; padding-block: 12px 14px; }
   .planning-session > footer > button { flex: 1 1 100%; min-height: 40px; }
-  .planning-intent-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
   .planning-loom-row { grid-template-columns: 1fr; }
   .planning-loom-row button { width: 100%; }
   .planning-loom-use { width: 100%; justify-content: center; }
@@ -465,8 +534,8 @@
 
 .planning-icon-button {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
@@ -515,7 +584,7 @@
   margin-top: 10px;
   padding: 10px 14px;
   border: 1px solid #dbe3d3;
-  border-radius: 11px;
+  border-radius: 12px;
   background: #f6f9f1;
   color: var(--ink);
   font-size: 12.5px;
@@ -2324,11 +2393,16 @@ body {
   align-items: center;
 }
 
+/* The Focus panel is the sheet's scroll region, so its inline-end edge carries
+   the scrollbar gutter: an overlay scrollbar paints over the last ~14px of the
+   region and must never land on a right-aligned action (§3.2, §11). The 24px
+   also matches the sheet's own sub line inset; the inline-start keeps the
+   header's 18px so the panel stays on the sheet's content axis. */
 .goal-composer-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 18px 18px;
+  gap: 8px;
+  padding: 14px 24px 18px 18px;
 }
 
 /* The Focus tab's goal section collapses to its one-line state (design
@@ -2337,48 +2411,68 @@ body {
 .focus-goal {
   display: grid;
   min-width: 0;
-  gap: 9px;
+  gap: 8px;
+}
+
+/* The editor's parts are separated regions, not a stack of leftovers (§8.9). */
+.focus-goal-body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
 }
 
 .focus-goal.is-collapsed {
   gap: 6px;
 }
 
+/* One row: the eyebrow leads and the disclosure is the row's trailing control,
+   so the chevron reads as part of the section it opens (§7.2.1). The hairline
+   under the expanded row gives that row an edge the trailing control can
+   belong to, the way the recap stream's own rule binds its eyebrow. */
 .focus-goal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 26px;
+  min-height: 34px;
+}
+
+.focus-goal:not(.is-collapsed) .focus-goal-head {
+  border-bottom: 1px solid var(--line, #d9ded5);
+  padding-bottom: 5px;
 }
 
 .focus-goal-eyebrow {
   color: #557d35;
-  font-size: 9px;
-  font-weight: 780;
+  font-size: 10px;
+  font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
+/* Icon controls in the conversation surfaces sit at the 34px compact target:
+   the same box the sheet's header actions use (§12). */
 .focus-goal-disclosure {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   place-items: center;
+  border: 0;
   border-radius: 8px;
+  background: var(--inset, #edf0ea);
   color: var(--muted);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .focus-goal-disclosure:hover {
-  background: var(--hover, rgba(24, 32, 24, 0.055));
+  background: rgba(24, 32, 24, 0.09);
   color: var(--ink);
 }
 
 .focus-goal-disclosure:focus-visible {
-  outline: 2px solid var(--signal-strong, #7cc936);
-  outline-offset: 1px;
+  outline: 2px solid var(--color-focus, #4a7d22);
+  outline-offset: 2px;
 }
 
 .focus-goal-preview {
@@ -2398,60 +2492,143 @@ body {
   gap: 7px;
 }
 
+/* Question, then the one qualifier line, then the field: the question leads
+   because it is the only control-label step in the block (§3.3, five-step chat
+   scale; §8.9 keeps helper copy to what the surface cannot carry). */
 .goal-editor-field > label {
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1.3;
 }
 
 .goal-editor-field > textarea {
   width: 100%;
-  min-height: 92px;
-  padding: 11px 12px;
+  min-height: 58px;
+  padding: 10px 12px;
   resize: vertical;
-  border: 1px solid #d4dacd;
-  border-radius: 11px;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 10px;
   background: #fff;
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
 .goal-editor-field > textarea:focus {
-  border-color: #86bd58;
-  outline: 3px solid rgba(168, 241, 91, 0.28);
+  border-color: var(--color-focus, #4a7d22);
+  outline: 2px solid var(--color-focus, #4a7d22);
+  outline-offset: 1px;
+}
+
+/* The UA resizer is a square box at the padding-box corner, so it pokes
+   through the field's radius and breaks the focus ring. A smaller, centred
+   mark keeps the resize affordance inside the rounded corner. */
+.goal-editor-field > textarea::-webkit-resizer {
+  background: linear-gradient(135deg, transparent 0 42%, #bcc5b6 42% 58%, transparent 58% 100%) center / 9px 9px no-repeat;
 }
 
 .goal-editor-field > small {
-  color: var(--muted);
-  font-size: 9px;
+  color: var(--ink-2, #626a61);
+  font-size: 11px;
   line-height: 1.45;
 }
 
+/* The suggestion is an optional source for the field above it, so the card
+   reads top-down: mark and title with the card's one action on that row, then
+   the suggestion itself as body copy at the card's full width (§8.1, §8.2).
+   The mark and action share the title's line, so nothing floats. */
 .goal-composer-panel .composer-goal-suggestion {
   grid-column: 1;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
   margin: 0;
+  padding: 10px 13px;
+  border: 1px solid #cfdabf;
+  border-radius: 12px;
+  background: rgba(184, 255, 90, 0.08);
+}
+
+.goal-composer-panel .composer-goal-suggestion > svg {
+  grid-area: 1 / 1;
+  color: #668c38;
+}
+
+/* The wrapper carries no box of its own: the title and the suggestion are grid
+   rows, so the suggestion takes the card's full width. */
+.goal-composer-panel .composer-goal-suggestion > div {
+  display: contents;
+}
+
+.goal-composer-panel .composer-goal-suggestion strong {
+  grid-area: 1 / 2;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.goal-composer-panel .composer-goal-suggestion p {
+  grid-area: 2 / 1 / auto / -1;
+  margin: 0;
+  color: var(--ink-2, #626a61);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.goal-composer-panel .composer-goal-suggestion button {
+  grid-area: 1 / 3;
+  justify-self: end;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-2, #626a61);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.goal-composer-panel .composer-goal-suggestion button:hover {
+  border-color: var(--line-strong, #c5cec1);
+  color: var(--ink);
+}
+
+.goal-composer-panel .composer-goal-suggestion button:focus-visible {
+  outline: 2px solid var(--color-focus, #4a7d22);
+  outline-offset: 2px;
 }
 
 /* A saved goal reads as a card with one edit affordance; the editor only
    appears when there is no goal or the employee chose to change it. */
 .goal-card {
   position: relative;
-  border: 1px solid #d4dacd;
-  border-radius: 11px;
+  border: 1px solid var(--line, #d9ded5);
+  border-radius: 12px;
   background: #fff;
-  padding: 13px 40px 13px 13px;
+  padding: 13px 44px 13px 14px;
 }
 
 .goal-card-edit {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   place-items: center;
+  border: 0;
   border-radius: 8px;
   color: var(--muted);
   cursor: pointer;
@@ -2465,7 +2642,7 @@ body {
 
 .goal-card-edit:focus-visible,
 .goal-editor-actions button:focus-visible {
-  outline: 2px solid var(--signal-strong, #7cc936);
+  outline: 2px solid var(--color-focus, #4a7d22);
   outline-offset: 1px;
 }
 
@@ -2476,7 +2653,7 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -2492,9 +2669,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 32px;
-  border-radius: 9px;
-  padding: 0 14px;
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0 16px;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -2502,20 +2679,27 @@ body {
 }
 
 .goal-editor-actions button.primary {
-  border: 1px solid transparent;
+  border: 1px solid #a6e852;
   background: var(--signal, #a8f15b);
   color: var(--ink);
+  box-shadow: 0 2px 7px rgba(143, 203, 64, 0.2);
 }
 
+/* An unavailable decision keeps its signal identity as a tint over a legible
+   label, and drops the live fill, the lift, and the pointer (§8.2). */
 .goal-editor-actions button.primary:disabled {
-  opacity: 0.55;
-  cursor: default;
+  border-color: rgba(143, 203, 64, 0.4);
+  background: rgba(168, 241, 91, 0.16);
+  color: var(--ink-2, #626a61);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
 }
 
 .goal-editor-actions button.secondary {
-  border: 1px solid #d4dacd;
+  border: 1px solid var(--line, #d9ded5);
   background: #fff;
-  color: var(--muted);
+  color: var(--ink-2, #626a61);
 }
 
 .goal-editor-actions button.secondary:hover {
@@ -5344,6 +5528,11 @@ button:not(:disabled):active {
 
 .goal-retry:hover {
   background: #f7d9d3;
+}
+
+.goal-retry:focus-visible {
+  outline: 2px solid var(--color-focus, #4a7d22);
+  outline-offset: 2px;
 }
 
 .goal-retry .loading-arc,

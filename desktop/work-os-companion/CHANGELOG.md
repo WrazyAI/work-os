@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.51 — 2026-10-15
+
+- Today's focus and the daily plan window are tidier: the question leads, the fields fit what you write, and each button sits with the thing it acts on.
+- The daily plan window no longer carries a helper line the window itself already says — its placeholder and its Loom row both explain it.
+
 ## 0.4.50 — 2026-10-15
 
 - The Action receipt card is now one compact row — the recorded actions expand only when you ask.
