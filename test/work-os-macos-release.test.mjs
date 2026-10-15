@@ -114,7 +114,7 @@ test("release mutations serialize across refs and publication checks packaged st
 });
 
 
-test("packaged startup gate accepts a settled launch and rejects a crash or a stuck one", async (t) => {
+test("packaged startup gate accepts a settled launch and rejects a crash, a stuck one, or a panicking vault", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "work-os-startup-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const script = fileURLToPath(new URL("../desktop/work-os-companion/scripts/check-macos-startup.sh", import.meta.url));
@@ -154,13 +154,19 @@ test("packaged startup gate accepts a settled launch and rejects a crash or a st
     });
   };
   // The gate reads the app's own boot phases: a launch that only stays alive is
-  // not enough, because that is exactly what a frozen companion did.
+  // not enough, because that is exactly what a frozen companion did, and a
+  // panicking one leaves a retry screen that can only panic again.
   const phaseWrite = 'mkdir -p "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics"; '
     + 'printf \'%s\\n\' \'{"category":"app.boot.phase","message":"boot:connect_screen","metadata":{"phase":"boot:connect_screen"}}\' > "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl"';
-  const [settled, stuck, crash] = await Promise.all([
+  const failureScreenWrite = 'mkdir -p "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics"; '
+    + 'printf \'%s\\n\' \'{"category":"app.boot.phase","message":"boot:vault_failed","metadata":{"phase":"boot:vault_failed"}}\' > "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl"';
+  const panickingWrite = `${phaseWrite}; printf '%s\\n' '{"category":"rust.panic","message":"panicked at tauri-plugin-stronghold/src/kdf.rs:37:41: Failed to write salt for Stronghold"}' >> "$HOME/Library/Logs/com.wrazy.workos.pilot/diagnostics/app-events.jsonl"`;
+  const [settled, stuck, crash, panicked, failureOnFresh] = await Promise.all([
     run("settled", `${phaseWrite}; echo started; exec sleep 30`),
     run("stuck", 'echo still-loading; exec sleep 30'),
     run("crash", 'echo startup-crash; exit 7'),
+    run("panicked", `${panickingWrite}; echo panicking; exec sleep 30`),
+    run("failure-on-fresh", `${failureScreenWrite}; echo vault-failed; exec sleep 30`),
   ]);
   assert.equal(settled.code, 0);
   assert.match(settled.log, /started/);
@@ -172,6 +178,13 @@ test("packaged startup gate accepts a settled launch and rejects a crash or a st
   assert.match(stuck.output, /never got past its loading screen/);
   assert.equal(crash.code, 1);
   assert.match(crash.output, /startup-crash/);
+  assert.equal(panicked.code, 1);
+  assert.match(panicked.output, /the host panicked while opening the local vault/);
+  assert.match(panicked.output, /Failed to write salt/);
+  // A fresh device can always read its own key, so a failure screen there means
+  // the local vault is broken on first run.
+  assert.equal(failureOnFresh.code, 1);
+  assert.match(failureOnFresh.output, /settled on a failure screen \(boot:vault_failed\)/);
 });
 
 

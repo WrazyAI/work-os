@@ -292,7 +292,10 @@ describe("floating companion integration", () => {
     const gate = readFileSync(resolve(root, "src/vaultGate.ts"), "utf8");
     expect(gate).toContain("VAULT_GATE_TIMEOUT_MS");
     const app = readFileSync(resolve(root, "src/App.tsx"), "utf8");
-    expect(app).toContain("runVaultGate(() => applyVaultStateRef.current())");
+    expect(app).toMatch(/runVaultGate\(\s*\(\) => applyVaultStateRef\.current\(\)/);
+    // The gate asks the host whether a panic lost the open, so a vault that can
+    // never load offers the recovery that replaces it instead of Retry forever.
+    expect(app).toContain('invoke<boolean>("vault_open_trouble")');
     // StrictMode mounts, cleans up, and mounts again: a "started once" guard
     // would leave the second mount without a live attempt and strand the gate
     // on its loading screen.
@@ -301,15 +304,44 @@ describe("floating companion integration", () => {
     const startup = readFileSync(resolve(root, "scripts/check-macos-startup.sh"), "utf8");
     expect(startup).toContain("boot:vault_failed");
     expect(startup).toContain("seed_stale_key");
+    // A panicking vault open leaves a retry screen that panics again, so the
+    // packaged-Mac gate fails on any host panic and requires a usable phase
+    // wherever the saved key is readable.
+    expect(startup).toContain("host_panicked");
+    expect(startup).toContain("rust.panic");
+    expect(startup).toMatch(/run_scenario "fresh device" usable/);
+  });
+
+  // A first launch on a fresh Mac had no app data directory, so the Stronghold
+  // plugin's salt write panicked ("Failed to write salt for Stronghold", Os
+  // code 2) and the vault never opened — on that machine, forever.
+  it("creates the vault's directories before the Stronghold plugin writes its salt", () => {
+    const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
+    const setup = rust.slice(rust.indexOf(".setup(|app| {"));
+    const createAt = setup.indexOf("ensure_vault_directories");
+    const saltAt = setup.indexOf("with_argon2");
+    expect(createAt).toBeGreaterThan(-1);
+    expect(saltAt).toBeGreaterThan(-1);
+    expect(createAt).toBeLessThan(saltAt);
+    expect(setup).toContain("app_local_data_dir()?");
+    expect(setup).toContain("app_data_dir()?");
+    expect(rust).toMatch(/fn ensure_vault_directories[\s\S]{0,400}ensure_directories/);
+    const core = readFileSync(resolve(root, "src-tauri/vault-password-core/src/lib.rs"), "utf8");
+    expect(core).toMatch(/pub fn ensure_directories[\s\S]{0,400}create_dir_all/);
+    // The rules crate is the one CI can run without a desktop toolchain.
+    const ci = readFileSync(resolve(root, "../../.github/workflows/ci.yml"), "utf8");
+    expect(ci).toContain("cargo test --manifest-path src-tauri/vault-password-core/Cargo.toml");
   });
 
   it("grants the recovery command to every window that can hit a broken vault", () => {
     const permissions = readFileSync(resolve(root, "src-tauri/permissions/allow-app-commands.toml"), "utf8");
     expect(permissions).toContain('"get_vault_password"');
     expect(permissions).toContain('"reset_local_vault"');
+    expect(permissions).toContain('"vault_open_trouble"');
     const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");
     expect(rust).toContain("vault_password::get_vault_password");
     expect(rust).toContain("vault_password::reset_local_vault");
+    expect(rust).toContain("vault_password::vault_open_trouble");
     expect(rust).toContain("vault_password::init(app.handle())");
   });
 });

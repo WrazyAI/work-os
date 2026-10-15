@@ -28,6 +28,16 @@ pub unsafe extern "C" fn memset_explicit(
     destination
 }
 
+/// Creates the directories the local vault writes into, before anything writes
+/// into them. The rules (and their tests) live in the vault-password-core crate;
+/// the host supplies the platform paths.
+fn ensure_vault_directories(
+    directories: [std::path::PathBuf; 2],
+) -> Result<(), Box<dyn std::error::Error>> {
+    work_os_vault_password_core::ensure_directories(directories)?;
+    Ok(())
+}
+
 fn allowed_desktop_connect_url(url: &str) -> Result<tauri::Url, String> {
     let parsed = tauri::Url::parse(url).map_err(|error| error.to_string())?;
     if parsed.scheme() != "https"
@@ -601,6 +611,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault_password::get_vault_password,
             vault_password::reset_local_vault,
+            vault_password::vault_open_trouble,
             local_settings::ensure_local_settings,
             session_guard::app_heartbeat,
             arm_update_exit_watchdog,
@@ -621,6 +632,20 @@ pub fn run() {
             diagnostics::open_logs_dir
         ])
         .setup(|app| {
+            // The Stronghold plugin derives its key with Argon2 and writes the
+            // salt with `std::fs::write(..).expect(..)` (kdf.rs) — it never
+            // creates the directory itself. On macOS nothing else creates the
+            // app data directory before this point, so a first launch on a
+            // fresh Mac panicked with "Failed to write salt for Stronghold"
+            // (Os code 2) and the vault could never open: the loading screen
+            // never resolved, on every retry. Both directories are made here,
+            // because the salt lives in the local data directory while the
+            // vault file lives in the app data directory (the same place on
+            // macOS, two different ones on Windows).
+            ensure_vault_directories([
+                app.path().app_local_data_dir()?,
+                app.path().app_data_dir()?,
+            ])?;
             let salt_path = app.path().app_local_data_dir()?.join("stronghold-salt");
             app.handle()
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;

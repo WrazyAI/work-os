@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.44 — 2026-10-15
+
+- Fixed the app getting stuck on its loading screen on a newly set-up Mac: the local data folder is now created before it is needed.
+- If the local data can no longer be opened, the recovery screen now offers starting fresh instead of only retrying.
+
 ## 0.4.43 — 2026-10-15
 
 - The administration workspace scrolls again after you open and close its drawers, and its page headers and task rows no longer crowd their controls.

@@ -121,6 +121,29 @@ async fn await_reply<T: Send + 'static>(
         .map_err(|_| VaultPasswordError::unavailable())?
 }
 
+/// Set when the host panicked while this device's vault was being opened.
+///
+/// The Stronghold plugin panics instead of returning an error when its salt or
+/// vault file cannot be written or read, and a panic leaves the frontend's
+/// promise unresolved forever: the gate then reports a plain timeout whose only
+/// suggestion is Retry, which panics again. Recording the panic lets the gate
+/// offer the one recovery that can move the device forward.
+static VAULT_OPEN_PANIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Called from the diagnostics panic hook for every host panic.
+pub fn note_panic(message: &str) {
+    if message.to_ascii_lowercase().contains("stronghold") {
+        VAULT_OPEN_PANIC.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Whether this launch has already lost a vault open to a host panic. Read by
+/// the boot gate when its own attempt times out.
+#[tauri::command]
+pub fn vault_open_trouble() -> bool {
+    VAULT_OPEN_PANIC.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Starts the worker. Called once from setup, after diagnostics.
 pub fn init(app: &tauri::AppHandle) {
     let data_dir = match app.path().app_data_dir() {
@@ -135,6 +158,15 @@ pub fn init(app: &tauri::AppHandle) {
             return;
         }
     };
+    // The vault file and the vault id are written straight into this directory.
+    if let Err(error) = vault::ensure_directories([data_dir.clone()]) {
+        diagnostics::host_event(
+            app,
+            "vault.password.init_failed",
+            &format!("Could not create the local vault directory ({error})"),
+            DiagnosticLevel::Warn,
+        );
+    }
     let (sender, receiver) = channel();
     let handle = app.clone();
     let spawned = std::thread::Builder::new()

@@ -194,11 +194,15 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
 fn install_panic_hook() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let message = redact_string(&info.to_string());
+        // A panicking vault open leaves the frontend waiting forever; the gate
+        // asks about it so a dead-end retry loop becomes a recoverable screen.
+        crate::vault_password::note_panic(&message);
         if let Some(state) = STATE.get() {
             if let Ok(mut inner) = state.lock() {
                 let event = normalize_event(IncomingEvent {
                     category: "rust.panic".into(),
-                    message: redact_string(&info.to_string()),
+                    message,
                     source: Some(DiagnosticSource::Rust),
                     level: Some(DiagnosticLevel::Error),
                     ..IncomingEvent::default()

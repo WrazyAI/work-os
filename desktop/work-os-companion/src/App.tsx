@@ -1128,7 +1128,13 @@ export default function App() {
     // The opener is read through a ref so this stays identity-stable: the boot
     // effect must run once per mount, not once per view change.
     vaultAttemptRef.current?.abandon();
-    const attempt = runVaultGate(() => applyVaultStateRef.current());
+    const attempt = runVaultGate(
+      () => applyVaultStateRef.current(),
+      // A host panic (the Stronghold plugin panics instead of erroring) leaves
+      // the open pending forever; asking about it turns a retry loop that can
+      // never succeed into the one recovery that can.
+      { probeTrouble: async () => isTauri() && await invoke<boolean>("vault_open_trouble").catch(() => false) },
+    );
     vaultAttemptRef.current = attempt;
     void attempt.result.then((outcome: VaultGateSettled) => { vaultAttemptRef.current = null; setVaultGate(outcome); });
   }, []);

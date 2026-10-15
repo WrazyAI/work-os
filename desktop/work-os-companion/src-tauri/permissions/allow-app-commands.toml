@@ -4,6 +4,7 @@ description = "Allow the main companion window to use local IPC commands."
 commands.allow = [
   "get_vault_password",
   "reset_local_vault",
+  "vault_open_trouble",
   "app_heartbeat",
   "ensure_local_settings",
   "focus_main",

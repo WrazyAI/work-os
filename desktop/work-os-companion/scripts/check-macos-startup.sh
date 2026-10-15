@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # Packaged Mac startup gate.
 #
-# Three things are checked against the app the release would ship:
+# Four things are checked against the app the release would ship:
 #
 #   1. the process survives its first seconds (crash-on-launch),
-#   2. the local vault gate SETTLES — the app reaches a boot phase past its
-#      loading screen inside the gate timeout, and
-#   3. that holds on a device whose saved vault key this build is not trusted
-#      for, which is the state an in-place update creates.
+#   2. no host panic — a panicking vault open (the Stronghold plugin panics
+#      instead of returning an error when its salt or vault file cannot be
+#      written) leaves the loading screen up forever on every retry,
+#   3. the local vault gate SETTLES — the app reaches a boot phase past its
+#      loading screen inside the gate timeout — and on a device that can read
+#      its saved key it must reach a USABLE phase, not a failure screen,
+#   4. that still holds on a device whose saved vault key this build is not
+#      trusted for, which is the state an in-place update creates.
 #
-# Point 2 is the regression this script exists for. The vault key lives in the
-# macOS Keychain; an in-place update changes the app's ad-hoc code signature, so
-# the saved item no longer matches the new binary and macOS raises a password
-# dialog that blocks whoever asked for it. When that ask ran on the app's main
-# thread the whole companion froze — the loading screen stayed up forever and the
-# mascot could not be dragged — and nothing in the log ever advanced. The phases
-# below come from the app's own diagnostics log and only advance while its
-# windows are alive, so a stuck launch stops at `boot:loading` and fails here.
+# Points 2 and 3 are the regressions this script exists for. A first launch on a
+# fresh Mac had no app data directory, so the plugin's salt write panicked with
+# "Failed to write salt for Stronghold" and the vault never opened; when that
+# panic happened on the app's main thread the whole companion froze — the
+# loading screen stayed up forever and the mascot could not be dragged. The
+# phases below come from the app's own diagnostics log and only advance while its
+# windows are alive, so a launch that froze stops at `boot:loading` and fails
+# here, and a panicking one fails on its `rust.panic` line.
 set -euo pipefail
 
 root="$(pwd)"
@@ -70,8 +74,26 @@ phase_is_settled() {
   esac
 }
 
+# A phase that means the app is usable rather than parked on a failure screen.
+phase_is_usable() {
+  case "$1" in
+    boot:connect_screen|boot:workspace_ready|boot:onboarding|boot:waiting_for_data) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# A panicking vault open never resolves its promise, so the app can only show a
+# retry screen that panics again. Any host panic fails the gate.
+host_panicked() {
+  [[ -f "$events" ]] && grep -q '"category":"rust.panic"' "$events"
+}
+
+panic_detail() {
+  [[ -f "$events" ]] && grep -o '"message":"panicked at[^"]*' "$events" | tail -1 | sed 's/^"message":"//'
+}
+
 run_scenario() {
-  local name="$1"
+  local name="$1" expectation="$2"
   local pid deadline phase=""
   rm -f "$events"
   : > "$log"
@@ -86,6 +108,20 @@ run_scenario() {
       return 1
     fi
     if phase="$(latest_phase)" && phase_is_settled "$phase"; then
+      if host_panicked; then
+        echo "[$name] the host panicked while opening the local vault: $(panic_detail)" >&2
+        report_gate_trail >&2
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        return 1
+      fi
+      if [[ "$expectation" == "usable" ]] && ! phase_is_usable "$phase"; then
+        echo "[$name] settled on a failure screen ($phase) although this device can read its saved key" >&2
+        report_gate_trail >&2
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        return 1
+      fi
       echo "[$name] boot gate settled at $phase"
       report_gate_trail
       kill "$pid" 2>/dev/null || true
@@ -104,9 +140,11 @@ run_scenario() {
 }
 
 status=0
+# A fresh Mac can read its key, so the vault must open: a failure screen here
+# means the local vault is broken on first run.
 clear_saved_key
-run_scenario "fresh device" || status=1
+run_scenario "fresh device" usable || status=1
 seed_stale_key
-run_scenario "saved key from an earlier build" || status=1
+run_scenario "saved key from an earlier build" settled || status=1
 clear_saved_key
 exit "$status"

@@ -228,6 +228,25 @@ pub fn random_id() -> String {
     value.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// Creates the directories the vault writes into, before anything writes into
+/// them.
+///
+/// The Stronghold plugin derives its key with Argon2 and writes the salt with
+/// `std::fs::write(salt_path, ..).expect(..)` — it never creates the directory.
+/// On a Mac where the app has not run yet, that write is the first thing to
+/// touch the app data directory, and the panic it produced ("Failed to write
+/// salt for Stronghold", Os code 2) left the vault permanently unopenable: the
+/// loading screen never resolved, on every retry. The salt lives in the local
+/// data directory and the vault file in the app data directory, so a host hands
+/// in both. An existing directory is not an error.
+pub fn ensure_directories(directories: impl IntoIterator<Item = std::path::PathBuf>) -> Result<(), String> {
+    for directory in directories {
+        std::fs::create_dir_all(&directory)
+            .map_err(|error| format!("{} ({error})", directory.display()))?;
+    }
+    Ok(())
+}
+
 fn read_or_create(
     store: &dyn VaultStore,
     notify: &dyn Fn(&str, &str),
@@ -394,6 +413,28 @@ mod tests {
 
     fn boxed(store: FakeStore) -> &'static FakeStore {
         Box::leak(Box::new(store))
+    }
+
+    #[test]
+    fn creates_every_directory_the_vault_writes_into() {
+        let root = std::env::temp_dir().join(format!("work-os-vault-dirs-{}", std::process::id()));
+        let local = root.join("local/data");
+        let app = root.join("app/data");
+        ensure_directories([local.clone(), app.clone()]).expect("creates nested directories");
+        assert!(local.is_dir(), "the salt's directory must exist before the plugin writes it");
+        assert!(app.is_dir(), "the vault file's directory must exist before the plugin writes it");
+        // Every later launch starts with the directories already there.
+        ensure_directories([local, app]).expect("existing directories are not an error");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn reports_which_directory_could_not_be_created() {
+        let file = std::env::temp_dir().join(format!("work-os-vault-file-{}", std::process::id()));
+        std::fs::write(&file, b"not a directory").unwrap();
+        let error = ensure_directories([file.join("nested")]).unwrap_err();
+        assert!(error.contains("nested"), "the failure names the path: {error}");
+        std::fs::remove_file(&file).ok();
     }
 
     #[test]

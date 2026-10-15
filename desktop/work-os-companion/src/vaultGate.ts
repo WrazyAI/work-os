@@ -14,14 +14,21 @@
  * - the vault opens → the workspace continues (or reports a real error),
  * - the store answers with a failure → the failure screen names it and offers
  *   the matching recovery,
- * - nothing answers in time → the timeout failure, so the app can be retried
- *   instead of hanging.
+ * - nothing answers in time → the host is asked whether it lost the open to a
+ *   panic (the Stronghold plugin panics rather than returning an error when its
+ *   salt or vault file cannot be written or read, and a panic leaves this
+ *   promise pending forever); a panicked open offers starting fresh, because
+ *   retrying it only panics again,
+ * - nothing answers and nothing crashed → the timeout failure, so the app can
+ *   be retried instead of hanging.
  *
  * A retried attempt abandons the previous one. The abandoned read keeps running
  * in the host (its answer is cached there), so a late answer can never resolve
  * the retired attempt and jump the UI past the screen the employee is on. */
 
 export const VAULT_GATE_TIMEOUT_MS = 30_000;
+/** Bound on the panic probe: a host that cannot answer it is itself a symptom. */
+export const VAULT_TROUBLE_PROBE_MS = 1_500;
 
 /** The bounded, employee-facing explanation of a gate failure, plus which
  * recovery the UI may offer. */
@@ -67,6 +74,28 @@ const TIMEOUT_FAILURE: VaultGateFailure = {
   requiresReset: false,
 };
 
+const TROUBLE_FAILURE: VaultGateFailure = {
+  // A host panic lost the open outright (the Stronghold plugin panics instead
+  // of returning an error when its salt or vault file cannot be written or
+  // read), so retrying cannot help and the local copy has to be replaced.
+  message: "Work OS couldn't open this device's saved data: the local copy did not survive the attempt. Start fresh to replace it, or try again after an update.",
+  confirmationRequired: false,
+  requiresReset: true,
+};
+
+/** Resolves to `fallback` if `promise` has not settled within `ms`. */
+export async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), Math.max(0, ms)); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
 }
@@ -89,12 +118,21 @@ export function vaultFailureFrom(error: unknown): VaultGateFailure {
   };
 }
 
+export interface VaultGateOptions {
+  /** How long the vault may take before the failure screen appears. */
+  timeoutMs?: number;
+  /** Asked once a timeout fires: did the host lose the open to a panic?
+   * Answers `false` when it cannot answer at all. */
+  probeTrouble?: () => Promise<boolean>;
+}
+
 /** Starts one gate attempt. `open` resolves when the vault is usable; anything
  * it rejects with is reported as a failure. Never rejects itself. */
 export function runVaultGate(
   open: () => Promise<unknown>,
-  timeoutMs: number = VAULT_GATE_TIMEOUT_MS,
+  options: VaultGateOptions = {},
 ): VaultAttempt {
+  const timeoutMs = options.timeoutMs ?? VAULT_GATE_TIMEOUT_MS;
   let settled = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let resolveOutcome: (outcome: VaultGateSettled) => void = () => undefined;
@@ -110,7 +148,19 @@ export function runVaultGate(
   const result = new Promise<VaultGateSettled>((resolve) => {
     resolveOutcome = resolve;
   });
-  timer = setTimeout(() => settle({ status: "failed", failure: TIMEOUT_FAILURE }), Math.max(0, timeoutMs));
+  timer = setTimeout(() => {
+    void (async () => {
+      let panicked = false;
+      if (options.probeTrouble) {
+        panicked = await withTimeout(
+          options.probeTrouble().catch(() => false),
+          VAULT_TROUBLE_PROBE_MS,
+          false,
+        );
+      }
+      settle({ status: "failed", failure: panicked ? TROUBLE_FAILURE : TIMEOUT_FAILURE });
+    })();
+  }, Math.max(0, timeoutMs));
 
   void (async () => {
     try {
