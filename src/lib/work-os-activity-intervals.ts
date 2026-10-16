@@ -1061,6 +1061,23 @@ export async function activityIntervalFullView(row: ActivityIntervalRecord): Pro
   return intervalView(row, evidence);
 }
 
+/** The recap's own words, for a spoken read: the lead line the card shows
+ * (final detail when the employee amended it, otherwise the model's) and the
+ * structured activity lines. The card, the prompter and the voice all render
+ * from this one source. */
+export function intervalSpeechSource(row: { final_detail?: unknown; ai_detail?: unknown; headline?: unknown; structured_summary?: unknown }): {
+  detail: string | null;
+  headline: string | null;
+  activities: string[];
+} {
+  const detail = row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null;
+  return {
+    detail,
+    headline: row.headline ? String(row.headline) : null,
+    activities: intervalStructure(row).activities,
+  };
+}
+
 /** One interval by id, scoped to the employee who owns it.
  *
  * Recap speech reads the recap server-side, so the route needs exactly this:
