@@ -63,7 +63,9 @@ import { NotificationsBell, OUTSTANDING_STATUS_META, outstandingRowMeta } from "
 import { MEMORY_SEEN_KEY, OVERDUE_NOTIFIED_KEY, RECAP_NOTIFIED_KEY, memoryCandidateIds, mergeOverdueKeys, mergeSeenIds, overdueNotifyKey, overdueSummary, readyRecap, recapNotifyKey, unseenMemoryIds, unseenOverdueKeys } from "./notificationsLogic";
 import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
-import { DashboardSkeleton, FadeArc, TaskListSkeleton, Wave } from "./LoadingUi";
+import { BootOverlay, useBootRise } from "./BootHandoff";
+import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
+import { resolveBootScreen } from "./bootScreen";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { buildPlanItemsFromInterpretation } from "./planItems";
@@ -3631,7 +3633,8 @@ export default function App() {
       : !visibleSession ? "boot:connect_screen"
         : !visibleOnboarding ? "boot:waiting_for_data"
           : visibleOnboarding.onboardingRequired ? "boot:onboarding"
-            : "boot:workspace_ready";
+            : (visibleDay || error) ? "boot:workspace_ready"
+              : "boot:waiting_for_data";
   useEffect(() => {
     markBootPhase(bootPhase);
     if (bootPhase === "boot:vault_failed") {
@@ -3755,23 +3758,24 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen]);
 
-  if (vaultGate.status === "pending") return <LoadingScreen failed={false} retry={() => undefined} stage="Opening this device’s saved session" onDebug={() => void openDebugger()} onOffline={() => undefined} />;
-  if (vaultGate.status === "failed") return <LoadingScreen
+  const boot = resolveBootScreen({
+    vault: vaultGate.status === "pending" ? "pending" : vaultGate.status === "failed" ? "failed" : "opened",
+    hasSession: !!visibleSession,
+    adminReady: landing === "admin" && (!!session || ADMIN_SHELL_BOOT) && workSessionQuery.data?.role === "admin",
+    onboarding: visibleOnboarding ? { onboardingRequired: visibleOnboarding.onboardingRequired } : null,
+    dayReady: !!visibleDay,
+    dayFailed: !!error,
+  });
+  const bootRise = useBootRise(boot);
+  if (boot.kind === "failed") return <LoadingScreen
       failed
       retry={retryVaultGate}
       note={vaultGate.failure.message}
       onReset={vaultGate.failure.requiresReset ? startFreshOnThisDevice : undefined}
       onDebug={() => void openDebugger()}
     />;
-  if (!visibleSession) return <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
-  if (!visibleOnboarding) return <LoadingScreen
-      failed={!!error}
-      retry={() => void refresh()}
-      stage="Reading your schedule and workday"
-      onDebug={() => void openDebugger()}
-      onOffline={() => setScenario({ ...DEFAULT_DEBUG_SCENARIO, enabled: true, syncBypass: true, authState: "real", onboardingState: "complete", dayState: "clocked_in" })}
-    />;
-  if (visibleOnboarding.onboardingRequired) return <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+  const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
+  const renderOnboarding = () => <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
 
   /*
    * Administration sits below setup, and that order is the contract: see
@@ -3784,7 +3788,7 @@ export default function App() {
    * overlay layer mounts on this branch too, so a counted flag always has a
    * rendered owner here (design §9).
    */
-  if (landing === "admin" && (session || ADMIN_SHELL_BOOT) && workSessionQuery.data?.role === "admin") {
+  const renderAdmin = () => {
     /* The administration masthead's bell is the same surface the employee
      * masthead mounts, reading the signed-in account's own notifications. The
      * loading/error pins exist only in the dev-only shell harness, which has no
@@ -3829,8 +3833,9 @@ export default function App() {
       />
       {renderGlobalOverlays()}
     </>;
-  }
+  };
 
+  const renderWorkspace = () => {
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
   const startNewChat = () => {
     clearComposerChat();
@@ -3844,7 +3849,7 @@ export default function App() {
     setAiUnavailable(null);
     setComposerThinking(null);
   };
-  return <div className="workspace">
+  return <div className={`workspace${bootRise ? " boot-rise" : ""}`}>
     <SidebarNav
       activeView={view}
       onNavigate={(nextView) => setView(nextView)}
@@ -4263,6 +4268,18 @@ export default function App() {
     {missedClockOut && <div className="task-modal-backdrop"><section className="task-modal" role="dialog" aria-modal="true" aria-labelledby="missed-clockout-title"><header><div><span>Session correction · {formatWorkOsDate(missedClockOut.date)}</span><h2 id="missed-clockout-title">Enter the exact clock-out time</h2></div><button aria-label="Close correction" onClick={() => setMissedClockOut(null)}><X size={18} /></button></header><div className="task-modal-body"><p>Work OS will not infer this timestamp. Enter the time you actually stopped working.</p>{missedClockOut.clockedInAt && <small>Clocked in {formatWorkOsDateTime(missedClockOut.clockedInAt)}</small>}<label><span>Clock-out timestamp</span><input type="datetime-local" value={missedClockOutAt} onChange={(event) => setMissedClockOutAt(event.target.value)} /></label><label><span>Correction note <em>optional</em></span><textarea value={missedClockOutReason} onChange={(event) => setMissedClockOutReason(event.target.value)} /></label></div><footer><button onClick={() => setMissedClockOut(null)}>Cancel</button><button className="primary" disabled={busy || !missedClockOutAt} onClick={correctMissedClockOut}>Save correction</button></footer></section></div>}
     {clockOutConfirmation && <div className="task-modal-backdrop confirmation-backdrop"><section className="delete-confirmation" role="alertdialog" aria-modal="true"><span><AlertTriangle size={18} /></span><h2>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Confirm clock-out"}</h2><p>{extendedClockOut || clockOutExtendedPrompt ? "This clock-out is more than 15 minutes after the scheduled end. Confirm that you intentionally worked the extended shift; the acknowledgement will be retained in the audit record." : "Clock out and close today’s workspace?"}</p><div><button disabled={busy} onClick={() => { setClockOutConfirmation(false); setClockOutExtendedPrompt(false); }}>Cancel</button><button className="primary" disabled={busy} onClick={confirmClockOut}>{extendedClockOut || clockOutExtendedPrompt ? "Confirm extended shift" : "Clock out"}</button></div></section></div>}
   </div>;
+  };
+
+  let bootContent: ReactNode = null;
+  if (boot.kind === "content") {
+    switch (boot.surface) {
+      case "connect": bootContent = renderConnect(); break;
+      case "onboarding": bootContent = renderOnboarding(); break;
+      case "admin": bootContent = renderAdmin(); break;
+      case "workspace": bootContent = renderWorkspace(); break;
+    }
+  }
+  return <BootOverlay screen={boot}>{bootContent}</BootOverlay>;
 }
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }
@@ -4339,17 +4356,8 @@ export function LoadingScreen({ failed, retry, note, stage, onReset, onDebug, on
     const timer = setTimeout(() => setResetArmed(false), 8_000);
     return () => clearTimeout(timer);
   }, [resetArmed]);
-  if (!failed) {
-    return <main className="loading"><div className="loading-shell">
-      {/* Otto carries the wait instead of a logo badge: he is the same
-          presence the employee just met in setup, and he is honestly working.
-          The isolated path keeps this pose from depending on a live workday. */}
-      <MascotPet isolated agent="working" workday="active" className="mascot-loading" artClassName="mascot-loading-art" />
-      <h1>Getting your day ready</h1>
-      <p>Syncing your schedule, tasks, and provider context…</p>
-      <Wave className="loading-wave-large" /><small className="loading-stage">{stage ?? "Connecting to your workspace"}</small>
-    </div></main>;
-  }
+  // The non-failed launch surface lives in BootHandoff.tsx (First Light); this
+  // component is the local-vault recovery path only.
   const hint = onReset
     ? resetArmed
       ? "This deletes this device's saved session and queued updates. Tasks and updates already filed with the server stay, and you'll connect this device again."

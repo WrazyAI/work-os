@@ -49,6 +49,8 @@ assert.match(redesignStyles, /\.goal-editor-actions/);
 assert.match(redesignStyles, /\.focus-edit-button/);
 
 const app = read("src/App.tsx");
+const boot = read("src/BootHandoff.tsx");
+const bootModel = read("src/bootScreen.ts");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
 
@@ -97,10 +99,19 @@ assert.match(onboarding, /\[aria-invalid="true"\], \[data-invalid="true"\]/);
 assert.doesNotMatch(onboarding, /Saved · revision/);
 // The panel masthead is a label only; session controls live on the stage once.
 assert.match(onboarding, /<header><span>Workspace setup<\/span><\/header>/);
-assert.match(app, /agent="working" workday="active"/);
+assert.match(boot, /agent="working" workday="active"/);
 assert.match(app, /agent="blocked" workday="active"/);
-assert.match(app, /stage="Opening this device/);
-assert.match(app, /Getting your day ready/);
+assert.match(bootModel, /Opening this device’s saved session/);
+assert.match(boot, /Getting your day ready/);
+// The boot seam: resolver-driven gate chain, one persistent overlay, and the
+// handoff rise wired only onto the workspace root.
+assert.match(app, /resolveBootScreen\(/);
+assert.match(app, /<BootOverlay/);
+assert.match(app, /boot-rise/);
+assert.match(app, /dayReady: !!visibleDay/);
+assert.match(app, /dayFailed: !!error/);
+assert.doesNotMatch(app, /loading-wave-large/);
+assert.match(bootModel, /!state\.dayReady && !state\.dayFailed/);
 assert.doesNotMatch(app, /wordmark-badge/);
 assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);
@@ -422,7 +433,7 @@ assert.match(app, /DashboardSkeleton/);
 assert.match(app, /TaskListSkeleton/);
 assert.match(insightsView, /InsightsSkeleton/);
 assert.match(app, /FadeArc/);
-assert.match(app, /loading-wave-large/);
+assert.doesNotMatch(app, /loading-wave-large/);
 assert.match(taskSurfaces, /TaskDetailSkeleton/);
 assert.match(main, /import TodayPreview/);
 assert.match(main, /params\.has\("preview-tasks"\)/);
