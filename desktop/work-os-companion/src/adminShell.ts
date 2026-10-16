@@ -1,5 +1,5 @@
 import type { SessionResponse } from "./admin/types";
-import { EMPTY_GUIDE_STATE, type GuideState } from "./guideState";
+import { EMPTY_GUIDE_STATE, GUIDE_VIEWS, type GuideState } from "./guideState";
 
 /**
  * DEV-only boot harness for the real App shell in the administration
@@ -60,8 +60,21 @@ export const ADMIN_SHELL_SESSION: SessionResponse = {
   featureFlags: { employee_companion: true, desktop_companion: true },
 };
 
-/** The guide flags the harness boots with: a brand-new account's, so the
- * administration guides auto-open once each exactly as they would for a first
- * visit. The harness has no backend to hold a durable record, which is the
- * point — a reload is a fresh account. */
-export const ADMIN_SHELL_GUIDE_STATE: GuideState = EMPTY_GUIDE_STATE;
+/** The guide flags the harness boots with. `fresh` (the default) is a
+ * brand-new account's, so the administration guides auto-open once each
+ * exactly as they would for a first visit — the harness has no backend to hold
+ * a durable record, which is the point: a reload is a fresh account. `seen`
+ * marks every guide seen, which is what the film shooter boots with so a take
+ * films the page rather than the guide standing on top of it. */
+export const ADMIN_SHELL_GUIDE_STATES = ["fresh", "seen"] as const;
+export type AdminShellGuideState = (typeof ADMIN_SHELL_GUIDE_STATES)[number];
+
+const GUIDE_SEEN_AT = "2026-01-01T00:00:00.000Z";
+
+export function adminShellGuideStateFor(search: string, dev: boolean): GuideState | null {
+  if (!isAdminShellBoot(search, dev)) return null;
+  const value = new URLSearchParams(search).get("guides");
+  const state = ADMIN_SHELL_GUIDE_STATES.find((entry) => entry === value) ?? "fresh";
+  if (state === "fresh") return EMPTY_GUIDE_STATE;
+  return { guides: Object.fromEntries(GUIDE_VIEWS.map((view) => [view, GUIDE_SEEN_AT])), autoOpen: true };
+}

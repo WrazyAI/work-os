@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ADMIN_GUIDE_VIEWS } from "./guideState";
 
 const workspace = readFileSync(new URL("./admin/AdminWorkspace.tsx", import.meta.url), "utf8");
 const adminStyles = readFileSync(new URL("./admin/admin.css", import.meta.url), "utf8");
@@ -36,10 +37,12 @@ describe("administration page guides", () => {
     expect(app).toContain("navigateAdminGuide");
   });
 
-  it("keeps the administration scene styles decorative and motion-safe", () => {
-    expect(adminStyles).toMatch(/\.guide-art \{[\s\S]*?border-radius:\s*14px;/);
-    expect(adminStyles).toMatch(/\.guide-phase \{[\s\S]*?opacity:\s*0;/);
-    expect(adminStyles).toMatch(/\.guide-phase\.is-active \{[\s\S]*?opacity:\s*1;/);
-    expect(adminStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.guide-phase \{[\s\S]*?transition:\s*none;/);
+  it("films the administration sections like the employee pages", () => {
+    // Every administration guide carries one clip per step, shot through the
+    // admin-shell fixtures boot, and the drawn scene vocabulary is gone.
+    expect(adminStyles).not.toContain(".guide-art");
+    expect(adminStyles).not.toContain(".guide-phase");
+    const films = readFileSync(new URL("./guideFilms.ts", import.meta.url), "utf8");
+    for (const view of ADMIN_GUIDE_VIEWS) expect(films).toContain(`  ${view}: [`);
   });
 });

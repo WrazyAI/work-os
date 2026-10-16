@@ -3,7 +3,6 @@ import { Check, X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { guideFilmsFor } from "./guideFilms";
 import GuideFilm, { clockLabel } from "./GuideFilm";
-import PageGuideArt from "./PageGuideArt";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import { ADMIN_GUIDE_VIEWS, EMPLOYEE_GUIDE_VIEWS, type GuideView } from "./guideState";
@@ -33,8 +32,7 @@ const shortTitle = (view: GuideView) => PAGE_GUIDES[view].title.replace(/^How /,
  *
  * It never advances on its own. Each page's clips play through and then it
  * waits, because moving someone to another screen unasked is the opposite of
- * guiding them. A page that was never filmed shows its drawn scene instead,
- * and the rail treats it exactly like a filmed chapter.
+ * guiding them.
  */
 export default function GuideTour({
   pages = TOUR_PAGES,
@@ -112,17 +110,13 @@ export default function GuideTour({
             ))}
           </ol>
 
-          {films.length > 0 ? (
-            <GuideFilm
-              view={view}
-              film={films[chapter] ?? null}
-              chapterKey={`${view}:${chapter}`}
-              autoplay
-              onEnded={advance}
-            />
-          ) : (
-            <PageGuideArt view={view} activeStep={chapter} />
-          )}
+          <GuideFilm
+            view={view}
+            film={films[chapter] ?? null}
+            chapterKey={`${view}:${chapter}`}
+            autoplay
+            onEnded={advance}
+          />
 
           <ol className="guide-steps">
             {guide.steps.map((step, index) => (

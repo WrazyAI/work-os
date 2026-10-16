@@ -41,6 +41,42 @@ const DAY = {
   row: { scale: 1.3, band: ".dashboard-task-row", anchor: "center" },
 };
 
+/*
+ * The administration workspace. Its seven guides boot the real shell through
+ * the admin-shell harness (`?admin-shell`), which fabricates the admin session
+ * and seeds every section from fixtures — no backend contact, no writes.
+ * `&guides=seen` boots the flags of an account that has already met every
+ * guide, so a take films the page instead of the guide standing on top of it.
+ */
+const ADMIN_BOOT = "/?admin-shell&guides=seen";
+
+/** Every administration take starts from the same quiet page: the harness's
+ * notification flyouts and the overview's standing stale-snapshot card are
+ * dismissed the way a person would dismiss them, so they never sit in shot. */
+const quietAdmin = async (page) => {
+  await page.evaluate(() => {
+    for (const button of document.querySelectorAll("button.notification-dismiss")) button.click();
+  });
+  await page.waitForTimeout(320);
+};
+
+/** A take's own setup, after the shared quieting. */
+const adminBefore = (extra) => async (page) => {
+  await quietAdmin(page);
+  if (extra) await extra(page);
+};
+
+/* Compositions the administration camera returns to, named once so two clips
+ * frame the same card the same way. A card is found by what it carries, never
+ * by where it sits in a list. */
+const ADMIN = {
+  top: { band: 0 },
+  roster: { fit: ".admin-card:has(.admin-table)", anchor: "top" },
+  attention: { fit: ".admin-card:has(.admin-attention)", anchor: "top" },
+  activity: { fit: ".admin-card:has(.admin-activity)", anchor: "top" },
+  drawer: { contain: ".admin-drawer" },
+};
+
 export const GUIDE_SHOTS = {
   day: {
     1: {
@@ -342,6 +378,471 @@ export const GUIDE_SHOTS = {
         { point: ".settings-group:nth-of-type(5)", ms: 620 },
         { cam: { band: 1010, scale: 1.16, ms: 1300 } },
         { wait: 420 },
+      ],
+    },
+  },
+
+  /*
+   * Overview: the roster, what needs attention, and the activity stream — the
+   * same three bands the steps name, walked top to bottom.
+   */
+  admin_overview: {
+    1: {
+      chapter: "See who is working",
+      url: ADMIN_BOOT,
+      await: [".admin-kpi-strip", ".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.top,
+      entry: { x: 934, y: 452 },
+      hold: 420,
+      tail: 300,
+      shots: [
+        { cam: { fit: ".admin-kpi-strip", anchor: "top", ms: 1200 } },
+        { point: ".admin-kpi-strip", ms: 560 },
+        { cam: { ...ADMIN.roster, ms: 1250 } },
+        { point: ".admin-table tbody tr", ms: 620 },
+        { wait: 160 },
+        // One push into a row, so the attendance pill and today's counts are
+        // readable rather than merely present.
+        { cam: { scale: 1.25, band: ".admin-table tbody tr:nth-of-type(2)", anchor: "center", ms: 900 } },
+        { point: ".admin-table tbody tr:nth-of-type(2) .admin-pill", ms: 620 },
+        { wait: 320 },
+      ],
+    },
+    2: {
+      chapter: "Clear what needs attention",
+      url: ADMIN_BOOT,
+      await: [".admin-attention"],
+      before: adminBefore(),
+      opening: ADMIN.attention,
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { ...ADMIN.attention, ms: 1150 } },
+        { point: ".admin-attention li button", ms: 640 },
+        { wait: 180 },
+        { point: ".admin-attention li:nth-of-type(2) button", ms: 620 },
+        { wait: 300 },
+      ],
+    },
+    3: {
+      chapter: "Follow the activity",
+      url: ADMIN_BOOT,
+      await: [".admin-activity"],
+      before: adminBefore(),
+      opening: ADMIN.activity,
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 320,
+      shots: [
+        { cam: { ...ADMIN.activity, ms: 1250 } },
+        { point: ".admin-activity li button", ms: 640 },
+        { wait: 200 },
+        // A real row opens the record behind it.
+        { click: ".admin-activity li button", ms: 620, after: 1100 },
+        { cam: { ...ADMIN.drawer, ms: 820 } },
+        { wait: 320 },
+      ],
+    },
+  },
+
+  /*
+   * People: the roster, the person drawer, and what the drawer holds.
+   */
+  admin_people: {
+    1: {
+      chapter: "Find the person",
+      url: ADMIN_BOOT,
+      nav: "People",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.roster,
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { ...ADMIN.roster, ms: 1050 } },
+        { point: ".admin-search input", ms: 620 },
+        { wait: 200 },
+        { point: ".admin-table tbody tr", ms: 640 },
+        { wait: 160 },
+        { point: ".admin-table tbody tr:nth-of-type(3)", ms: 620 },
+        { wait: 300 },
+      ],
+    },
+    2: {
+      chapter: "Open the record",
+      url: ADMIN_BOOT,
+      nav: "People",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.roster,
+      entry: ".admin-table tbody tr",
+      hold: 380,
+      tail: 320,
+      shots: [
+        { point: ".admin-table tbody tr", ms: 620 },
+        { wait: 180 },
+        { click: ".admin-table tbody tr", ms: 620, after: 1200 },
+        { cam: { ...ADMIN.drawer, ms: 850 } },
+        { wait: 340 },
+      ],
+    },
+    3: {
+      chapter: "Read what they filed",
+      url: ADMIN_BOOT,
+      nav: "People",
+      await: [".admin-table"],
+      before: adminBefore(async (page) => {
+        await page.click(".admin-table tbody tr");
+        await page.waitForSelector(".admin-drawer-body", { timeout: 8000 });
+        await page.waitForTimeout(700);
+        // The drawer's own scroll region: the take shows the sections a
+        // record-holder reads, not the mechanics of reaching them. It ends at
+        // the record's foot, where the reports and the evidence summary live.
+        await page.evaluate(() => {
+          const body = document.querySelector(".admin-drawer-body");
+          if (body) body.scrollTop = body.scrollHeight;
+        });
+        await page.waitForTimeout(420);
+      }),
+      opening: ADMIN.drawer,
+      entry: { x: 700, y: 470 },
+      hold: 420,
+      tail: 320,
+      shots: [
+        { cam: { ...ADMIN.drawer, ms: 900 } },
+        { point: ".admin-drawer-grid .admin-block:nth-of-type(6)", ms: 620 },
+        { wait: 200 },
+        { cam: { fit: ".admin-drawer-grid .admin-block:nth-of-type(6)", anchor: "center", ms: 1000 } },
+        { wait: 200 },
+        { cam: { fit: ".admin-drawer-grid .admin-block:nth-of-type(7)", anchor: "center", ms: 1000 } },
+        { wait: 380 },
+      ],
+    },
+  },
+
+  /*
+   * Tasks: the filters, a task's own drawer, and the add flow.
+   */
+  admin_tasks: {
+    1: {
+      chapter: "Filter the record",
+      url: ADMIN_BOOT,
+      nav: "Tasks",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: { fit: ".admin-card-controls", anchor: "center" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { fit: ".admin-card-controls", anchor: "center", ms: 1050 } },
+        { point: ".admin-search input", ms: 620 },
+        { wait: 200 },
+        { cam: { fit: ".admin-table", anchor: "top", ms: 1050 } },
+        { point: ".admin-table tbody tr", ms: 640 },
+        { wait: 300 },
+      ],
+    },
+    2: {
+      chapter: "Open a task",
+      url: ADMIN_BOOT,
+      nav: "Tasks",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.roster,
+      entry: ".admin-table tbody tr",
+      hold: 380,
+      tail: 320,
+      shots: [
+        { point: ".admin-table tbody tr", ms: 620 },
+        { wait: 180 },
+        { click: ".admin-table tbody tr", ms: 620, after: 1200 },
+        { cam: { ...ADMIN.drawer, ms: 850 } },
+        { wait: 340 },
+      ],
+    },
+    3: {
+      chapter: "Add work for the team",
+      url: ADMIN_BOOT,
+      nav: "Tasks",
+      await: [".admin-table"],
+      tag: { add: "Add task" },
+      before: adminBefore(),
+      opening: { fit: ".admin-card-controls", anchor: "center" },
+      entry: "[data-film-target=add]",
+      hold: 380,
+      tail: 320,
+      shots: [
+        { point: "[data-film-target=add]", ms: 620 },
+        { wait: 180 },
+        { click: "[data-film-target=add]", ms: 620, after: 1100 },
+        { cam: { ...ADMIN.drawer, ms: 850 } },
+        { wait: 320 },
+      ],
+    },
+  },
+
+  /*
+   * EOD Review: the queue, the document, and the decision.
+   */
+  admin_review: {
+    1: {
+      chapter: "Work the queue",
+      url: ADMIN_BOOT,
+      nav: "EOD Review",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.roster,
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { ...ADMIN.roster, ms: 1100 } },
+        { point: ".admin-table tbody tr", ms: 640 },
+        { wait: 160 },
+        { point: ".admin-table tbody tr:nth-of-type(2)", ms: 620 },
+        { wait: 300 },
+      ],
+    },
+    2: {
+      chapter: "Read the document",
+      url: ADMIN_BOOT,
+      nav: "EOD Review",
+      await: [".admin-table"],
+      before: adminBefore(),
+      opening: ADMIN.roster,
+      entry: ".admin-table tbody tr",
+      hold: 380,
+      tail: 320,
+      shots: [
+        { point: ".admin-table tbody tr", ms: 620 },
+        { wait: 180 },
+        { click: ".admin-table tbody tr", ms: 620, after: 1200 },
+        { cam: { fit: ".admin-details", anchor: "top", ms: 1000 } },
+        { wait: 340 },
+      ],
+    },
+    3: {
+      chapter: "Decide",
+      url: ADMIN_BOOT,
+      nav: "EOD Review",
+      await: [".admin-table"],
+      before: adminBefore(async (page) => {
+        await page.click(".admin-table tbody tr");
+        await page.waitForSelector(".admin-decision", { timeout: 8000 });
+        await page.waitForTimeout(700);
+        await page.evaluate(() => document.querySelector(".admin-decision")?.scrollIntoView({ block: "center" }));
+        await page.waitForTimeout(420);
+      }),
+      opening: { fit: ".admin-decision", anchor: "center" },
+      entry: { x: 700, y: 470 },
+      hold: 420,
+      tail: 320,
+      shots: [
+        { cam: { fit: ".admin-decision", anchor: "center", ms: 1050 } },
+        { point: "[aria-label='Manager notes']", ms: 640 },
+        { wait: 200 },
+        { point: ".admin-decision-actions button", ms: 640 },
+        { wait: 340 },
+      ],
+    },
+  },
+
+  /*
+   * Insights: the range control, the brief and measurements, and a person's
+   * facts.
+   */
+  admin_insights: {
+    1: {
+      chapter: "Set the range",
+      url: ADMIN_BOOT,
+      nav: "Insights",
+      await: [".admin-kpi-strip"],
+      before: adminBefore(),
+      opening: ADMIN.top,
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { fit: ".admin-card-controls", anchor: "center", ms: 1050 } },
+        { point: '[aria-label="Insight range"] button:nth-of-type(2)', ms: 620 },
+        { wait: 200 },
+        // A real range change: every measurement behind it re-reads itself.
+        { click: '[aria-label="Insight range"] button:nth-of-type(2)', ms: 620, after: 1100 },
+        { cam: { fit: ".admin-kpi-strip", anchor: "top", ms: 1100 } },
+        { wait: 320 },
+      ],
+    },
+    2: {
+      chapter: "Read the brief and measurements",
+      url: ADMIN_BOOT,
+      nav: "Insights",
+      await: [".admin-brief-columns"],
+      before: adminBefore(),
+      opening: { fit: ".admin-brief-columns", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 420,
+      tail: 320,
+      shots: [
+        { cam: { fit: ".admin-brief-columns", anchor: "top", ms: 1100 } },
+        { point: ".admin-brief-lead", ms: 560 },
+        { wait: 240 },
+        { cam: { fit: ".admin-kpi-strip", anchor: "top", ms: 1050 } },
+        { point: ".admin-kpi-strip", ms: 560 },
+        { wait: 320 },
+      ],
+    },
+    3: {
+      chapter: "Open a person's facts",
+      url: ADMIN_BOOT,
+      nav: "Insights",
+      await: [".admin-band-facts"],
+      before: adminBefore(),
+      opening: { fit: ".admin-band-facts", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 320,
+      shots: [
+        { cam: { fit: ".admin-band-facts", anchor: "top", ms: 1100 } },
+        { point: ".admin-band-facts .admin-table tbody tr", ms: 640 },
+        { wait: 180 },
+        { click: ".admin-band-facts .admin-table tbody tr", ms: 620, after: 1200 },
+        { cam: { ...ADMIN.drawer, ms: 850 } },
+        { wait: 320 },
+      ],
+    },
+  },
+
+  /*
+   * Evidence: the filters, the integrations band, and a flagged frame.
+   */
+  admin_evidence: {
+    1: {
+      chapter: "Filter the record",
+      url: ADMIN_BOOT,
+      nav: "Evidence",
+      await: [".admin-groups"],
+      before: adminBefore(),
+      opening: { fit: ".admin-card:has(.admin-groups)", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { fit: ".admin-card:has(.admin-groups)", anchor: "top", ms: 1100 } },
+        { point: '[aria-label="Filter by source"]', ms: 620 },
+        { wait: 200 },
+        { point: ".admin-check", ms: 620 },
+        { wait: 200 },
+        { cam: { fit: ".admin-groups", anchor: "top", ms: 1000 } },
+        { wait: 300 },
+      ],
+    },
+    2: {
+      chapter: "Check the integrations",
+      url: ADMIN_BOOT,
+      nav: "Evidence",
+      await: [".admin-integration-row"],
+      before: adminBefore(),
+      opening: { fit: ".admin-card:has(.admin-integration-row)", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 420,
+      tail: 320,
+      shots: [
+        { cam: { fit: ".admin-card:has(.admin-integration-row)", anchor: "top", ms: 1150 } },
+        { point: ".admin-integration-row", ms: 640 },
+        { wait: 200 },
+        { point: ".admin-card:has(.admin-integration-row) .admin-button", ms: 620 },
+        { wait: 320 },
+      ],
+    },
+    3: {
+      chapter: "Open a flagged frame",
+      url: ADMIN_BOOT,
+      nav: "Evidence",
+      await: [".admin-groups"],
+      before: adminBefore(async (page) => {
+        // The disputed row is the one carrying the failing pill, and the
+        // drawer is opened before the take so the camera can frame the reason
+        // the rule asks for rather than the mechanics of reaching it.
+        await page.click(".admin-groups button:has(.admin-pill.err)");
+        await page.waitForSelector(".admin-drawer [aria-label='Reason for viewing this retained screenshot']", { timeout: 8000 });
+        await page.waitForTimeout(700);
+      }),
+      opening: ADMIN.drawer,
+      entry: { x: 700, y: 470 },
+      hold: 420,
+      tail: 340,
+      shots: [
+        { cam: { ...ADMIN.drawer, ms: 900 } },
+        { point: "[aria-label='Reason for viewing this retained screenshot']", ms: 640 },
+        { wait: 240 },
+        { point: ".admin-drawer .admin-inline-fields .admin-button", ms: 620 },
+        { wait: 320 },
+      ],
+    },
+  },
+
+  /*
+   * Settings: features and status, members and teams, connections.
+   */
+  admin_settings: {
+    1: {
+      chapter: "Features and status",
+      url: ADMIN_BOOT,
+      nav: "Settings",
+      await: [".admin-feature-list"],
+      before: adminBefore(),
+      opening: { fit: ".admin-grid > .admin-card:nth-of-type(2)", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 300,
+      shots: [
+        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(2)", anchor: "top", ms: 1150 } },
+        { point: ".admin-toggle", ms: 640 },
+        { wait: 240 },
+        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(1)", anchor: "top", ms: 1000 } },
+        { wait: 300 },
+      ],
+    },
+    2: {
+      chapter: "Members and teams",
+      url: ADMIN_BOOT,
+      nav: "Settings",
+      await: [".admin-grid > .admin-card:nth-of-type(3)"],
+      before: adminBefore(),
+      opening: { fit: ".admin-grid > .admin-card:nth-of-type(3)", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 320,
+      shots: [
+        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(3)", anchor: "top", ms: 1100 } },
+        { point: ".admin-grid > .admin-card:nth-of-type(3) .admin-table tbody tr", ms: 640 },
+        { wait: 200 },
+        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(4)", anchor: "top", ms: 1000 } },
+        { point: ".admin-grid > .admin-card:nth-of-type(4) .admin-rows li", ms: 620 },
+        { wait: 300 },
+      ],
+    },
+    3: {
+      chapter: "Provider connections",
+      url: ADMIN_BOOT,
+      nav: "Settings",
+      await: [".admin-grid > .admin-card:nth-of-type(5)"],
+      before: adminBefore(),
+      opening: { fit: ".admin-grid > .admin-card:nth-of-type(5)", anchor: "top" },
+      entry: { x: 930, y: 470 },
+      hold: 400,
+      tail: 320,
+      shots: [
+        // Connections and field mappings share one band; blueprints follow it.
+        { cam: { fit: ".admin-grid > .admin-band", anchor: "top", ms: 1150 } },
+        { point: ".admin-grid > .admin-band .admin-rows li", ms: 640 },
+        { wait: 200 },
+        { cam: { fit: ".admin-grid > .admin-card:nth-of-type(5)", anchor: "top", ms: 1000 } },
+        { wait: 320 },
       ],
     },
   },

@@ -4586,10 +4586,6 @@ body.modal-open {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .guide-phase {
-    transform: none;
-    transition: none;
-  }
   .guide-step-control {
     transition: none;
   }

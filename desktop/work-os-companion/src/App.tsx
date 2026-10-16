@@ -89,7 +89,7 @@ import { bootSurface } from "./bootSurface";
 import { seedAdminFixtures, seedAdminShellNotifications } from "./admin/adminFixtures";
 import { adminKeys, fetchSession } from "./admin/data";
 import type { AdminSection, AdminSectionFocus, SessionResponse } from "./admin/types";
-import { ADMIN_SHELL_GUIDE_STATE, ADMIN_SHELL_SESSION, adminShellNotificationStateFor, adminShellOverlayFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOverlay } from "./adminShell";
+import { ADMIN_SHELL_SESSION, adminShellGuideStateFor, adminShellNotificationStateFor, adminShellOverlayFor, isAdminShellBoot, type AdminShellNotificationState, type AdminShellOverlay } from "./adminShell";
 import { Empty, PageIntro } from "./SharedUi";
 import type { PlanAnnotation, PlanDraftEdit } from "./planningAnnotations";
 import { overlayScrollLockActive, useModalScrollLock } from "./modalScrollLock";
@@ -131,6 +131,11 @@ const ADMIN_SHELL_OVERLAY: AdminShellOverlay | null = ADMIN_SHELL_BOOT
  * in a packaged build and on every other boot. */
 const ADMIN_SHELL_NOTIFICATIONS: AdminShellNotificationState | null = ADMIN_SHELL_BOOT
   ? adminShellNotificationStateFor(window.location.search, import.meta.env.DEV)
+  : null;
+/** The guide flags the `?admin-shell` harness boots with; `&guides=seen` is
+ * what the film shooter uses so a take films the page, not the guide. */
+const ADMIN_SHELL_GUIDE_STATE = ADMIN_SHELL_BOOT
+  ? adminShellGuideStateFor(window.location.search, import.meta.env.DEV)
   : null;
 
 const worktivityControlTransport: WorktivityControlTransport = {
@@ -585,7 +590,7 @@ export default function App() {
     organizationId: session?.organizationId ?? (ADMIN_SHELL_BOOT ? ADMIN_SHELL_SESSION.organizationId : null),
     activeView: pageGuideView,
     blocked: baseModalOpen,
-    fixture: ADMIN_SHELL_BOOT ? ADMIN_SHELL_GUIDE_STATE : undefined,
+    fixture: ADMIN_SHELL_GUIDE_STATE ?? undefined,
   });
   const navigateAdmin = useCallback((next: AdminSection, focus?: AdminSectionFocus) => {
     setAdminSection(next);

@@ -50,8 +50,8 @@ export interface GuideDefinition {
 /**
  * The page guides, one per workspace page: the five employee pages and the
  * seven administration sections. Copy is short and truthful — it describes
- * what the surface does, never scores or promises. The employee pages are
- * filmed; the administration scenes are drawn (see PageGuideArt).
+ * what the surface does, never scores or promises. Every page is filmed (see
+ * guideFilms.ts), and the numbered steps are the film's chapters.
  */
 export const PAGE_GUIDES: Record<GuideView, GuideDefinition> = {
   day: {

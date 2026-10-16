@@ -1054,10 +1054,10 @@ there is never more than one guide per page.
   contract with their own keys (`admin_overview` … `admin_settings`): one
   first-visit pass per section, the masthead `?` replays it, and the first
   administration guide offers the workspace tour, which walks the seven
-  sections in order and moves the real workspace. Administration pages are not
-  filmed, so their guides render the drawn scene vocabulary instead of the
-  employee pages' film; the modal, flags, and opt-out are shared, never a
-  second copy.
+  sections in order and moves the real workspace. Every administration page is
+  filmed like the employee pages — shot through the admin-shell fixtures boot —
+  so all twelve guides play film; the modal, flags, and opt-out are shared,
+  never a second copy.
 
 ### 8.12 Review notifications, the notifications panel, and suggestion review
 
@@ -1711,10 +1711,10 @@ Each surface states its budgets, and visual QA checks them.
   avatar windows. Bursts coalesce to the latest sequence at most every 250ms; the
   trace pulls the rows it shows instead of receiving whole events.
 - Polling cadence follows §8.7. No surface polls faster than its contract states.
-- Guide film: 1,000×500 H.264 at 30fps, and the whole five-page set stays under
-  4 MB. Each clip is encoded for its own length only — nothing loops, nothing
-  auto-repeats — and the generated manifest records the exact encoded length, so
-  the module can never claim a duration the file does not have.
+- Guide film: 1,000×500 H.264 at 30fps, and the whole twelve-page set stays
+  under 8 MB. Each clip is encoded for its own length only — nothing loops,
+  nothing auto-repeats — and the generated manifest records the exact encoded
+  length, so the module can never claim a duration the file does not have.
 - Guide film is loaded per chapter on demand, not all at once. Opening a guide
   fetches one clip and one still, and a chapter that is never chosen is never
   downloaded.

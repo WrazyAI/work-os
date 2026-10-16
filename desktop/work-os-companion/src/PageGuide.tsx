@@ -3,7 +3,6 @@ import { X } from "lucide-react";
 import { PAGE_GUIDES } from "./guides";
 import { guideFilmsFor } from "./guideFilms";
 import GuideFilm, { clockLabel } from "./GuideFilm";
-import PageGuideArt from "./PageGuideArt";
 import { MASCOT } from "./mascot";
 import { MascotMark } from "./chat/MascotMark";
 import type { GuideView } from "./guideState";
@@ -29,8 +28,7 @@ function useReducedMotion() {
  * its chapters. Opened for the first time it plays straight through — step one
  * runs, its clip ends, step two takes over — so a first visit is carried rather
  * than clicked at. Choosing a step jumps the film there, and arrow keys step
- * between chapters. Pages that were never filmed (administration) carry the
- * drawn scene instead: the same chapters, the same steps, no playback.
+ * between chapters.
  *
  * Two things are deliberate:
  *
@@ -120,17 +118,13 @@ export default function PageGuide({
           <button type="button" aria-label="Close page guide" title="Close page guide" onClick={onClose}><X size={17} /></button>
         </header>
         <div className="task-modal-body guide-modal-body">
-          {films.length > 0 ? (
-            <GuideFilm
-              view={view}
-              film={films[chapter] ?? null}
-              chapterKey={`${view}:${chapter}`}
-              autoplay={!reduced}
-              onEnded={advance}
-            />
-          ) : (
-            <PageGuideArt view={view} activeStep={chapter} />
-          )}
+          <GuideFilm
+            view={view}
+            film={films[chapter] ?? null}
+            chapterKey={`${view}:${chapter}`}
+            autoplay={!reduced}
+            onEnded={advance}
+          />
           <ol className="guide-steps">
             {guide.steps.map((step, index) => {
               const active = activeStep === index;

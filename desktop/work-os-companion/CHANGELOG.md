@@ -26,6 +26,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 ## Unreleased
 
 - The app opens into a quieter First Light screen — Otto works at a bench of light while your day loads, and your workspace rises in when it's ready.
+- The administration workspace's page guides now play short film of the real pages instead of drawn scenes, just like the employee guides.
 
 ## 0.4.59 — 2026-10-16
 
@@ -59,7 +60,6 @@ chores, and internal tooling unless they change what the employee sees or does.
 - Dates across the companion and administration now read like dates — "Oct 16, 2026" instead of raw timestamp values.
 - Administration sections keep their data while you move between them, so switching pages no longer reloads everything each time.
 - The administration workspace now has the same refresh button as the employee view: it refreshes the page you're on and spins while that page's data syncs.
-
 ## 0.4.52 — 2026-10-15
 
 - The administration workspace now has first-visit page guides: each section explains itself once, and the ? in its header replays it any time.
