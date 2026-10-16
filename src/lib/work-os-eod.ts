@@ -274,7 +274,7 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     markdown,
     metrics: {
       completed: completedHuman.length,
-      automation: automation.count,
+      automation: automation.count + automationOutside.count,
       progressed: progressed.length,
       deferred: deferred.length,
       carried: carried.length,
