@@ -142,6 +142,80 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }, { path, method: init.method ?? "GET", statusHint: "request" }, "sync");
 }
 
+/** A spoken recap clip: the WAV, the words it says, and the revision those
+ * words belong to. `stale` means the recap has moved on since the card was
+ * rendered, so the caller refreshes the card before playing. */
+export type RecapSpeechClip = {
+  bytes: ArrayBuffer;
+  mimeType: string;
+  lines: Array<{ text: string; time: string | null }>;
+  revision: number | null;
+  stale: boolean;
+};
+
+/** Streams one recap read aloud. The route takes the recap's id (never text) and
+ * answers with the audio plus the lines it spoke, so the prompter shows exactly
+ * what is being said. */
+export async function apiRequestAudio(
+  path: string,
+  body: { intervalId: string; revision: number | null; voice: string },
+): Promise<RecapSpeechClip> {
+  return diagnostics.withSpan("api.requestAudio", async () => {
+    if (syncBypassActive) throw new SyncBypassError();
+    const session = (await secureState.session()) ?? (import.meta.env && import.meta.env.DEV ? debugSession : null);
+    if (!session || isSessionExpired(session)) {
+      throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${cleanBase(session.apiBase)}${path}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(40_000),
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          "X-Work-OS-Organization-Id": session.organizationId,
+          "Content-Type": "application/json",
+          ...machineCadenceHeaders(),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      const failure = classifyRequestFailure(error);
+      throw new ApiRequestError(failure.message, null, true);
+    }
+    if (!response.ok) {
+      if (response.status === 401) await dropRejectedSession(path);
+      const detail = await response.json().catch(() => null) as { error?: unknown } | null;
+      const message = typeof detail?.error === "string" && detail.error
+        ? detail.error
+        : "Reading that recap is unavailable right now. Try again in a moment.";
+      throw new ApiRequestError(message, response.status, RETRYABLE_STATUS.has(response.status));
+    }
+    const linesHeader = response.headers.get("x-work-os-recap-lines");
+    let lines: RecapSpeechClip["lines"] = [];
+    if (linesHeader) {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(linesHeader));
+        if (Array.isArray(parsed)) {
+          lines = parsed.flatMap((entry) => entry && typeof entry === "object" && typeof (entry as { text?: unknown }).text === "string"
+            ? [{ text: (entry as { text: string }).text, time: typeof (entry as { time?: unknown }).time === "string" ? (entry as { time: string }).time : null }]
+            : []);
+        }
+      } catch { lines = []; }
+    }
+    const revisionHeader = response.headers.get("x-work-os-recap-revision");
+    const revision = revisionHeader && Number.isFinite(Number(revisionHeader)) ? Number(revisionHeader) : null;
+    return {
+      bytes: await response.arrayBuffer(),
+      mimeType: response.headers.get("content-type") ?? "audio/wav",
+      lines,
+      revision,
+      stale: response.headers.get("x-work-os-recap-stale") === "1",
+    };
+  }, { path, method: "POST", statusHint: "audio" }, "sync");
+}
+
 /** Authenticated binary fetch for protected media such as screenshot previews. */
 export async function apiRequestBlob(path: string, label = "Media"): Promise<Blob> {
   return diagnostics.withSpan("api.requestBlob", async () => {
