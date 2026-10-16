@@ -2114,6 +2114,8 @@ export default function AvatarApp(): React.ReactElement {
               decidingId={decidingIntervalId}
               pollMs={DAY_POLL_MS}
               onViewInApp={() => void openFocusInApp()}
+              onListen={toggleRecapRead}
+              listeningId={recapSpeech.status === "idle" ? null : recapSpeech.intervalId}
             />
           </>) : (<>
           {(contextualPrompt.kind === "check_in" || contextualPrompt.kind === "agenda") && taskContext && (taskContext.pendingCount + taskContext.overdueCount) > 0 && (
@@ -2180,6 +2182,8 @@ export default function AvatarApp(): React.ReactElement {
                             onEdit={activityPrompt?.id === entry.activityInterval.id ? startRecapEdit : undefined}
                             onDecide={decideActivityPrompt}
                             deciding={decidingIntervalId === entry.activityInterval.id}
+                            onListen={facts.voiceAvailable ? toggleRecapRead : undefined}
+                            listening={recapSpeech.status !== "idle" && recapSpeech.intervalId === entry.activityInterval.id}
                           />
                         )}
                         {entry.toolResults?.map((result, resultIndex) => {

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, StickyNote, X } from "lucide-react";
+import { Camera, Check, ChevronLeft, ChevronRight, Github, Image as ImageIcon, Pencil, Square, StickyNote, Volume2, X } from "lucide-react";
 import { ScreenshotImage, type PreviewResolver } from "./ScreenshotGallery";
 import { useModalScrollLock } from "./modalScrollLock";
 import type { ActivityInterval, ActivityIntervalCard as ActivityIntervalCardData, ActivityIntervalEvidence } from "./types";
@@ -152,6 +152,30 @@ interface ActivityIntervalCardProps {
   /** Chat-bubble presentation: an Edit action that hands editing to the
    * composer instead of expanding an inline field. */
   onEdit?: () => void;
+  /** Reads this recap aloud, beside the confirm action — the same player the
+   * companion bubble uses, so the two can never overlap. Carries the revision
+   * this card rendered, so a clip can never speak words the card has moved on
+   * from. */
+  onListen?: (id: string, revision: number | null) => void;
+  /** True while this recap is the one being read. */
+  listening?: boolean;
+}
+
+/** The read-aloud affordance, in the row that decides the recap: a speaker
+ * while it is idle, a stop square while this recap is the one being read. The
+ * label names the recap so a screen reader hears which one it will read. */
+function ListenControl({ listening, onListen, label }: { listening: boolean; onListen: () => void; label: string | null | undefined }) {
+  const what = label ? `the recap for ${label}` : "this recap";
+  return <button
+    type="button"
+    className={`chat-activity-quiet is-icon chat-activity-listen${listening ? " is-listening" : ""}`}
+    aria-label={listening ? `Stop reading ${what}` : `Listen to ${what}`}
+    aria-pressed={listening}
+    title={listening ? "Stop reading" : "Listen instead of reading"}
+    onClick={onListen}
+  >
+    {listening ? <Square size={13} aria-hidden="true" /> : <Volume2 size={15} aria-hidden="true" />}
+  </button>;
 }
 
 /** One Activity Interval Review card: headline, evidence-bounded detail,
@@ -167,6 +191,8 @@ export function ActivityIntervalCard({
   defaultPanel = null,
   resolveSrc,
   onEdit,
+  onListen,
+  listening = false,
 }: ActivityIntervalCardProps) {
   const [feedback, setFeedback] = useState("");
   const [amending, setAmending] = useState(false);
@@ -288,6 +314,7 @@ export function ActivityIntervalCard({
               <button type="button" className="chat-activity-quiet is-icon" aria-label="Edit" title="Edit" disabled={deciding} onClick={onEdit}>
                 <Pencil size={14} aria-hidden="true" />
               </button>
+              {onListen && <ListenControl listening={listening} onListen={() => onListen(interval.id, interval.revision ?? null)} label={interval.label} />}
             </div>
           </div>
         ) : amending ? (
@@ -318,6 +345,7 @@ export function ActivityIntervalCard({
             <button type="button" className="chat-activity-quiet is-icon" aria-label="Add or correct" title="Add or correct" disabled={deciding} onClick={() => setAmending(true)}>
               <Pencil size={14} aria-hidden="true" />
             </button>
+            {onListen && <ListenControl listening={listening} onListen={() => onListen(interval.id, interval.revision ?? null)} label={interval.label} />}
           </div>
         )
       ) : null}

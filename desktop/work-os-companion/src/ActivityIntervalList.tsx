@@ -8,7 +8,7 @@ import type { PreviewResolver } from "./ScreenshotGallery";
 /** The Tasks tab's Recent activity stream: Activity Interval Reviews newest
  * first, oldest last, each able to reveal the exact frames it was built from.
  * Reads its own cached query so a new recap appears without reopening the tab. */
-export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc, onViewInApp }: {
+export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidingId, pollMs, resolveSrc, onViewInApp, onListen, listeningId }: {
   date: string | null;
   enabled: boolean;
   timezone?: string | null;
@@ -18,6 +18,9 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
   resolveSrc?: PreviewResolver;
   /** Floating companion only: jump to the Focus tab in the main window. */
   onViewInApp?: () => void;
+  /** Readings are offered on the companion's own cards. */
+  onListen?: (id: string, revision: number | null) => void;
+  listeningId?: string | null;
 }) {
   const query = useActivityIntervalsQuery({ enabled, date, pollMs });
   const intervals = useMemo(() => query.data?.pages.flatMap((page) => page.intervals) ?? [], [query.data]);
@@ -58,6 +61,8 @@ export function ActivityIntervalList({ date, enabled, timezone, onDecide, decidi
               onDecide={onDecide}
               deciding={decidingId === interval.id}
               resolveSrc={resolveSrc}
+              onListen={onListen}
+              listening={listeningId === interval.id}
             />
           ))}
         </div>
