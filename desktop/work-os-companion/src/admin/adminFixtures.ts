@@ -451,6 +451,22 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
     ],
   } satisfies OrganizationResponse);
   const taskFilters = { filter: "open", personId: "", projectId: "", limit: "200", completed: "false" };
+  // The dense record exercises the task-date rules: created stamps in both the
+  // provider and local shapes, one task with no created date (both cells keep
+  // their dash), and two tasks with no recorded due date — one created
+  // recently (its effective due date is created + 1 day) and one created days
+  // ago (that default has already passed, so the row reads Overdue).
+  const taskCreated: Array<{ created_at?: string; provider_created_at?: string }> = [
+    { provider_created_at: "2026-09-28T09:15:00.000Z" },
+    { created_at: "2026-10-01T10:20:00.000Z" },
+    { provider_created_at: "2026-10-05T08:05:00.000Z" },
+    { created_at: `${isoDaysAgo(4)}T09:00:00.000Z` },
+    { provider_created_at: "2026-10-07T12:00:00.000Z" },
+    { created_at: "2026-10-08T09:30:00.000Z" },
+    { provider_created_at: "2026-10-09T14:10:00.000Z" },
+    {},
+    { provider_created_at: `${isoDaysAgo(1)}T08:30:00.000Z` },
+  ];
   queryClient.setQueryData(adminKeys.tasks(taskFilters), {
     tasks: Array.from({ length: 9 }, (_, index) => ({
       id: `t-${index + 1}`,
@@ -466,7 +482,8 @@ export function seedAdminFixtures(queryClient: QueryClient, state: "dense" | "em
         "Quarterly retention policy review",
       ][index],
       completed: false,
-      due_date: new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
+      due_date: index === 3 || index === 8 ? null : new Date(Date.UTC(2026, 9, 12 + (index % 6))).toISOString().slice(0, 10),
+      ...taskCreated[index],
       priority: ["high", "medium", "low"][index % 3],
       labels: index % 2 === 0 ? ["platform"] : [],
       project: index % 3 === 0 ? { id: "proj-1", name: "Platform" } : index % 3 === 1 ? { id: "proj-2", name: "Product" } : { id: "proj-3", name: "Operations" },

@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The administration task list now shows each task's created date, and a task with no due date reads due one day after it was created.
+
 ## 0.4.55 — 2026-10-16
 
 - Otto's launcher stays a small button in the lower-right corner when the window is narrow, instead of stretching across the bottom of the screen.

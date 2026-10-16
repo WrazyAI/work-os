@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AdminTaskRow } from "./admin/data";
-import { TASK_SORT_COLUMNS, nextTaskSort, sortTaskRows, type TaskSortState } from "./admin/TasksPage";
+import { TASK_SORT_COLUMNS, nextTaskSort, sortTaskRows, taskCreatedDate, taskEffectiveDueDate, type TaskSortState } from "./admin/TasksPage";
 
 /** A fixed workday keeps the Status ranks deterministic: the fixture dates
  * below are chosen around it (2026-10-16). */
@@ -89,10 +89,64 @@ describe("administration task ordering", () => {
     expect(labels(sortTaskRows(rows, asc("status"), TODAY))).toEqual(["t-past", "t-today"]);
   });
 
+  it("reads a task's created date with the provider stamp first, then the local record", () => {
+    expect(taskCreatedDate(row("t-1", { provider_created_at: "2026-09-30T23:00:00.000Z", created_at: "2026-10-02T08:00:00.000Z" }))).toBe("2026-09-30");
+    expect(taskCreatedDate(row("t-2", { created_at: "2026-10-02T08:00:00.000Z" }))).toBe("2026-10-02");
+    expect(taskCreatedDate(row("t-3", { provider_created_at: "  ", created_at: "2026-10-02" }))).toBe("2026-10-02");
+    // An unreadable or missing stamp reads as not recorded instead of
+    // fabricating a day.
+    expect(taskCreatedDate(row("t-4", { created_at: "not-a-date" }))).toBeNull();
+    expect(taskCreatedDate(row("t-5"))).toBeNull();
+  });
+
+  it("derives the effective due date as created + 1 day, month and year boundaries included", () => {
+    expect(taskEffectiveDueDate(row("t-1", { created_at: "2026-10-13T09:00:00.000Z" }))).toBe("2026-10-14");
+    expect(taskEffectiveDueDate(row("t-2", { provider_created_at: "2026-10-31T23:00:00.000Z" }))).toBe("2026-11-01");
+    expect(taskEffectiveDueDate(row("t-3", { created_at: "2026-12-31" }))).toBe("2027-01-01");
+    // A recorded due date always wins over the default.
+    expect(taskEffectiveDueDate(row("t-4", { due_date: "2026-11-20", created_at: "2026-10-13T09:00:00.000Z" }))).toBe("2026-11-20");
+    // No created date means no effective due date at all.
+    expect(taskEffectiveDueDate(row("t-5", { due_date: null }))).toBeNull();
+  });
+
+  it("sorts Created newest first, oldest first second, and keeps missing dates last both ways", () => {
+    const rows = [
+      row("t-old", { created_at: "2026-09-01T09:00:00.000Z" }),
+      row("t-new", { provider_created_at: "2026-10-10T09:00:00.000Z" }),
+      row("t-none"),
+      row("t-mid", { created_at: "2026-09-20T09:00:00.000Z" }),
+    ];
+    expect(labels(sortTaskRows(rows, desc("created"), TODAY))).toEqual(["t-new", "t-mid", "t-old", "t-none"]);
+    expect(labels(sortTaskRows(rows, asc("created"), TODAY))).toEqual(["t-old", "t-mid", "t-new", "t-none"]);
+  });
+
+  it("sorts Due by the effective due date, so a derived created + 1 day orders among recorded dates", () => {
+    const rows = [
+      row("t-recorded-late", { due_date: "2026-10-20" }),
+      row("t-derived", { created_at: "2026-10-12" }),
+      row("t-recorded-early", { due_date: "2026-10-06" }),
+      row("t-missing"),
+    ];
+    // t-derived reads 2026-10-13, between the two recorded dates.
+    expect(labels(sortTaskRows(rows, asc("due"), TODAY))).toEqual(["t-recorded-early", "t-derived", "t-recorded-late", "t-missing"]);
+    expect(labels(sortTaskRows(rows, desc("due"), TODAY))).toEqual(["t-recorded-late", "t-derived", "t-recorded-early", "t-missing"]);
+  });
+
+  it("ranks a task past its derived due date as Overdue and one due today as Open", () => {
+    const rows = [
+      row("t-derived-past", { created_at: "2026-10-10" }),
+      row("t-derived-today", { created_at: "2026-10-15" }),
+      row("t-undated", {}),
+    ];
+    expect(labels(sortTaskRows(rows, asc("status"), TODAY))).toEqual(["t-derived-past", "t-derived-today", "t-undated"]);
+  });
+
   it("starts each column at its natural direction, reverses on the second activation, and switches columns", () => {
     expect(nextTaskSort(null, "task")).toEqual({ key: "task", direction: "asc" });
     expect(nextTaskSort({ key: "task", direction: "asc" }, "task")).toEqual({ key: "task", direction: "desc" });
     expect(nextTaskSort({ key: "task", direction: "desc" }, "task")).toEqual({ key: "task", direction: "asc" });
+    expect(nextTaskSort(null, "created")).toEqual({ key: "created", direction: "desc" });
+    expect(nextTaskSort({ key: "created", direction: "desc" }, "created")).toEqual({ key: "created", direction: "asc" });
     expect(nextTaskSort({ key: "task", direction: "desc" }, "due")).toEqual({ key: "due", direction: "asc" });
     expect(nextTaskSort({ key: "status", direction: "desc" }, "status")).toEqual({ key: "status", direction: "asc" });
   });
@@ -101,6 +155,7 @@ describe("administration task ordering", () => {
     expect(TASK_SORT_COLUMNS.map((column) => [column.key, column.firstDirection, column.directions.asc, column.directions.desc])).toEqual([
       ["task", "asc", "A to Z", "Z to A"],
       ["assignees", "asc", "A to Z", "Z to A"],
+      ["created", "desc", "oldest first", "newest first"],
       ["due", "asc", "earliest first", "latest first"],
       ["status", "asc", "overdue first", "done first"],
     ]);

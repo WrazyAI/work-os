@@ -21,6 +21,7 @@ import {
   statusLabel,
   todayIso,
 } from "./data";
+import { formatWorkOsFullDate, shiftWorkOsDate } from "../dateFormat";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
@@ -36,7 +37,7 @@ type TaskFilter = "open" | "completed" | "all";
  * claims no rank and stays last. Pure functions, exported for the comparator
  * tests (design.md §16.2 sortable tables). */
 
-export type TaskSortKey = "task" | "assignees" | "due" | "status";
+export type TaskSortKey = "task" | "assignees" | "created" | "due" | "status";
 export type TaskSortDirection = "asc" | "desc";
 export interface TaskSortState {
   key: TaskSortKey;
@@ -51,12 +52,44 @@ export const TASK_SORT_COLUMNS: ReadonlyArray<{
 }> = [
   { key: "task", label: "Task", firstDirection: "asc", directions: { asc: "A to Z", desc: "Z to A" } },
   { key: "assignees", label: "Assignees", firstDirection: "asc", directions: { asc: "A to Z", desc: "Z to A" } },
+  { key: "created", label: "Created", firstDirection: "desc", directions: { asc: "oldest first", desc: "newest first" } },
   { key: "due", label: "Due", firstDirection: "asc", directions: { asc: "earliest first", desc: "latest first" } },
   { key: "status", label: "Status", firstDirection: "asc", directions: { asc: "overdue first", desc: "done first" } },
 ];
 
 function trimmedText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+const STRICT_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The recorded calendar day a date-shaped value states, if it states one; an
+ * empty or unreadable value is "not recorded" and never paints. */
+function recordedDate(value: unknown): string | null {
+  const day = trimmedText(value).slice(0, 10);
+  return STRICT_DATE.test(day) ? day : null;
+}
+
+/** The created date the row states: the provider's own creation stamp first,
+ * then the local record — the same precedence the employee task detail reads.
+ * Both shapes keep their recorded calendar day instead of shifting with the
+ * viewer's timezone. */
+export function taskCreatedDate(task: AdminTaskRow): string | null {
+  return recordedDate(trimmedText(task.provider_created_at) || trimmedText(task.created_at));
+}
+
+/** The row's effective due date: the recorded due date when the task has one,
+ * otherwise one day after it was created (design.md §16.2). The derived value
+ * is the due date everywhere the row is read — the Due cell, the overdue
+ * warning and the Overdue/Open/Done pill, and the Due column's sorting —
+ * exactly as if it were recorded, and it renders plainly with no "default"
+ * marker. Only a task whose created date is also missing has no effective due
+ * date and keeps the dash. */
+export function taskEffectiveDueDate(task: AdminTaskRow): string | null {
+  const recorded = recordedDate(task.due_date);
+  if (recorded) return recorded;
+  const created = taskCreatedDate(task);
+  return created ? shiftWorkOsDate(created, 1) || null : null;
 }
 
 function taskLabel(task: AdminTaskRow): string | null {
@@ -81,13 +114,14 @@ function dayValue(value: unknown): number | null {
 }
 
 /** 0 = Overdue, 1 = Open, 2 = Done — the same predicate the pill renders from
- * the recorded completion flag; a row whose record states no flag has no rank
- * and sorts last in both directions (the pill's Open is a display default
+ * the recorded completion flag, reading the row's effective due date (the
+ * created + 1 day default included); a row whose record states no flag has no
+ * rank and sorts last in both directions (the pill's Open is a display default
  * only). */
 function statusRank(task: AdminTaskRow, today: string): number | null {
   if (typeof task.completed !== "boolean") return null;
   if (task.completed) return 2;
-  const due = trimmedText(task.due_date);
+  const due = taskEffectiveDueDate(task);
   return due && due < today ? 0 : 1;
 }
 
@@ -118,7 +152,8 @@ function compareTiebreak(a: AdminTaskRow, b: AdminTaskRow) {
 
 /** `sort` null keeps the record's default recency order (most recently updated
  * first, missing timestamps last); `today` is the caller's workday for the
- * Status ranks. */
+ * Status ranks. Created and Due read the date helpers above, so a derived due
+ * date orders exactly like a recorded one. */
 export function compareAdminTasks(a: AdminTaskRow, b: AdminTaskRow, sort: TaskSortState | null, today = todayIso()) {
   const direction: 1 | -1 = sort?.direction === "desc" ? -1 : 1;
   const primary = !sort
@@ -127,9 +162,11 @@ export function compareAdminTasks(a: AdminTaskRow, b: AdminTaskRow, sort: TaskSo
       ? compareNullable(taskLabel(a), taskLabel(b), direction, compareText)
       : sort.key === "assignees"
         ? compareNullable(assigneeLabel(a), assigneeLabel(b), direction, compareText)
-        : sort.key === "due"
-          ? compareNullable(dayValue(a.due_date), dayValue(b.due_date), direction, (left, right) => left - right)
-          : compareNullable(statusRank(a, today), statusRank(b, today), direction, (left, right) => left - right);
+        : sort.key === "created"
+          ? compareNullable(dayValue(taskCreatedDate(a)), dayValue(taskCreatedDate(b)), direction, (left, right) => left - right)
+          : sort.key === "due"
+            ? compareNullable(dayValue(taskEffectiveDueDate(a)), dayValue(taskEffectiveDueDate(b)), direction, (left, right) => left - right)
+            : compareNullable(statusRank(a, today), statusRank(b, today), direction, (left, right) => left - right);
   return primary || compareTiebreak(a, b);
 }
 
@@ -313,19 +350,28 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
               <tbody>
                 {sortedRows.map((task) => {
                   const id = String(task.id);
-                  const overdue = task.completed !== true && task.due_date && String(task.due_date) < todayIso();
+                  const created = taskCreatedDate(task);
+                  // The effective due date includes the created + 1 day default;
+                  // it drives the cell, the overdue warning, and the pill
+                  // exactly as a recorded due date would (design.md §16.2).
+                  const due = taskEffectiveDueDate(task);
+                  const overdue = task.completed !== true && !!due && due < todayIso();
+                  const priority = trimmedText(task.priority);
                   return (
                     <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
                       <td>
                         <span className="admin-record">
                           <b className={task.completed ? "is-done" : undefined}>{String(task.title ?? task.name ?? "Task")}</b>
-                          <small>{task.project?.name ? String(task.project.name) : "No project"}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>
+                          {/* Project stays a small per-task detail — the list
+                              is one flat record, never grouped by project. */}
+                          <small>{task.project?.name ? String(task.project.name) : "No project"}{priority ? ` · ${statusLabel(priority)} priority` : ""}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>
                         </span>
                       </td>
                       <td className="admin-quiet">
                         {Array.isArray(task.assignees) && task.assignees.length ? task.assignees.map((assignee: Record<string, any>) => assignee.displayName).join(", ") : "Unassigned"}
                       </td>
-                      <td className={overdue ? "admin-numeric warn" : "admin-numeric"}>{task.due_date ? shortDate(`${task.due_date}T12:00:00Z`) : "—"}</td>
+                      <td className="admin-numeric">{formatWorkOsFullDate(created)}</td>
+                      <td className={overdue ? "admin-numeric warn" : "admin-numeric"}>{formatWorkOsFullDate(due)}</td>
                       <td><Pill tone={task.completed ? "ok" : overdue ? "err" : "neutral"}>{task.completed ? "Done" : overdue ? "Overdue" : "Open"}</Pill></td>
                       <td>
                         <AdminButton

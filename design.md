@@ -1816,9 +1816,22 @@ Settings keeps each field group inside its own card instead of the header.
   exceptions, recent workdays, reports, updates and recaps, and a seven-day
   evidence summary.
 - **Tasks** is the organization task record with bounded filters and the local
-  add-task flow; **Settings** groups system status, features, memberships,
-  teams, provider connections, field mappings, and blueprints into sections
-  with one action per decision area.
+  add-task flow: one flat list, never grouped or ordered by project, which
+  stays a small per-task detail beside the task's priority and labels.
+  **Settings** groups system status, features, memberships, teams, provider
+  connections, field mappings, and blueprints into sections with one action
+  per decision area.
+
+**Task dates.** Every task row shows when the task was created — the provider's
+own creation stamp when recorded, then the local record's — in the same
+letter-month form as its due date and immediately ahead of it, so the two dates
+read together. A task with no recorded due date reads against the default it
+implies: one day after it was created. The derived value is the row's effective
+due date everywhere the row is read — the Due cell, the overdue warning and the
+Overdue/Open/Done pill, and the Due column's sorting — exactly as a recorded
+date would, and it renders plainly with no "default" marker. Only a task whose
+created date is also missing shows a dash and claims no overdue state, so a
+task past its derived date does read Overdue.
 
 **Cached state.** Administration reads through the shared in-memory TanStack
 Query cache, not a fetch per visit: list and summary reads revalidate after 45
@@ -1837,13 +1850,15 @@ control is the explicit force-fresh path for the current section.
 
 **Sortable tables.** The administration task record opens most-recently-updated
 first. Every labeled column header is a button: the first activation applies
-that column's natural order — A→Z for Task and Assignees, earliest first for
-Due, attention order (Overdue → Open → Done) for Status — a second activation
-reverses it, and another column switches to its own natural order. Rows missing
-the sorted value stay last in both directions, and ties break by title then id
-so the list never jitters. The sorted column's `th` carries `aria-sort` with an
-always-visible direction indicator, inactive columns reveal a quiet affordance
-on hover or keyboard focus, and the empty actions column is never sortable.
+that column's natural order — A→Z for Task and Assignees, newest first for
+Created, earliest first for Due (which orders by the row's effective due date,
+the derived default included), attention order (Overdue → Open → Done) for
+Status — a second activation reverses it, and another column switches to its
+own natural order. Rows missing the sorted value stay last in both directions,
+and ties break by title then id so the list never jitters. The sorted column's
+`th` carries `aria-sort` with an always-visible direction indicator, inactive
+columns reveal a quiet affordance on hover or keyboard focus, and the empty
+actions column is never sortable.
 
 ### 16.3 Data and provenance
 

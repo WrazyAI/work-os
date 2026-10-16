@@ -63,6 +63,10 @@ export interface AdminTaskRow {
   status?: string | null;
   labels?: string[] | null;
   updated_at?: string | null;
+  /** The record's own creation stamp; `provider_created_at` (Nifty's mirror)
+   * wins when both are present, matching the employee task detail. */
+  created_at?: string | null;
+  provider_created_at?: string | null;
   project?: { id?: string; name?: string | null } | null;
   assignees?: Array<Record<string, any>> | null;
   [key: string]: any;
@@ -661,6 +665,8 @@ function normalizeTaskRow(row: Loose): AdminTaskRow {
     status: asTextOrNull(row.status),
     labels: asTextArray(row.labels),
     updated_at: asTextOrNull(row.updated_at),
+    created_at: asTextOrNull(row.created_at),
+    provider_created_at: asTextOrNull(row.provider_created_at),
     project: project ? { id: asText(project.id), name: asTextOrNull(project.name) } : null,
     // Assignee rows are rendered by name; a sparse embed must not hand the
     // page a null it would dereference.

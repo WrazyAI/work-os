@@ -247,14 +247,19 @@ describe("administration response normalizers", () => {
     const list = normalizeAdminTaskList({ tasks: [{ id: "t-1", name: "Retry handling" }] });
     expect(list.summary).toBeUndefined();
     expect(list.nextOffset).toBeNull();
-    expect(list.tasks[0]).toMatchObject({ id: "t-1", name: "Retry handling", title: null, project: null, assignees: [], labels: [], completed: null, due_date: null });
+    expect(list.tasks[0]).toMatchObject({ id: "t-1", name: "Retry handling", title: null, project: null, assignees: [], labels: [], completed: null, due_date: null, created_at: null, provider_created_at: null });
     const details = normalizeAdminTaskDetails({ task: { id: "t-1", title: "Retry handling" } });
     expect(details.subtasks).toEqual([]);
     expect(details.task.project).toBeNull();
     // A present assignee keeps a readable name for the table.
     const named = normalizeAdminTaskList({ tasks: [{ id: "t-2", assignees: [{ display_name: "Amara Okafor" }] }] });
     expect(named.tasks[0].assignees).toEqual([{ display_name: "Amara Okafor", displayName: "Amara Okafor" }]);
-    expectNoLeaks([list, details, named]);
+    // The created stamps keep their exact field names so the table can read
+    // the provider's record first and the local one second.
+    const stamped = normalizeAdminTaskList({ tasks: [{ id: "t-3", created_at: "2026-10-01T08:00:00.000Z", provider_created_at: "2026-09-30" }] });
+    expect(stamped.tasks[0].created_at).toBe("2026-10-01T08:00:00.000Z");
+    expect(stamped.tasks[0].provider_created_at).toBe("2026-09-30");
+    expectNoLeaks([list, details, named, stamped]);
   });
 
   it("normalizes organization, connections, and GitHub payloads without their collections", () => {
