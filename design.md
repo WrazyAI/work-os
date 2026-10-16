@@ -487,6 +487,23 @@ Rows:
 - The description renders only when it adds something beyond the title; it is
   dropped at narrow widths along with the project line.
 - No per-row border box unless a row is a temporary pending/error state.
+- The row's trailing columns — progress, due, status, actions — centre
+  vertically against the row, not against its title line. Pinned to the top
+  they leave dead space beneath themselves on any row that carries a
+  description, which reads as a stack of half-empty cards.
+- Type sits on the administration tables' steps: a 13px title, 11px metadata
+  and status pill, an 11.5px description, and a 10px tracked column header.
+  Readable type is the constraint; chrome yields to it rather than the reverse.
+- The description carries `--dash-muted`, the same step as the metadata line.
+  `--dash-faint` does not clear AA on the row surface, and the description is
+  content the employee is meant to read.
+- The failing state is stated once, by the pill. The due date does not repeat it
+  in red alongside.
+- The status vocabulary (Open, Complete, Overdue, Sync issue) and its tints are
+  defined once in `styles.css`. A theme layer places the pill; it does not
+  restate its colour, size, or weight.
+- The active sort is stated once, in the column row. A day group states an order
+  only when that group deviates from the view's own.
 - No raw provider IDs, object stringification, or invalid date output.
 
 ### 6.3 Selection, hover, and focus
@@ -505,6 +522,13 @@ Use aria-selected="true" as the source of truth. Do not add a separate
 selected class that can drift. The visual may be implemented with an inset
 1px line plus a subtle surface change, but it must never use a colored
 vertical bar or a neon highlighter.
+
+This treatment applies where the surface has a selection model. The task list
+has none. There `aria-selected` — which is also invalid on `role="button"` —
+could only restate "this task is on today's plan", and because every My day row
+is on today's plan the selected chrome would cover the whole list and say
+nothing. That fact is the `On today` tag, and inside My day it needs no signal
+at all: every row there is on today's plan.
 
 Hover is a smaller version of the same surface change. Keyboard focus gets a
 visible 2px focus ring outside the row, with sufficient contrast. Focus and

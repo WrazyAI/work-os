@@ -25,6 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.54 — 2026-10-16
+
+- The Tasks list is easier to read: larger text, plain rows separated by thin dividers, and red only where something actually needs your attention.
+- My day stops repeating the same sorting note above every group, and an overdue task no longer turns its own date red as well as its status.
+
 ## 0.4.53 — 2026-10-16
 
 - The administration task list now opens newest first; click any column header to sort by it, and click again to reverse the order.
