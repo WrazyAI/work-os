@@ -25,12 +25,11 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.53 — 2026-10-16
+
 - The administration task list now opens newest first; click any column header to sort by it, and click again to reverse the order.
-
 - Dates across the companion and administration now read like dates — "Oct 16, 2026" instead of raw timestamp values.
-
 - Administration sections keep their data while you move between them, so switching pages no longer reloads everything each time.
-
 - The administration workspace now has the same refresh button as the employee view: it refreshes the page you're on and spins while that page's data syncs.
 
 ## 0.4.52 — 2026-10-15
