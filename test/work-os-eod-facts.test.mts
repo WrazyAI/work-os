@@ -9,6 +9,7 @@ import {
   formatReportDate,
   groupActivityFrames,
   humanizeGoalSource,
+  outsideShiftMarker,
   progressedFacts,
   unplannedFacts,
 } from "../src/lib/work-os-eod-facts";
@@ -57,6 +58,21 @@ test("times render in the employee timezone in plain 12-hour form", () => {
   assert.equal(formatReportDate("2026-09-17"), "September 17, 2026");
   assert.equal(factLine({ title: "Confirm Acme emergency service claims", at: "2026-09-17T15:03:54Z" }, "UTC", "completed"), "- Confirm Acme emergency service claims — completed 3:03 PM");
   assert.equal(factLine({ title: "Refine the WorkOS design direction" }, "UTC"), "- Refine the WorkOS design direction");
+});
+
+test("facts outside the workday window carry a plain outside-shift marker", () => {
+  const window = { startIso: "2026-10-14T14:00:00.000Z", endIso: "2026-10-14T21:00:00.000Z", source: "schedule" as const };
+  assert.equal(outsideShiftMarker("2026-10-14T15:03:00.000Z", window), "");
+  assert.equal(outsideShiftMarker("2026-10-14T01:17:00.000Z", window), " (outside shift)");
+  assert.equal(outsideShiftMarker("2026-10-14T21:41:00.000Z", window), " (outside shift)");
+  // No window or no usable timestamp leaves the fact unmarked.
+  assert.equal(outsideShiftMarker("2026-10-14T01:17:00.000Z", null), "");
+  assert.equal(outsideShiftMarker(null, window), "");
+  assert.equal(outsideShiftMarker("invalid", window), "");
+  assert.equal(
+    factLine({ title: "Evaluate Depot CI runner speed", at: "2026-10-14T01:17:00.000Z" }, "UTC", "completed", window),
+    "- Evaluate Depot CI runner speed — completed 1:17 AM (outside shift)",
+  );
 });
 
 test("goal provenance is humanized instead of leaking enum values", () => {

@@ -41,9 +41,10 @@ test("employee flow routes preserve idempotency and person scope", async () => {
   assert.doesNotMatch(eodService, /workspace\.carryOverGroups/);
   assert.match(eodService, /No tasks were completed on this date/);
   assert.match(await source("src/lib/work-os-eod-window.ts"), /resolveEodActivityWindow/, "the workday window resolves from the schedule, then the session");
-  assert.match(await source("src/lib/work-os-eod-window.ts"), /withinEodActivityWindow/, "day facts are filtered by the workday window");
-  assert.match(await source("src/lib/work-os-eod.ts"), /withinEodActivityWindow/, "the deterministic draft bounds task facts to the workday window");
-  assert.match(await source("src/lib/aiEod.ts"), /withinEodActivityWindow/, "the AI draft bounds task facts to the workday window");
+  assert.match(await source("src/lib/work-os-eod-window.ts"), /withinEodActivityWindow/, "day facts are compared against the workday window");
+  assert.match(await source("src/lib/work-os-eod-facts.ts"), /outsideShiftMarker/, "out-of-shift facts carry a plain marker");
+  assert.match(await source("src/lib/work-os-eod.ts"), /eodActivityWindowFor/, "the deterministic draft resolves the workday window for fact labels");
+  assert.match(await source("src/lib/aiEod.ts"), /outsideShiftMarker/, "the AI draft labels out-of-shift facts");
   assert.match(await source("src/lib/work-os-screenshot-hours.ts"), /eodActivityWindowFor/, "hourly EOD rollups follow the workday window");
   assert.match(await source("src/lib/aiEod.ts"), /eodActivityWindowFor/, "the EOD screenshot context follows the workday window");
   assert.match(await source("src/app/api/work-os/me/eod/ai-draft/route.ts"), /eodActivityWindowFor/, "the EOD draft's GitHub evidence follows the workday window");

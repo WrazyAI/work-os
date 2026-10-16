@@ -1,4 +1,5 @@
 import type { Json } from "@/lib/work-os-internal";
+import { withinEodActivityWindow, type EodActivityWindow } from "@/lib/work-os-eod-window";
 
 /** Scheduled agent routines ("Run me-context-update routine (2026-09-17)") are
  * automation, not employee deliverables. The EOD collapses every run of the
@@ -76,11 +77,19 @@ export function humanizeGoalSource(provenance: unknown): string {
   return labels[key] ?? "Not recorded";
 }
 
-/** One report line: "- Title — 09:12", with the time only when it is known. */
-export function factLine(item: { title: string; at?: string | null }, timezone: string, verb?: string): string {
+/** Facts the workday window proves finished outside the shift carry a plain
+ * marker, so a manager never reads off-shift work as in-shift work. Facts with
+ * no window or no usable timestamp stay unmarked. */
+export function outsideShiftMarker(at: unknown, window: EodActivityWindow | null): string {
+  return window && !withinEodActivityWindow(at, window) ? " (outside shift)" : "";
+}
+
+/** One report line: "- Title — 09:12", with the time only when it is known and
+ * the outside-shift marker when the workday window proves it. */
+export function factLine(item: { title: string; at?: string | null }, timezone: string, verb?: string, window?: EodActivityWindow | null): string {
   const time = formatLocalTime(item.at, timezone);
   const suffix = time ? ` — ${verb ? `${verb} ` : ""}${time}` : "";
-  return `- ${item.title}${suffix}`;
+  return `- ${item.title}${suffix}${outsideShiftMarker(item.at, window ?? null)}`;
 }
 
 /** Creations that came from the day's own plan are commitments, not unplanned

@@ -7,7 +7,7 @@ import { recordWorkMemory } from "@/lib/work-memory";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
-import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
@@ -150,11 +150,11 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     .filter((id) => id && id !== "null"));
 
   const evidence = (evidenceRows ?? []) as Json[];
-  // Task facts and updates outside the workday window never enter the report;
-  // an overnight or post-shift completion belongs to no reported workday.
+  // Task facts stay date-scoped; the workday window only labels the ones that
+  // finished outside the shift, so overnight output is never hidden.
   const window = await eodActivityWindowFor(access.organizationId, personId, reportDate);
-  const updates = ((checkInsResult.data ?? []) as Json[]).filter((row) => withinEodActivityWindow(row.occurred_at, window));
-  const events = ((eventsResult.data ?? []) as Json[]).filter((row) => withinEodActivityWindow(row.exact_at ?? row.observed_at, window));
+  const updates = (checkInsResult.data ?? []) as Json[];
+  const events = (eventsResult.data ?? []) as Json[];
   const dayWork = selectDayEodWork({ events, tasks: workspace.tasks });
 
   // Routine runs are automation, not deliverables: they collapse into one
@@ -208,7 +208,7 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   const roleValue = personResult.data.role_profile as { name?: string } | Array<{ name?: string }> | null;
   const roleName = Array.isArray(roleValue) ? roleValue[0]?.name : roleValue?.name;
   const title = `EOD Report: ${personResult.data.display_name} — ${formatReportDate(reportDate)}`;
-  const completedLines = capFactLines(completedHuman.map((item) => factLine(item, timezone, "completed")));
+  const completedLines = capFactLines(completedHuman.map((item) => factLine(item, timezone, "completed", window)));
   const markdown = [
     `# ${title}`,
     "",
@@ -226,20 +226,20 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     "",
     "## Progressed Work",
     ...(progressed.length
-      ? capFactLines(progressed.map((item) => factLine(item, timezone)))
+      ? capFactLines(progressed.map((item) => factLine(item, timezone, undefined, window)))
       : ["- No progress updates were recorded for this day."]),
     "",
     "## Deferred Work",
-    ...capFactLines(deferred.map((item) => factLine(item, timezone))),
+    ...capFactLines(deferred.map((item) => factLine(item, timezone, undefined, window))),
     ...(!deferred.length ? ["- No work was explicitly deferred."] : []),
     "",
     "## Carried Work",
-    ...capFactLines(carried.map((item) => factLine(item, timezone))),
+    ...capFactLines(carried.map((item) => factLine(item, timezone, undefined, window))),
     ...(!carried.length ? ["- Nothing carries over from this day."] : []),
     "",
     "## Unplanned Work",
     ...(unplanned.length
-      ? capFactLines(unplanned.map((item) => factLine(item, timezone, "created")))
+      ? capFactLines(unplanned.map((item) => factLine(item, timezone, "created", window)))
       : ["- No tasks were created outside the day's plan."]),
     "",
     "## Output Evidence",

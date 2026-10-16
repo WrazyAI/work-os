@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
-import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
-import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
+import { automationName, collapseAutomation, formatLocalTime, outsideShiftMarker } from "@/lib/work-os-eod-facts";
+import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
@@ -152,6 +152,7 @@ export function buildEodPrompt(grounding: EodGrounding): string {
   return [
     `Write the end-of-day report for ${grounding.personName}, ${grounding.date}. Plain language for a manager — no jargon, no productivity scores, no invention.`,
     `Session: ${grounding.clockedInAt ?? "not clocked in"} → ${grounding.clockedOutAt ?? "still open"}.`,
+    `Facts marked (outside shift) finished outside the employee's scheduled shift; state them exactly as recorded and never present them as in-shift work.`,
     "",
     "Updates recorded through the day:",
     fmt(facts.summary, "none"),
@@ -231,12 +232,15 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     : { data: [], error: null };
   if (planItemsResult.error) throw new Error(`load EOD commitment items: ${planItemsResult.error.message}`);
 
-  // Workday facts only: task completions and updates outside the shift never
-  // enter the report.
+  // Task facts stay date-scoped; the workday window labels the ones that
+  // finished outside the shift instead of hiding them.
   const window = await eodActivityWindowFor(organizationId, personId, date);
   const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
-    .filter((row) => withinEodActivityWindow(row.occurred_at, window))
-    .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
+    .map((row) => {
+      const text = String(row.input_text ?? "").trim();
+      const at = String(row.occurred_at ?? "");
+      return { kind: String(row.update_kind ?? "update"), text: text ? `${text}${outsideShiftMarker(at, window)}` : "", at };
+    })
     .filter((row) => row.text);
   const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
   const completed: string[] = [];
@@ -245,8 +249,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   const automationTitles: string[] = [];
   const seenCompleted = new Set<string>();
   const seenCarried = new Set<string>();
-  const events = ((eventsResult.data ?? []) as Array<Record<string, unknown>>)
-    .filter((event) => withinEodActivityWindow(event.exact_at ?? event.observed_at, window));
+  const events = ((eventsResult.data ?? []) as Array<Record<string, unknown>>);
   for (const event of events) {
     const snapshot = (event.task_snapshot ?? {}) as { title?: unknown };
     const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "a task";
@@ -273,7 +276,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     }
     const rawAt = event.exact_at ?? event.observed_at;
     const time = formatLocalTime(rawAt, timezone);
-    const stamped = time ? `${title} (${time})` : title;
+    const stamped = `${time ? `${title} (${time})` : title}${outsideShiftMarker(rawAt, window)}`;
     if (completedEvent) completed.push(stamped);
     else carried.push(stamped);
   }
