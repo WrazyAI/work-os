@@ -1,7 +1,10 @@
-import { ArrowLeftRight, CircleHelp } from "lucide-react";
+import { ArrowLeftRight, CircleHelp, RefreshCw } from "lucide-react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import SidebarNav from "../SidebarNav";
 import { NotificationsBell } from "../NotificationsBell";
 import { ProfileAvatar } from "../ProfileSettings";
+import { FadeArc } from "../LoadingUi";
+import { adminSectionQueryMatches } from "./adminRefresh";
 import OverviewPage from "./OverviewPage";
 import PeoplePage from "./PeoplePage";
 import TasksPage from "./TasksPage";
@@ -78,6 +81,16 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
   const navigate = (next: AdminSection, nextFocus?: Focus) => onNavigate(next, nextFocus);
   const meta = ADMIN_SECTIONS[section];
 
+  const queryClient = useQueryClient();
+  /* The masthead refresh control mirrors the employee one (App.tsx): it
+   * revalidates only the reads backing the current section — never a blanket
+   * app refresh. The same control spins whenever that section's data is
+   * fetching, because `useIsFetching` observes the live query cache: the
+   * Overview 60s poll, invalidations after a write, focus revalidation, or
+   * this button's own click all drive the same state. Settings keeps no
+   * page refresh (design.md §16.1). */
+  const fetching = useIsFetching({ predicate: (query) => adminSectionQueryMatches(section, query.queryKey) });
+
   const content = section === "overview"
     ? <OverviewPage onOpenSection={(next, focus) => navigate(next, focus)} onOpenPerson={(personId) => navigate("people", { personId })} />
     : section === "people"
@@ -132,6 +145,18 @@ export default function AdminWorkspace({ session, notifications, profile, onOpen
               <span className="admin-quiet">No personal workday is mapped to this account</span>
             )}
             {session.personId && notifications ? <NotificationsBell {...notifications} /> : null}
+            {session.role === "admin" && section !== "settings" ? (
+              <button
+                type="button"
+                className="icon"
+                title="Refresh this page"
+                aria-label="Refresh this page"
+                disabled={fetching > 0}
+                onClick={() => void queryClient.refetchQueries({ predicate: (query) => adminSectionQueryMatches(section, query.queryKey), type: "active" })}
+              >
+                {fetching > 0 ? <FadeArc size={17} /> : <RefreshCw size={17} />}
+              </button>
+            ) : null}
             {profile ? (
               <button type="button" className="avatar" aria-label={`Profile for ${profile.name}`} title="Open profile settings" onClick={profile.onOpen}>
                 <ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />

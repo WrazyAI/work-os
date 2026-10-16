@@ -1736,6 +1736,19 @@ migration or an unusable Nifty connection. The flyout stack keeps the shared
 viewport position here: a receipt lands in the window's top-right corner with
 the same insets as the employee view, at every width.
 
+**Page refresh.** The masthead carries the employee workspace's page refresh
+control in the same place, between the notifications bell and the profile
+avatar: one icon button that refreshes the data backing the open section, never
+a blanket app refresh. It revalidates only that section's reads — the overview
+snapshot, the roster, the task record, reports and their evidence, insights, or
+the evidence and provider reads — including the shared reads a page actually
+uses and the detail records of its open drawers. Because the control tracks the
+live query cache, the same state serves every refresh source: the Overview
+poll, an invalidation after a confirmed write, focus revalidation, and the
+button's own click all spin it and disable it while the section's reads are in
+flight. Settings is the one exemption — its decision areas edit the records
+they show — so it renders no page refresh.
+
 ### 16.2 Page contracts
 
 Every section keeps one header rhythm: the card's name and its one-line detail
