@@ -6,12 +6,26 @@ import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import type { ReactNode } from "react";
 
 /* Shared primitives for the Work OS administration surface. They follow the
- * design.md blueprint: warm raised surfaces, hairline structure, one signal
- * action per decision area, and quiet metadata. */
+ * design.md blueprint and the refined desktop companion language: raised
+ * panels with hairline structure, flat rows instead of nested boxes, quiet
+ * metadata, and signal reserved for state and actions. */
 
 export function cx(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
 }
+
+/** One semantic tone vocabulary shared by marks, pills, and metric dots. */
+export type Tone = "neutral" | "signal" | "ok" | "warn" | "err" | "info" | "observed";
+
+export const TONE_COLOR: Record<Tone, string> = {
+  neutral: "var(--text-tertiary)",
+  signal: "var(--accent)",
+  ok: "var(--status-ok)",
+  warn: "var(--status-warn)",
+  err: "var(--status-error)",
+  info: "var(--status-info)",
+  observed: "var(--status-observed)",
+};
 
 export function AdminCard({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
   return (
@@ -31,10 +45,10 @@ export function SectionHeading({ icon: Icon, title, detail, action }: {
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
-          {Icon ? <Icon size={16} style={{ color: "var(--accent)" }} aria-hidden /> : null}
+        <h2 className="flex items-center gap-2 text-[14.5px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+          {Icon ? <Icon size={14} className="shrink-0" style={{ color: "var(--text-tertiary)" }} aria-hidden /> : null}
           {title}
         </h2>
         {detail ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">{detail}</p> : null}
@@ -44,32 +58,42 @@ export function SectionHeading({ icon: Icon, title, detail, action }: {
   );
 }
 
+/** A quiet panel action link: muted until hover, never competing with content. */
+export function PanelLink({ href, icon: Icon, children }: { href: string; icon?: typeof Info; children: ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+    >
+      {children}
+      {Icon ? <Icon size={13} aria-hidden /> : null}
+    </Link>
+  );
+}
+
 export function Metric({ label, value, detail, tone = "neutral", href, onClick }: {
   label: string;
   value: ReactNode;
   detail?: string;
-  tone?: "neutral" | "signal" | "warn" | "err" | "observed";
+  tone?: Tone;
   href?: string;
   onClick?: () => void;
 }) {
-  const color =
-    tone === "signal" ? "var(--accent)"
-      : tone === "warn" ? "var(--status-warn)"
-        : tone === "err" ? "var(--status-error)"
-          : tone === "observed" ? "var(--status-observed)"
-            : "var(--text-primary)";
   const body = (
     <>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</span>
-      <span className="mt-1.5 block text-[24px] font-semibold leading-none tracking-[-0.02em] [font-variant-numeric:tabular-nums]" style={{ color }}>{value}</span>
-      {detail ? <span className="mt-1.5 block text-[11px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
+      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+        {tone !== "neutral" ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: TONE_COLOR[tone] }} /> : null}
+        {label}
+      </span>
+      <span className="mt-1.5 block text-[22px] font-semibold leading-none tracking-[-0.02em] text-[var(--text-primary)] [font-variant-numeric:tabular-nums]">{value}</span>
+      {detail ? <span className="mt-1.5 block text-[10.5px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
     </>
   );
   const className = cx(
-    "block rounded-2xl border p-4 text-left transition",
+    "block rounded-[14px] border p-3.5 text-left transition",
     (href || onClick) && "hover:border-[var(--border-hot)]",
   );
-  const style = { borderColor: "var(--border)", background: "var(--bg-card)", boxShadow: "var(--shadow-sm)" };
+  const style = { borderColor: "var(--border)", background: "var(--bg-card)" };
   if (href) return <Link href={href} className={className} style={style}>{body}</Link>;
   if (onClick) return <button type="button" onClick={onClick} className={className} style={style}>{body}</button>;
   return <div className={className} style={style}>{body}</div>;
@@ -84,12 +108,13 @@ const pillTones: Record<string, { color: string; background: string; border: str
   observed: { color: "var(--status-observed)", background: "var(--status-observed-soft)", border: "color-mix(in srgb, var(--status-observed) 28%, transparent)" },
 };
 
-export function StatusPill({ tone = "neutral", children, icon: Icon }: { tone?: keyof typeof pillTones; children: ReactNode; icon?: typeof Info }) {
-  const palette = pillTones[tone] ?? pillTones.neutral;
+/** A restrained pill: neutral surface, tone carried by the text and mark. */
+export function StatusPill({ tone = "neutral", children, icon: Icon }: { tone?: Tone; children: ReactNode; icon?: typeof Info }) {
+  const color = TONE_COLOR[tone];
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-semibold leading-none"
-      style={{ color: palette.color, background: palette.background, borderColor: palette.border }}
+      className="inline-flex items-center gap-1.5 rounded-full px-2 py-[3px] text-[10.5px] font-semibold leading-none whitespace-nowrap"
+      style={{ color, background: "var(--bg-tertiary)" }}
     >
       {Icon ? <Icon size={11} aria-hidden /> : null}
       {children}
@@ -97,16 +122,20 @@ export function StatusPill({ tone = "neutral", children, icon: Icon }: { tone?: 
   );
 }
 
-export function ProvenanceChip({ children, title }: { children: ReactNode; title?: string }) {
+/** Dot + text state mark for rows and inline metadata. */
+export function StateMark({ tone = "neutral", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
+  const color = TONE_COLOR[tone];
   return (
-    <span
-      title={title}
-      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]"
-      style={{ borderColor: "var(--border)", background: "var(--bg-secondary)" }}
-    >
+    <span title={title} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium" style={{ color }}>
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
       {children}
     </span>
   );
+}
+
+/** Provenance reads as quiet text, never a tracked badge. */
+export function ProvenanceChip({ children, title }: { children: ReactNode; title?: string }) {
+  return <span title={title} className="text-[10.5px] leading-4 text-[var(--text-tertiary)]">{children}</span>;
 }
 
 export function Notice({ tone = "info", children, action }: { tone?: "info" | "warn" | "err" | "ok"; children: ReactNode; action?: ReactNode }) {
@@ -124,19 +153,18 @@ export function Notice({ tone = "info", children, action }: { tone?: "info" | "w
   );
 }
 
+/** Flat empty state: a quiet icon, one sentence, one recovery path. */
 export function EmptyState({ icon: Icon, title, body, action }: { icon?: typeof Info; title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="grid place-items-center rounded-2xl border px-6 py-12 text-center" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-      <div>
-        {Icon ? (
-          <span className="mx-auto grid size-10 place-items-center rounded-full border" style={{ borderColor: "var(--border)", background: "var(--bg-card)", color: "var(--text-tertiary)" }}>
-            <Icon size={18} aria-hidden />
-          </span>
-        ) : null}
-        <p className="mt-3 text-[14px] font-semibold text-[var(--text-primary)]">{title}</p>
-        {body ? <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-5 text-[var(--text-tertiary)]">{body}</p> : null}
-        {action ? <div className="mt-4 flex justify-center gap-2">{action}</div> : null}
-      </div>
+    <div className="flex flex-col items-start gap-1 px-0.5 py-6">
+      {Icon ? (
+        <span className="mb-1.5 grid size-8 place-items-center rounded-[10px]" style={{ background: "var(--bg-tertiary)", color: "var(--text-tertiary)" }}>
+          <Icon size={15} aria-hidden />
+        </span>
+      ) : null}
+      <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
+      {body ? <p className="max-w-[48ch] text-[12px] leading-5 text-[var(--text-tertiary)]">{body}</p> : null}
+      {action ? <div className="mt-2.5 flex gap-2">{action}</div> : null}
     </div>
   );
 }
@@ -233,13 +261,13 @@ export function SelectField({ label, value, onChange, options, placeholder, aria
   className?: string;
 }) {
   return (
-    <label className={cx("grid gap-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]", className)}>
+    <label className={cx("grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]", className)}>
       {label}
       <select
         aria-label={ariaLabel ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-[34px] rounded-[10px] border bg-transparent px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-[var(--text-primary)] outline-none"
+        className="min-h-[34px] rounded-[10px] border bg-transparent px-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
         {placeholder ? <option value="">{placeholder}</option> : null}
@@ -259,7 +287,7 @@ export function TextField({ label, value, onChange, type = "text", placeholder, 
   className?: string;
 }) {
   return (
-    <label className={cx("grid gap-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]", className)}>
+    <label className={cx("grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]", className)}>
       {label}
       <input
         aria-label={ariaLabel ?? label}
@@ -267,7 +295,7 @@ export function TextField({ label, value, onChange, type = "text", placeholder, 
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="min-h-[34px] rounded-[10px] border bg-transparent px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-[var(--text-primary)] outline-none"
+        className="min-h-[34px] rounded-[10px] border bg-transparent px-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       />
     </label>

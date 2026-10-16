@@ -72,20 +72,18 @@ export function TrendBars({ data, series, ariaLabel }: {
   );
 }
 
-/** Categorical palette for stacked-by-person charts: semantic workspace
- * tokens where one exists, plus fixed mid-tone hexes chosen to stay legible
- * against both the light and dark workspace surfaces. */
+/** Categorical palette for stacked-by-person charts: a calm, desaturated
+ * family that reads as one system in both themes. Danger red stays reserved
+ * for alerts, so it is deliberately not part of this sequence. */
 export const CHART_PALETTE = [
-  "var(--accent)",
+  "var(--color-signal-deep)",
   "var(--status-observed)",
-  "var(--status-warn)",
-  "var(--status-error)",
-  "#8b5cf6",
-  "#d946ef",
-  "#0d9488",
-  "#f97316",
-  "#6366f1",
+  "#a8833c",
+  "#6f8d7c",
+  "#8d7fa8",
+  "#b06a4a",
   "var(--text-tertiary)",
+  "#5f7fa0",
 ] as const;
 
 export interface StackedTimePerson {

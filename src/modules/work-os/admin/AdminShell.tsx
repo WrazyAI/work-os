@@ -6,7 +6,7 @@ import { useEffect, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { adminFetch, adminKeys, type SessionResponse, type SystemStatusResponse } from "./api";
-import { Button, Notice, Skeleton, StatusPill, cx } from "./ui";
+import { Button, Notice, Skeleton, cx } from "./ui";
 
 export type AdminSection = "overview" | "people" | "tasks" | "review" | "insights" | "evidence" | "settings";
 
@@ -19,6 +19,17 @@ const SECTION_META: Record<AdminSection, { title: string; purpose: string }> = {
   evidence: { title: "Evidence", purpose: "Observations and output evidence, with their provenance." },
   settings: { title: "Settings", purpose: "Workspace configuration, members, and provider connections." },
 };
+
+/** One quiet status line item: a tone dot with plain text, never a pill. */
+function StatusDot({ tone, children }: { tone: "ok" | "warn" | "neutral"; children: ReactNode }) {
+  const color = tone === "ok" ? "var(--status-ok)" : tone === "warn" ? "var(--status-warn)" : "var(--text-tertiary)";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
+      {children}
+    </span>
+  );
+}
 
 /** The administration workspace frame.
  *
@@ -60,10 +71,8 @@ export default function AdminShell({ section, children }: { section: AdminSectio
         <header>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--accent)" }}>
-                Work OS · Administration
-              </p>
-              <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-[-0.025em] text-[var(--text-primary)]">
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Work OS</p>
+              <h1 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[var(--text-primary)]">
                 {meta.title}
               </h1>
               <p className="mt-1 text-[13px] leading-5 text-[var(--text-secondary)]">{meta.purpose}</p>
@@ -100,20 +109,21 @@ export default function AdminShell({ section, children }: { section: AdminSectio
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11.5px] text-[var(--text-tertiary)]">
             <span>{today}</span>
-            <span aria-hidden>·</span>
-            <span className="inline-flex items-center gap-1.5">
-              {status.isLoading ? "Checking workspace…" : schemaReady ? (
-                <StatusPill tone="ok">Workspace ready</StatusPill>
+            <span>
+              {status.isLoading ? (
+                "Checking workspace…"
+              ) : schemaReady ? (
+                <StatusDot tone="ok">Workspace ready</StatusDot>
               ) : (
-                <StatusPill tone="warn">Migration required</StatusPill>
+                <StatusDot tone="warn">Migration required</StatusDot>
               )}
             </span>
             {status.data && schemaReady ? (
-              <span className="inline-flex items-center gap-1.5">
+              <span>
                 {status.data.nifty.canCallApi ? (
-                  <StatusPill tone="ok">Nifty connected</StatusPill>
+                  <StatusDot tone="ok">Nifty connected</StatusDot>
                 ) : (
-                  <StatusPill tone="warn">Nifty needs a connection</StatusPill>
+                  <StatusDot tone="warn">Nifty needs a connection</StatusDot>
                 )}
               </span>
             ) : null}
@@ -136,7 +146,7 @@ export default function AdminShell({ section, children }: { section: AdminSectio
           )}
         </main>
 
-        <footer className="mt-10 border-t pt-4 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
+        <footer className="mt-10 border-t pt-4 text-[10.5px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
           Activity context is descriptive and never proves attendance, productivity, or task completion. Worktivity owns attendance; Work OS mirrors provider-confirmed state.
         </footer>
       </div>
