@@ -82,7 +82,7 @@ describe("recap speech player", () => {
     expect(h.player.snapshot().status).toBe("idle");
     expect(h.player.snapshot().lines).toEqual([]);
     expect(h.audios[0].paused).toBeGreaterThan(0);
-    expect(h.audios).toHaveLength(1, "one audio element for the whole window");
+    expect(h.audios).toHaveLength(1); // one audio element for the whole window
   });
 
   it("switching recaps replaces the read instead of stacking a second one", async () => {

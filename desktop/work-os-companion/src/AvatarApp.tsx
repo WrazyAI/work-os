@@ -2,6 +2,11 @@ import { hasPendingMascotApproval } from "./mascotApproval";
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "@tauri-apps/api/window";
 import { emit, listen } from "./tauriEvents";
+import { RecapPrompter } from "./RecapPrompter";
+import { createRecapSpeechPlayer, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
+import { DEFAULT_RECAP_VOICE, grownWindow, normalizeRecapVoice, RECAP_BUBBLE_RESTING } from "./recapSpeech";
+import { prefersReducedMotion } from "./listShift";
+import { apiRequestAudio } from "./api";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { History, SquarePen, X } from "lucide-react";
@@ -196,6 +201,14 @@ export default function AvatarApp(): React.ReactElement {
   const avatarFixture = avatarFixtureRequested(window.location.search);
   const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
+  // Reading a recap aloud: the words come from the route, the clock from the
+  // audio's own progress, and one player owns this window's only audio element.
+  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>({ status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null });
+  const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
+  const recapVoiceRef = useRef<string>(recapVoice);
+  recapVoiceRef.current = recapVoice;
+  const loadDayRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
+  const reducedMotion = prefersReducedMotion();
   const [facts, setFacts] = useState<DayFacts>(() => avatarShiftProgressFixture
     ? avatarShiftProgressFixtureFacts()
     : avatarObservedFixture ? avatarObservedFixtureFacts()
@@ -236,10 +249,26 @@ export default function AvatarApp(): React.ReactElement {
   const [scrollToLatest, setScrollToLatest] = useState(0);
   /* Voice input (design §8.8): the transcript lands in the draft for review;
      nothing is ever sent by the recorder itself. */
+  // One player owns this window's audio: the tray hide, the recorder, and every
+  // Listen control route through it, so two reads can never overlap and a
+  // recording never starts on top of one.
+  const [recapPlayer] = useState<RecapSpeechPlayer>(() => createRecapSpeechPlayer({
+    fetchClip: (input) => apiRequestAudio("/api/work-os/voice/recap", input),
+    toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
+    releaseObjectUrl: (url) => URL.revokeObjectURL(url),
+    createAudio: (src) => new Audio(src),
+    onSnapshot: (snapshot) => setRecapSpeech(snapshot),
+    onFailure: (message) => setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]),
+    onStaleCard: () => { void loadDayRef.current?.(true); },
+  }));
+  const toggleRecapRead = useCallback((intervalId: string, revision: number | null): void => {
+    void recapPlayer.toggle({ intervalId, revision, voice: recapVoiceRef.current, enabled: facts.voiceAvailable });
+  }, [recapPlayer, facts.voiceAvailable]);
+  const stopRecapRead = useCallback((): void => recapPlayer.stop(), [recapPlayer]);
+
   const voice = useVoiceInput({
     enabled: facts.voiceAvailable,
-    surface: "floating",
-    onTranscript: (text) => {
+    surface: "floating",    onTranscript: (text) => {
       setInput((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
       setAvatarTab("chat");
       setRecapEditMode(false);
@@ -328,6 +357,7 @@ export default function AvatarApp(): React.ReactElement {
       setDesktopSession(session);
       setConnected(!!session && new Date(session.expiresAt).getTime() > Date.now());
       notificationPermission.current = await requestNotificationPermissionOnce();
+      void secureState.settings().then((settings) => setRecapVoice(normalizeRecapVoice(settings.recapVoice))).catch(() => undefined);
       try {
         const saved = readJson<{ x?: number; y?: number }>(POSITION_KEY, {});
         const monitor = win ? await currentMonitor() : null;
@@ -514,6 +544,46 @@ export default function AvatarApp(): React.ReactElement {
       }
     }
   }, []);
+
+  // Keep the player's stale-card refresh pointed at the live loader.
+  loadDayRef.current = loadDay;
+
+  // Grow the bubble while Otto reads, and put it back exactly as it was. Only
+  // the collapsed companion is managed here — expanding it is the panel's own
+  // effect, and the read keeps going through the expand.
+  useEffect(() => {
+    if (!win || expanded) return;
+    const reading = recapSpeech.status !== "idle";
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [monitor, scaleFactor, outer] = await Promise.all([currentMonitor(), win.scaleFactor(), win.outerPosition()]);
+        if (cancelled) return;
+        const logical = outer.toLogical(scaleFactor);
+        const bounds = monitor
+          ? { width: monitor.size.width, height: monitor.size.height }
+          : { width: logical.x + RECAP_BUBBLE_RESTING.width, height: logical.y + RECAP_BUBBLE_RESTING.height };
+        const target = reading
+          ? grownWindow(RECAP_BUBBLE_RESTING, { lineHeight: 19, prompterLines: 3, chrome: 96 }, bounds, { x: logical.x, y: logical.y })
+          : { size: RECAP_BUBBLE_RESTING, position: { x: logical.x, y: logical.y } };
+        await win.setSize(new LogicalSize(target.size.width, target.size.height)).catch(() => undefined);
+        await win.setPosition(new LogicalPosition(target.position.x, target.position.y)).catch(() => undefined);
+      } catch { /* the companion keeps its size when the monitor cannot be read */ }
+    })();
+    return () => { cancelled = true; };
+  }, [win, expanded, recapSpeech.status]);
+
+  // A hidden companion does not read to an empty room.
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === "hidden") stopRecapRead(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [stopRecapRead]);
+
+  // One audio owner: recording and reading never overlap.
+  useEffect(() => {
+    if (voice.state !== "idle") stopRecapRead();
+  }, [voice.state, stopRecapRead]);
 
   useEffect(() => {
     if (avatarFixture) return;
@@ -1214,8 +1284,9 @@ export default function AvatarApp(): React.ReactElement {
           const monitor = await currentMonitor();
           let x = logical.x;
           if (monitor) {
+            const width = (await win.outerSize()).toLogical(scaleFactor).width;
             if (x < 28) x = 0;
-            else if (x > monitor.size.width - AVATAR_COLLAPSED.width - 28) x = monitor.size.width - AVATAR_COLLAPSED.width;
+            else if (x > monitor.size.width - width - 28) x = monitor.size.width - width;
           }
           if (x !== logical.x) await win.setPosition(new LogicalPosition(x, logical.y));
           writeJson(POSITION_KEY, { x, y: logical.y });
@@ -1900,7 +1971,7 @@ export default function AvatarApp(): React.ReactElement {
       <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
         {!expanded && (
           <div className="avatar-compact">
-          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
+          <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
           <button className="avatar-orb" onClick={() => void toggleExpanded(true)} title="Connect Work OS from the main window" aria-label={`Open ${MASCOT.name} companion to connect Work OS`}>
             <MascotPet workday="disconnected" className="avatar-pet" artClassName="avatar-pet-art" />
           </button>
@@ -1927,9 +1998,32 @@ export default function AvatarApp(): React.ReactElement {
         {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
         {bubble === "recap" && pendingRecap && (
           <div className="avatar-prompt-bubble avatar-recap-bubble">
-            <strong>{pendingRecap.headline ?? "Your activity recap is ready"}</strong>
-            <span>{pendingRecap.detail ? `${pendingRecap.detail.slice(0, 140)}${pendingRecap.detail.length > 140 ? "…" : ""}` : "Review what your screenshots show."}</span>
-            <button type="button" className="avatar-bubble-more" onClick={openRecapInChat}>View more</button>
+            {recapSpeech.status === "idle" ? <>
+              <strong>{pendingRecap.headline ?? "Your activity recap is ready"}</strong>
+              <span>{pendingRecap.detail ? `${pendingRecap.detail.slice(0, 140)}${pendingRecap.detail.length > 140 ? "…" : ""}` : "Review what your screenshots show."}</span>
+              <div className="avatar-bubble-actions">
+                <button type="button" className="avatar-bubble-more" onClick={openRecapInChat}>View more</button>
+                {facts.voiceAvailable && <button
+                  type="button"
+                  className="avatar-bubble-listen"
+                  title="Hear this recap instead of reading it"
+                  aria-label={`Listen to ${pendingRecap.label ?? "this recap"}`}
+                  onClick={() => toggleRecapRead(pendingRecap.id, pendingRecap.revision ?? null)}
+                >Listen</button>}
+              </div>
+            </> : <>
+              <div className="avatar-bubble-reading">
+                <span className="avatar-reading-dots" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+                <span className="avatar-reading-label">{recapSpeech.status === "playing" ? "Otto is reading" : "Getting your recap…"}</span>
+                <button type="button" className="avatar-bubble-stop" onClick={stopRecapRead}>Stop</button>
+              </div>
+              {recapSpeech.lines.length > 0 && <RecapPrompter
+                lines={recapSpeech.lines}
+                progress={recapSpeech.progress}
+                activeIndex={recapSpeech.activeIndex}
+                reduced={reducedMotion}
+              />}
+            </>}
           </div>
         )}
         {bubble === "prompt" && (
@@ -1941,7 +2035,7 @@ export default function AvatarApp(): React.ReactElement {
             onAction={(action) => { void (action === "open_eod" ? openEodReview() : openGoalPlan()); }}
           />
         )}
-        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => void invoke("hide_avatar").catch(() => undefined)} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
+        <span className="avatar-drag-surface" data-tauri-drag-region title="Drag to move the companion" aria-hidden="true">⋮⋮</span><button className="avatar-hide" onClick={() => { stopRecapRead(); void invoke("hide_avatar").catch(() => undefined); }} aria-label="Hide companion" title="Hide companion"><X size={13} aria-hidden="true" /></button>
         <button
           className="avatar-orb"
           onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}

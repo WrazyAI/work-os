@@ -14,6 +14,8 @@ import type { CachedGuideState, GuideState } from "./guideState";
 
 export interface WorkOsSettings {
   apiBase: string;
+  /** The voice recaps are read in; absent means the first shipped voice. */
+  recapVoice?: string;
   /** Launch update check. Absent historically means on. */
   autoCheckUpdates: boolean;
   /** Hold-to-talk shortcut (`Ctrl + M`). Absent historically means on. */
@@ -265,11 +267,12 @@ export const secureState = {
   clearPendingAuth: () => isTauri() ? remove("pending-auth") : Promise.resolve(),
   settings: async (): Promise<WorkOsSettings> => {
     if (!isTauri()) return { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates: true, voiceHotkey: true, ...APPEARANCE_DEFAULTS };
-    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
+    const settings = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; recapVoice?: unknown }>("settings");
     const autoCheckUpdates = settings?.autoCheckUpdates !== false;
     const voiceHotkey = settings?.voiceHotkey !== false;
     const appearance = normalizeAppearance(settings);
-    try { return { autoCheckUpdates, voiceHotkey, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
+    const recapVoice = typeof settings?.recapVoice === "string" ? settings.recapVoice : undefined;
+    try { return { autoCheckUpdates, voiceHotkey, recapVoice, apiBase: httpsOrigin(settings?.apiBase || defaultApiBase), ...appearance }; }
     catch {
       const fallback = { apiBase: httpsOrigin(defaultApiBase), autoCheckUpdates, voiceHotkey, ...appearance };
       await set("settings", fallback);

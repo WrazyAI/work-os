@@ -277,6 +277,77 @@ body.avatar-window {
 }
 .avatar-bubble-more:hover { filter: brightness(1.04); }
 .avatar-bubble-more:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
+
+/* Listening to a recap: one quiet offer beside View more, and the reading state
+   that replaces the preview. The palette is the bubble's own dark surface; the
+   reading waveform is the companion's cream dots, never the recorder's lime
+   bars, so "Otto is talking" and "you are recording" never share a shape. */
+.avatar-bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+.avatar-bubble-actions .avatar-bubble-more { margin-top: 0; }
+.avatar-bubble-listen {
+  border: 1px solid rgba(244, 245, 238, 0.28);
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #e7ecdf;
+  font: 700 11px/1 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+.avatar-bubble-listen:hover { border-color: rgba(244, 245, 238, 0.5); }
+.avatar-bubble-listen:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
+.avatar-bubble-reading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.avatar-reading-label {
+  color: #b9c0b0;
+  font: 600 11px/1.3 Manrope, Inter, sans-serif;
+}
+.avatar-bubble-stop {
+  margin-left: auto;
+  border: 1px solid rgba(244, 245, 238, 0.28);
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #e7ecdf;
+  font: 700 11px/1 Manrope, Inter, sans-serif;
+  cursor: pointer;
+}
+.avatar-bubble-stop:hover { border-color: rgba(244, 245, 238, 0.5); }
+.avatar-bubble-stop:focus-visible { outline: 2px solid var(--conversation-focus); outline-offset: 1px; }
+.avatar-reading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+}
+.avatar-reading-dots i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f2f1ea;
+  opacity: 0.45;
+  animation: avatar-reading-dot 1s ease-in-out infinite;
+}
+.avatar-reading-dots i:nth-child(2) { animation-delay: 0.18s; }
+.avatar-reading-dots i:nth-child(3) { animation-delay: 0.36s; }
+.avatar-reading-dots i:nth-child(4) { animation-delay: 0.54s; }
+.avatar-reading-dots i:nth-child(5) { animation-delay: 0.72s; }
+@keyframes avatar-reading-dot {
+  0%, 100% { opacity: 0.3; transform: translateY(0) scale(0.85); }
+  50% { opacity: 1; transform: translateY(-3px) scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-reading-dots i { animation: none; opacity: 0.8; }
+}
 .avatar-day-time {
   position: absolute;
   right: 50%;
