@@ -413,9 +413,23 @@
 /* Pre-app loading surface --------------------------------------------------- */
 
 .loading {
-  background:
-    radial-gradient(circle at 50% 27%, rgba(168, 241, 91, 0.1), transparent 23rem),
-    #171914;
+  background: #171914;
+}
+
+/* First Light glow breathes while the boot surface is up; the radial lives on
+   the ::before so a moving background never repaints the whole canvas. */
+main.loading::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 27%, rgba(168, 241, 91, 0.1), transparent 23rem);
+  animation: boot-glow-breath 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes boot-glow-breath {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 .loading-shell {
@@ -500,6 +514,55 @@
   color: #cfd3c8;
 }
 
+/* Morning Rise: the boot overlay is one persistent surface. While loading it is
+   the whole screen; on the handoff it covers the workspace (already mounted
+   beneath, interactive) and lifts away over 640ms. */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  background: #171914;
+}
+
+.boot-overlay > .loading {
+  height: 100%;
+}
+
+.boot-overlay.boot-cover {
+  pointer-events: none;
+}
+
+.boot-overlay.boot-exit {
+  animation: boot-exit-night 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  pointer-events: none;
+}
+
+.boot-overlay.boot-exit-reduced {
+  animation: boot-exit-fade 150ms linear both;
+  pointer-events: none;
+}
+
+@keyframes boot-exit-night {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes boot-exit-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* The workspace's one-shot rise plays only through the boot handoff. */
+.workspace.boot-rise {
+  animation: boot-workspace-rise 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes boot-workspace-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* Seamless transition: the app content fades in over the loading surface. */
 .workspace {
   animation: app-enter 300ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
@@ -533,9 +596,11 @@
   .loading-wave-bar,
   .loading-arc,
   .loading-bench-pulse,
+  main.loading::before,
   .skeleton,
   .loading-shell,
-  .workspace {
+  .workspace,
+  .workspace.boot-rise {
     animation: none !important;
   }
 
