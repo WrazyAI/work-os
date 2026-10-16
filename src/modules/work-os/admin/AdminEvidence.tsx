@@ -14,18 +14,18 @@ import {
   type GithubIntegrationActorsResponse,
   type GithubIntegrationReposResponse,
 } from "./api";
-import { CHART_COLORS, MixDonut, SparkTrend } from "./charts";
+import { CHART_COLORS, CHART_PALETTE, SparkTrend } from "./charts";
 import {
   AdminCard,
   Button,
   Drawer,
   EmptyState,
   Notice,
-  ProvenanceChip,
   SectionHeading,
   SegmentedControl,
   SelectField,
   Skeleton,
+  StateMark,
   StatusPill,
   TextField,
   relativeTime,
@@ -175,7 +175,7 @@ export default function AdminEvidencePage() {
 
   return (
     <div className="grid gap-5">
-      {/* Source mix and volume — lead with the shape of the record */}
+      {/* Record shape — one quiet facts line and one volume trend */}
       {evidenceSources.length || evidenceDays.length ? (
         <AdminCard>
           <SectionHeading
@@ -183,27 +183,28 @@ export default function AdminEvidencePage() {
             title="Record shape"
             detail={`Evidence in this range by source, ${from} to ${to}.`}
           />
-          <div className="grid gap-5 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-center">
-            <MixDonut
-              ariaLabel="Evidence items in this range by source"
-              centerValue={String(evidenceSources.reduce((sum, entry) => sum + entry.count, 0))}
-              centerLabel="items"
-              data={evidenceSources.slice(0, 6).map((entry, index) => ({
-                key: entry.source,
-                label: entry.source === "worktivity" ? "Worktivity (activity)" : entry.source,
-                value: entry.count,
-                color: [CHART_COLORS.accent, CHART_COLORS.observed, CHART_COLORS.warn, CHART_COLORS.neutral, CHART_COLORS.error, "var(--border-hot)"][index] ?? CHART_COLORS.neutral,
-              }))}
-            />
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Volume per day</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[var(--text-secondary)]">
+            <span className="text-[var(--text-tertiary)]">
+              <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{evidenceSources.reduce((sum, entry) => sum + entry.count, 0)}</strong> items
+            </span>
+            {evidenceSources.slice(0, 6).map((entry, index) => (
+              <span key={entry.source} className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: CHART_PALETTE[index % CHART_PALETTE.length] }} />
+                {entry.source === "worktivity" ? "Worktivity (activity)" : entry.source}
+                <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{entry.count}</strong>
+              </span>
+            ))}
+          </div>
+          {evidenceDays.length ? (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <p className="text-[10.5px] text-[var(--text-tertiary)]">Volume per day</p>
               <SparkTrend
                 ariaLabel="Evidence volume per day in this range"
                 color={CHART_COLORS.accent}
                 data={evidenceDays.map((entry) => ({ label: entry.date.slice(5), value: entry.count }))}
               />
             </div>
-          </div>
+          ) : null}
         </AdminCard>
       ) : null}
 
@@ -213,15 +214,15 @@ export default function AdminEvidencePage() {
           icon={Cable}
           title="Integrations"
           detail="Provider evidence that feeds this record. Observation is never completion."
-          action={<Link href="/work-os/admin/settings" className="text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>Open Settings</Link>}
+          action={<Link href="/work-os/admin/settings" className="text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open Settings</Link>}
         />
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-xl border p-4" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-                <GitBranch size={15} style={{ color: "var(--accent)" }} aria-hidden /> GitHub
+                <GitBranch size={15} className="text-[var(--text-tertiary)]" aria-hidden /> GitHub
               </span>
-              <StatusPill tone={githubConnection ? "ok" : "warn"}>{githubConnection ? "Connected" : "Not connected"}</StatusPill>
+              <StateMark tone={githubConnection ? "ok" : "warn"}>{githubConnection ? "Connected" : "Not connected"}</StateMark>
             </div>
             <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
               {githubConnection
@@ -244,17 +245,15 @@ export default function AdminEvidencePage() {
             <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
-                  <Cable size={15} style={{ color: "var(--accent)" }} /> GHL
+                  <Cable size={15} className="text-[var(--text-tertiary)]" /> GHL
                 </span>
-                <StatusPill tone="ok">Connected</StatusPill>
+                <StateMark tone="ok">Connected</StateMark>
               </div>
               <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--text-tertiary)]">
                 Opportunity, appointment, and conversation activity from GoHighLevel becomes output evidence for the mapped person.
               </p>
-              <div className="mt-3 flex gap-2">
-                <ProvenanceChip>Opportunities</ProvenanceChip>
-                <ProvenanceChip>Appointments</ProvenanceChip>
-                <ProvenanceChip>Conversations</ProvenanceChip>
+              <div className="mt-3 flex gap-2 text-[11px] text-[var(--text-tertiary)]">
+                <span>Opportunities</span>·<span>Appointments</span>·<span>Conversations</span>
               </div>
             </div>
             <div className="absolute inset-0 flex items-end justify-end p-4">
@@ -264,7 +263,7 @@ export default function AdminEvidencePage() {
         </div>
       </AdminCard>
 
-      {/* Unmapped GitHub accounts */}
+      {/* Unmapped GitHub accounts — flat rows */}
       {actors.length ? (
         <AdminCard>
           <SectionHeading
@@ -272,12 +271,12 @@ export default function AdminEvidencePage() {
             title="Unmapped GitHub accounts"
             detail={`${githubActors.data?.totals.unattributedEvents ?? 0} event${(githubActors.data?.totals.unattributedEvents ?? 0) === 1 ? "" : "s"} from ${actors.length} account${actors.length === 1 ? "" : "s"} waiting for a person. Mapping an account also attributes its earlier events.`}
           />
-          <ul className="grid gap-2">
+          <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {actors.map((actor) => {
               const value = actorPerson[actor.key] ?? actor.suggestion?.personId ?? "";
               return (
-                <li key={actor.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                  <span className="min-w-0 flex-1">
+                <li key={actor.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-1 last:pb-1">
+                  <span className="min-w-0 flex-1 basis-[220px]">
                     <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{actor.login ?? `GitHub id ${actor.id}`}</span>
                     <span className="block truncate text-[11px] text-[var(--text-tertiary)]">
                       {actor.events} event{actor.events === 1 ? "" : "s"} · last {relativeTime(actor.lastSeen)}{actor.titles[0] ? ` · ${actor.titles[0]}` : ""}
@@ -309,7 +308,7 @@ export default function AdminEvidencePage() {
       ) : null}
 
       <AdminCard padded={false}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <SegmentedControl<EvidenceTab>
             ariaLabel="Evidence view"
             value={tab}
@@ -346,7 +345,7 @@ export default function AdminEvidencePage() {
             <div>
               {grouped.map(([date, rows]) => (
                 <section key={date}>
-                  <h3 className="border-y px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
+                  <h3 className="border-y px-5 py-2 text-[11.5px] font-medium text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
                     {formatWorkOsDate(date)} · {rows.length} item{rows.length === 1 ? "" : "s"}
                   </h3>
                   <ul>
@@ -372,12 +371,12 @@ export default function AdminEvidencePage() {
                                 {row.summary ? ` · ${row.summary.slice(0, 90)}` : ""}
                               </span>
                             </span>
-                            <span className="flex shrink-0 flex-wrap items-center gap-1.5">
-                              {metadata.repository ? <ProvenanceChip>{String(metadata.repository)}</ProvenanceChip> : null}
-                              {event?.evidence_class ? <ProvenanceChip>{statusLabel(event.evidence_class)}</ProvenanceChip> : null}
-                              <ProvenanceChip>{row.source === "loom" ? "Loom" : row.source}</ProvenanceChip>
-                              {event?.correction_status && event.correction_status !== "original" ? <StatusPill tone="warn">{statusLabel(event.correction_status)}</StatusPill> : null}
-                              {screenshot && !screenshot.deleted_at ? <StatusPill tone="observed"><Camera size={10} aria-hidden /> Retained</StatusPill> : null}
+                            <span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
+                              {metadata.repository ? <span>{String(metadata.repository)}</span> : null}
+                              {event?.evidence_class ? <span>{statusLabel(event.evidence_class)}</span> : null}
+                              <span>{row.source === "loom" ? "Loom" : row.source}</span>
+                              {event?.correction_status && event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(event.correction_status)}</StateMark> : null}
+                              {screenshot && !screenshot.deleted_at ? <StateMark tone="observed">Retained</StateMark> : null}
                             </span>
                           </button>
                         </li>
@@ -406,16 +405,16 @@ export default function AdminEvidencePage() {
           <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {intervals.data.intervals.map((interval) => (
               <li key={interval.id} className="px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="text-[12.5px] font-semibold text-[var(--text-primary)]">{interval.personName ?? "Unattributed"}</span>
                     <span className="text-[11.5px] tabular-nums text-[var(--text-tertiary)]">{interval.label}</span>
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <ProvenanceChip>
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
+                    <span>
                       {interval.reviewStatus === "confirmed" ? "Employee confirmed" : interval.reviewStatus === "amended" ? "Employee amended" : "AI-inferred, not reviewed"}
-                    </ProvenanceChip>
-                    <ProvenanceChip>{interval.evidenceCount} frames</ProvenanceChip>
+                    </span>
+                    <span>{interval.evidenceCount} frames</span>
                   </span>
                 </div>
                 {interval.headline ? <p className="mt-1.5 text-[13px] font-semibold text-[var(--text-primary)]">{interval.headline}</p> : null}
@@ -461,29 +460,29 @@ export default function AdminEvidencePage() {
       >
         {selected ? (
           <div className="grid gap-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <ProvenanceChip>{selected.source === "loom" ? "Loom recording" : selected.source}</ProvenanceChip>
-              {selected.event?.evidence_class ? <ProvenanceChip>{statusLabel(selected.event.evidence_class)}</ProvenanceChip> : null}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+              <span>{selected.source === "loom" ? "Loom recording" : selected.source}</span>
+              {selected.event?.evidence_class ? <span>{statusLabel(selected.event.evidence_class)}</span> : null}
               {(() => {
                 const metadata = (selected.event?.metadata ?? {}) as AnyRow;
                 return (
                   <>
-                    {metadata.repository ? <ProvenanceChip>{String(metadata.repository)}</ProvenanceChip> : null}
-                    {metadata.event ? <ProvenanceChip>{statusLabel(String(metadata.event))}</ProvenanceChip> : null}
+                    {metadata.repository ? <span>{String(metadata.repository)}</span> : null}
+                    {metadata.event ? <span>{statusLabel(String(metadata.event))}</span> : null}
                   </>
                 );
               })()}
-              {selected.event?.correction_status && selected.event.correction_status !== "original" ? <StatusPill tone="warn">{statusLabel(selected.event.correction_status)}</StatusPill> : null}
-              <span className="text-[11px] text-[var(--text-tertiary)]">recorded {relativeTime(selected.created_at)}</span>
+              {selected.event?.correction_status && selected.event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(selected.event.correction_status)}</StateMark> : null}
+              <span>recorded {relativeTime(selected.created_at)}</span>
             </div>
             {selected.summary ? <p className="text-[13px] leading-6 text-[var(--text-secondary)]">{selected.summary}</p> : <p className="text-[12.5px] text-[var(--text-tertiary)]">No summary was recorded for this item.</p>}
             {selected.task ? (
               <p className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
-                <Link2 size={13} aria-hidden style={{ color: "var(--accent)" }} /> Linked task: {selected.task.title}
+                <Link2 size={13} aria-hidden className="text-[var(--text-tertiary)]" /> Linked task: {selected.task.title}
               </p>
             ) : null}
             {selected.url ? (
-              <a href={selected.url} target="_blank" rel="noreferrer" className="text-[12px] font-semibold" style={{ color: "var(--accent)" }}>Open source artifact</a>
+              <a href={selected.url} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Open source artifact</a>
             ) : null}
 
             {(() => {
@@ -518,11 +517,13 @@ export default function AdminEvidencePage() {
             })()}
 
             {selected.metrics && Object.keys(selected.metrics).length ? (
-              <div className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Recorded metrics</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+                <p className="text-[10.5px] text-[var(--text-tertiary)]">Recorded metrics</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-[var(--text-secondary)]">
                   {Object.entries(selected.metrics).slice(0, 8).map(([key, value]) => (
-                    <StatusPill key={key} tone="neutral">{statusLabel(key)}: {typeof value === "object" ? "recorded" : String(value)}</StatusPill>
+                    <span key={key}>
+                      {statusLabel(key)} <strong className="font-semibold text-[var(--text-primary)]">{typeof value === "object" ? "recorded" : String(value)}</strong>
+                    </span>
                   ))}
                 </div>
               </div>
@@ -576,8 +577,8 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       ) : (
         <div className="grid gap-4">
           {repos.data?.webhookUrl ? (
-            <div className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Webhook receiver</p>
+            <div className="border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <p className="text-[10.5px] text-[var(--text-tertiary)]">Webhook receiver</p>
               <p className="mt-1 break-all font-mono text-[11px] text-[var(--text-secondary)]">{repos.data.webhookUrl}</p>
             </div>
           ) : null}
@@ -599,11 +600,11 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           {disconnect.error ? <Notice tone="err">{(disconnect.error as Error).message}</Notice> : null}
 
           {repos.data?.repos.length ? (
-            <ul className="grid gap-2">
+            <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
               {repos.data.repos.map((repo) => {
                 const isConnected = connected.has(repo.full_name.toLowerCase());
                 return (
-                  <li key={repo.full_name} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  <li key={repo.full_name} className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-1 last:pb-1">
                     <span className="min-w-0">
                       <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{repo.full_name}</span>
                       <span className="block text-[11px] text-[var(--text-tertiary)]">
@@ -611,12 +612,12 @@ function GithubReposDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                       </span>
                     </span>
                     {isConnected ? (
-                      <span className="flex items-center gap-2">
-                        <StatusPill tone="ok">Webhook active</StatusPill>
+                      <span className="flex items-center gap-3">
+                        <StateMark tone="ok">Webhook active</StateMark>
                         <Button size="sm" variant="ghost" disabled={refreshState} onClick={() => disconnect.mutate(repo.full_name)}>Remove</Button>
                       </span>
                     ) : orgWebhook ? (
-                      <StatusPill tone="neutral">Covered by organization</StatusPill>
+                      <StateMark tone="neutral">Covered by organization</StateMark>
                     ) : (
                       <Button size="sm" variant="secondary" disabled={refreshState} onClick={() => connect.mutate(repo.full_name)}>Connect</Button>
                     )}
