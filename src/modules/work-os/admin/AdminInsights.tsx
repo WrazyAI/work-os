@@ -17,7 +17,6 @@ import {
   SegmentedControl,
   SelectField,
   Skeleton,
-  StatusPill,
   cx,
   formatDuration,
   relativeTime,
@@ -52,10 +51,11 @@ export default function AdminInsightsPage() {
 
   if (insights.isLoading) {
     return (
-      <div className="grid gap-4">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className="grid gap-5">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-24 w-full" />
         <Skeleton className="h-80 w-full" />
+        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
@@ -73,8 +73,9 @@ export default function AdminInsightsPage() {
 
   return (
     <div className="grid gap-5">
+      {/* Controls + the written brief */}
       <AdminCard padded={false}>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-4">
           <SegmentedControl<AdminInsightRange>
             ariaLabel="Insight range"
             value={range}
@@ -97,21 +98,21 @@ export default function AdminInsightsPage() {
           </div>
         </div>
         <div className="border-t px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
-          <p className="text-[13.5px] leading-6 text-[var(--text-primary)]">{data.notes.summary}</p>
-          <div className="mt-3 grid gap-4 md:grid-cols-3">
+          <p className="text-[13px] leading-6 text-[var(--text-primary)]">{data.notes.summary}</p>
+          <div className="mt-3.5 grid gap-4 md:grid-cols-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">What the record shows</p>
+              <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">What the record shows</p>
               <ul className="mt-1.5 grid gap-1.5">
                 {data.notes.wins.map((line, index) => (
                   <li key={index} className="flex gap-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-                    <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ background: "var(--accent)" }} />
+                    <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ background: "var(--text-tertiary)" }} />
                     {line}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Attention</p>
+              <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">Attention</p>
               <ul className="mt-1.5 grid gap-1.5">
                 {data.notes.attention.length ? data.notes.attention.map((line, index) => (
                   <li key={index} className="flex gap-2 text-[12px] leading-5 text-[var(--text-secondary)]">
@@ -122,11 +123,11 @@ export default function AdminInsightsPage() {
               </ul>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Suggested next focus</p>
+              <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">Suggested next focus</p>
               <ul className="mt-1.5 grid gap-1.5">
                 {data.notes.nextFocus.map((line, index) => (
                   <li key={index} className="flex gap-2 text-[12px] leading-5 text-[var(--text-secondary)]">
-                    <ArrowRight size={12} className="mt-1 shrink-0" style={{ color: "var(--accent)" }} aria-hidden />
+                    <ArrowRight size={12} className="mt-1 shrink-0 text-[var(--text-tertiary)]" aria-hidden />
                     {line}
                   </li>
                 ))}
@@ -136,7 +137,8 @@ export default function AdminInsightsPage() {
         </div>
       </AdminCard>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {/* One strip of range facts, never a tile wall */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <Metric label="Outcomes completed" value={totals.outcomesCompleted} detail={comparison(totals.outcomesCompleted, data.previous.outcomesCompleted, "")} tone="signal" />
         <Metric label="Commitment rate" value={commitment == null ? "—" : `${commitment}%`} detail={totals.planned ? `${totals.plannedCompleted} of ${totals.planned} planned` : "No confirmed plans"} />
         <Metric label="Active people" value={totals.activePeople} detail={`of ${data.people.length} in scope`} />
@@ -146,26 +148,9 @@ export default function AdminInsightsPage() {
         <Metric label="Sessions to fix" value={totals.sessionsNeedingCorrection} detail={totals.sessionsNeedingCorrection ? "Unresolved time excluded" : "No corrections open"} tone={totals.sessionsNeedingCorrection ? "warn" : "neutral"} />
       </div>
 
-      {/* Time worked — observed work time per day, split by teammate, leads the
-          record charts; the Daily record chart below keeps outcomes/updates/EOD. */}
-      <AdminCard>
-        <SectionHeading
-          icon={Clock3}
-          title="Time worked"
-          detail={`Observed work time per day, split by teammate, ${data.from} to ${data.through}.`}
-        />
-        {hasTimeData ? (
-          <StackedTimeBars
-            ariaLabel={`Observed work time per day, split by teammate, from ${data.from} to ${data.through}`}
-            data={data.timeSeries}
-          />
-        ) : (
-          <p className="text-[12.5px] text-[var(--text-tertiary)]">No observed work time in this range.</p>
-        )}
-      </AdminCard>
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <AdminCard>
+      {/* The range's record: one daily chart beside observed-app context */}
+      <div className="grid gap-5 lg:grid-cols-12">
+        <AdminCard className="lg:col-span-7">
           <SectionHeading
             icon={Gauge}
             title="Daily record"
@@ -186,81 +171,109 @@ export default function AdminInsightsPage() {
             ]}
           />
           {data.updateKinds.length ? (
-            <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Update mix</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {data.updateKinds.map((kind) => (
-                  <StatusPill key={kind.kind} tone="neutral">{statusLabel(kind.kind)}: {kind.count}</StatusPill>
-                ))}
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3 text-[11.5px] text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)" }}>
+              <span className="text-[var(--text-tertiary)]">Update mix</span>
+              {data.updateKinds.map((kind) => (
+                <span key={kind.kind}>
+                  {statusLabel(kind.kind)} <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{kind.count}</strong>
+                </span>
+              ))}
             </div>
           ) : null}
         </AdminCard>
 
-        <div className="grid content-start gap-5">
-          <AdminCard>
-            <SectionHeading icon={Activity} title="Observed apps" detail="Neutral activity context from retained frame summaries." />
-            {data.topApps.length ? (
-              <ul className="grid gap-2.5">
-                {data.topApps.map((app) => (
-                  <li key={app.name} className="grid gap-1">
-                    <div className="flex items-center justify-between gap-2 text-[12px]">
-                      <span className="truncate text-[var(--text-secondary)]">{app.name}</span>
-                      <span className="tabular-nums text-[var(--text-tertiary)]">{app.minutes}m</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-tertiary)" }}>
-                      <div className="h-full rounded-full" style={{ width: `${(app.minutes / maxAppMinutes) * 100}%`, background: "var(--status-observed)" }} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[12px] text-[var(--text-tertiary)]">No activity context was recorded in this range.</p>
-            )}
-          </AdminCard>
-
-          <AdminCard>
-            <SectionHeading icon={ListChecks} title="Backlog" detail="Open work recorded across the workspace." />
-            {data.overdueOpen == null ? (
-              <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">Overdue work is not scoped to this view.</p>
-            ) : (
-              <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">
-                <strong className="font-semibold text-[var(--text-primary)]">{data.overdueOpen}</strong> open task{data.overdueOpen === 1 ? "" : "s"} past their due date.
-              </p>
-            )}
-            <Link href="/work-os/admin/tasks" className="mt-3 inline-flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>
-              Open Tasks <ArrowRight size={12} aria-hidden />
-            </Link>
-          </AdminCard>
-        </div>
+        <AdminCard className="lg:col-span-5">
+          <SectionHeading icon={Activity} title="Observed apps" detail="Neutral activity context from retained frame summaries." />
+          {data.topApps.length ? (
+            <ul className="grid gap-2.5">
+              {data.topApps.map((app) => (
+                <li key={app.name} className="grid gap-1">
+                  <div className="flex items-center justify-between gap-2 text-[12px]">
+                    <span className="truncate text-[var(--text-secondary)]">{app.name}</span>
+                    <span className="tabular-nums text-[var(--text-tertiary)]">{app.minutes}m</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-tertiary)" }}>
+                    <div className="h-full rounded-full" style={{ width: `${(app.minutes / maxAppMinutes) * 100}%`, background: "var(--status-observed)" }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-[var(--text-tertiary)]">No activity context was recorded in this range.</p>
+          )}
+        </AdminCard>
       </div>
 
+      {/* Observed time for the range beside current backlog pressure */}
+      <div className="grid gap-5 lg:grid-cols-12">
+        <AdminCard className="lg:col-span-7">
+          <SectionHeading
+            icon={Clock3}
+            title="Time worked"
+            detail={`Observed work time per day, split by teammate, ${data.from} to ${data.through}.`}
+          />
+          {hasTimeData ? (
+            <StackedTimeBars
+              ariaLabel={`Observed work time per day, split by teammate, from ${data.from} to ${data.through}`}
+              data={data.timeSeries}
+            />
+          ) : (
+            <p className="text-[12.5px] text-[var(--text-tertiary)]">No observed work time in this range.</p>
+          )}
+        </AdminCard>
+
+        <AdminCard className="lg:col-span-5">
+          <SectionHeading icon={ListChecks} title="Backlog" detail="Open work recorded across the workspace." />
+          {data.overdueOpen == null ? (
+            <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">Overdue work is not scoped to this view.</p>
+          ) : (
+            <p className="text-[12.5px] leading-5 text-[var(--text-secondary)]">
+              <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{data.overdueOpen}</strong> open task{data.overdueOpen === 1 ? "" : "s"} past their due date.
+            </p>
+          )}
+          <Link
+            href="/work-os/admin/tasks"
+            className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+          >
+            Open Tasks <ArrowRight size={12} aria-hidden />
+          </Link>
+        </AdminCard>
+      </div>
+
+      {/* Recorded facts per teammate */}
       <AdminCard padded={false}>
-        <div className="px-5 py-4">
+        <div className="px-5 pt-4 pb-2">
           <SectionHeading icon={Users} title="People in this range" detail="Recorded facts per teammate. Activity context is descriptive and never a productivity score." />
         </div>
         {peopleRows.length ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-[12.5px]">
               <thead>
-                <tr className="border-y text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
-                  <th className="px-5 py-2.5 font-semibold">Person</th>
-                  <th className="px-3 py-2.5 font-semibold">Outcomes</th>
-                  <th className="px-3 py-2.5 font-semibold">Commitment</th>
-                  <th className="px-3 py-2.5 font-semibold">Updates</th>
-                  <th className="px-3 py-2.5 font-semibold">EOD</th>
-                  <th className="px-3 py-2.5 font-semibold">Tracked</th>
-                  <th className="px-3 py-2.5 font-semibold">Sessions to fix</th>
-                  <th className="px-3 py-2.5 font-semibold">Last activity</th>
+                <tr className="border-y text-[11px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>
+                  <th className="px-5 py-2.5 font-medium">Person</th>
+                  <th className="px-3 py-2.5 font-medium">Outcomes</th>
+                  <th className="px-3 py-2.5 font-medium">Commitment</th>
+                  <th className="px-3 py-2.5 font-medium">Updates</th>
+                  <th className="px-3 py-2.5 font-medium">EOD</th>
+                  <th className="px-3 py-2.5 font-medium">Tracked</th>
+                  <th className="px-3 py-2.5 font-medium">Sessions to fix</th>
+                  <th className="px-5 py-2.5 font-medium">Last activity</th>
                 </tr>
               </thead>
               <tbody>
                 {peopleRows.map((row) => (
                   <tr
                     key={row.personId}
+                    tabIndex={0}
                     className="cursor-pointer border-b transition hover:bg-[var(--bg-secondary)]"
                     style={{ borderColor: "var(--border-subtle)" }}
                     onClick={() => setSelectedPerson(row.personId)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedPerson(row.personId);
+                      }
+                    }}
                   >
                     <td className="px-5 py-3">
                       <span className="flex items-center gap-2.5">
@@ -277,7 +290,7 @@ export default function AdminInsightsPage() {
                     <td className="px-3 py-3 tabular-nums">{row.eodSubmitted}</td>
                     <td className="px-3 py-3 tabular-nums">{row.trackedMinutes >= 60 ? formatDuration(row.trackedMinutes * 60) : `${row.trackedMinutes}m`}</td>
                     <td className={cx("px-3 py-3 tabular-nums", row.sessionsNeedingCorrection > 0 && "text-[var(--status-warn)]")}>{row.sessionsNeedingCorrection}</td>
-                    <td className="px-3 py-3 text-[var(--text-tertiary)]">{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "—"}</td>
+                    <td className="px-5 py-3 text-[11.5px] text-[var(--text-tertiary)]">{row.lastActivityAt ? relativeTime(row.lastActivityAt) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -298,7 +311,10 @@ export default function AdminInsightsPage() {
         width={440}
         footer={
           selectedRow ? (
-            <Link href={`/work-os/admin/review?personId=${selectedRow.personId}`} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+            <Link
+              href={`/work-os/admin/review?personId=${selectedRow.personId}`}
+              className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+            >
               Open their EOD reports <ArrowRight size={12} aria-hidden />
             </Link>
           ) : null
@@ -306,7 +322,7 @@ export default function AdminInsightsPage() {
       >
         {selectedRow ? (
           <div className="grid gap-4">
-            <dl className="grid grid-cols-2 gap-2">
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-3.5">
               {[
                 ["Outcomes completed", String(selectedRow.outcomesCompleted)],
                 ["Late outcomes", String(selectedRow.outcomesLate)],
@@ -317,8 +333,8 @@ export default function AdminInsightsPage() {
                 ["Tracked context", selectedRow.trackedMinutes >= 60 ? formatDuration(selectedRow.trackedMinutes * 60) : `${selectedRow.trackedMinutes}m`],
                 ["Sessions to fix", String(selectedRow.sessionsNeedingCorrection)],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</dt>
+                <div key={label} className="min-w-0">
+                  <dt className="text-[10.5px] text-[var(--text-tertiary)]">{label}</dt>
                   <dd className="mt-0.5 text-[14px] font-semibold tabular-nums text-[var(--text-primary)]">{value}</dd>
                 </div>
               ))}
