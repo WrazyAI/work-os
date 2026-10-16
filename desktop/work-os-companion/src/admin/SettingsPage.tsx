@@ -34,7 +34,7 @@ const FEATURES: Array<{ key: string; label: string; detail: string }> = [
   { key: "github_evidence", label: "GitHub evidence", detail: "Commits, pull requests, reviews, and workflow runs become output evidence." },
   { key: "ghl_evidence", label: "GoHighLevel evidence", detail: "Opportunity and appointment activity becomes output evidence." },
   { key: "seo_mission_control", label: "SEO mission control", detail: "The SEO operations surfaces inside the console." },
-  { key: "voice_input", label: "Voice input", detail: "Record → transcribe → review in the composers." },
+  { key: "voice_input", label: "Voice input & output", detail: "Record → transcribe → review in the composers, and hear recaps read back." },
 ];
 
 /** Workspace settings: what the organization has switched on, who belongs to

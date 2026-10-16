@@ -382,7 +382,7 @@ function intervalTool() {
             items: {
               type: "object",
               properties: {
-                description: { type: "string", description: "A short, scannable phrase (at most about 16 words) naming one observable activity, with its clock time when known." },
+                description: { type: "string", description: "One observable activity in at most 10 words, led by its clock time when known, exactly like \"7:21 PM Reviewed the cursor-pagination code\". Name one thing, never two, and no counts, tool brands, or file paths." },
                 evidence_indexes: { type: "array", items: { type: "integer" }, description: "1-based indexes of the observations that support this activity." },
                 possible_task_reference: { type: ["string", "null"] },
                 confidence: { type: "number", minimum: 0, maximum: 1 },
