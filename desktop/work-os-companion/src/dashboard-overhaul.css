@@ -504,7 +504,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-records { padding: 0 16px 18px; box-shadow: none; background: transparent; }
 .task-records.evidence-list { padding: 0 16px 18px; }
 .sort-header-row { position: sticky; top: 0; z-index: 3; min-height: 38px; border-bottom-color: var(--dash-line-strong); background: rgba(255, 255, 252, 0.96); backdrop-filter: blur(12px); }
-.sort-header-row button { color: var(--dash-muted); font-size: 9px; letter-spacing: 0.08em; }
+.sort-header-row button { color: var(--dash-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.07em; }
 .tasks-column-sort {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) 36px 116px 100px 38px;
@@ -524,31 +524,50 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-record-section-head strong { color: var(--dash-ink); font-size: 11px; letter-spacing: 0.02em; text-transform: none; }
 .task-record-section-head span { background: #e7efe2; color: #507448; }
 .task-record-section-head small { color: var(--dash-faint); }
-.task-record.workspace-task { min-height: 72px; grid-template-columns: 30px minmax(0, 1fr) 36px 116px 100px 38px !important; gap: 12px; margin: 0 2px; padding: 12px 10px; border-bottom-color: var(--dash-line); border-radius: 10px; background: transparent; transition: background 150ms ease, box-shadow 150ms ease, outline-color 150ms ease; }
+.task-record.workspace-task { min-height: 64px; grid-template-columns: 30px minmax(0, 1fr) 36px 116px 100px 38px !important; gap: 12px; margin: 0 2px; padding: 12px 10px; border-bottom-color: var(--dash-line); border-radius: 10px; background: transparent; transition: background 150ms ease, box-shadow 150ms ease, outline-color 150ms ease; }
 .task-record.workspace-task:hover { background: #fbfcf9; box-shadow: inset 0 0 0 1px rgba(197, 206, 193, 0.72), 0 3px 12px rgba(20, 30, 18, 0.025); }
 .task-record.workspace-task:last-child { border-bottom: 0; }
-.task-record.workspace-task[aria-selected="true"] { background: #f3f7ef; box-shadow: inset 0 0 0 1px var(--dash-line-strong), 0 4px 16px rgba(20, 30, 18, 0.045); }
 .task-record.workspace-task:focus-visible { outline: 2px solid var(--dash-signal-deep); outline-offset: 2px; }
-.task-record.workspace-task[aria-selected="true"]:focus-visible { outline-color: var(--dash-ink); }
 .task-record.workspace-task .task-row-body { min-width: 0; }
+/* The row's [aria-selected="true"] rules went with the attribute they keyed
+   off. §6.3's selected treatment is for a row the person selected; in My day
+   every row is on today's plan, so keying it to that fact dressed the entire
+   list in selection chrome and left the resting row with no surface of its own.
+   §6.2 gives the resting row a paper surface and a hairline divider. */
 .task-row-line.primary-line { gap: 8px; }
 .task-row-line.primary-line h3 { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 730; letter-spacing: -0.015em; text-overflow: ellipsis; white-space: nowrap; }
-.task-record.workspace-task[aria-selected="true"] .task-row-line.primary-line h3 { color: var(--dash-ink-soft); }
-.task-row-line.secondary-line { gap: 7px; margin-top: 5px; }
-.task-row-line.secondary-line small { color: var(--dash-muted); font-size: 10px; }
-.task-row-desc { max-width: 660px; margin-top: 5px; overflow: hidden; color: var(--dash-faint); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.task-record.workspace-task .task-meta-due { display: none; margin-top: 4px; color: var(--dash-muted); font-size: 10px; font-weight: 700; }
-.task-meta-due.danger { color: var(--dash-danger); }
+/* `.evidence-list h3` (a shared rule that also reaches this element) adds a 5px
+   bottom margin, which opened the title-to-metadata gap to 11px and held the row
+   above its own content height. The row's rhythm belongs to the row. */
+.task-records .workspace-task .task-row-line.primary-line h3 { margin: 0; }
+.task-row-line.secondary-line { gap: 7px; margin-top: 3px; }
+.task-row-line.secondary-line small { color: var(--dash-muted); font-size: calc(11px * var(--text-scale, 1)); }
+/* Scoped past `.evidence-list p` — a shared rule that also speaks for this
+   element — so the row's own scale wins; the size stays on the text-scale
+   setting (§8.6) like the metadata line beside it. */
+.task-records .workspace-task .task-row-desc { max-width: 660px; margin-top: 3px; overflow: hidden; color: var(--dash-muted); font-size: calc(11.5px * var(--text-scale, 1)); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.task-record.workspace-task .task-meta-due { display: none; margin-top: 3px; color: var(--dash-muted); font-size: 11px; font-weight: 700; }
+/* Same reasoning as the due column: the pill states the failure, the in-body
+   date stays a quiet date at narrow widths. */
+.task-record.workspace-task .task-meta-due.danger { color: var(--dash-muted) !important; font-weight: 700; }
 .task-check { width: 24px; height: 24px; border-color: #b6c8b0; border-radius: 8px; }
 .task-check:hover:not(:disabled) { border-color: var(--dash-signal-deep); background: #eef8e8; }
 .task-check.is-completing { border-color: var(--dash-signal-deep); }
 .task-row-ring { justify-self: center; }
-.task-due { color: var(--dash-muted); font-size: 10px; font-weight: 700; }
-.task-due.danger, .task-state.overdue { color: var(--dash-danger); }
-.task-state { display: inline-flex; align-items: center; justify-content: center; justify-self: start; min-height: 22px; padding: 0 8px; border-radius: 999px; background: #edf2e9; color: #62705e; font-size: 9px; font-weight: 800; }
-.task-record.workspace-task .task-state.open { border: 1px solid var(--dash-line); background: transparent; color: var(--dash-muted); }
-.task-state.complete { background: #e4f4d8; color: #3f7825; }
-.task-record.workspace-task .surfaced-tag { border: 1px solid #d8e2d2; border-radius: 999px; background: #eef3eb; color: #60715b; font-size: 9px; font-weight: 750; }
+.task-due { color: var(--dash-muted); font-size: 11px; font-weight: 700; }
+/* §6.2 gives the failing state to the one semantic status pill, which sits
+   directly beside this date, so the date stays quiet: a second red signal only
+   repeats it. `.danger` is a global utility that forces its own colour with
+   !important and lands at 4.41:1 on this paper surface, so the row states the
+   override here rather than letting an unrelated rule decide the date's colour. */
+.task-due.danger { color: var(--dash-muted) !important; font-weight: 700; }
+/* The pill's colour, size and weight belong to §6.2's semantic vocabulary in
+   styles.css (open / complete / overdue / sync issue); this layer only places
+   it. It used to restate the pill as a monochrome 9px/800 uppercase chip and
+   override overdue's colour with --dash-danger, which put the overdue pill at
+   3.79:1 — the only text in either surface that failed AA. */
+.task-state { display: inline-flex; align-items: center; justify-content: center; justify-self: start; min-height: 22px; }
+.task-record.workspace-task .surfaced-tag { border: 1px solid #d8e2d2; border-radius: 999px; background: #eef3eb; color: #60715b; font-size: 10px; font-weight: 750; }
 .workspace-task-menu { justify-self: end; }
 .workspace-task-menu .ellipsis-button { width: 30px; height: 30px; border-color: var(--dash-line); border-radius: 9px; background: #f5f7f2; }
 .workspace-task-menu .ellipsis-button:hover { border-color: #b8cbb1; background: #fff; }

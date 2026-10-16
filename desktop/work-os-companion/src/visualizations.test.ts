@@ -246,7 +246,12 @@ describe("operational visualizations", () => {
     expect(app).toContain("task-meta-project");
     expect(app).toContain("task-meta-due");
     expect(dashboardStyles).toContain(".task-record.workspace-task .task-meta-due { display: none;");
-    expect(dashboardStyles).toContain(".task-record.workspace-task .task-state.open");
+    // The row's status pill takes §6.2's semantic vocabulary straight from
+    // styles.css — open, complete, overdue, sync issue — and this layer only
+    // places it; open is no longer restated as a separate monochrome chip.
+    expect(styles).toContain(".task-state.open {");
+    expect(styles).toContain(".task-state.overdue {");
+    expect(dashboardStyles).not.toContain(".task-record.workspace-task .task-state.open");
     expect(dashboardStyles).not.toContain("@media (min-width: 721px) and (max-width: 780px)");
     expect(app).not.toContain('taskView === "today" && !historical && pageCounts ? pageCounts.open');    expect(app).toContain("My day is open work only");
   });
@@ -392,9 +397,14 @@ describe("operational visualizations", () => {
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line > h3 \{[\s\S]*?min-width: 0;/);
     expect(workspaceStyles).toMatch(/\.surfaced-tag \{[\s\S]*?margin-left: auto;/);
-    // Completion aligns with the title; the right cluster stays centered.
+    // Completion keeps the title line it belongs to; the trailing cluster
+    // centres in the row. It used to pin to the top with the completion control,
+    // which left a three-line row with its date, status pill and menu stranded
+    // above ~60px of dead space.
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-check { grid-column: 1; align-self: start;");
-    expect(workspaceStyles).toContain("align-self: start; margin-top: 1px; }");
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; align-self: center;");
+    expect(workspaceStyles).toContain(".task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; align-self: center;");
+    expect(workspaceStyles).not.toContain("align-self: start; margin-top: 1px; }");
     // The due date centers against its status pill (both 22px boxes).
     expect(workspaceStyles).toContain(".task-records .workspace-task > .task-due { grid-column: 4; display: inline-flex; align-items: center;");
     // One frame: the panel is the card, and in-row chips match the meta line.

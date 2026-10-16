@@ -796,32 +796,30 @@ button:disabled {
   padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1;
-  letter-spacing: .07em;
   text-align: center;
-  text-transform: uppercase;
 }
 .task-state.open {
   border-color: transparent;
   background: #edf0ea;
-  color: #5b655a;
+  color: #4c554b;
 }
 .task-state.complete {
   border-color: transparent;
   background: #e8f4da;
-  color: #3c651d;
+  color: #37601a;
 }
 .task-state.overdue {
   border-color: transparent;
   background: #fbe7e3;
-  color: #a0372b;
+  color: #8f2c21;
 }
 .task-state.sync-issue {
   border-color: transparent;
   background: #fff3d1;
-  color: #7d5a10;
+  color: #6f500d;
 }
 .evidence-list h3 {
   font: 600 14px Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;

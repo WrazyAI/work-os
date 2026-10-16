@@ -5105,13 +5105,24 @@ button:not(:disabled):active {
 }
 
 /* Explicit column pinning: conditional cells (ring, due, menu) must never
-   shift the status pill or the menu. Historical rows keep the same tracks. */
-.task-records .workspace-task > .task-check { grid-column: 1; align-self: start; margin-top: 1px; }
-.task-records .workspace-task > .task-row-body { grid-column: 2; }
-.task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; align-self: start; margin-top: 1px; }
-.task-records .workspace-task > .task-due { grid-column: 4; display: inline-flex; align-items: center; justify-self: end; min-height: 22px; text-align: right; align-self: start; margin-top: 1px; }
-.task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; align-self: start; margin-top: 1px; }
-.task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; align-self: start; margin-top: 1px; }
+   shift the status pill or the menu. Historical rows keep the same tracks.
+
+   The completion control keeps the title line it belongs to, but the trailing
+   cluster now centres in the row. Pinned to the top it left ~60px of dead space
+   beneath itself whenever a row carried three lines, which is what made the list
+   read as a stack of half-empty cards instead of a ledger. */
+.task-records .workspace-task > .task-check { grid-column: 1; align-self: start; }
+.task-records .workspace-task > .task-row-body { grid-column: 2; align-content: start; }
+.task-records .workspace-task > .task-row-ring { grid-column: 3; justify-self: center; align-self: center; }
+.task-records .workspace-task > .task-due { grid-column: 4; display: inline-flex; align-items: center; justify-self: end; min-height: 22px; text-align: right; align-self: center; }
+.task-records .workspace-task > .task-state { grid-column: 5; justify-self: start; align-self: center; }
+.task-records .workspace-task > .workspace-task-menu { grid-column: 6; justify-self: end; align-self: center; }
+
+/* The completion control keeps its compact 22px mark, but §12's target floor
+   applies to the target: the ::after reaches 34px without moving the mark or
+   the row's geometry. It is absolutely positioned so it adds no grid item. */
+.task-records .workspace-task > .task-check { position: relative; }
+.task-records .workspace-task > .task-check::after { content: ""; position: absolute; inset: -6px; }
 
 /* Compact rows keep the four-column grid (completion | content | progress |
    menu): the due column is hidden by the grid contract and the redundant status
@@ -5213,12 +5224,6 @@ button:not(:disabled):active {
 
 .task-row-line.secondary-line .task-assignee-tags {
   margin: 0;
-}
-
-/* Status pill sizing inside workspace rows: ref-style compact. */
-.task-records .task-state {
-  min-width: 62px;
-  font-size: 8.5px;
 }
 
 /* ============ Dashboard (My day) — pre-shift ============ */
