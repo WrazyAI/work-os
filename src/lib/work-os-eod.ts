@@ -7,7 +7,7 @@ import { recordWorkMemory } from "@/lib/work-memory";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
-import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
+import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
@@ -18,6 +18,7 @@ import {
   groupActivityFrames,
   humanizeGoalSource,
   isAutomationTitle,
+  outsideWindowLabel,
   progressedFacts,
   unplannedFacts,
 } from "@/lib/work-os-eod-facts";
@@ -160,7 +161,10 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
   // Routine runs are automation, not deliverables: they collapse into one
   // line, and they never appear as carried or unplanned work.
   const completedHuman = dayWork.completed.filter((item) => !isAutomationTitle(item.title));
-  const automation = collapseAutomation(dayWork.completed);
+  const automation = collapseAutomation(dayWork.completed.filter((item) => withinEodActivityWindow(item.at, window)));
+  // Automation events keep their window classification through the collapse:
+  // a routine that ran outside the workday never hides inside an unmarked line.
+  const automationOutside = collapseAutomation(dayWork.completed.filter((item) => !withinEodActivityWindow(item.at, window)));
   const deferred = dayWork.deferred.filter((item) => !isAutomationTitle(item.title));
   const carried = dayWork.carried.filter((item) => !isAutomationTitle(item.title));
   const unplanned = unplannedFacts(events, planTaskIds, timezone);
@@ -222,7 +226,8 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     "## Completed Work",
     ...(completedLines.length ? completedLines : []),
     ...(automation.line ? [automation.line] : []),
-    ...(!completedLines.length && !automation.line ? ["- No tasks were completed on this date."] : []),
+    ...(automationOutside.line ? [`${automationOutside.line}${outsideWindowLabel(window)}`] : []),
+    ...(!completedLines.length && !automation.line && !automationOutside.line ? ["- No tasks were completed on this date."] : []),
     "",
     "## Progressed Work",
     ...(progressed.length

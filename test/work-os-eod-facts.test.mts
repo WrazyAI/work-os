@@ -10,6 +10,7 @@ import {
   groupActivityFrames,
   humanizeGoalSource,
   outsideShiftMarker,
+  outsideWindowLabel,
   progressedFacts,
   unplannedFacts,
 } from "../src/lib/work-os-eod-facts";
@@ -73,6 +74,13 @@ test("facts outside the workday window carry a plain outside-shift marker", () =
     factLine({ title: "Evaluate Depot CI runner speed", at: "2026-10-14T01:17:00.000Z" }, "UTC", "completed", window),
     "- Evaluate Depot CI runner speed — completed 1:17 AM (outside shift)",
   );
+  // A session-derived window (no schedule that day) never implies a shift.
+  const sessionWindow = { startIso: "2026-10-14T09:00:00.000Z", endIso: "2026-10-14T17:00:00.000Z", source: "session" as const };
+  assert.equal(outsideWindowLabel(window), " (outside shift)");
+  assert.equal(outsideWindowLabel(sessionWindow), " (outside the workday)");
+  assert.equal(outsideWindowLabel(null), "");
+  assert.equal(outsideShiftMarker("2026-10-14T01:17:00.000Z", sessionWindow), " (outside the workday)");
+  assert.equal(outsideShiftMarker("2026-10-14T12:00:00.000Z", sessionWindow), "");
 });
 
 test("goal provenance is humanized instead of leaking enum values", () => {

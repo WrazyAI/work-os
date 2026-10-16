@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
-import { automationName, collapseAutomation, formatLocalTime, outsideShiftMarker } from "@/lib/work-os-eod-facts";
-import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
+import { automationName, collapseAutomation, formatLocalTime, outsideShiftMarker, outsideWindowLabel } from "@/lib/work-os-eod-facts";
+import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
@@ -152,7 +152,7 @@ export function buildEodPrompt(grounding: EodGrounding): string {
   return [
     `Write the end-of-day report for ${grounding.personName}, ${grounding.date}. Plain language for a manager — no jargon, no productivity scores, no invention.`,
     `Session: ${grounding.clockedInAt ?? "not clocked in"} → ${grounding.clockedOutAt ?? "still open"}.`,
-    `Facts marked (outside shift) finished outside the employee's scheduled shift; state them exactly as recorded and never present them as in-shift work.`,
+    `Facts marked (outside shift) or (outside the workday) finished outside the employee's recorded working period; state them exactly as recorded and never present them as in-shift work.`,
     "",
     "Updates recorded through the day:",
     fmt(facts.summary, "none"),
@@ -247,6 +247,7 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   const carried: string[] = [];
   const blockers: string[] = [];
   const automationTitles: string[] = [];
+  const automationOutsideTitles: string[] = [];
   const seenCompleted = new Set<string>();
   const seenCarried = new Set<string>();
   const events = ((eventsResult.data ?? []) as Array<Record<string, unknown>>);
@@ -260,13 +261,15 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     // Carried and deferred events both describe work that moves forward.
     const deferredEvent = ["deferred", "carried"].includes(String(event.event_type ?? ""));
     if (!completedEvent && !deferredEvent) continue;
+    const rawAt = event.exact_at ?? event.observed_at;
     // Repeated events for the same task are one fact; routine runs collapse
-    // into a single automation line instead of one entry per execution.
+    // into a single automation line instead of one entry per execution, and
+    // they keep their window classification through the collapse.
     if (completedEvent) {
       if (seenCompleted.has(key)) continue;
       seenCompleted.add(key);
       if (automationName(title)) {
-        automationTitles.push(title);
+        (withinEodActivityWindow(rawAt, window) ? automationTitles : automationOutsideTitles).push(title);
         continue;
       }
     } else {
@@ -274,7 +277,6 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
       seenCarried.add(key);
       if (automationName(title)) continue;
     }
-    const rawAt = event.exact_at ?? event.observed_at;
     const time = formatLocalTime(rawAt, timezone);
     const stamped = `${time ? `${title} (${time})` : title}${outsideShiftMarker(rawAt, window)}`;
     if (completedEvent) completed.push(stamped);
@@ -282,6 +284,8 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   }
   const automation = collapseAutomation(automationTitles);
   if (automation.line) completed.push(automation.line.replace(/^-\s*/, ""));
+  const automationOutside = collapseAutomation(automationOutsideTitles);
+  if (automationOutside.line) completed.push(`${automationOutside.line.replace(/^-\s*/, "")}${outsideWindowLabel(window)}`);
   for (const update of updates) {
     if (update.kind === "blocked" && !blockers.includes(update.text)) blockers.push(update.text);
   }

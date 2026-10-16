@@ -77,11 +77,19 @@ export function humanizeGoalSource(provenance: unknown): string {
   return labels[key] ?? "Not recorded";
 }
 
-/** Facts the workday window proves finished outside the shift carry a plain
- * marker, so a manager never reads off-shift work as in-shift work. Facts with
- * no window or no usable timestamp stay unmarked. */
+/** The label for facts outside the window. A scheduled shift says "outside
+ * shift"; a session-derived window (no schedule that day) says "outside the
+ * workday" rather than implying a shift that does not exist. */
+export function outsideWindowLabel(window: EodActivityWindow | null): string {
+  if (!window) return "";
+  return window.source === "schedule" ? " (outside shift)" : " (outside the workday)";
+}
+
+/** Facts the workday window proves finished outside it carry a plain marker,
+ * so a manager never reads off-shift work as in-shift work. Facts with no
+ * window or no usable timestamp stay unmarked. */
 export function outsideShiftMarker(at: unknown, window: EodActivityWindow | null): string {
-  return window && !withinEodActivityWindow(at, window) ? " (outside shift)" : "";
+  return window && !withinEodActivityWindow(at, window) ? outsideWindowLabel(window) : "";
 }
 
 /** One report line: "- Title — 09:12", with the time only when it is known and
