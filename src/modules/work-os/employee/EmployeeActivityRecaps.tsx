@@ -150,7 +150,7 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
   return (
     <li className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{interval.label}</p>
+        <p className="text-[11.5px] font-semibold tabular-nums text-[var(--text-tertiary)]">{interval.label}</p>
         <StatusPill tone={interval.reviewStatus === "confirmed" ? "done" : interval.reviewStatus === "amended" ? "info" : "open"}>
           {REVIEW_LABELS[interval.reviewStatus]}
         </StatusPill>
@@ -210,7 +210,7 @@ function RecapCard({ interval, timezone, onDecided }: { interval: ActivityInterv
                 <span className="tabular-nums text-[var(--text-tertiary)]">{formatTime(frame.capturedAt, timezone)}</span>
                 {frame.visibleApp ? <span className="font-semibold text-[var(--text-secondary)]">{frame.visibleApp}</span> : null}
                 <span className="min-w-0 flex-1 text-[var(--text-secondary)]">{frame.frameSummary || "Frame retained without a text summary."}</span>
-                {frame.usedInModel ? <span className="text-[10px] uppercase tracking-[0.05em] text-[var(--text-tertiary)]">used in recap</span> : null}
+                {frame.usedInModel ? <span className="text-[10.5px] text-[var(--text-tertiary)]">used in recap</span> : null}
               </li>
             ))}
           </ul>

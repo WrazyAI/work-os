@@ -184,7 +184,7 @@ function MemoryModal({
                     <li key={fact.id} className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
                       <p className="text-[13px] leading-5 text-[var(--text-primary)]">{fact.content}</p>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">From your updates{fact.local_date ? ` · ${calendarDateLabel(fact.local_date)}` : fact.occurred_at ? ` · ${formatDateTimeShort(fact.occurred_at)}` : ""}</span>
+                        <span className="text-[10.5px] text-[var(--text-tertiary)]">From your updates{fact.local_date ? ` · ${calendarDateLabel(fact.local_date)}` : fact.occurred_at ? ` · ${formatDateTimeShort(fact.occurred_at)}` : ""}</span>
                         <span className="flex gap-2">
                           <SecondaryButton className="!px-2.5 !py-1.5 !text-[11px]" disabled={reviewFact.isPending} onClick={() => reviewFact.mutate({ id: fact.id, status: "rejected" })}>Not true</SecondaryButton>
                           <PrimaryButton className="!px-2.5 !py-1.5 !text-[11px]" disabled={reviewFact.isPending} onClick={() => reviewFact.mutate({ id: fact.id, status: "confirmed" })}><Check size={12} /> Keep</PrimaryButton>
@@ -205,7 +205,7 @@ function MemoryModal({
                     <li key={fact.id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2.5" style={{ borderColor: "var(--border)" }}>
                       <div className="min-w-0 flex-1">
                         <p className="text-[12px] leading-5 text-[var(--text-primary)]"><Check size={11} className="mr-1 inline" style={{ color: "var(--status-ok)" }} />{fact.content}</p>
-                        <span className="text-[10px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">{fact.local_date ? `Kept ${calendarDateLabel(fact.local_date)}` : "Kept"}</span>
+                        <span className="text-[10.5px] text-[var(--text-tertiary)]">{fact.local_date ? `Kept ${calendarDateLabel(fact.local_date)}` : "Kept"}</span>
                       </div>
                       <QuietDelete disabled={forgetItem.isPending} onClick={() => forgetItem.mutate(fact.id)} />
                     </li>
@@ -216,13 +216,13 @@ function MemoryModal({
               )}
 
               <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">Recent activity</p>
+                <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">Recent activity</p>
                 {visibleRecent.length ? (
                   <ul className="mt-2">
                     {visibleRecent.map((item) => (
                       <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b py-2.5" style={{ borderColor: "var(--border)" }}>
                         <div className="min-w-0 flex-1">
-                          <span className="block text-[10px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">{item.kind}</span>
+                          <span className="block text-[10.5px] text-[var(--text-tertiary)]">{item.kind}</span>
                           <p className="text-[12px] leading-5 text-[var(--text-primary)]">{item.summary || item.content}</p>
                         </div>
                         <div className="flex items-center gap-3">

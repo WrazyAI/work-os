@@ -235,7 +235,7 @@ export default function EmployeePlanBuilder({
               {day.access?.featureFlags?.loom_updates === true ? (
                 <div className="rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Attach a Loom (optional)</span>
+                    <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">Attach a Loom (optional)</span>
                     <button type="button" className="text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }} onClick={() => setLoomOpen((value) => !value)}>
                       {loomOpen ? "Close" : "Add a recording"}
                     </button>
@@ -272,12 +272,12 @@ export default function EmployeePlanBuilder({
           ) : (
             <div className="grid gap-5">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Draft summary</p>
+                <p className="text-[11px] font-semibold text-[var(--text-secondary)]">Draft summary</p>
                 <p className="mt-1.5 text-[14px] leading-6 text-[var(--text-primary)]">{effectiveInterpretation?.summary || "No summary was drafted."}</p>
               </div>
 
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">Commitments</p>
+                <p className="text-[11px] font-semibold text-[var(--text-secondary)]">Commitments</p>
                 <ul className="mt-2 grid gap-3">
                   {(effectiveInterpretation?.commitments ?? []).map((commitment) => {
                     const editing = editingId === commitment.clientId;
@@ -325,7 +325,7 @@ export default function EmployeePlanBuilder({
                               {commitment.linkedTaskId ? <StatusPill tone="info">Linked task</StatusPill> : <StatusPill tone="open">New outcome</StatusPill>}
                               {commitment.estimatedMinutes ? <span className="text-[11px] text-[var(--text-tertiary)]">~{commitment.estimatedMinutes} min</span> : null}
                               {commitment.sourceRefs.slice(0, 2).map((source) => (
-                                <span key={`${source.provider}-${source.id}`} className="text-[10px] uppercase tracking-[0.05em] text-[var(--text-tertiary)]">{source.label || `${source.provider} ${source.type}`}</span>
+                                <span key={`${source.provider}-${source.id}`} className="text-[10.5px] text-[var(--text-tertiary)]">{source.label || `${source.provider} ${source.type}`}</span>
                               ))}
                             </div>
                           </>
@@ -341,7 +341,7 @@ export default function EmployeePlanBuilder({
 
               {(effectiveInterpretation?.clarifications ?? []).length ? (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">A couple of questions</p>
+                  <p className="text-[11px] font-semibold text-[var(--text-secondary)]">A couple of questions</p>
                   <div className="mt-2 grid gap-2">
                     {effectiveInterpretation!.clarifications.map((clarification) => (
                       <label key={clarification.id} className="grid gap-1 rounded-xl border px-4 py-3" style={{ borderColor: "color-mix(in srgb, var(--status-warn) 40%, var(--border))", background: "var(--bg-primary)" }}>

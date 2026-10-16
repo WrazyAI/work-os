@@ -489,13 +489,13 @@ function DayBars({ points }: { points: InsightSeriesPoint[] }) {
   return (
     <figure>
       <div
-        className="flex items-end gap-1"
+        className="flex items-end justify-center gap-1"
         style={{ height: 140 }}
         role="img"
         aria-label={`Outcomes completed per day: ${points.map((point) => `${point.label} ${point.outcomes}`).join(", ")}.`}
       >
         {points.map((point, index) => (
-          <div key={point.date} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1" title={`${point.label}: ${point.outcomes} outcome${point.outcomes === 1 ? "" : "s"}`}>
+          <div key={point.date} className="flex h-full min-w-0 max-w-[84px] flex-1 flex-col justify-end gap-1" title={`${point.label}: ${point.outcomes} outcome${point.outcomes === 1 ? "" : "s"}`}>
             <span className="text-center text-[10px] tabular-nums text-[var(--text-tertiary)]">{point.outcomes > 0 ? point.outcomes : ""}</span>
             <div
               className="rounded-t-[4px]"
