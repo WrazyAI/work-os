@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CalendarRange, RefreshCw, Sparkles, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, CalendarRange, RefreshCw, Sparkles, Target, TrendingUp } from "lucide-react";
 import { useEmployeeDay } from "./useEmployeeDay";
 import { fetchJson, calendarDateLabel, formatDateTimeShort, longDateLabel, type EmployeeInsightsResponse } from "./model";
 import {
@@ -24,13 +24,16 @@ import {
   EmptyState,
   IconButton,
   Masthead,
+  Metric,
   Notice,
   Panel,
   PanelHeader,
   SecondaryButton,
   Skeleton,
+  StateMark,
   StatusPill,
   SyncChip,
+  cx,
   inputClass,
   inputStyle,
 } from "./ui";
@@ -43,11 +46,13 @@ const RANGES: Array<{ id: Range; label: string }> = [
   { id: "30d", label: "30 days" },
 ];
 
+/* Calm composition colors: completed stays the deepest signal, context keeps
+ * the cool observation tone, and nothing here is danger red. */
 const FLOW_COLORS: Record<string, string> = {
   completed: "var(--accent-deep)",
-  progressed: "var(--status-info)",
+  progressed: "var(--status-observed)",
   deferred: "var(--status-warn)",
-  carried: "#8a6cc9",
+  carried: "#8d7fa8",
   unplanned: "var(--text-tertiary)",
 };
 
@@ -55,7 +60,6 @@ export default function EmployeeInsights() {
   const { day, refresh, sync, syncing } = useEmployeeDay();
   const [range, setRange] = useState<Range>("7d");
   const [through, setThrough] = useState("");
-  const [showStats, setShowStats] = useState(false);
   const [synthesis, setSynthesis] = useState<{ status: "loading" } | { status: "ready"; text: string; mode?: "ai" | "evidence" } | { status: "failed" } | null>(null);
 
   useEffect(() => {
@@ -104,11 +108,24 @@ export default function EmployeeInsights() {
   const updateKinds = data ? updateKindBreakdown(data.updateKinds ?? data.days) : [];
   const timing = data ? onTimeRate(data.days) : null;
   const rangeLabel = range === "day" ? "today" : range === "7d" ? "these 7 days" : "these 30 days";
+  const dayCount = days.length;
+  const recordedDays = rangeSummary?.recordedDays ?? 0;
+  const daysWithUpdate = data?.consistency?.daysWithUpdate ?? days.filter((item) => Number(item.updates ?? 0) > 0).length;
+  const ratio = (part: number, of: number) => (of > 0 ? Math.round((part / of) * 100) : null);
+  // Comparison marks only render when the response actually carries an equal
+  // earlier period; a missing comparison must never read as a drop against zero.
+  const comparisonAvailable = Boolean(data?.comparison?.days?.length);
+  const pillFor = (key: string) => (comparisonAvailable ? deltas.find((stat) => stat.key === key) ?? null : null);
+  const activeKinds = updateKinds.filter((kind) => kind.value > 0);
+  const summary = trendSummary(series);
+  const closingCarryOver = rangeSummary?.closingCarryOver ?? 0;
+  const closingOverdue = rangeSummary?.closingOverdue ?? 0;
+  const blockers = rangeSummary?.blockers ?? 0;
 
   return (
     <div>
       <Masthead
-        eyebrow="Work OS · Insights"
+        eyebrow="Work OS"
         title="Your record"
         meta="Outcomes, plan reliability, updates, evidence, and Worktivity context stay separate — the record is not a score."
         actions={
@@ -122,8 +139,10 @@ export default function EmployeeInsights() {
                     type="button"
                     aria-current={active ? "true" : undefined}
                     onClick={() => setRange(item.id)}
-                    className="rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition"
-                    style={active ? { background: "color-mix(in srgb, var(--accent-deep) 12%, var(--bg-card))", color: "var(--accent-deep)" } : { color: "var(--text-secondary)" }}
+                    className={cx(
+                      "rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition",
+                      active ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+                    )}
                   >
                     {item.label}
                   </button>
@@ -162,111 +181,35 @@ export default function EmployeeInsights() {
         </div>
       ) : data ? (
         <div className="grid gap-5">
-          <Panel>
-            <div className="grid gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
-                  {calendarDateLabel(data.from)} → {calendarDateLabel(data.through)}
-                </p>
-                <h2 className="mt-1.5 text-[26px] font-bold leading-tight text-[var(--text-primary)]">
-                  {data.totals.tasksCompleted} outcome{data.totals.tasksCompleted === 1 ? "" : "s"} completed
-                </h2>
-                <p className="mt-1.5 text-[13px] leading-6 text-[var(--text-secondary)]">
-                  {Number(data.totals.planned ?? 0) > 0
-                    ? <>{data.totals.plannedCompleted} of {data.totals.planned} planned commitments landed{rangeSummary?.commitmentRate != null ? <> · <strong className="text-[var(--text-primary)]">{rangeSummary.commitmentRate}%</strong> completion</> : null}.</>
-                    : "No planned commitments were recorded in this range."}
-                </p>
-                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-[var(--text-tertiary)]">
-                  <span>Nifty {data.freshness.niftySyncedAt ? `updated ${formatDateTimeShort(data.freshness.niftySyncedAt)}` : "not synced"}</span>
-                  <span>Worktivity {data.freshness.worktivityObservedAt ? `observed ${formatDateTimeShort(data.freshness.worktivityObservedAt)}` : "not observed"}</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
-                <Stat label="Recorded days" value={`${rangeSummary?.recordedDays ?? 0}/${days.length}`} />
-                <Stat label="Avg recorded day" value={durationLabel(rangeSummary?.averageObservedSeconds ?? 0)} />
-                <Stat label="Outcomes / day" value={rangeSummary?.recordedDays ? `${Math.round(((Number(data.totals.tasksCompleted ?? 0) / rangeSummary.recordedDays) + Number.EPSILON) * 10) / 10}` : "—"} />
-                <Stat label="Closing carry-over" value={`${rangeSummary?.closingCarryOver ?? 0}`} delta={data.comparison?.days?.length ? { key: "carried", label: "Carry-over", current: rangeSummary?.closingCarryOver ?? 0, previous: (rangeSummary?.closingCarryOver ?? 0) - (rangeSummary?.carryOverDelta ?? 0), delta: rangeSummary?.carryOverDelta ?? 0, unit: "count", goodDirection: false } : null} />
-              </div>
-            </div>
-          </Panel>
-
-          <div className="grid gap-5 xl:grid-cols-2">
-            <Panel>
-              <PanelHeader
-                icon={<TrendingUp size={16} />}
-                title="Outcomes by day"
-                meta={`Completed outcomes across ${rangeLabel}. Bars are exact counts; the brief below explains the narrative.`}
-              />
-              <div className="px-5 py-4">
-                <DayBars points={series} />
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-                  <span>Peak day: {trendSummary(series).peak ? `${trendSummary(series).peak!.label} · ${trendSummary(series).peak!.observedMinutes} min observed` : "—"}</span>
-                  <span>Recorded days: {trendSummary(series).recordedDays}</span>
-                  <span>Average plan completion: {trendSummary(series).averageCompletionPercent != null ? `${trendSummary(series).averageCompletionPercent}%` : "—"}</span>
-                </div>
-              </div>
-            </Panel>
-
-            <Panel>
-              <PanelHeader
-                icon={<CalendarRange size={16} />}
-                title="Work flow"
-                meta="Outcomes, progress updates, deferred, carried, and unplanned work — kept separate on purpose."
-              />
-              <div className="grid gap-4 px-5 py-4 sm:grid-cols-[160px_minmax(0,1fr)]">
-                <FlowDonut slices={flow} />
-                <div className="grid content-center gap-2">
-                  {flow.map((slice) => (
-                    <div key={slice.key} className="flex items-center justify-between gap-3 text-[12px]">
-                      <span className="flex items-center gap-2 text-[var(--text-secondary)]">
-                        <span aria-hidden="true" className="size-2.5 rounded-full" style={{ background: FLOW_COLORS[slice.key] }} />
-                        {slice.label}
-                      </span>
-                      <span className="tabular-nums text-[var(--text-primary)]">
-                        {slice.value} <span className="text-[11px] text-[var(--text-tertiary)]">({sharePercent(slice.value, flow.reduce((sum, item) => sum + item.value, 0))}%)</span>
-                      </span>
-                    </div>
-                  ))}
-                  {timing && timing.total > 0 ? (
-                    <div className="mt-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                      <div className="flex items-center justify-between text-[12px]">
-                        <span className="text-[var(--text-secondary)]">Outcomes on time</span>
-                        <span className="tabular-nums text-[var(--text-primary)]">{timing.onTime} on time · {timing.late} late{timing.percent != null ? ` · ${timing.percent}%` : ""}</span>
-                      </div>
-                      <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-tertiary)" }} role="img" aria-label={`${timing.onTime} outcomes on time and ${timing.late} late`}>
-                        <span style={{ width: `${sharePercent(timing.onTime, timing.total)}%`, background: "var(--accent-deep)" }} />
-                        <span style={{ width: `${sharePercent(timing.late, timing.total)}%`, background: "var(--status-warn)" }} />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              {updateKinds.some((kind) => kind.value > 0) ? (
-                <div className="flex flex-wrap gap-2 border-t px-5 py-3" style={{ borderColor: "var(--border)" }}>
-                  {updateKinds.filter((kind) => kind.value > 0).map((kind) => (
-                    <span key={String(kind.key)} className="rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: kind.attention ? "color-mix(in srgb, var(--status-warn) 45%, var(--border))" : "var(--border)", color: kind.attention ? "var(--status-warn)" : "var(--text-secondary)" }}>
-                      {kind.label} {kind.value}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </Panel>
+          {/* Range summary — one quiet line, no hero card */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-[var(--text-tertiary)]">
+            <span className="font-semibold text-[var(--text-primary)]">{calendarDateLabel(data.from)} → {calendarDateLabel(data.through)}</span>
+            <span>
+              {Number(data.totals.planned ?? 0) > 0
+                ? `${data.totals.plannedCompleted} of ${data.totals.planned} planned commitments landed`
+                : "No planned commitments were recorded in this range"}
+            </span>
+            <span>Nifty {data.freshness.niftySyncedAt ? `updated ${formatDateTimeShort(data.freshness.niftySyncedAt)}` : "not synced"}</span>
+            <span>Worktivity {data.freshness.worktivityObservedAt ? `observed ${formatDateTimeShort(data.freshness.worktivityObservedAt)}` : "not observed"}</span>
           </div>
 
-          {chips.length ? (
-            <Panel>
-              <PanelHeader icon={<Target size={16} />} title="Rhythm" meta="Deterministic consistency signals from the same record — no streak pressure, no scoring." />
-              <div className="flex flex-wrap gap-3 px-5 py-4">
-                {chips.map((chip) => (
-                  <div key={chip.key} className="min-w-[150px] flex-1 rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
-                    <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{chip.label}</span>
-                    <strong className="mt-1 block text-[18px] font-bold tabular-nums text-[var(--text-primary)]">{chip.value}</strong>
-                    <span className="mt-0.5 block text-[11px] leading-4 text-[var(--text-tertiary)]">{chip.detail}</span>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          ) : null}
+          {/* Five-fact KPI strip */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <KpiCard label="Outcomes completed" value={String(data.totals.tasksCompleted)} delta={pillFor("tasksCompleted")} />
+            <KpiCard
+              label="Commitment rate"
+              value={rangeSummary?.commitmentRate != null ? `${rangeSummary.commitmentRate}%` : "—"}
+              detail={rangeSummary?.commitmentRate != null ? `${data.totals.plannedCompleted} of ${data.totals.planned} planned` : "No planned commitments in this range"}
+            />
+            <KpiCard label="Updates recorded" value={String(data.totals.updates)} delta={pillFor("updates")} />
+            <KpiCard label="Observed context" value={durationLabel(Number(data.totals.observedSeconds ?? 0))} delta={pillFor("observedMinutes")} />
+            <KpiCard
+              label="Closing carry-over"
+              value={String(closingCarryOver)}
+              attention={closingCarryOver > 0}
+              detail={closingCarryOver > 0 ? "Still open at the close" : "Nothing carried at the close"}
+            />
+          </div>
 
           <Panel>
             <PanelHeader
@@ -302,7 +245,7 @@ export default function EmployeeInsights() {
               meta={`${calendarDateLabel(data.from)} – ${calendarDateLabel(data.through)} · generated from the same record you see below.`}
             />
             <div className="grid gap-6 px-5 py-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-              <p className="text-[14px] leading-6 text-[var(--text-primary)]">{data.brief.summary || "No insight record is available for this range."}</p>
+              <p className="text-[13.5px] leading-6 text-[var(--text-primary)]">{data.brief.summary || "No insight record is available for this range."}</p>
               <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
                 <BriefList title="Wins" items={data.brief.wins} />
                 <BriefList title="Attention" items={data.brief.attention} />
@@ -311,50 +254,163 @@ export default function EmployeeInsights() {
             </div>
           </Panel>
 
+          {/* The range's daily record — one chart, exact counts */}
           <Panel>
             <PanelHeader
-              icon={<CalendarRange size={16} />}
-              title="Daily records"
-              meta={`${days.length} day${days.length === 1 ? "" : "s"} in this range. Newest first.`}
-              actions={<SecondaryButton onClick={() => setShowStats((value) => !value)}>{showStats ? "Hide exact numbers" : "Show exact numbers"}</SecondaryButton>}
+              icon={<TrendingUp size={16} />}
+              title="Outcomes by day"
+              meta={`Completed outcomes across ${rangeLabel}. Bars are exact counts; the brief above explains the narrative.`}
             />
-            {days.length ? (
-              <ul>
-                {[...days].reverse().map((item) => (
-                  <li key={item.date} className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <button type="button" onClick={() => setThrough(item.date)} className="text-left text-[13px] font-semibold hover:underline" style={{ color: "var(--accent-deep)" }}>
-                        {longDateLabel(item.date)}
-                      </button>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {item.sessionQuality?.message ? <StatusPill tone="overdue">{item.sessionQuality.message}</StatusPill> : null}
-                        {item.breakFreshness ? <StatusPill tone="open">{item.breakFreshness}</StatusPill> : null}
-                      </div>
-                    </div>
-                    <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] tabular-nums text-[var(--text-secondary)]">
-                      <span>{item.tasksCompleted} completed</span>
-                      <span>{item.progressed ?? 0} progressed</span>
-                      <span>{item.deferred ?? 0} deferred</span>
-                      <span>{item.carried ?? 0} carried</span>
-                      <span>{item.unplanned ?? 0} unplanned</span>
-                      {showStats ? <span>{durationLabel(item.observedSeconds)} observed</span> : null}
-                      {showStats && item.trackedMinutes ? <span>{durationLabel(item.trackedMinutes * 60)} tracked context</span> : null}
-                    </p>
-                    {item.goal?.text ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">Goal: {item.goal.text}</p> : null}
-                    {item.references.length ? (
-                      <p className="mt-1.5 flex flex-wrap gap-3">
-                        {item.references.slice(0, 4).map((reference) => (
-                          <a key={reference.id} href={reference.target} className="text-[11px] font-semibold" style={{ color: "var(--accent-deep)" }}>{reference.label}</a>
-                        ))}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={<CalendarRange size={20} />} title="No recorded days in this range" message="Work you log or plan will appear here day by day." />
-            )}
+            <div className="px-5 py-4">
+              <DayBars points={series} />
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
+                <span>Peak day: {summary.peak ? `${summary.peak.label} · ${summary.peak.observedMinutes} min observed` : "—"}</span>
+                <span>Recorded days: {summary.recordedDays}</span>
+                <span>Average plan completion: {summary.averageCompletionPercent != null ? `${summary.averageCompletionPercent}%` : "—"}</span>
+              </div>
+            </div>
           </Panel>
+
+          {/* Plan reliability beside the record mix */}
+          <div className="grid gap-5 lg:grid-cols-12">
+            <Panel className="lg:col-span-7">
+              <PanelHeader icon={<Target size={16} />} title="Plan reliability" meta="Recorded ratios from this range." />
+              <div className="grid gap-4 px-5 py-4">
+                <ReliabilityRow
+                  label="Outcomes on time"
+                  percent={timing?.percent ?? null}
+                  detail={timing && timing.total > 0 ? `${timing.onTime} on time · ${timing.late} late` : "No outcomes with a due date in this range"}
+                />
+                <ReliabilityRow
+                  label="Days with an update"
+                  percent={ratio(daysWithUpdate, dayCount)}
+                  detail={`${daysWithUpdate} of ${dayCount} day${dayCount === 1 ? "" : "s"} with a substantive update`}
+                />
+                <ReliabilityRow
+                  label="Days recorded"
+                  percent={ratio(recordedDays, dayCount)}
+                  detail={`${recordedDays} of ${dayCount} day${dayCount === 1 ? "" : "s"} with observed time${recordedDays > 0 && rangeSummary ? ` · ${durationLabel(rangeSummary.averageObservedSeconds)} average` : ""}`}
+                />
+                <p className="text-[11px] leading-4 text-[var(--text-tertiary)]">Undated work is never classified either way.</p>
+              </div>
+            </Panel>
+
+            <Panel className="lg:col-span-5">
+              <PanelHeader
+                icon={<CalendarRange size={16} />}
+                title="Record mix"
+                meta="How this range's recorded items split — a composition, not a sequence."
+              />
+              <div className="grid gap-4 px-5 py-4 sm:grid-cols-[160px_minmax(0,1fr)]">
+                <FlowDonut slices={flow} />
+                <div className="grid content-center gap-2">
+                  {flow.map((slice) => (
+                    <div key={slice.key} className="flex items-center justify-between gap-3 text-[12px]">
+                      <span className="flex items-center gap-2 text-[var(--text-secondary)]">
+                        <span aria-hidden="true" className="size-2.5 rounded-full" style={{ background: FLOW_COLORS[slice.key] }} />
+                        {slice.label}
+                      </span>
+                      <span className="tabular-nums text-[var(--text-primary)]">
+                        {slice.value} <span className="text-[11px] text-[var(--text-tertiary)]">({sharePercent(slice.value, flow.reduce((sum, item) => sum + item.value, 0))}%)</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {activeKinds.length ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-5 py-3 text-[11.5px] text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)" }}>
+                  <span className="text-[var(--text-tertiary)]">Update mix</span>
+                  {activeKinds.map((kind) => (
+                    <span key={String(kind.key)}>
+                      {kind.label} <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{kind.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </Panel>
+          </div>
+
+          {/* Closing attention beside the rhythm signals */}
+          <div className="grid gap-5 lg:grid-cols-12">
+            <Panel className="lg:col-span-7">
+              <PanelHeader icon={<AlertTriangle size={16} />} title="Needs attention" meta="Closing state, not accumulated snapshots." />
+              <div className="grid gap-2.5 px-5 py-4">
+                <AttentionRow count={closingCarryOver} amber>carried item{closingCarryOver === 1 ? "" : "s"} still open at the end of the range</AttentionRow>
+                <AttentionRow count={closingOverdue}>overdue item{closingOverdue === 1 ? "" : "s"} in the latest day</AttentionRow>
+                <AttentionRow count={blockers} amber>blocker{blockers === 1 ? "" : "s"} raised through recorded updates</AttentionRow>
+                {data.brief.nextFocus[0] ? (
+                  <p className="mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 border-t pt-3 text-[12.5px] leading-5" style={{ borderColor: "var(--border-subtle)" }}>
+                    <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Next focus</span>
+                    <b className="font-semibold text-[var(--text-primary)]">{data.brief.nextFocus[0]}</b>
+                  </p>
+                ) : null}
+              </div>
+            </Panel>
+
+            <Panel className="lg:col-span-5">
+              <PanelHeader icon={<Target size={16} />} title="Work rhythm" meta="Goals, updates, outcomes, and the closing streak." />
+              <div className="grid grid-cols-2 gap-x-5 gap-y-4 px-5 py-4">
+                {chips.length ? (
+                  chips.map((chip) => <Metric key={chip.key} label={chip.label} value={chip.value} detail={chip.detail} />)
+                ) : (
+                  <p className="col-span-2 text-[12px] text-[var(--text-tertiary)]">No rhythm signals were recorded in this range yet.</p>
+                )}
+              </div>
+            </Panel>
+          </div>
+
+          {/* Exact daily values stay behind the disclosure (design §4.5) */}
+          <details className="rounded-2xl border" style={{ borderColor: "var(--border)", background: "var(--bg-card)", boxShadow: "0 1px 2px rgba(20,30,18,.035), 0 10px 28px rgba(20,30,18,.045)" }}>
+            <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <span className="flex items-center gap-2 text-[14.5px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+                <CalendarRange size={14} className="shrink-0" style={{ color: "var(--text-tertiary)" }} />
+                View daily breakdown
+              </span>
+              <span className="text-[11.5px] text-[var(--text-tertiary)]">{dayCount} day{dayCount === 1 ? "" : "s"} in this range · newest first</span>
+            </summary>
+            <div className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
+              {days.length ? (
+                <ul>
+                  {[...days].reverse().map((item) => (
+                    <li key={item.date} className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <button type="button" onClick={() => setThrough(item.date)} className="text-left text-[13px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">
+                          {longDateLabel(item.date)}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {item.sessionQuality?.message ? <StateMark tone="warn">{item.sessionQuality.message}</StateMark> : null}
+                          {item.breakFreshness ? <StateMark tone="neutral">{item.breakFreshness}</StateMark> : null}
+                        </div>
+                      </div>
+                      <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] tabular-nums text-[var(--text-secondary)]">
+                        <span>{item.tasksCompleted} completed</span>
+                        <span>{item.progressed ?? 0} progressed</span>
+                        <span>{item.deferred ?? 0} deferred</span>
+                        <span>{item.carried ?? 0} carried</span>
+                        <span>{item.unplanned ?? 0} unplanned</span>
+                        <span>{durationLabel(item.observedSeconds)} observed</span>
+                        {item.trackedMinutes ? <span>{durationLabel(item.trackedMinutes * 60)} tracked context</span> : null}
+                      </p>
+                      {item.goal?.text ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">Goal: {item.goal.text}</p> : null}
+                      {item.references.length ? (
+                        <p className="mt-1.5 flex flex-wrap gap-3">
+                          {item.references.slice(0, 4).map((reference) => (
+                            <a key={reference.id} href={reference.target} className="text-[11px] font-semibold text-[var(--text-secondary)] underline-offset-2 transition hover:text-[var(--text-primary)] hover:underline">{reference.label}</a>
+                          ))}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState icon={<CalendarRange size={18} />} title="No recorded days in this range" message="Work you log or plan will appear here day by day." />
+              )}
+            </div>
+          </details>
+
+          <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
+            These are descriptive personal signals, not a performance score. Idle activity is never labeled productivity, and activity context never proves task completion.
+          </p>
         </div>
       ) : (
         <EmptyState
@@ -367,11 +423,15 @@ export default function EmployeeInsights() {
   );
 }
 
-function Stat({ label, value, delta }: { label: string; value: string; delta?: DeltaStat | null }) {
+function KpiCard({ label, value, detail, delta, attention = false }: { label: string; value: string; detail?: string; delta?: DeltaStat | null; attention?: boolean }) {
   return (
-    <div className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
-      <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{label}</span>
-      <strong className="mt-1 block text-[18px] font-bold tabular-nums text-[var(--text-primary)]">{value}</strong>
+    <div className="rounded-[14px] border p-3.5" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+        {attention ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: "var(--status-warn)" }} /> : null}
+        {label}
+      </span>
+      <strong className="mt-1.5 block text-[22px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-[var(--text-primary)]">{value}</strong>
+      {detail ? <span className="mt-1.5 block text-[10.5px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
       {delta && delta.delta !== 0 ? <DeltaBadge stat={delta} /> : null}
     </div>
   );
@@ -382,9 +442,41 @@ function DeltaBadge({ stat }: { stat: DeltaStat }) {
   const good = stat.goodDirection === null ? null : rising === stat.goodDirection;
   const color = good === null ? "var(--text-tertiary)" : good ? "var(--status-ok)" : "var(--status-warn)";
   return (
-    <span className="mt-0.5 block text-[11px] font-semibold tabular-nums" style={{ color }}>
-      {rising ? "+" : "−"}{Math.abs(stat.delta)} <span className="font-normal text-[var(--text-tertiary)]">vs prior window</span>
+    <span className="mt-1 block text-[10.5px] font-medium tabular-nums" style={{ color }}>
+      {rising ? "+" : "−"}{Math.abs(stat.delta)} <span className="text-[var(--text-tertiary)]">vs prior window</span>
     </span>
+  );
+}
+
+function ReliabilityRow({ label, percent, detail }: { label: string; percent: number | null; detail: string }) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[12.5px] text-[var(--text-primary)]">{label}</span>
+        <span className="text-[12.5px] font-semibold tabular-nums text-[var(--text-primary)]">{percent == null ? "—" : `${percent}%`}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-tertiary)" }} role="img" aria-label={`${label}: ${percent == null ? "not recorded in this range" : `${percent}%`}`}>
+        <div className="h-full rounded-full" style={{ width: `${percent ?? 0}%`, background: percent == null ? "transparent" : "var(--accent-deep)" }} />
+      </div>
+      <span className="text-[11px] leading-4 text-[var(--text-tertiary)]">{detail}</span>
+    </div>
+  );
+}
+
+function AttentionRow({ count, amber = false, children }: { count: number; amber?: boolean; children: ReactNode }) {
+  const active = count > 0;
+  return (
+    <p className="flex items-baseline gap-2.5 text-[12.5px] leading-5 text-[var(--text-secondary)]">
+      <span
+        aria-hidden
+        className="relative top-[-1px] size-1.5 shrink-0 rounded-full"
+        style={active ? { background: amber ? "var(--status-warn)" : "var(--text-tertiary)" } : { border: "1px solid var(--border-hot)" }}
+      />
+      <span>
+        <strong className={cx("font-semibold tabular-nums", active ? "" : "text-[var(--text-tertiary)]")} style={active && amber ? { color: "var(--status-warn)" } : { color: active ? "var(--text-primary)" : "var(--text-tertiary)" }}>{count}</strong>{" "}
+        <span className={active ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>{children}</span>
+      </span>
+    </p>
   );
 }
 
@@ -452,7 +544,7 @@ function FlowDonut({ slices }: { slices: FlowSlice[] }) {
             return element;
           })
         : null}
-      <text x="50%" y="47%" textAnchor="middle" style={{ fontSize: 20, fontWeight: 700, fill: "var(--text-primary)" }}>{total}</text>
+      <text x="50%" y="47%" textAnchor="middle" style={{ fontSize: 20, fontWeight: 600, fill: "var(--text-primary)" }}>{total}</text>
       <text x="50%" y="62%" textAnchor="middle" style={{ fontSize: 9, fill: "var(--text-tertiary)" }}>items in range</text>
     </svg>
   );
@@ -461,7 +553,7 @@ function FlowDonut({ slices }: { slices: FlowSlice[] }) {
 function BriefList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h3 className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{title}</h3>
+      <h3 className="text-[11.5px] font-semibold text-[var(--text-secondary)]">{title}</h3>
       {items.length ? (
         <ul className="mt-1.5 grid gap-1">
           {items.map((item) => (
