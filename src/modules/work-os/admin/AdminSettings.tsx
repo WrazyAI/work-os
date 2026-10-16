@@ -14,6 +14,7 @@ import {
   SectionHeading,
   SelectField,
   Skeleton,
+  StateMark,
   StatusPill,
   TextField,
   statusLabel,
@@ -65,7 +66,7 @@ export default function AdminSettingsPage() {
   });
   const status = useQuery<SystemStatusResponse>({
     queryKey: adminKeys.status(),
-    queryFn: () => adminFetch("/api/work-os/status"),
+    queryFn: () => adminFetch<SystemStatusResponse>("/api/work-os/status"),
     staleTime: 30_000,
   });
   const people = useQuery<{ people: Array<{ id: string; display_name: string }> }>({
@@ -138,18 +139,18 @@ export default function AdminSettingsPage() {
       {/* System status */}
       <AdminCard>
         <SectionHeading icon={ShieldCheck} title="System status" detail="Schema, provider connectivity, and the runtime flags the workspace depends on." />
-        <div className="flex flex-wrap items-center gap-2">
-          {status.isLoading ? <Skeleton className="h-7 w-40" /> : (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]">
+          {status.isLoading ? <Skeleton className="h-6 w-40" /> : (
             <>
-              <StatusPill tone={status.data?.schema.ready ? "ok" : "warn"}>
+              <StateMark tone={status.data?.schema.ready ? "ok" : "warn"}>
                 {status.data?.schema.ready ? "Work OS schema ready" : "Migration required"}
-              </StatusPill>
-              <StatusPill tone={status.data?.nifty.canCallApi ? "ok" : "warn"}>
+              </StateMark>
+              <StateMark tone={status.data?.nifty.canCallApi ? "ok" : "warn"}>
                 {status.data?.nifty.canCallApi ? "Nifty API ready" : "Nifty needs a connection"}
-              </StatusPill>
-              <StatusPill tone={status.data?.nifty.hasRefreshToken ? "ok" : "neutral"}>
+              </StateMark>
+              <StateMark tone={status.data?.nifty.hasRefreshToken ? "ok" : "neutral"}>
                 {status.data?.nifty.hasRefreshToken ? "Refresh token present" : "No refresh token"}
-              </StatusPill>
+              </StateMark>
             </>
           )}
         </div>
@@ -163,16 +164,15 @@ export default function AdminSettingsPage() {
       {/* Pilot features */}
       <AdminCard>
         <SectionHeading icon={Settings} title="Workspace features" detail="Pilot features enabled for the whole organization. Members can override the companion flags individually." />
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
           {FEATURES.map((feature) => (
             <li key={feature.key}>
               <label
-                className={`flex min-h-[44px] items-center justify-between gap-3 rounded-xl border px-3.5 py-2 text-[12.5px] ${feature.comingSoon ? "cursor-not-allowed" : ""}`}
-                style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}
+                className={`flex items-center justify-between gap-4 py-3 first:pt-1 last:pb-1 ${feature.comingSoon ? "cursor-not-allowed" : "cursor-pointer"}`}
                 aria-disabled={feature.comingSoon ? "true" : undefined}
               >
-                <span className={feature.comingSoon ? "blur-[2px] opacity-60 select-none" : ""} aria-hidden={feature.comingSoon ? "true" : undefined}>
-                  <span className="block font-semibold text-[var(--text-primary)]">{feature.label}</span>
+                <span className={`min-w-0 ${feature.comingSoon ? "blur-[2px] opacity-60 select-none" : ""}`} aria-hidden={feature.comingSoon ? "true" : undefined}>
+                  <span className="block text-[12.5px] font-semibold text-[var(--text-primary)]">{feature.label}</span>
                   <span className="block text-[11px] text-[var(--text-tertiary)]">{feature.detail}</span>
                 </span>
                 {feature.comingSoon ? (
@@ -216,10 +216,10 @@ export default function AdminSettingsPage() {
             Add or update
           </Button>
         </div>
-        <ul className="mt-4 grid gap-2">
+        <ul className="mt-4 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
           {(organization.data?.memberships ?? []).map((member) => (
-            <li key={String(member.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-3.5 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
-              <span className="min-w-0 flex-1">
+            <li key={String(member.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-1 last:pb-1">
+              <span className="min-w-0 flex-1 basis-[200px]">
                 <span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">
                   {member.person?.display_name || member.person?.email || String(member.user_id)}
                 </span>
@@ -257,7 +257,7 @@ export default function AdminSettingsPage() {
             </li>
           ))}
           {!organization.data?.memberships?.length && !organization.isLoading ? (
-            <li className="text-[12px] text-[var(--text-tertiary)]">No memberships recorded yet.</li>
+            <li className="py-2 text-[12px] text-[var(--text-tertiary)]">No memberships recorded yet.</li>
           ) : null}
         </ul>
       </AdminCard>
@@ -289,11 +289,11 @@ export default function AdminSettingsPage() {
             Assign
           </Button>
         </div>
-        <ul className="mt-4 grid gap-2">
+        <ul className="mt-4 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
           {(organization.data?.teams ?? []).map((team) => {
             const members = (organization.data?.teamMembers ?? []).filter((member) => member.team_id === team.id);
             return (
-              <li key={String(team.id)} className="rounded-xl border px-3.5 py-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+              <li key={String(team.id)} className="py-3 first:pt-1 last:pb-1">
                 <p className="text-[12.5px] font-semibold text-[var(--text-primary)]">{String(team.name)}</p>
                 <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">
                   {members.length
@@ -304,7 +304,7 @@ export default function AdminSettingsPage() {
             );
           })}
           {!organization.data?.teams?.length && !organization.isLoading ? (
-            <li className="text-[12px] text-[var(--text-tertiary)]">No teams yet.</li>
+            <li className="py-2 text-[12px] text-[var(--text-tertiary)]">No teams yet.</li>
           ) : null}
         </ul>
       </AdminCard>
@@ -360,26 +360,26 @@ export default function AdminSettingsPage() {
             Workspace: the GitHub organization login (for example <span className="font-mono">WrazyAI</span>) or its numeric id. Account: the GitHub username or numeric user id — a verified account attributes that person&apos;s commits, pull requests, reviews, and workflow runs.
           </p>
         ) : null}
-        <ul className="mt-4 grid gap-2">
+        <ul className="mt-4 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
           {(connections.data?.connections ?? []).map((connection) => (
-            <li key={String(connection.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-[12px]" style={{ borderColor: "var(--border-subtle)" }}>
+            <li key={String(connection.id)} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-1 last:pb-1 text-[12px]">
               <span className="font-semibold text-[var(--text-primary)]">{String(connection.provider)}</span>
               <span className="font-mono text-[11px] text-[var(--text-tertiary)]">{String(connection.external_workspace_id)}</span>
-              <StatusPill tone={connection.active === false ? "warn" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</StatusPill>
+              <StateMark tone={connection.active === false ? "warn" : "ok"}>{connection.active === false ? "Inactive" : "Active"}</StateMark>
             </li>
           ))}
           {!connections.data?.connections?.length && !connections.isLoading ? (
-            <li className="text-[12px] text-[var(--text-tertiary)]">No provider connections yet.</li>
+            <li className="py-2 text-[12px] text-[var(--text-tertiary)]">No provider connections yet.</li>
           ) : null}
         </ul>
         {(connections.data?.accounts ?? []).length ? (
-          <ul className="mt-3 grid gap-1.5 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+          <ul className="mt-3 grid gap-2 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
             {connections.data!.accounts.map((account) => (
               <li key={String(account.id)} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-[var(--text-secondary)]">
                 <ProvenanceChip>{String(account.provider)}</ProvenanceChip>
                 <span className="font-mono text-[11px] text-[var(--text-tertiary)]">{String(account.external_account_id)}</span>
                 <span>{account.person?.display_name ?? "Unattributed"}</span>
-                <StatusPill tone={account.verified ? "ok" : "warn"}>{account.verified ? "Verified" : "Unverified"}</StatusPill>
+                <StateMark tone={account.verified ? "ok" : "warn"}>{account.verified ? "Verified" : "Unverified"}</StateMark>
               </li>
             ))}
           </ul>
@@ -422,15 +422,16 @@ export default function AdminSettingsPage() {
           <SelectField label="Assignee" value={blueprintAssignee} onChange={setBlueprintAssignee} options={personOptions} placeholder="Unassigned" ariaLabel="Blueprint assignee" />
         </div>
         {(blueprints.data?.blueprints ?? []).length ? (
-          <ul className="mt-4 grid gap-2 md:grid-cols-2">
+          <ul className="mt-4 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {blueprints.data!.blueprints.map((blueprint) => (
-              <li key={String(blueprint.id)} className="rounded-xl border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
-                <p className="text-[12.5px] font-semibold text-[var(--text-primary)]">{String(blueprint.name)}</p>
-                <p className="mt-1 text-[11.5px] leading-5 text-[var(--text-tertiary)]">{String(blueprint.description ?? "")}</p>
+              <li key={String(blueprint.id)} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 first:pt-1 last:pb-1">
+                <span className="min-w-0 flex-1 basis-[240px]">
+                  <span className="block text-[12.5px] font-semibold text-[var(--text-primary)]">{String(blueprint.name)}</span>
+                  <span className="mt-0.5 block text-[11.5px] leading-5 text-[var(--text-tertiary)]">{String(blueprint.description ?? "")}</span>
+                </span>
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="mt-2.5"
                   disabled={!blueprintClient.trim() || generateBlueprint.isPending}
                   onClick={() => generateBlueprint.mutate({ id: String(blueprint.id), body: { client_name: blueprintClient.trim(), start_date: blueprintStart, assignee_person_ids: blueprintAssignee ? [blueprintAssignee] : [] } })}
                 >
@@ -451,7 +452,7 @@ export default function AdminSettingsPage() {
 
       <p className="text-[11px] leading-5 text-[var(--text-tertiary)]">
         Need the workspace migration or readiness audit? Run <span className="font-mono">npm run work-os:pilot-audit</span> against the deployment.{" "}
-        <Link href="/work-os/admin" className="font-semibold" style={{ color: "var(--accent)" }}>Back to overview</Link>
+        <Link href="/work-os/admin" className="font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">Back to overview</Link>
       </p>
     </div>
   );
