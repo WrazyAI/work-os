@@ -2042,7 +2042,7 @@ export default function AvatarApp(): React.ReactElement {
           title={showShiftTime ? `${elapsedText} · ${progressText}` : "Work OS companion"}
           aria-label={showShiftTime ? `${MASCOT.name}: ${mascotVisual.label}. ${elapsedText}. ${progressText}.` : showBadge ? `${MASCOT.name}: ${mascotVisual.label}. Open companion to respond.` : `Open ${MASCOT.name} companion`}
         >
-          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} />
+          <MascotPet agent={agentActivity} workday={workdayState} className="avatar-pet" artClassName="avatar-pet-art" replayKey={snoozeReplayId} speaking={recapSpeech.status === "playing"} />
           {(showShiftTime || showBadge) && <span
             className={`avatar-badge${showShiftTime && !showBadge ? " avatar-badge-progress" : ""}${showShiftTime && !showBadge && !progressAvailable ? " avatar-badge-progress-unavailable" : ""}`}
             style={showShiftTime && !showBadge && progressAvailable ? { "--shift-progress": `${fraction * 100}%` } as React.CSSProperties : undefined}

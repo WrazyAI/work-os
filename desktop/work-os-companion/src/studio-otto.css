@@ -275,3 +275,18 @@
   60% { transform: rotate(4deg); }
   80%, 100% { transform: rotate(0); }
 }
+
+/* The mouth while Otto reads. Two frames, stepped, so it reads as speech and
+   never as a loading shimmer; reduced motion holds the mouth open instead. */
+.studio-speak-mouth {
+  fill: var(--studio-accent, #a8f15b);
+  transform-origin: 80px 76px;
+  animation: studio-speak 340ms steps(2, end) infinite;
+}
+@keyframes studio-speak {
+  0% { transform: scaleY(0.35); }
+  100% { transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-speak-mouth { animation: none; }
+}

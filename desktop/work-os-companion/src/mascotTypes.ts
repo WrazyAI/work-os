@@ -13,6 +13,10 @@ export interface MascotRendererProps {
   className?: string;
   style?: CSSProperties;
   ariaLabel?: string;
+  /** Otto is reading aloud right now: the mouth moves, the pose stays as it is
+   * (a reading is not a new posture, and the pose set never learns a special
+   * case for it). */
+  speaking?: boolean;
 }
 
 export type MascotRenderer = ComponentType<MascotRendererProps>;
