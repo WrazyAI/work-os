@@ -228,7 +228,7 @@ export default function EmployeeSettings() {
               </SecondaryButton>
             </div>
             {exclusions ? (
-              <p className="border-t px-5 py-3 text-[12px] leading-5 text-[var(--text-secondary)]" style={{ borderColor: "var(--border)" }}>
+              <p className="border-t px-5 py-3 text-[12px] leading-5 text-[var(--text-secondary)]" style={{ borderColor: "var(--border-subtle)" }}>
                 Excluded apps and domains: <span className="text-[var(--text-primary)]">{exclusions}</span>
               </p>
             ) : null}
@@ -273,7 +273,7 @@ export default function EmployeeSettings() {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{label}</dt>
+      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{label}</dt>
       <dd className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{value}</dd>
     </div>
   );
