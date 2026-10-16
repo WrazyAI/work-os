@@ -570,30 +570,33 @@ body:has(.admin-workspace) .notifications-card {
   }
 }
 
-/* --- Compact date-range control (EOD Review) ------------------------------
-   One button names the current report range in letter months and expands a
-   small popup with the native From/To pickers. The popup anchors under the
-   button and floats above the card body; the control measures itself on open
-   and clamps the popup to the viewport (flipping it above the button when the
-   space below is too small), so no page position can push it off-screen. It
-   sits in the same `.admin-controls-group` band as every other filter
-   (design.md §8.2, §16.2). */
+/* --- Compact date-range filter (EOD Review) --------------------------------
+   One icon-only filter-cone button sits on the controls row beside the status
+   views and expands a small popup with the native From/To pickers. The popup
+   anchors under the button and floats above the card body; the control
+   measures itself on open and clamps the popup to the viewport (flipping it
+   above the button when the space below is too small), so no page position
+   can push it off-screen. The applied range lives in the popup's inputs, and
+   the button keeps a quiet applied state: while a range other than the 30-day
+   default is applied, a small accent dot rides the button's top corner and
+   the cone steps up from muted to ink (design.md §8.2, §16.2). */
 .admin-range {
   position: relative;
   min-width: 0;
 }
 
 .admin-range-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 34px;
   min-height: 34px;
-  padding: 0 12px;
+  padding: 0;
   border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
   border-radius: 10px;
   background: var(--surface-raised, #fbfcf8);
   color: var(--ink);
-  font: 500 12px/1.4 Inter, "Segoe UI Variable Text", sans-serif;
   cursor: pointer;
   transition: border-color 160ms var(--ease-product), background-color 160ms var(--ease-product);
 }
@@ -611,6 +614,24 @@ body:has(.admin-workspace) .notifications-card {
 
 .admin-range-button svg {
   color: var(--muted);
+}
+
+/* The quiet applied state: a small dot on the top corner, with the cone
+   reading ink instead of muted. The default range stays plain. */
+.admin-range-button.is-active svg {
+  color: var(--ink);
+}
+
+.admin-range-button.is-active::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal-strong, #7cc936);
+  box-shadow: 0 0 0 2px var(--surface-raised, #fbfcf8);
 }
 
 .admin-range-popup {
@@ -656,16 +677,24 @@ body:has(.admin-workspace) .notifications-card {
   }
 }
 
-/* Narrow layout: the range control fills its row and keeps the 40px touch
-   target the stacked controls use (design.md §11 small class). */
+/* Narrow layout: the range group keeps the icon button at the stacked 40px
+   touch target and shares its row with the person select that follows it, so
+   the two filters still read as one band under the wrapped status views
+   (design.md §11 small class). The sibling selector keeps every other page's
+   trailing group on the shared full-width narrow rule. */
 @media (max-width: 560px) {
-  .admin-range {
-    width: 100%;
+  .admin-card-controls .admin-controls-group.is-range {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .admin-card-controls .admin-controls-group.is-range + .admin-controls-group.is-end {
+    width: auto;
+    flex: 1 1 160px;
   }
 
   .admin-range-button {
-    width: 100%;
-    justify-content: center;
+    width: 40px;
     min-height: 40px;
   }
 }

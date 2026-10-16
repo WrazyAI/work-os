@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, CalendarDays, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "lucide-react";
+import { Activity, Camera, Check, FileCheck2, FilePlus2, Filter, ScrollText, X } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { formatWorkOsFullDate } from "../dateFormat";
 import {
@@ -54,12 +54,14 @@ export function sortReportsNewestFirst(reports: WorkOsReportRow[]): WorkOsReport
   });
 }
 
-/** The compact report-range control: one button that names the current range
- * in letter months and expands a small popup with the native From/To pickers.
- * The popup anchors under the button, clamps to the viewport (and flips above
- * the button when there is no room below), closes on Escape, an outside
- * press, or Done, and returns focus to the button. The range text lives on
- * the control, so the card's detail line stays counts only (design.md §8.2,
+/** The queue's one range filter: an icon-only filter-cone button that sits on
+ * the controls row beside the status views and expands a small popup with the
+ * native From/To pickers. The popup anchors under the button, clamps to the
+ * viewport (and flips above the button when there is no room below), closes
+ * on Escape, an outside press, or Done, and returns focus to the button. The
+ * applied range lives in the popup's inputs, so the card's detail line stays
+ * counts only, and the button reads its own state quietly: a small accent dot
+ * while a range other than the 30-day default is applied (design.md §8.2,
  * §16.2). */
 export function ReportRangeControl({ from, to, onFromChange, onToChange, initialOpen = false }: {
   from: string;
@@ -77,6 +79,12 @@ export function ReportRangeControl({ from, to, onFromChange, onToChange, initial
   // other close path returns focus to the range button (design.md §12).
   const keepFocus = useRef(false);
   const rangeLabel = `${formatWorkOsFullDate(from)} – ${formatWorkOsFullDate(to)}`;
+  // The button's quiet applied state: the default range (30 days back →
+  // today, the pair the queue seeds its state with) stays plain, and any
+  // other range raises the accent dot. The default is captured at mount so a
+  // date rollover while the page stays open never fakes an applied filter.
+  const [defaultRange] = useState(() => ({ from: isoDaysAgo(30), to: todayIso() }));
+  const isDefaultRange = from === defaultRange.from && to === defaultRange.to;
 
   useEffect(() => {
     if (!open) return;
@@ -145,14 +153,13 @@ export function ReportRangeControl({ from, to, onFromChange, onToChange, initial
       <button
         ref={buttonRef}
         type="button"
-        className="admin-range-button"
+        className={`admin-range-button${isDefaultRange ? "" : " is-active"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Report date range: ${rangeLabel}`}
+        aria-label={`Filter reports by date range: ${rangeLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
-        <CalendarDays size={14} aria-hidden />
-        <span>{rangeLabel}</span>
+        <Filter size={14} aria-hidden />
       </button>
       {open ? (
         <div className="admin-range-popup" role="dialog" aria-label="Report date range" ref={popupRef}>
@@ -253,10 +260,10 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
         padded={false}
         controls={
           <>
-            {/* The status views and the person filter share the first row —
-                tabs first, people right-aligned while there is room; the
-                compact range control owns the row below. The range text now
-                lives on the control, so the detail line stays counts only. */}
+            {/* One controls row: the status views first, the range filter cone
+                next to them, the person filter after. The range text lives in
+                the popup's inputs, so the detail line stays counts only
+                (design.md §8.2, §16.2). */}
             <AdminControls>
               <AdminControlsGroup>
                 <Segmented<StatusFilter>
@@ -272,13 +279,11 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
                   ]}
                 />
               </AdminControlsGroup>
+              <AdminControlsGroup className="is-range">
+                <ReportRangeControl from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+              </AdminControlsGroup>
               <AdminControlsGroup end>
                 <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-              </AdminControlsGroup>
-            </AdminControls>
-            <AdminControls>
-              <AdminControlsGroup>
-                <ReportRangeControl from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
               </AdminControlsGroup>
             </AdminControls>
           </>

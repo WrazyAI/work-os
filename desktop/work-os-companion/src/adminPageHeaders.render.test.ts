@@ -67,26 +67,26 @@ function expectCleanTitleRow(card: string, title: string) {
 }
 
 describe("administration page headers", () => {
-  it("keeps the review queue's title row text-only, tabs and people on one row, the compact range below", () => {
+  it("keeps the review queue's title row text-only and its tabs, range cone, and people on one controls row", () => {
     const markup = renderPage(createElement(ReviewPage, {}));
     const card = cardOf(markup, "Review queue");
     expectCleanTitleRow(card, "Review queue");
     const controls = controlsBand(card);
     expect(controls).toContain('aria-label="Report status"');
     expect(controls).toContain('aria-label="Filter by person"');
-    // The status views and the person filter share the first row — tabs
-    // first, people after them, right-aligned while the row has room.
+    // One controls row now: the status views first, the range filter cone
+    // next to them, the person filter after (right-aligned while there is
+    // room). The range names itself on the icon button and in the popup the
+    // button opens; no visible range text rides the row.
     const rows = controls.split('class="admin-controls"').slice(1);
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain('aria-label="Report status"');
-    expect(rows[0]).toContain('aria-label="Filter by person"');
-    expect(rows[0].indexOf('aria-label="Report status"')).toBeLessThan(rows[0].indexOf('aria-label="Filter by person"'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].indexOf('aria-label="Report status"')).toBeLessThan(rows[0].indexOf("admin-range-button"));
+    expect(rows[0].indexOf("admin-range-button")).toBeLessThan(rows[0].indexOf('aria-label="Filter by person"'));
+    expect(rows[0]).toContain('class="admin-controls-group is-range"');
     expect(rows[0]).toContain('class="admin-controls-group is-end"');
-    // The compact range button owns the row below and names the current
-    // range; its From/To inputs live in the popup the button opens.
-    expect(rows[1]).toContain("admin-range-button");
-    expect(rows[1]).toContain(`${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}`);
+    expect(rows[0]).toContain(`aria-label="Filter reports by date range: ${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}"`);
     expect(controls).not.toContain('aria-label="Reports from date"');
+    expect(controls).not.toContain(`>${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}<`);
   });
 
   it("keeps the task record's views, search, filters, and action on one compact controls row", () => {

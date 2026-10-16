@@ -1833,13 +1833,16 @@ first: a report's submission time is its clock, a row that was never submitted
 falls back to its report date so a draft keeps its day's place rather than
 jumping the queue, rows missing both keys stay last, and ties break by report
 date then id. There are no click-to-sort headers here — newest first is the
-queue's one deliberate order. The date range is one compact control: a button
-that names the current range in the shared letter-month form ("Sep 16, 2026 –
-Oct 16, 2026") and expands a small popup holding the native From/To pickers
-and a Done action. The popup opens anchored under the button, closes on
-Escape, an outside press, or Done, returns focus to the button, and is clamped
-to the viewport; because the range text lives on the control, the card's
-detail line carries the counts only.
+queue's one deliberate order. The date range is one compact control: an
+icon-only filter-cone button on the queue's controls row, beside the status
+views and ahead of the person filter, that expands a small popup holding the
+native From/To pickers and a Done action. The popup opens anchored under the
+button, closes on Escape, an outside press, or Done, returns focus to the
+button, and is clamped to the viewport. The button names the applied range to
+assistive technology and keeps a quiet applied state — a small accent dot —
+while a range other than the 30-day default is applied; because the range
+text lives in the popup's inputs, the card's detail line carries the counts
+only.
 
 **Task dates.** Every task row shows when the task was created — the provider's
 own creation stamp when recorded, then the local record's — in the same

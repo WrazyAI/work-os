@@ -103,39 +103,55 @@ describe("review queue order", () => {
     expect(body.indexOf("Newest submission")).toBeLessThan(body.indexOf("Oldest submission"));
   });
 
-  it("keeps the card detail line to the counts and puts the range on the control", () => {
+  it("keeps the card detail line to the counts and names the range on the filter button", () => {
     const markup = renderQueue([report("r-1")]);
     const title = markup.slice(markup.indexOf("admin-card-title"), markup.indexOf("admin-card-controls"));
     expect(title).toContain("awaiting review");
     expect(title).not.toContain(formatWorkOsFullDate(isoDaysAgo(30)));
-    expect(markup).toContain(`>${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}<`);
+    expect(markup).toContain(`aria-label="Filter reports by date range: ${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}"`);
+    // The range text is a name and a popup value, never a visible row label.
+    expect(markup).not.toContain(`>${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}<`);
   });
 });
 
 describe("review range control", () => {
-  it("shows the current range in letter months on one button", () => {
-    const markup = renderToStaticMarkup(createElement(ReportRangeControl, {
-      from: "2026-09-16",
-      to: "2026-10-16",
-      onFromChange: () => undefined,
-      onToChange: () => undefined,
-    }));
-    expect(markup).toContain("Sep 16, 2026 – Oct 16, 2026");
+  const renderRange = (from: string, to: string, initialOpen = false) => renderToStaticMarkup(createElement(ReportRangeControl, {
+    from,
+    to,
+    onFromChange: () => undefined,
+    onToChange: () => undefined,
+    initialOpen,
+  }));
+
+  it("renders the range as an icon-only filter-cone button that still names the range", () => {
+    const markup = renderRange("2026-09-16", "2026-10-16");
     expect(markup).toContain('class="admin-range-button"');
     expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('aria-label="Filter reports by date range: Sep 16, 2026 – Oct 16, 2026"');
+    // The cone icon is the button's only child: no visible range text.
+    const button = markup.slice(markup.indexOf("admin-range-button"), markup.indexOf("</button>"));
+    expect(button).toContain("<svg");
+    expect(button).toContain("lucide-funnel");
+    expect(button).not.toContain("<span");
+    expect(markup).not.toContain(">Sep 16, 2026");
     expect(markup).not.toContain("admin-range-popup");
     expect(markup).not.toContain("<input");
   });
 
+  it("keeps the quiet state on the default range and raises it for any custom range", () => {
+    // The default is 30 days back through today, the same pair the queue
+    // seeds its state with; the button stays plain there.
+    const quiet = renderRange(isoDaysAgo(30), todayIso());
+    expect(quiet).toContain('class="admin-range-button"');
+    expect(quiet).not.toContain("is-active");
+    for (const [from, to] of [[isoDaysAgo(45), todayIso()], [isoDaysAgo(30), isoDaysAgo(10)]]) {
+      expect(renderRange(from, to)).toContain('class="admin-range-button is-active"');
+    }
+  });
+
   it("opens as a labelled dialog holding the native pickers and a Done action", () => {
-    const markup = renderToStaticMarkup(createElement(ReportRangeControl, {
-      from: "2026-09-16",
-      to: "2026-10-16",
-      onFromChange: () => undefined,
-      onToChange: () => undefined,
-      initialOpen: true,
-    }));
+    const markup = renderRange("2026-09-16", "2026-10-16", true);
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('class="admin-range-popup"');
     expect(markup).toContain('role="dialog"');
@@ -169,5 +185,13 @@ describe("review range control", () => {
     const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)", css.indexOf(".admin-range-popup")));
     expect(reduced).toContain(".admin-range-popup");
     expect(reduced).toContain("animation: none");
+  });
+
+  it("styles the icon button with a corner dot for the applied range and a 40px stacked target", () => {
+    const css = readText(resolve(root, "src/admin/admin.css"));
+    expect(css).toMatch(/\.admin-range-button \{[\s\S]*?width: 34px/);
+    expect(css).toMatch(/\.admin-range-button\.is-active::after \{[\s\S]*?border-radius: 50%/);
+    const narrow = css.slice(css.indexOf("@media (max-width: 560px)", css.indexOf(".admin-range-button")));
+    expect(narrow).toMatch(/\.admin-range-button \{[\s\S]*?width: 40px/);
   });
 });
