@@ -73,7 +73,7 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
           {hours.length ? (
             <ul>
               {hours.map((hour) => (
-                <li key={hour.hourStart} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                <li key={hour.hourStart} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                   <span className="w-14 shrink-0 text-[11px] font-bold tabular-nums text-[var(--text-tertiary)]">{hour.label}</span>
                   <span className="min-w-0 flex-1 text-[12px] leading-5 text-[var(--text-secondary)]">
                     {hour.summary}
@@ -85,7 +85,7 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
             </ul>
           ) : null}
           {viewable.length ? (
-            <details className="border-t px-5 py-3" style={{ borderColor: "var(--border)" }}>
+            <details className="border-t px-5 py-3" style={{ borderColor: "var(--border-subtle)" }}>
               <summary className="cursor-pointer text-[11px] font-semibold text-[var(--text-tertiary)]">
                 Analyzed frames · {viewable.length}
               </summary>
@@ -95,14 +95,14 @@ export default function EmployeeEodEvidence({ date, timezone, enabled }: { date:
                     <span className="w-14 shrink-0 text-[11px] tabular-nums text-[var(--text-tertiary)]">{formatTime(frame.capturedAt, timezone)}</span>
                     {frame.visibleApp ? <span className="text-[11px] font-semibold text-[var(--text-secondary)]">{frame.visibleApp}</span> : null}
                     <span className="min-w-0 flex-1 text-[12px] leading-5 text-[var(--text-secondary)]">{frame.summary}</span>
-                    <span className="text-[10px] uppercase tracking-[0.05em] text-[var(--text-tertiary)]" title={`confidence ${frame.confidence}`}>{confidenceLabel(frame.confidence)}</span>
+                    <span className="text-[10.5px] text-[var(--text-tertiary)]" title={`confidence ${frame.confidence}`}>{confidenceLabel(frame.confidence)}</span>
                   </li>
                 ))}
               </ul>
             </details>
           ) : null}
           {data.pending > 0 ? (
-            <p className="border-t px-5 py-3 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border)" }} role="status">
+            <p className="border-t px-5 py-3 text-[11px] leading-5 text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }} role="status">
               {data.pending} frame{data.pending === 1 ? " is" : "s are"} still being analyzed. This list refreshes automatically.
             </p>
           ) : null}

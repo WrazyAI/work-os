@@ -301,10 +301,10 @@ export default function EmployeeReview() {
             aria-label="EOD report draft"
           />
           {!editorLocked ? (
-            <div className="mt-3 rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
+            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Ask the assistant to adjust this draft</span>
-                <button type="button" className="text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }} onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
+                <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">Ask the assistant to adjust this draft</span>
+                <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setRefineOpen((value) => !value); setEodNotice(null); }}>
                   {refineOpen ? "Close" : "Refine draft"}
                 </button>
               </div>
@@ -329,10 +329,10 @@ export default function EmployeeReview() {
             </div>
           ) : null}
           {!editorLocked && day.data?.access?.featureFlags?.loom_updates === true ? (
-            <div className="mt-3 rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
+            <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Recorded a Loom for this day?</span>
-                <button type="button" className="text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }} onClick={() => { setLoomOpen((value) => !value); setEodNotice(null); }}>
+                <span className="text-[11.5px] font-medium text-[var(--text-secondary)]">Recorded a Loom for this day?</span>
+                <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setLoomOpen((value) => !value); setEodNotice(null); }}>
                   {loomOpen ? "Close" : "Analyze a Loom"}
                 </button>
               </div>
@@ -446,7 +446,7 @@ export default function EmployeeReview() {
                 icon={<FileCheck2 size={16} />}
                 title="End-of-day report"
                 meta={historical ? `Report for ${calendarDateLabel(selectedDate)}.` : "One report per workday."}
-                actions={<StatusPill tone={status === "approved" ? "done" : status === "rejected" ? "error" : status === "pending_review" ? "info" : "open"}>{status ? status.replaceAll("_", " ") : "not drafted"}</StatusPill>}
+                actions={<StatusPill tone={status === "approved" ? "done" : status === "rejected" ? "error" : status === "pending_review" ? "info" : "open"}>{status ? status.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase()) : "Not drafted"}</StatusPill>}
               />
             </div>
             <div className="px-5 py-5">{eodPanel}</div>
@@ -461,9 +461,9 @@ export default function EmployeeReview() {
               />
               <ul>
                 {proposals.map((proposal) => (
-                  <li key={proposal.id} className="flex flex-wrap items-start gap-3 border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                  <li key={proposal.id} className="flex flex-wrap items-start gap-3 border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{String(proposal.operation ?? "").replaceAll("_", " ")}</p>
+                      <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">{String(proposal.operation ?? "").replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase())}</p>
                       <p className="mt-1 text-[13px] font-medium text-[var(--text-primary)]">{proposal.task?.title || proposal.before_state?.title || proposalSummary(proposal)}</p>
                       {proposal.task?.title || proposal.before_state?.title ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{proposalSummary(proposal)}</p> : null}
                       {proposal.failure_reason ? <p className="mt-2 text-[12px]" style={{ color: "var(--status-warn)" }}>{proposal.failure_reason}</p> : null}
@@ -493,10 +493,10 @@ export default function EmployeeReview() {
             {evidence.length ? (
               <ul>
                 {evidence.map((item) => (
-                  <li key={item.id} className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                  <li key={item.id} className="border-b px-5 py-4 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[12px] font-semibold text-[var(--text-primary)]">{item.title}</p>
-                      <span className="text-[10px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">{item.source === "loom" ? "Loom recording" : item.source}</span>
+                      <span className="text-[10.5px] text-[var(--text-tertiary)]">{item.source === "loom" ? "Loom recording" : item.source}</span>
                     </div>
                     {item.summary ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
                     {item.source === "loom" && item.url ? <a href={String(item.url)} target="_blank" rel="noreferrer" className="mt-1.5 inline-block text-[11px] font-semibold" style={{ color: "var(--accent-deep)" }}>Open recording</a> : null}
@@ -545,7 +545,7 @@ export default function EmployeeReview() {
                 {outstandingDays.map((outstandingDay) => {
                   const meta = EOD_STATUS_META[outstandingDay.status];
                   return (
-                    <li key={outstandingDay.date} className="border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                    <li key={outstandingDay.date} className="border-b last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                       <button
                         type="button"
                         onClick={() => {
