@@ -7,6 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { NotificationProvider } from "./NotificationFlyouts";
 import { seedAdminFixtures } from "./admin/adminFixtures";
+import { isoDaysAgo, todayIso } from "./admin/data";
+import { formatWorkOsFullDate } from "./dateFormat";
 import EvidencePage from "./admin/EvidencePage";
 import InsightsPage from "./admin/InsightsPage";
 import PeoplePage from "./admin/PeoplePage";
@@ -65,24 +67,26 @@ function expectCleanTitleRow(card: string, title: string) {
 }
 
 describe("administration page headers", () => {
-  it("keeps the review queue's title row text-only, status on its own row, filters below", () => {
+  it("keeps the review queue's title row text-only, tabs and people on one row, the compact range below", () => {
     const markup = renderPage(createElement(ReviewPage, {}));
     const card = cardOf(markup, "Review queue");
     expectCleanTitleRow(card, "Review queue");
     const controls = controlsBand(card);
     expect(controls).toContain('aria-label="Report status"');
     expect(controls).toContain('aria-label="Filter by person"');
-    expect(controls).toContain('aria-label="Reports from date"');
-    expect(controls).toContain('aria-label="Reports to date"');
-    // The status views own their row; the person and date pair share the next
-    // one, with the dates travelling as a single group.
+    // The status views and the person filter share the first row — tabs
+    // first, people after them, right-aligned while the row has room.
     const rows = controls.split('class="admin-controls"').slice(1);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain('aria-label="Report status"');
-    expect(rows[0]).not.toContain('aria-label="Filter by person"');
-    expect(rows[1]).toContain('aria-label="Filter by person"');
-    expect(rows[1]).toContain('aria-label="Reports from date"');
-    expect(rows[1]).toContain('aria-label="Reports to date"');
+    expect(rows[0]).toContain('aria-label="Filter by person"');
+    expect(rows[0].indexOf('aria-label="Report status"')).toBeLessThan(rows[0].indexOf('aria-label="Filter by person"'));
+    expect(rows[0]).toContain('class="admin-controls-group is-end"');
+    // The compact range button owns the row below and names the current
+    // range; its From/To inputs live in the popup the button opens.
+    expect(rows[1]).toContain("admin-range-button");
+    expect(rows[1]).toContain(`${formatWorkOsFullDate(isoDaysAgo(30))} – ${formatWorkOsFullDate(todayIso())}`);
+    expect(controls).not.toContain('aria-label="Reports from date"');
   });
 
   it("keeps the task record's views and search on one controls row and its selects plus action on the next", () => {

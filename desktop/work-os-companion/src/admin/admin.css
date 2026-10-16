@@ -557,6 +557,106 @@ body:has(.admin-workspace) .notifications-card {
   }
 }
 
+/* --- Compact date-range control (EOD Review) ------------------------------
+   One button names the current report range in letter months and expands a
+   small popup with the native From/To pickers. The popup anchors under the
+   button and floats above the card body; the control measures itself on open
+   and clamps the popup to the viewport (flipping it above the button when the
+   space below is too small), so no page position can push it off-screen. It
+   sits in the same `.admin-controls-group` band as every other filter
+   (design.md §8.2, §16.2). */
+.admin-range {
+  position: relative;
+  min-width: 0;
+}
+
+.admin-range-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-radius: 10px;
+  background: var(--surface-raised, #fbfcf8);
+  color: var(--ink);
+  font: 500 12px/1.4 Inter, "Segoe UI Variable Text", sans-serif;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-product), background-color 160ms var(--ease-product);
+}
+
+.admin-range-button:hover,
+.admin-range-button[aria-expanded="true"] {
+  border-color: var(--line-strong, #c5cec1);
+  background: #f2f4ee;
+}
+
+.admin-range-button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.admin-range-button svg {
+  color: var(--muted);
+}
+
+.admin-range-popup {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  width: min(320px, calc(100vw - 40px));
+  padding: 12px;
+  border: 1px solid #d7ddd3;
+  border-radius: 12px;
+  background: var(--white, #fdfefa);
+  box-shadow: 0 18px 48px rgba(20, 30, 18, 0.16), 0 2px 8px rgba(20, 30, 18, 0.06);
+  animation: admin-range-in 140ms var(--ease-product) both;
+}
+
+.admin-range-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-range-fields .admin-field {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
+.admin-range-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@keyframes admin-range-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-range-popup {
+    animation: none;
+  }
+}
+
+/* Narrow layout: the range control fills its row and keeps the 40px touch
+   target the stacked controls use (design.md §11 small class). */
+@media (max-width: 560px) {
+  .admin-range {
+    width: 100%;
+  }
+
+  .admin-range-button {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+}
+
 .admin-inline-fields {
   display: flex;
   flex-wrap: wrap;

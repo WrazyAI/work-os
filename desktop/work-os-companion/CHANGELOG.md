@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- EOD Review shows the newest reports first, with a compact date-range button and the people filter on the same line as the tabs.
+
 ## 0.4.57 — 2026-10-16
 
 - If a voice update can't reach the workspace, the companion quietly tries once more before it gives up.

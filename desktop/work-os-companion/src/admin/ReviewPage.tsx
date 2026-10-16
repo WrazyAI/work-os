@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "lucide-react";
+import { Activity, CalendarDays, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { formatWorkOsFullDate } from "../dateFormat";
 import {
@@ -28,6 +28,146 @@ import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Draw
 import type { ReportsResponse, WorkOsReportRow } from "./types";
 
 type StatusFilter = "pending_review" | "all" | "approved" | "rejected" | "draft";
+
+/** The queue reads newest first. A report's submission time is its clock; a
+ * row that was never submitted falls back to its report date so a draft keeps
+ * its day's place instead of jumping the queue. Rows missing both keys sort
+ * last, and equal clocks break by report date then id so the order never
+ * jitters. This is the queue's one deliberate order — there are no
+ * click-to-sort headers here (design.md §16.2). */
+export function sortReportsNewestFirst(reports: WorkOsReportRow[]): WorkOsReportRow[] {
+  const clock = (report: WorkOsReportRow): string | null => {
+    if (report.submitted_at) return report.submitted_at;
+    if (!report.report_date) return null;
+    return report.report_date.includes("T") ? report.report_date : `${report.report_date}T00:00:00.000Z`;
+  };
+  return [...reports].sort((a, b) => {
+    const aClock = clock(a);
+    const bClock = clock(b);
+    if (aClock !== bClock) {
+      if (aClock === null) return 1;
+      if (bClock === null) return -1;
+      return aClock < bClock ? 1 : -1;
+    }
+    if (a.report_date !== b.report_date) return a.report_date < b.report_date ? 1 : -1;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+/** The compact report-range control: one button that names the current range
+ * in letter months and expands a small popup with the native From/To pickers.
+ * The popup anchors under the button, clamps to the viewport (and flips above
+ * the button when there is no room below), closes on Escape, an outside
+ * press, or Done, and returns focus to the button. The range text lives on
+ * the control, so the card's detail line stays counts only (design.md §8.2,
+ * §16.2). */
+export function ReportRangeControl({ from, to, onFromChange, onToChange, initialOpen = false }: {
+  from: string;
+  to: string;
+  onFromChange: (next: string) => void;
+  onToChange: (next: string) => void;
+  /** Render-test seam: mounts with the popup open, as if the button was pressed. */
+  initialOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  // A press that lands on another control keeps that control's focus; every
+  // other close path returns focus to the range button (design.md §12).
+  const keepFocus = useRef(false);
+  const rangeLabel = `${formatWorkOsFullDate(from)} – ${formatWorkOsFullDate(to)}`;
+
+  useEffect(() => {
+    if (!open) return;
+    popupRef.current?.querySelector<HTMLElement>("input")?.focus();
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== "Escape") return;
+      } else if (event instanceof PointerEvent) {
+        const target = event.target;
+        if (wrapRef.current && target instanceof Node && wrapRef.current.contains(target)) return;
+        const onOtherControl = target instanceof Element && !!target.closest("button, a, input, select, textarea, [tabindex]");
+        keepFocus.current = onOtherControl;
+        // Cancelling the pointer default stops the browser from blurring the
+        // popup to the body, so the focus restore lands back on the button
+        // (the same reason the drawer's backdrop cancels it). A press on
+        // another control is left alone so that control still takes focus.
+        if (!onOtherControl) event.preventDefault();
+      } else {
+        return;
+      }
+      setOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    window.addEventListener("pointerdown", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("pointerdown", close);
+      if (!keepFocus.current) buttonRef.current?.focus();
+      keepFocus.current = false;
+    };
+  }, [open]);
+
+  // The popup measures itself once open: the inline axis is clamped so the
+  // popup never leaves the viewport, and it flips above the button when the
+  // space below is too small for it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const popup = popupRef.current;
+    const wrap = wrapRef.current;
+    if (!popup || !wrap) return;
+    const place = () => {
+      const rect = wrap.getBoundingClientRect();
+      const margin = 12;
+      // Clamp the popup's viewport box to [margin, innerWidth - margin]; when
+      // the button sits near the right edge the popup slides left of it (it
+      // may extend past the card, but never past the window).
+      const minLeft = margin - rect.left;
+      const maxLeft = window.innerWidth - margin - rect.left - popup.offsetWidth;
+      popup.style.left = `${Math.min(Math.max(minLeft, 0), maxLeft)}px`;
+      const below = window.innerHeight - rect.bottom;
+      if (below < popup.offsetHeight + margin + 6 && rect.top > popup.offsetHeight + margin + 6) {
+        popup.style.top = "auto";
+        popup.style.bottom = `${rect.height + 6}px`;
+      } else {
+        popup.style.top = `${rect.height + 6}px`;
+        popup.style.bottom = "auto";
+      }
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+
+  return (
+    <div className="admin-range" ref={wrapRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="admin-range-button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Report date range: ${rangeLabel}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <CalendarDays size={14} aria-hidden />
+        <span>{rangeLabel}</span>
+      </button>
+      {open ? (
+        <div className="admin-range-popup" role="dialog" aria-label="Report date range" ref={popupRef}>
+          <div className="admin-range-fields">
+            <TextField label="From" type="date" value={from} onChange={onFromChange} ariaLabel="Reports from date" />
+            <TextField label="To" type="date" value={to} onChange={onToChange} ariaLabel="Reports to date" />
+          </div>
+          <div className="admin-range-actions">
+            <AdminButton variant="primary" onClick={() => setOpen(false)}>Done</AdminButton>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** EOD review: the queue, the report as a structured document beside its
  * sourced evidence and interval recaps, and the decision record. */
@@ -66,10 +206,11 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
     staleTime: ADMIN_STALE_MS,
   });
 
-  const selected = useMemo(() => {
-    const list = reports.data?.reports ?? [];
-    return list.find((report) => report.id === selectedId) ?? null;
-  }, [reports.data, selectedId]);
+  // The queue's one deliberate order: newest submission first (see
+  // `sortReportsNewestFirst`). A deep link still finds its record by id
+  // whatever its place in the order.
+  const list = useMemo(() => sortReportsNewestFirst(reports.data?.reports ?? []), [reports.data]);
+  const selected = useMemo(() => list.find((report) => report.id === selectedId) ?? null, [list, selectedId]);
 
   const review = useMutation({
     mutationFn: ({ reportId, next, managerNotes }: { reportId: string; next: "approved" | "rejected"; managerNotes: string }) =>
@@ -100,7 +241,6 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
   });
 
   const counts = reports.data?.counts;
-  const list = reports.data?.reports ?? [];
   const personOptions = (people.data?.people ?? []).map((person) => ({ value: String(person.id), label: String(person.display_name ?? "Unnamed") }));
   const pendingOnly = selected?.status === "pending_review";
 
@@ -109,13 +249,14 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
       <AdminCard
         icon={ScrollText}
         title="Review queue"
-        detail={counts ? `${counts.pending_review} awaiting review · ${counts.draft} draft${counts.draft === 1 ? "" : "s"} · ${counts.approved} approved · ${counts.rejected} returned · ${formatWorkOsFullDate(from)} – ${formatWorkOsFullDate(to)}` : undefined}
+        detail={counts ? `${counts.pending_review} awaiting review · ${counts.draft} draft${counts.draft === 1 ? "" : "s"} · ${counts.approved} approved · ${counts.rejected} returned` : undefined}
         padded={false}
         controls={
           <>
-            {/* The status views own their row; the person and date filters
-                group on the filters row below it. The dates travel as one
-                pair. */}
+            {/* The status views and the person filter share the first row —
+                tabs first, people right-aligned while there is room; the
+                compact range control owns the row below. The range text now
+                lives on the control, so the detail line stays counts only. */}
             <AdminControls>
               <AdminControlsGroup>
                 <Segmented<StatusFilter>
@@ -131,14 +272,13 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
                   ]}
                 />
               </AdminControlsGroup>
+              <AdminControlsGroup end>
+                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
+              </AdminControlsGroup>
             </AdminControls>
             <AdminControls>
               <AdminControlsGroup>
-                <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
-              </AdminControlsGroup>
-              <AdminControlsGroup>
-                <TextField label="From" type="date" value={from} onChange={setFrom} ariaLabel="Reports from date" />
-                <TextField label="To" type="date" value={to} onChange={setTo} ariaLabel="Reports to date" />
+                <ReportRangeControl from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
               </AdminControlsGroup>
             </AdminControls>
           </>
