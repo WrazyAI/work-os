@@ -5,18 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, ListChecks, Plus, Search } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { adminFetch, adminKeys } from "./api";
-import { CHART_COLORS, MixDonut } from "./charts";
 import {
   AdminCard,
   Button,
   Drawer,
   EmptyState,
   Notice,
-  SectionHeading,
   SegmentedControl,
   SelectField,
   Skeleton,
-  StatusPill,
+  StateMark,
   TextField,
   cx,
   statusLabel,
@@ -125,29 +123,25 @@ export default function AdminTasksPage() {
 
   return (
     <div className="grid gap-5">
-      {/* Workload split — the visual leads, then the filterable list */}
+      {/* Counts stay a quiet line; the list is the page */}
       {tasks.data?.summary ? (
-        <AdminCard>
-          <SectionHeading
-            icon={ListChecks}
-            title="Workload"
-            detail={`${tasks.data.summary.open} open task${tasks.data.summary.open === 1 ? "" : "s"} in scope, exact counts across the workspace.`}
-          />
-          <MixDonut
-            ariaLabel="Open, overdue, and recently completed task counts"
-            centerValue={String(tasks.data.summary.open)}
-            centerLabel="open"
-            data={[
-              { key: "open", label: "Open (not overdue)", value: Math.max(0, tasks.data.summary.open - tasks.data.summary.overdue), color: CHART_COLORS.accent },
-              { key: "overdue", label: "Overdue", value: tasks.data.summary.overdue, color: CHART_COLORS.warn },
-              { key: "completedWeek", label: "Completed · last 7 days", value: tasks.data.summary.completedWeek, color: CHART_COLORS.observed },
-            ]}
-          />
-        </AdminCard>
+        <p className="text-[12px] text-[var(--text-tertiary)]">
+          <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{tasks.data.summary.open}</strong> open
+          {" · "}
+          <strong
+            className="font-semibold tabular-nums"
+            style={{ color: tasks.data.summary.overdue ? "var(--status-warn)" : "var(--text-primary)" }}
+          >
+            {tasks.data.summary.overdue}
+          </strong>{" "}
+          overdue
+          {" · "}
+          <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{tasks.data.summary.completedWeek}</strong> completed this week
+        </p>
       ) : null}
 
       <AdminCard padded={false}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <SegmentedControl<TaskFilter>
             ariaLabel="Task status"
             value={filter}
@@ -159,7 +153,7 @@ export default function AdminTasksPage() {
             ]}
           />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+            <label className="grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
               Search
               <span className="relative">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" aria-hidden />
@@ -167,7 +161,7 @@ export default function AdminTasksPage() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Title or description"
-                  className="min-h-[34px] w-[200px] rounded-[10px] border bg-transparent pl-8 pr-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-[var(--text-primary)] outline-none"
+                  className="min-h-[34px] w-[200px] rounded-[10px] border bg-transparent pl-8 pr-2.5 py-1.5 text-[12px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
                   style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
                 />
               </span>
@@ -193,7 +187,7 @@ export default function AdminTasksPage() {
               const names = assigneeNames(task);
               const url = taskUrl(task);
               return (
-                <li key={String(task.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-5 py-3" style={{ borderColor: "var(--border-subtle)" }}>
+                <li key={String(task.id)} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                   <button
                     type="button"
                     aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
@@ -218,11 +212,16 @@ export default function AdminTasksPage() {
                       {task.priority ? ` · ${statusLabel(String(task.priority))} priority` : ""}
                     </p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    {task.pending_status === "failed" ? <StatusPill tone="err">Sync failed</StatusPill> : null}
+                  <span className="flex shrink-0 items-center gap-3">
+                    {task.pending_status === "failed" ? <StateMark tone="err">Sync failed</StateMark> : null}
                     <ProvenanceBadge task={task} />
                     {url ? (
-                      <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: "var(--accent)" }}>
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+                      >
                         Open <ExternalLink size={11} aria-hidden />
                       </a>
                     ) : null}
@@ -242,7 +241,7 @@ export default function AdminTasksPage() {
           </div>
         )}
         {tasks.data?.nextOffset != null ? (
-          <p className="px-5 py-3 text-[11.5px] text-[var(--text-tertiary)]">Showing the first 200 tasks. Narrow the filters to see the rest.</p>
+          <p className="border-t px-5 py-3 text-[11.5px] text-[var(--text-tertiary)]" style={{ borderColor: "var(--border-subtle)" }}>Showing the first 200 tasks. Narrow the filters to see the rest.</p>
         ) : null}
       </AdminCard>
 
@@ -263,14 +262,14 @@ export default function AdminTasksPage() {
       >
         <div className="grid gap-3">
           <TextField label="Title" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} placeholder="What needs to be done?" ariaLabel="Task title" />
-          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+          <label className="grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
             Description
             <textarea
               value={form.description}
               onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
               rows={3}
               placeholder="Context, links, or acceptance notes."
-              className="w-full resize-y rounded-[10px] border bg-transparent px-3 py-2 text-[12.5px] font-normal normal-case tracking-normal text-[var(--text-primary)] outline-none"
+              className="w-full resize-y rounded-[10px] border bg-transparent px-3 py-2 text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
               style={{ borderColor: "var(--border)" }}
             />
           </label>
@@ -293,7 +292,7 @@ export default function AdminTasksPage() {
 }
 
 function ProvenanceBadge({ task }: { task: AnyRow }) {
-  if (String(task.provider ?? "") === "local") return <StatusPill tone="neutral">Work OS record</StatusPill>;
-  if (task.synced_at) return <StatusPill tone="neutral">Nifty synced</StatusPill>;
-  return <StatusPill tone="warn">Sync pending</StatusPill>;
+  if (String(task.provider ?? "") === "local") return <span className="text-[10.5px] text-[var(--text-tertiary)]">Work OS record</span>;
+  if (task.synced_at) return <span className="text-[10.5px] text-[var(--text-tertiary)]">Nifty synced</span>;
+  return <StateMark tone="warn">Sync pending</StateMark>;
 }
