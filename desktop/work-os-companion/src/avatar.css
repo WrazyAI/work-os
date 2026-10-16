@@ -999,6 +999,39 @@ body.avatar-window {
 }
 .avatar-badge { top: 8px; right: 8px; }
 
+/* While Otto reads, the collapsed companion lays out as a column — the grown
+   bubble on top, the mascot under it — so the prompter gets the window's new
+   width instead of the resting 164px box, and nothing overlaps. */
+.avatar-shell[data-recap-reading="true"] {
+  /* The window grew upward to make room; anchoring the column to the bottom
+     keeps the mascot and the elapsed pill exactly where they were on screen,
+     and lets the prompter take the space that opened above. */
+  align-items: flex-end;
+}
+.avatar-shell[data-recap-reading="true"] .avatar-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 300px;
+  height: auto;
+  gap: 8px;
+}
+.avatar-shell[data-recap-reading="true"] .avatar-compact .avatar-prompt-bubble {
+  position: static;
+  width: 100%;
+  /* The resting clamp exists because the figure must never move; while reading
+     the figure has room, so the prompter gets the whole box. */
+  max-height: none;
+  overflow: visible;
+}
+.avatar-shell[data-recap-reading="true"] .avatar-compact .avatar-orb {
+  margin: 0 auto 12px;
+}
+.avatar-shell[data-recap-reading="true"] .avatar-compact .avatar-drag-surface,
+.avatar-shell[data-recap-reading="true"] .avatar-compact .avatar-hide {
+  top: 6px;
+}
+
 /* Choosing how Otto reads to you: four rows, each auditioned in place. The row
    is the choice; the small square to its left is the sample. */
 .voice-picker {
@@ -1049,4 +1082,12 @@ body.avatar-window {
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 11.5px;
+}
+
+/* DEV-only review frame (?window=avatar&frame=WxH): the companion fills the
+   frame instead of the browser viewport, so its true proportions can be judged.
+   The attribute never exists in a packaged build. */
+[data-dev-frame] .avatar-shell {
+  width: 100%;
+  height: 100%;
 }

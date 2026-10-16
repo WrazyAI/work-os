@@ -31,7 +31,7 @@ import { MascotMark } from "./chat/MascotMark";
 import { MASCOT } from "./mascot";
 import { taskSelectionFromResult } from "./chat/selection";
 import { AvatarThinking, type AvatarThinkingStage } from "./AvatarThinking";
-import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
+import { avatarAgendaBubbleFixtureFacts, avatarAgendaBubbleFixtureRequested, avatarAttentionFixtureRequested, avatarEodBubbleFixtureFacts, avatarEodBubbleFixtureRequested, avatarEodOutstandingAfterFixtureFacts, avatarEodOutstandingAfterFixtureRequested, avatarEodOutstandingExpiredFixtureFacts, avatarEodOutstandingExpiredFixtureRequested, avatarEodOutstandingRecapFixtureFacts, avatarEodOutstandingRecapFixtureRequested, avatarFixtureChat, avatarFixtureFacts, avatarFixtureRequested, avatarMascotSizeFixture, avatarMultiSelectScrollFixtureChat, avatarMultiSelectScrollFixtureFacts, avatarMultiSelectScrollFixtureRequested, avatarNextStepsEmptyFixtureRequested, avatarNextStepsFixtureMoment, avatarNextStepsFixtureRequested, avatarNextStepsPairFixtureChat, avatarNextStepsPairFixtureRequested, avatarNextStepsRecoveryFixtureChat, avatarNextStepsRecoveryFixtureRequested, avatarObservedFixtureFacts, avatarObservedFixtureRequested, avatarRecapFixtureCard, avatarRecapFixtureChat, avatarRecapFixtureFacts, avatarRecapFixtureRequested, avatarRecapReadingFixtureLines, avatarRecapReadingFixtureRequested, avatarRecapReadingStillFixtureRequested, AVATAR_RECAP_READING_SAMPLE, avatarRecapProcessingFixtureRequested, avatarShiftProgressFixtureFacts, avatarShiftProgressFixtureRequested, avatarSnoozeFixtureFacts, avatarSnoozeFixtureRequested } from "./avatarFixture";
 import { isSettingsHotkey } from "./settingsHotkey";
 import { AgendaReviewCard } from "./AgendaReviewCard";
 import { deriveTaskContext } from "./avatarTaskContext";
@@ -191,6 +191,8 @@ export default function AvatarApp(): React.ReactElement {
   const avatarEodOutstandingExpiredFixture = avatarEodOutstandingExpiredFixtureRequested(window.location.search);
   const avatarAgendaBubbleFixture = avatarAgendaBubbleFixtureRequested(window.location.search);
   const avatarRecapFixture = avatarRecapFixtureRequested(window.location.search);
+  // The read-aloud fixture plays a shipped sample instead of calling the route.
+  const avatarRecapReadingFixture = avatarRecapReadingFixtureRequested(window.location.search);
   const avatarNextStepsFixture = avatarNextStepsFixtureRequested(window.location.search);
   const avatarNextStepsRecoveryFixture = avatarNextStepsRecoveryFixtureRequested(window.location.search);
   const avatarNextStepsEmptyFixture = avatarNextStepsEmptyFixtureRequested(window.location.search);
@@ -199,11 +201,16 @@ export default function AvatarApp(): React.ReactElement {
   const avatarRecapProcessingFixture = avatarRecapProcessingFixtureRequested(window.location.search);
   const avatarMascotFixture = avatarMascotSizeFixture(window.location.search);
   const avatarFixture = avatarFixtureRequested(window.location.search);
-  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
+  const [expanded, setExpanded] = useState(avatarFixture && !avatarShiftProgressFixture && !avatarObservedFixture && !avatarAttentionFixture && !avatarSnoozeFixture && !avatarRecapFixture && !avatarRecapReadingFixture && !avatarRecapProcessingFixture && !avatarNextStepsFixture && !avatarNextStepsRecoveryLike && !avatarEodBubbleFixture && !avatarAgendaBubbleFixture && !avatarEodOutstandingRecapFixture && !avatarEodOutstandingAfterFixture && !avatarEodOutstandingExpiredFixture);
   const [connected, setConnected] = useState<boolean | null>(avatarFixture ? true : null);
   // Reading a recap aloud: the words come from the route, the clock from the
   // audio's own progress, and one player owns this window's only audio element.
-  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>({ status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null });
+  const avatarRecapReadingStillFixture = avatarRecapReadingStillFixtureRequested(window.location.search);
+  const [recapSpeech, setRecapSpeech] = useState<RecapSpeechSnapshot>(avatarRecapReadingStillFixture
+    // The frozen frame: mid-read, no audio, so the prompter's shape can be
+    // reviewed without a session, a provider call, or a browser gesture.
+    ? { status: "playing", lines: avatarRecapReadingFixtureLines(), progress: 0.42, activeIndex: 2, revision: 1, intervalId: "fixture-recap" }
+    : { status: "idle", lines: [], progress: 0, activeIndex: 0, revision: null, intervalId: null });
   const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const recapVoiceRef = useRef<string>(recapVoice);
   recapVoiceRef.current = recapVoice;
@@ -219,7 +226,7 @@ export default function AvatarApp(): React.ReactElement {
     : avatarEodOutstandingAfterFixture ? avatarEodOutstandingAfterFixtureFacts()
     : avatarEodOutstandingExpiredFixture ? avatarEodOutstandingExpiredFixtureFacts()
     : avatarAgendaBubbleFixture ? avatarAgendaBubbleFixtureFacts()
-    : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarNextStepsRecoveryLike) ? avatarRecapFixtureFacts()
+    : (avatarRecapFixture || avatarRecapReadingFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarNextStepsRecoveryLike) ? avatarRecapFixtureFacts()
     : avatarFixture ? avatarFixtureFacts() : {
     loaded: false, voiceAvailable: false, shiftDate: "", promptRequired: false, nextPromptAt: null, promptKind: null,
     shiftStartsAt: null, shiftEndsAt: null, sessionState: null, attendanceState: null, clockedInAt: null,
@@ -236,13 +243,13 @@ export default function AvatarApp(): React.ReactElement {
       : avatarNextStepsRecoveryFixture
         ? avatarNextStepsRecoveryFixtureChat()
         : avatarMultiSelectScrollFixture ? avatarMultiSelectScrollFixtureChat()
-        : (avatarRecapFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
+        : (avatarRecapFixture || avatarRecapReadingFixture || avatarRecapProcessingFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureChat() : avatarFixture ? avatarFixtureChat() : []);
   const [loadedChatConversation, setLoadedChatConversation] = useState<string | null>(null);
   const chatConversationSignature = useRef("");
   const readyReceiptRef = useRef<string | null>(null);
   const [input, setInput] = useState("");
   const [avatarTab, setAvatarTab] = useState<"chat" | "tasks">("chat");
-  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
+  const [activityPrompt, setActivityPrompt] = useState<ActivityIntervalCardData | null>((avatarRecapFixture || avatarRecapReadingFixture || avatarNextStepsFixture || avatarEodOutstandingRecapFixture) ? avatarRecapFixtureCard() : null);
   const [activityPreparing, setActivityPreparing] = useState(avatarRecapProcessingFixture);
   const [recapEditMode, setRecapEditMode] = useState(false);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
@@ -253,11 +260,19 @@ export default function AvatarApp(): React.ReactElement {
   // Listen control route through it, so two reads can never overlap and a
   // recording never starts on top of one.
   const [recapPlayer] = useState<RecapSpeechPlayer>(() => createRecapSpeechPlayer({
-    fetchClip: (input) => apiRequestAudio("/api/work-os/voice/recap", input),
+    fetchClip: avatarRecapReadingFixture
+      ? async () => ({
+          bytes: await (await fetch(AVATAR_RECAP_READING_SAMPLE)).arrayBuffer(),
+          mimeType: "audio/mpeg",
+          lines: avatarRecapReadingFixtureLines(),
+          revision: 1,
+          stale: false,
+        })
+      : (input) => apiRequestAudio("/api/work-os/voice/recap", input),
     toObjectUrl: (bytes, mimeType) => URL.createObjectURL(new Blob([bytes], { type: mimeType })),
     releaseObjectUrl: (url) => URL.revokeObjectURL(url),
     createAudio: (src) => new Audio(src),
-    onSnapshot: (snapshot) => setRecapSpeech(snapshot),
+    onSnapshot: (snapshot) => { if (!avatarRecapReadingStillFixture) setRecapSpeech(snapshot); },
     onFailure: (message) => setChat((current) => [...current, { id: `recap-speech-error-${Date.now()}`, role: "system", text: message }]),
     onStaleCard: () => { void loadDayRef.current?.(true); },
   }));
@@ -544,6 +559,9 @@ export default function AvatarApp(): React.ReactElement {
       }
     }
   }, []);
+
+  // The read-aloud fixture is pressed, not auto-played: browsers refuse audio
+  // without a gesture, and the press is the interaction being previewed.
 
   // Keep the player's stale-card refresh pointed at the live loader.
   loadDayRef.current = loadDay;
@@ -2001,7 +2019,7 @@ export default function AvatarApp(): React.ReactElement {
   }
 
   return (
-    <div className={`avatar-shell ${expanded ? "expanded" : ""}`}>
+    <div className={`avatar-shell ${expanded ? "expanded" : ""}`} data-recap-reading={recapSpeech.status !== "idle" ? "true" : undefined}>
       {!expanded && (
         <div className="avatar-compact">
         {bubble === "processing" && <button className="avatar-prompt-bubble" onClick={() => { clearRecapAutoCollapse(); void toggleExpanded(true); }}><strong>Reviewing your last hour…</strong><span>Otto is analyzing your recent frames.</span></button>}
