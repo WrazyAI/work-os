@@ -102,6 +102,13 @@ trusting — and the card underneath remains the audit record.
    shows a hairline of progress.
 6. **One text** — card lines = prompter lines = spoken words.
 7. Three or four voices, samples generated once and saved, the employee picks.
+8. Listening **rides the existing `voice_input` flag** — one switch for the
+   organisation, no second opt-in. The capability is relabelled in the UI to
+   **“Voice input & output”**: `src/modules/work-os/admin/AdminSettings.tsx`
+   and `desktop/work-os-companion/src/admin/SettingsPage.tsx`, whose detail
+   lines gain the output half (“…and listen to recaps read back”). The flag
+   *key* stays `voice_input`; only the label changes, so existing organisations
+   keep their setting.
 
 ## Decided by the builder (check these)
 
@@ -163,10 +170,10 @@ trusting — and the card underneath remains the audit record.
 
 - **Server**: new route + a small `work-os-recap-speech.ts` module (script
   assembly + provider call + cache). Same auth shape as the transcribe route
-  (`requireWorkOsAccess`, `requirePerson`), same server-only key. **Which
-  feature flag gates it is the open question below** — listening is a new
-  charge on the organisation's fal account, so it is the operator's call whether
-  it rides `voice_input` or gets its own opt-in.
+  (`requireWorkOsAccess`, `requirePerson`), same server-only key, gated by the
+  same `voice_input` flag as transcription — now presented in the UI as “Voice
+  input & output”. Listening is a new charge on the organisation's fal account;
+  it is bounded per recap by the cache and the length guard.
 - **Companion**: a playback controller (one audio element, one owner), the
   prompter component, the Otto speaking animation, the dots on the bubble and the
   mic chip, and the settings row for the voice.
@@ -191,10 +198,6 @@ trusting — and the card underneath remains the audit record.
 
 ## Open items
 
-- **The operator's call**: does recap listening ride the existing `voice_input`
-  flag (one switch; every org that has voice input starts paying for text to
-  speech) or get its own opt-in flag (a second switch, and a rollout order
-  between the web deploy and the companion release)?
 - The exact three or four voices (samples generated, the operator picks).
 - Growth pixel math per text size / mascot size (both are accessibility
   settings, so the bubble's resting and grown heights differ).
