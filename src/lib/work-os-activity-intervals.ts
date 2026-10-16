@@ -908,6 +908,8 @@ export type ActivityIntervalView = {
   label: string;
   promptKind: "follow_up" | "hourly_fallback";
   generationStatus: string;
+  /** Bumped whenever the synthesis is rewritten. 1 for rows that predate it. */
+  revision: number;
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
@@ -924,6 +926,14 @@ export type ActivityIntervalView = {
    * coverage capture. */
   coverage: { framesRecorded: number | null; framesAnalyzed: number | null } | null;
 };
+
+/** The synthesis revision a row carries, normalised for clients: a positive
+ * integer, 1 when the column is absent (every row written before revisions
+ * existed) or unusable. */
+export function intervalRevision(row: { revision?: unknown }): number {
+  const value = Math.floor(Number(row?.revision));
+  return Number.isFinite(value) && value >= 1 ? value : 1;
+}
 
 /** The Postgres shim returns timestamptz columns as Date objects, but every
  * API payload must carry ISO instants so clients on any runtime parse them
@@ -1023,6 +1033,10 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
     label: formatIntervalRange(windowStart, windowEnd, String(row.timezone ?? "UTC")),
     promptKind: String(row.prompt_kind) as ActivityIntervalView["promptKind"],
     generationStatus: String(row.generation_status),
+    // A recap can be regenerated while it is still unreviewed, so a client that
+    // renders one must be able to say which revision it rendered; a spoken read
+    // keyed without it could say words the card no longer shows.
+    revision: intervalRevision(row),
     reviewStatus: String(row.review_status) as ActivityIntervalView["reviewStatus"],
     headline: row.headline ? String(row.headline) : null,
     detail: row.final_detail ? String(row.final_detail) : row.ai_detail ? String(row.ai_detail) : null,
@@ -1045,6 +1059,26 @@ function intervalView(row: ActivityIntervalRecord, evidence: ActivityIntervalEvi
 export async function activityIntervalFullView(row: ActivityIntervalRecord): Promise<ActivityIntervalView> {
   const evidence = (await loadIntervalEvidence([String(row.id)])).get(String(row.id)) ?? [];
   return intervalView(row, evidence);
+}
+
+/** One interval by id, scoped to the employee who owns it.
+ *
+ * Recap speech reads the recap server-side, so the route needs exactly this:
+ * an employee can only ever have their own recap read, and another person's id
+ * answers `null` rather than a 403 (the caller cannot tell the two apart, which
+ * is the point). */
+export async function getActivityIntervalForPerson(
+  access: WorkOsAccess,
+  intervalId: string,
+): Promise<ActivityIntervalRecord | null> {
+  if (!access.personId || !intervalId) return null;
+  const { data, error } = await db().from("work_activity_intervals").select("*")
+    .eq("id", intervalId)
+    .eq("organization_id", access.organizationId)
+    .eq("person_id", access.personId)
+    .maybeSingle();
+  if (error) throw new Error(`load activity interval: ${error.message}`);
+  return (data as ActivityIntervalRecord | null) ?? null;
 }
 
 /** Employee's recent activity stream, newest interval first. Raw image bytes
