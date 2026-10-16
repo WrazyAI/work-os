@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.58 — 2026-10-16
+
 - EOD Review shows the newest reports first, with a compact date-range button and the people filter on the same line as the tabs.
 
 ## 0.4.57 — 2026-10-16
