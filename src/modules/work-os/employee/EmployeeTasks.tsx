@@ -69,7 +69,7 @@ function TaskAssigneeTags({ task }: { task: AnyRow }) {
   return (
     <span className="flex flex-wrap gap-1" aria-label={`Assigned to ${people.map((person: AnyRow) => person.displayName).join(", ")}`}>
       {people.map((person: AnyRow) => (
-        <span key={person.personId || person.displayName} title={person.email || person.displayName} className="inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-semibold" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+        <span key={person.personId || person.displayName} title={person.email || person.displayName} className="inline-flex items-center rounded-full px-1.5 py-px text-[10px] font-medium" style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}>
           {person.displayName}
         </span>
       ))}
@@ -283,7 +283,7 @@ export default function EmployeeTasks() {
       {error ? <Notice tone="err" className="mb-5">{(error as Error).message}</Notice> : null}
 
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5" style={{ borderColor: "var(--border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
           <nav aria-label="Task views" className="flex flex-wrap gap-1">
             {VIEWS.map((item) => {
               const active = view === item.id;
@@ -294,10 +294,10 @@ export default function EmployeeTasks() {
                   type="button"
                   onClick={() => { setView(item.id); setSort(null); setSearch(""); setServerSearch(""); setFromDate(""); setToDate(""); setMenuTaskId(null); }}
                   aria-current={active ? "true" : undefined}
-                  className={cx("rounded-[10px] px-3 py-1.5 text-[12px] font-semibold transition", active ? "" : "hover:bg-[var(--bg-tertiary)]")}
-                  style={active
-                    ? { background: "color-mix(in srgb, var(--accent-deep) 12%, var(--bg-card))", color: "var(--accent-deep)", border: "1px solid color-mix(in srgb, var(--accent-deep) 30%, var(--border))" }
-                    : { color: "var(--text-secondary)", border: "1px solid transparent" }}
+                  className={cx(
+                    "rounded-[10px] px-3 py-1.5 text-[12px] font-semibold transition",
+                    active ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]",
+                  )}
                 >
                   {item.label}
                   {typeof count === "number" ? <span className="ml-1.5 tabular-nums text-[11px] opacity-70">{count}</span> : null}
@@ -342,7 +342,7 @@ export default function EmployeeTasks() {
           </div>
         ) : visible.length ? (
           <>
-            <div className="hidden items-center gap-3 border-b px-5 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] md:flex" style={{ borderColor: "var(--border)" }}>
+            <div className="hidden items-center gap-3 border-b px-5 py-2 text-[11px] font-medium text-[var(--text-tertiary)] md:flex" style={{ borderColor: "var(--border-subtle)" }}>
               <span className="w-5 shrink-0" aria-hidden="true" />
               <button type="button" onClick={() => activateSort("name")} className="flex flex-1 items-center gap-1 text-left hover:text-[var(--text-primary)]">
                 Name {sort?.key === "name" ? (sort.direction === "asc" ? "↑" : "↓") : null}
@@ -403,7 +403,7 @@ export default function EmployeeTasks() {
                 const isWorkOsTask = String(task.provider ?? "") === "local";
                 const expanded = expandedTaskId === taskId;
                 return (
-                  <li key={task.id} className="relative border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
+                  <li key={task.id} className="relative border-b last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
                     <div className="flex items-start gap-3 px-5 py-3.5">
                       <button
                         type="button"
