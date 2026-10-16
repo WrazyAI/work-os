@@ -44,6 +44,17 @@ export function resolveEodActivityWindow(input: {
   return null;
 }
 
+/** Whether an instant belongs to the workday window. Facts with no window or
+ * an unparseable timestamp stay: the report never drops what it cannot prove
+ * is outside the workday. The window end is inclusive, so a fact at the exact
+ * shift end still belongs to the workday. */
+export function withinEodActivityWindow(at: unknown, window: EodActivityWindow | null): boolean {
+  if (!window) return true;
+  const ms = instant(at);
+  if (ms === null) return true;
+  return ms >= Date.parse(window.startIso) && ms <= Date.parse(window.endIso);
+}
+
 /** Maps a `work_sessions` row onto the resolver. The admin client returns
  * timestamptz columns as Date objects under snake_case names; reading
  * camelCase keys off the raw row would always resolve to null. */

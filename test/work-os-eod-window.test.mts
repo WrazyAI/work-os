@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { eodActivityWindowFromSessionRow, resolveEodActivityWindow } from "../src/lib/work-os-eod-window";
+import { eodActivityWindowFromSessionRow, resolveEodActivityWindow, withinEodActivityWindow } from "../src/lib/work-os-eod-window";
 
 test("the EOD activity window follows the scheduled shift when the day has one", () => {
   // The pilot's mistake day: the session started overnight, but the workday is
@@ -43,6 +43,21 @@ test("the EOD activity window reads the session row's stored columns", () => {
     scheduled_starts_at: "2026-10-14T14:00:00.000Z",
     scheduled_ends_at: "2026-10-14T21:00:00.000Z",
   }), { startIso: "2026-10-14T14:00:00.000Z", endIso: "2026-10-14T21:00:00.000Z", source: "schedule" });
+});
+
+test("day facts outside the workday window are excluded from the report", () => {
+  const window = { startIso: "2026-10-14T14:00:00.000Z", endIso: "2026-10-14T21:00:00.000Z", source: "schedule" as const };
+  // In-window facts stay; the overnight and post-shift ones drop.
+  assert.equal(withinEodActivityWindow("2026-10-14T15:53:00.000Z", window), true);
+  assert.equal(withinEodActivityWindow(new Date("2026-10-14T14:00:00.000Z"), window), true);
+  assert.equal(withinEodActivityWindow("2026-10-14T21:00:00.000Z", window), true);
+  assert.equal(withinEodActivityWindow("2026-10-14T01:17:00.000Z", window), false);
+  assert.equal(withinEodActivityWindow("2026-10-14T21:41:00.000Z", window), false);
+  // No window or no usable timestamp keeps the fact: the report never drops
+  // what it cannot prove is outside the workday.
+  assert.equal(withinEodActivityWindow("2026-10-14T01:17:00.000Z", null), true);
+  assert.equal(withinEodActivityWindow(null, window), true);
+  assert.equal(withinEodActivityWindow("invalid", window), true);
 });
 
 test("the EOD activity window is unavailable when the day has no usable schedule or session", () => {

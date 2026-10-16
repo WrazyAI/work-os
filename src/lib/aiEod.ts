@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureHourlyScreenshotSummaries, type EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { automationName, collapseAutomation, formatLocalTime } from "@/lib/work-os-eod-facts";
-import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
+import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { localDayBounds } from "@/modules/work-os/companion";
 
 /** The employee's onboarding timezone, the same source the day label uses. */
@@ -231,7 +231,11 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
     : { data: [], error: null };
   if (planItemsResult.error) throw new Error(`load EOD commitment items: ${planItemsResult.error.message}`);
 
+  // Workday facts only: task completions and updates outside the shift never
+  // enter the report.
+  const window = await eodActivityWindowFor(organizationId, personId, date);
   const updates = ((updatesResult.data ?? []) as Array<Record<string, unknown>>)
+    .filter((row) => withinEodActivityWindow(row.occurred_at, window))
     .map((row) => ({ kind: String(row.update_kind ?? "update"), text: String(row.input_text ?? ""), at: String(row.occurred_at ?? "") }))
     .filter((row) => row.text);
   const timezone = typeof timezoneResult.data?.timezone === "string" && timezoneResult.data.timezone ? timezoneResult.data.timezone : "UTC";
@@ -241,7 +245,9 @@ export async function gatherEodGrounding(organizationId: string, personId: strin
   const automationTitles: string[] = [];
   const seenCompleted = new Set<string>();
   const seenCarried = new Set<string>();
-  for (const event of (eventsResult.data ?? []) as Array<Record<string, unknown>>) {
+  const events = ((eventsResult.data ?? []) as Array<Record<string, unknown>>)
+    .filter((event) => withinEodActivityWindow(event.exact_at ?? event.observed_at, window));
+  for (const event of events) {
     const snapshot = (event.task_snapshot ?? {}) as { title?: unknown };
     const title = typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "a task";
     // Distinct tasks can share a title (repeated routine runs); only repeat

@@ -7,6 +7,7 @@ import { recordWorkMemory } from "@/lib/work-memory";
 import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/companion";
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
+import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
@@ -149,8 +150,11 @@ async function buildDailyWorkspaceEodContent(access: WorkOsAccess, personId: str
     .filter((id) => id && id !== "null"));
 
   const evidence = (evidenceRows ?? []) as Json[];
-  const updates = (checkInsResult.data ?? []) as Json[];
-  const events = (eventsResult.data ?? []) as Json[];
+  // Task facts and updates outside the workday window never enter the report;
+  // an overnight or post-shift completion belongs to no reported workday.
+  const window = await eodActivityWindowFor(access.organizationId, personId, reportDate);
+  const updates = ((checkInsResult.data ?? []) as Json[]).filter((row) => withinEodActivityWindow(row.occurred_at, window));
+  const events = ((eventsResult.data ?? []) as Json[]).filter((row) => withinEodActivityWindow(row.exact_at ?? row.observed_at, window));
   const dayWork = selectDayEodWork({ events, tasks: workspace.tasks });
 
   // Routine runs are automation, not deliverables: they collapse into one
