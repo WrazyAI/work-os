@@ -503,6 +503,27 @@ describe("operational visualizations", () => {
     expect(conversationStyles).toMatch(/\.conversation-surface-floating\s+\.conversation-scroll-region::after\s*\{[^}]*backdrop-filter:\s*blur/s);
   });
 
+  it("keeps the closed Otto launcher a compact corner card at every width", () => {
+    const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
+    // §7.2: the closed in-app state is a compact launcher fixed to the
+    // lower-right viewport corner that never consumes task-list space. One
+    // element hosts both states, so a breakpoint that widens the dock for the
+    // open sheet must not hand that width to the launcher: at ≤700px the closed
+    // dock was given the sheet's full viewport width, and the launcher stretched
+    // across the window as a wide bottom bar over the task list.
+    const narrowIndex = conversationStyles.indexOf("@media (max-width: 700px)");
+    expect(narrowIndex).toBeGreaterThan(-1);
+    const narrowBlock = conversationStyles.slice(
+      narrowIndex,
+      conversationStyles.indexOf("@media (prefers-reduced-motion", narrowIndex),
+    );
+    const closedRule = narrowBlock.slice(0, narrowBlock.indexOf(".progress-dock.open"));
+    expect(closedRule).toMatch(/width:\s*min\(328px,\s*calc\(100vw - 24px\)\)/);
+    expect(closedRule).not.toMatch(/width:\s*calc\(100vw - 24px\);/);
+    // The open sheet is still the state that fills the narrow viewport.
+    expect(narrowBlock).toMatch(/\.progress-dock\.open\s*\{[^}]*right:\s*10px;[^}]*left:\s*10px;[^}]*width:\s*auto;/s);
+  });
+
   it("keeps the action receipt a compact toggle row", () => {
     const conversationStyles = readText(resolve(root, "src/chat/conversation.css"));
     const toolSurfaceStyles = readText(resolve(root, "src/chat/tool-surfaces.css"));

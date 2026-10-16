@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.55 — 2026-10-16
+
+- Otto's launcher stays a small button in the lower-right corner when the window is narrow, instead of stretching across the bottom of the screen.
+
 ## 0.4.54 — 2026-10-16
 
 - The Tasks list is easier to read: larger text, plain rows separated by thin dividers, and red only where something actually needs your attention.

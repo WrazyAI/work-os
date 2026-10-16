@@ -892,10 +892,15 @@
 }
 
 @media (max-width: 700px) {
+  /* §7.2 keeps the closed launcher a compact card in the viewport's lower-right
+     corner at every width; only the open sheet is the state that fills a narrow
+     screen. This rule used to hand the closed dock the sheet's full viewport
+     width, so the launcher stretched across the window as a wide bottom bar over
+     the task list and ran into the base of the window. */
   [data-conversation-surface="in-app"].progress-dock {
     right: 12px;
     bottom: 12px;
-    width: calc(100vw - 24px);
+    width: min(328px, calc(100vw - 24px));
   }
 
   [data-conversation-surface="in-app"].progress-dock.open {
