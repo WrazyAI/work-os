@@ -713,6 +713,90 @@ body:has(.admin-workspace) .notifications-card {
   color: #5e9d27;
 }
 
+/* --- Sortable table headers ---------------------------------------------
+   The task record's labeled columns sort in place: each label is a real
+   button that keeps the header's own type, a fixed-size indicator slot keeps
+   the cell geometry stable across every sort state, the active column shows
+   its direction arrow at all times, and an inactive column reveals its quiet
+   affordance on hover or keyboard focus. The focus ring is inset so it never
+   clips inside the scrolling table wrap, and the headers stay nowrap at every
+   width — the table scrolls horizontally in `.admin-table-wrap` instead
+   (design.md §16.2 sortable tables). */
+
+.admin-table thead th.admin-sort-head {
+  padding: 0;
+}
+
+.admin-sort-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 34px;
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms var(--ease-product), background-color 140ms var(--ease-product);
+}
+
+.admin-sort-button:hover,
+.admin-sort-button.is-active {
+  color: var(--ink);
+}
+
+.admin-sort-button:hover {
+  background: rgba(24, 32, 24, 0.035);
+}
+
+.admin-sort-button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+
+.admin-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+.admin-sort-icon svg {
+  display: block;
+}
+
+.admin-sort-idle {
+  opacity: 0;
+  transition: opacity 140ms var(--ease-product);
+}
+
+.admin-sort-button:hover .admin-sort-idle,
+.admin-sort-button:focus-visible .admin-sort-idle {
+  opacity: 0.55;
+}
+
+@media (max-width: 560px) {
+  .admin-sort-button {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sort-button,
+  .admin-sort-idle {
+    transition: none;
+  }
+}
+
 /* --- Lists -------------------------------------------------------------- */
 
 .admin-attention,

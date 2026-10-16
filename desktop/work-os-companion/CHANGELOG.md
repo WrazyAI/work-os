@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The administration task list now opens newest first; click any column header to sort by it, and click again to reverse the order.
+
 - Dates across the companion and administration now read like dates — "Oct 16, 2026" instead of raw timestamp values.
 
 - Administration sections keep their data while you move between them, so switching pages no longer reloads everything each time.

@@ -1811,6 +1811,16 @@ window focus and reconnect, the Overview snapshot is the one deliberate poll
 (60 seconds, paused while the window is hidden), and the masthead refresh
 control is the explicit force-fresh path for the current section.
 
+**Sortable tables.** The administration task record opens most-recently-updated
+first. Every labeled column header is a button: the first activation applies
+that column's natural order — A→Z for Task and Assignees, earliest first for
+Due, attention order (Overdue → Open → Done) for Status — a second activation
+reverses it, and another column switches to its own natural order. Rows missing
+the sorted value stay last in both directions, and ties break by title then id
+so the list never jitters. The sorted column's `th` carries `aria-sort` with an
+always-visible direction indicator, inactive columns reveal a quiet affordance
+on hover or keyboard focus, and the empty actions column is never sortable.
+
 ### 16.3 Data and provenance
 
 Administration endpoints are admin- or manager-scoped and organization-scoped

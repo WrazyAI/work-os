@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, ListChecks, Plus, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, ListChecks, Plus, Search } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
   ADMIN_STALE_MS,
+  type AdminTaskRow,
   completeAdminTask,
   createAdminTask,
   fetchAdminTaskDetails,
@@ -24,6 +25,168 @@ import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Noti
 
 type TaskFilter = "open" | "completed" | "all";
 
+/* --- Task ordering ------------------------------------------------------
+ * The organization task record opens most-recently-updated first, and every
+ * labeled column sorts the fetched list in place: the first activation applies
+ * the column's natural direction, a second activation reverses it, and another
+ * column starts its own natural order. Missing values stay last in both
+ * directions, and ties fall back to title A→Z then id so equal keys never
+ * jitter. Status ranks by attention (Overdue → Open → Done) exactly as the
+ * pill reads the recorded completion flag; a row whose record states no flag
+ * claims no rank and stays last. Pure functions, exported for the comparator
+ * tests (design.md §16.2 sortable tables). */
+
+export type TaskSortKey = "task" | "assignees" | "due" | "status";
+export type TaskSortDirection = "asc" | "desc";
+export interface TaskSortState {
+  key: TaskSortKey;
+  direction: TaskSortDirection;
+}
+
+export const TASK_SORT_COLUMNS: ReadonlyArray<{
+  key: TaskSortKey;
+  label: string;
+  firstDirection: TaskSortDirection;
+  directions: Record<TaskSortDirection, string>;
+}> = [
+  { key: "task", label: "Task", firstDirection: "asc", directions: { asc: "A to Z", desc: "Z to A" } },
+  { key: "assignees", label: "Assignees", firstDirection: "asc", directions: { asc: "A to Z", desc: "Z to A" } },
+  { key: "due", label: "Due", firstDirection: "asc", directions: { asc: "earliest first", desc: "latest first" } },
+  { key: "status", label: "Status", firstDirection: "asc", directions: { asc: "overdue first", desc: "done first" } },
+];
+
+function trimmedText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function taskLabel(task: AdminTaskRow): string | null {
+  return trimmedText(task.title ?? task.name) || null;
+}
+
+/** The joined assignee names the cell renders; an empty or missing embed, or
+ * the cell's own "Unassigned" fallback, is a missing value. */
+function assigneeLabel(task: AdminTaskRow): string | null {
+  if (!Array.isArray(task.assignees)) return null;
+  const names = task.assignees.map((assignee) => trimmedText(assignee?.displayName)).filter(Boolean);
+  if (!names.length) return null;
+  const joined = names.join(", ");
+  return joined.toLowerCase() === "unassigned" ? null : joined;
+}
+
+function dayValue(value: unknown): number | null {
+  const text = trimmedText(value);
+  if (!text) return null;
+  const parsed = Date.parse(text.length === 10 ? `${text}T00:00:00Z` : text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** 0 = Overdue, 1 = Open, 2 = Done — the same predicate the pill renders from
+ * the recorded completion flag; a row whose record states no flag has no rank
+ * and sorts last in both directions (the pill's Open is a display default
+ * only). */
+function statusRank(task: AdminTaskRow, today: string): number | null {
+  if (typeof task.completed !== "boolean") return null;
+  if (task.completed) return 2;
+  const due = trimmedText(task.due_date);
+  return due && due < today ? 0 : 1;
+}
+
+function updatedValue(task: AdminTaskRow): number | null {
+  const parsed = Date.parse(trimmedText(task.updated_at));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function compareText(a: string, b: string) {
+  const left = a.toLowerCase();
+  const right = b.toLowerCase();
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Missing values sort last whichever direction is active; direction only
+ * flips the comparison between two present values. */
+function compareNullable<T>(a: T | null, b: T | null, direction: 1 | -1, compare: (left: T, right: T) => number) {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return direction * compare(a, b);
+}
+
+function compareTiebreak(a: AdminTaskRow, b: AdminTaskRow) {
+  return compareNullable(taskLabel(a), taskLabel(b), 1, compareText)
+    || compareNullable(trimmedText(a.id) || null, trimmedText(b.id) || null, 1, compareText);
+}
+
+/** `sort` null keeps the record's default recency order (most recently updated
+ * first, missing timestamps last); `today` is the caller's workday for the
+ * Status ranks. */
+export function compareAdminTasks(a: AdminTaskRow, b: AdminTaskRow, sort: TaskSortState | null, today = todayIso()) {
+  const direction: 1 | -1 = sort?.direction === "desc" ? -1 : 1;
+  const primary = !sort
+    ? compareNullable(updatedValue(a), updatedValue(b), -1, (left, right) => left - right)
+    : sort.key === "task"
+      ? compareNullable(taskLabel(a), taskLabel(b), direction, compareText)
+      : sort.key === "assignees"
+        ? compareNullable(assigneeLabel(a), assigneeLabel(b), direction, compareText)
+        : sort.key === "due"
+          ? compareNullable(dayValue(a.due_date), dayValue(b.due_date), direction, (left, right) => left - right)
+          : compareNullable(statusRank(a, today), statusRank(b, today), direction, (left, right) => left - right);
+  return primary || compareTiebreak(a, b);
+}
+
+export function sortTaskRows(rows: AdminTaskRow[], sort: TaskSortState | null, today = todayIso()) {
+  return [...rows].sort((a, b) => compareAdminTasks(a, b, sort, today));
+}
+
+/** First activation applies the column's natural direction and a second
+ * reverses it; another column starts its own natural order. */
+export function nextTaskSort(current: TaskSortState | null, key: TaskSortKey): TaskSortState {
+  if (current?.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+  return { key, direction: TASK_SORT_COLUMNS.find((column) => column.key === key)?.firstDirection ?? "asc" };
+}
+
+/** The table head: every labeled column is one real button, the sorted
+ * column's th carries aria-sort, and the indicator slot is always present so
+ * the header never shifts when the sort changes. The empty actions column
+ * stays non-sortable. */
+export function TaskTableHead({ sort, onSort }: { sort: TaskSortState | null; onSort: (key: TaskSortKey) => void }) {
+  return (
+    <thead>
+      <tr>
+        {TASK_SORT_COLUMNS.map((column) => {
+          const direction: TaskSortDirection | null = sort && sort.key === column.key ? sort.direction : null;
+          const next: TaskSortDirection = direction === "asc" ? "desc" : direction === "desc" ? "asc" : column.firstDirection;
+          const accessible = direction
+            ? `${column.label}, sorted ${column.directions[direction]}. Activate to sort ${column.directions[next]}.`
+            : `Sort by ${column.label}, ${column.directions[next]}.`;
+          const Indicator = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ChevronsUpDown;
+          return (
+            <th
+              key={column.key}
+              scope="col"
+              className="admin-sort-head"
+              aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : undefined}
+            >
+              <button
+                type="button"
+                className={direction ? "admin-sort-button is-active" : "admin-sort-button"}
+                aria-label={accessible}
+                title={accessible}
+                onClick={() => onSort(column.key)}
+              >
+                <span>{column.label}</span>
+                <span className="admin-sort-icon" aria-hidden="true">
+                  <Indicator size={13} className={direction ? undefined : "admin-sort-idle"} />
+                </span>
+              </button>
+            </th>
+          );
+        })}
+        <th scope="col" />
+      </tr>
+    </thead>
+  );
+}
+
 /** The organization task record: bounded filters, the flat list, and a drawer
  * that opens one task's detail with its subtasks. */
 export default function TasksPage({ initialTaskId }: { initialTaskId?: string }) {
@@ -33,6 +196,7 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
   const [personId, setPersonId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<TaskSortState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(initialTaskId ?? null);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", projectId: "", assignee: "", dueDate: "", priority: "" });
@@ -90,6 +254,9 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     if (!needle) return list;
     return list.filter((task) => [task.name, task.title, task.project?.name].some((value) => String(value ?? "").toLowerCase().includes(needle)));
   }, [tasks.data, search]);
+  // No column active means the record's default recency order; client-side
+  // sorting is honest here because the page holds the full normalized list.
+  const sortedRows = useMemo(() => sortTaskRows(rows, sort), [rows, sort]);
   const summary = tasks.data?.summary;
 
   return (
@@ -142,9 +309,9 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
         ) : rows.length ? (
           <div className="admin-table-wrap">
             <table className="admin-table">
-              <thead><tr><th>Task</th><th>Assignees</th><th>Due</th><th>Status</th><th /></tr></thead>
+              <TaskTableHead sort={sort} onSort={(key) => setSort((current) => nextTaskSort(current, key))} />
               <tbody>
-                {rows.map((task) => {
+                {sortedRows.map((task) => {
                   const id = String(task.id);
                   const overdue = task.completed !== true && task.due_date && String(task.due_date) < todayIso();
                   return (
