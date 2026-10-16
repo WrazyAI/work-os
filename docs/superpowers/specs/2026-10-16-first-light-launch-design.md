@@ -113,8 +113,8 @@ gate branch resolves, and plays the exit only when a non-loading surface
 the failure branch after a successful retry is a plain swap, as today.
 
 Exit trigger: the moment a non-loading surface takes over — never a timer,
-never a fixed delay. What "takes over" means for the workspace path is the
-one open decision (§4.1).
+never a fixed delay. For the workspace path, §4.1 decides the exact moment:
+the overlay exits when the workspace will render real content.
 
 1. **Landing** (≤300ms). The pulse loop is shaped as crossing → rest (§3):
    each crossing fades out over its final stretch, then the bench rests
@@ -144,24 +144,20 @@ Integrity rules:
 Reduced motion: no landing, no transforms. A single ~150ms opacity fade from
 the night surface to the workspace.
 
-### 4.1 Open decision: when does the workspace path exit?
+### 4.1 Decision: when does the workspace path exit?
 
-The workspace mounts as soon as the onboarding record resolves (today's
-swap), but the first day payload can still be in flight, so an immediate
-rise can reveal a content-shaped skeleton. Two honest options:
+**Hold for real content** (owner's call, 2026-10-16). The overlay stays
+until the workspace's first real render is possible — day payload present;
+admin path: session and role resolved. The stage line stays truthful the
+whole time ("Reading your schedule and workday" is still exactly what is
+happening), and the rise always reveals the employee's actual day. Slow
+networks hold the night screen longer, which is still a live, honest wait.
 
-- **Hold for real content (recommended).** The overlay stays until the
-  workspace's first real render is possible (day payload present; admin
-  path: session and role resolved). The stage line stays truthful the whole
-  time — "Reading your schedule and workday" is still exactly what is
-  happening — and the rise always reveals the employee's actual day. Slow
-  networks hold the night screen longer, which is still a live, honest
-  wait.
-- **Exit as today.** The rise fires at today's swap and may reveal the
-  dashboard skeleton (itself an accepted pattern in the blueprint). The
-  swap happens marginally earlier on slow loads.
-
-Pending the owner's call; the builder plan depends on it.
+Builder notes: the overlay's exit condition is therefore "the workspace
+will render real content on its first paint", not today's swap condition.
+The stage line must never claim readiness the data doesn't have. The hold
+is bounded by existing error handling — a day-fetch failure still flips to
+the failed branch exactly as today; there is no invented timer.
 
 ## 5. Copy
 
@@ -255,4 +251,4 @@ Anti-goals:
   calls: one persistent boot overlay across loading phases with in-place
   stage-line updates (Q1), and the pulse loop's crossing → rest shape with
   the landing rules in §4 (Q3). The workspace-path readiness question (Q2)
-  is §4.1 and goes to the owner.
+ went to the owner: **hold for real content** (§4.1).
