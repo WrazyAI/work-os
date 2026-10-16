@@ -33,8 +33,9 @@ describe("turnCopyText", () => {
     });
     expect(text).toContain("I'll show you the currently incomplete tasks.");
     expect(text).toContain("Pending tasks:");
-    expect(text).toContain("- Harden task fallback copy (pending, due 2026-08-29)");
+    expect(text).toContain("- Harden task fallback copy (pending, due Aug 29, 2026)");
     expect(text).toContain("- Order and group task records (overdue)");
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
   it("names the action results with their status and failure detail", () => {

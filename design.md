@@ -1239,6 +1239,19 @@ Dates, instants, timezone identifiers, durations, and range endpoints are
 validated before formatting. Invalid values render —, Unavailable, or specific
 fallback copy; they never throw.
 
+**Date display.** Dates render in letter months, never as raw ISO timestamps
+or numerals-only strings. Full dates read "Oct 16, 2026"
+(`formatWorkOsFullDate`) in headers, table cells, records, and schedule lines;
+dense rows may keep the contextual "October 16" (`formatWorkOsDate`) or
+compact `shortDate` form. Relative forms ("2h ago") stay relative where the
+interface reads a freshness interval. Recorded date columns can arrive
+serialized as instants at UTC midnight; they keep their recorded calendar day
+and never shift with the viewer's timezone, and timezone-aware times use
+`formatWorkOsDateTime`. Native `<input type="date">` controls keep the
+operating system's display format, so when a range filter matters the surface
+states the applied range in letter-month form beside the control instead of
+restyling the picker.
+
 ### 9.1 Activity Interval Reviews
 
 A progress prompt may arrive as an Activity Interval Review: a grounded recap

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, FileCheck2, MessageSquareText, Search, ShieldCheck, Users } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
 import { ActivityDetailDrawer, activityRecordFromUpdate, updateText, type ActivityDetailRecord } from "./ActivityDetail";
+import { formatWorkOsFullDate } from "../dateFormat";
 import {
   adminKeys,
   ADMIN_DETAIL_STALE_MS,
@@ -277,7 +278,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
                   {detail.data.schedules.slice(0, 4).map((schedule, index) => (
                     <li key={index}>
                       <span>{String(schedule.start ?? "")}–{String(schedule.end ?? "")}</span>
-                      <small>{String(schedule.timezone ?? "")} · from {String(schedule.effective_from ?? "—")}</small>
+                      <small>{String(schedule.timezone ?? "")} · from {formatWorkOsFullDate(String(schedule.effective_from ?? ""))}</small>
                     </li>
                   ))}
                 </ul>
@@ -298,7 +299,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
                     <tbody>
                       {detail.data.sessions.slice(0, 6).map((session, index) => (
                         <tr key={index} className="static">
-                          <td>{String(session.shift_date ?? "—")}</td>
+                          <td>{formatWorkOsFullDate(String(session.shift_date ?? ""))}</td>
                           <td>{statusLabel(String(session.state ?? "unknown"))}</td>
                           <td className="admin-numeric">{Number(session.observed_seconds ?? 0) ? formatDuration(Number(session.observed_seconds ?? 0)) : "—"}</td>
                           <td className="admin-numeric">{String(session.updates ?? session.update_count ?? "—")}</td>
@@ -343,7 +344,7 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
                 <ul className="admin-rows">
                   {detail.data.reports.slice(0, 6).map((report, index) => (
                     <li key={index}>
-                      <span>{String(report.report_date ?? "Report")}</span>
+                      <span>{formatWorkOsFullDate(String(report.report_date ?? ""), "Report")}</span>
                       <Pill tone={reportTone(String(report.status ?? "draft"))}>{statusLabel(String(report.status ?? "draft"))}</Pill>
                     </li>
                   ))}

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Camera, Check, GitBranch, RefreshCw, ShieldCheck } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
+import { formatWorkOsFullDate } from "../dateFormat";
 import {
   adminKeys,
   ADMIN_STALE_MS,
@@ -22,7 +23,6 @@ import {
   normalizePeople,
   relativeTime,
   requestScreenshotAccess,
-  shortDate,
   statusLabel,
   isoDaysAgo,
   todayIso,
@@ -144,7 +144,7 @@ export default function EvidencePage({ initialTab = "evidence" }: { initialTab?:
       <AdminCard
         icon={Camera}
         title="Record shape"
-        detail={`Evidence by source between ${shortDate(`${from}T12:00:00Z`)} and ${shortDate(`${to}T12:00:00Z`)}`}
+        detail={`Evidence by source between ${formatWorkOsFullDate(from)} and ${formatWorkOsFullDate(to)}`}
       >
         <ShareBars ariaLabel="Evidence items in this range by source" items={sources.map((entry) => ({ label: evidenceSourceLabel(entry.source), value: entry.count }))} />
       </AdminCard>
@@ -234,7 +234,7 @@ export default function EvidencePage({ initialTab = "evidence" }: { initialTab?:
             <div className="admin-groups">
               {grouped.map(([date, rows]) => (
                 <section key={date}>
-                  <h3>{shortDate(`${date}T12:00:00Z`)}<small>{rows.length} item{rows.length === 1 ? "" : "s"}</small></h3>
+                  <h3>{formatWorkOsFullDate(date)}<small>{rows.length} item{rows.length === 1 ? "" : "s"}</small></h3>
                   <ul>
                     {rows.map((row) => (
                       <li key={row.id}>
@@ -298,7 +298,7 @@ export default function EvidencePage({ initialTab = "evidence" }: { initialTab?:
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.title ?? "Evidence"}
-        subtitle={selected ? `${selected.person?.display_name ?? "Unmapped person"} · ${shortDate(`${selected.evidence_date}T12:00:00Z`)}` : undefined}
+        subtitle={selected ? `${selected.person?.display_name ?? "Unmapped person"} · ${formatWorkOsFullDate(selected.evidence_date)}` : undefined}
         width={560}
       >
         {selected ? (

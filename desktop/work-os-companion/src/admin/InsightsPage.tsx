@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, Gauge, RefreshCw, Sparkles, Users } from "luci
 import { KpiCard, PlanReliability, type ReliabilityRow } from "../InsightCharts";
 import type { DeltaStat } from "../insights";
 import { GroupedBars, ShareBars, StackedTimeBars } from "./charts";
+import { formatWorkOsFullDate } from "../dateFormat";
 import { adminKeys, ADMIN_STALE_MS, fetchAdminInsights, formatMinutes, normalizeAdminInsights, relativeTime, shortDate, statusLabel } from "./data";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Avatar, Drawer, Notice, Pill, Segmented, SelectField, Skeleton } from "./ui";
 import type { AdminInsights, AdminInsightPersonRow, AdminInsightRange } from "./types";
@@ -78,7 +79,7 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
       <AdminCard
         icon={Gauge}
         title="Brief"
-        detail={`${shortDate(`${data.from}T12:00:00Z`)} – ${shortDate(`${data.through}T12:00:00Z`)} · generated ${relativeTime(data.freshness.generatedAt)}`}
+        detail={`${formatWorkOsFullDate(data.from)} – ${formatWorkOsFullDate(data.through)} · generated ${relativeTime(data.freshness.generatedAt)}`}
         controls={
           <AdminControls>
             <AdminControlsGroup>
@@ -255,7 +256,7 @@ export default function InsightsPage({ initialPersonId }: { initialPersonId?: st
         open={!!selected}
         onClose={() => setSelectedRow(null)}
         title={selected?.displayName ?? "Person"}
-        subtitle={selected ? `${selected.roleProfile ?? "Unmapped role"} · ${shortDate(`${data.from}T12:00:00Z`)} – ${shortDate(`${data.through}T12:00:00Z`)}` : undefined}
+        subtitle={selected ? `${selected.roleProfile ?? "Unmapped role"} · ${formatWorkOsFullDate(data.from)} – ${formatWorkOsFullDate(data.through)}` : undefined}
         width={520}
       >
         {selected ? (

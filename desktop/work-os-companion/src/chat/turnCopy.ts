@@ -5,6 +5,7 @@
  * is only a task list or a set of action results is still copyable. Everything
  * here is derived from the same data the cards render — nothing is invented. */
 
+import { formatWorkOsFullDate } from "../dateFormat";
 import { isDisplayToolOp, isMutatingToolOp, sameToolCall, type ProposedOperation } from "../interpretation";
 import { taskSelectionFromResult } from "./selection";
 
@@ -48,7 +49,7 @@ function taskLines(result: CopyableTurnResult): string[] {
   const lines = selection.tasks.map((task) => {
     const title = typeof task.title === "string" ? task.title : "Untitled task";
     const state = typeof task.state === "string" ? task.state : view === "Overdue tasks" ? "overdue" : "pending";
-    const due = typeof task.due_date === "string" && task.due_date ? `, due ${task.due_date.slice(0, 10)}` : "";
+    const due = typeof task.due_date === "string" && task.due_date ? `, due ${formatWorkOsFullDate(task.due_date)}` : "";
     return `- ${title} (${state}${due})`;
   });
   return [`${view}:`, ...lines];

@@ -44,6 +44,28 @@ export function formatWorkOsDate(value?: string | null, fallback = "—", refere
   return contextualDate(date, dateOnly ? "UTC" : undefined, referenceDate) ?? fallback;
 }
 
+/** Formats a full Work OS calendar date in the explicit short-month form
+ * ("Oct 16, 2026") used by headers, table cells, records, and schedule lines.
+ * Date-only values and SQL dates serialized as an instant stay on their
+ * recorded calendar day instead of shifting with the viewer's timezone. */
+export function formatWorkOsFullDate(value?: string | null, fallback = "—") {
+  if (!value) return fallback;
+  const dateOnly = dateOnlyValue(value);
+  if (DATE_ONLY_PATTERN.test(value) && !dateOnly) return fallback;
+  const date = dateOnly ?? new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: dateOnly ? "UTC" : undefined,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+  } catch {
+    return fallback;
+  }
+}
+
 /** Formats a timestamp with the shared Work OS date and the employee-local time. */
 export function formatWorkOsDateTime(value?: string | null, timezone?: string, fallback = "—", referenceDate = new Date()) {
   if (!value) return fallback;

@@ -55,7 +55,7 @@ describe("administration activity detail", () => {
     expect(record.detail).toBe("Waiting on staging credentials");
     expect(record.provenance).toBe("employee");
     expect(record.reportId).toBe("r-4");
-    expect(record.facts).toContainEqual({ label: "Workday", value: "2026-10-14" });
+    expect(record.facts).toContainEqual({ label: "Workday", value: "Oct 14, 2026" });
     expect(record.facts).toContainEqual({ label: "Substantive", value: "No — routine check-in" });
   });
 

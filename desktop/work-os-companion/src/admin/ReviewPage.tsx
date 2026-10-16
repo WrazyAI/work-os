@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "lucide-react";
 import { useNotifications } from "../NotificationFlyouts";
+import { formatWorkOsFullDate } from "../dateFormat";
 import {
   adminKeys,
   ADMIN_DETAIL_STALE_MS,
@@ -17,7 +18,6 @@ import {
   normalizeReports,
   relativeTime,
   reportTone,
-  shortDate,
   statusLabel,
   isoDaysAgo,
   todayIso,
@@ -91,11 +91,11 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
   const draft = useMutation({
     mutationFn: () => draftAdminReport(draftPerson, draftDate),
     onSuccess: async (result) => {
-      setReceipt(`A draft for ${shortDate(`${draftDate}T12:00:00Z`)} is ready to review.`);
+      setReceipt(`A draft for ${formatWorkOsFullDate(draftDate)} is ready to review.`);
       await queryClient.invalidateQueries({ queryKey: ["work-os", "admin"] });
       setStatus("all");
       if (result.report?.id) setSelectedId(result.report.id);
-      notifications.success(`A draft for ${shortDate(`${draftDate}T12:00:00Z`)} is ready to review.`, "EOD draft created");
+      notifications.success(`A draft for ${formatWorkOsFullDate(draftDate)} is ready to review.`, "EOD draft created");
     },
   });
 
@@ -109,7 +109,7 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
       <AdminCard
         icon={ScrollText}
         title="Review queue"
-        detail={counts ? `${counts.pending_review} awaiting review · ${counts.draft} draft${counts.draft === 1 ? "" : "s"} · ${counts.approved} approved · ${counts.rejected} returned` : undefined}
+        detail={counts ? `${counts.pending_review} awaiting review · ${counts.draft} draft${counts.draft === 1 ? "" : "s"} · ${counts.approved} approved · ${counts.rejected} returned · ${formatWorkOsFullDate(from)} – ${formatWorkOsFullDate(to)}` : undefined}
         padded={false}
         controls={
           <>
@@ -164,11 +164,11 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
                     <td>
                       <span className="admin-person">
                         <Avatar name={report.person?.display_name ?? "Unmapped"} size={28} />
-                        <span className="min-w-0"><b>{report.person?.display_name ?? "Unmapped person"}</b><small>{report.title || `EOD · ${shortDate(`${report.report_date}T12:00:00Z`)}`}</small></span>
+                        <span className="min-w-0"><b>{report.person?.display_name ?? "Unmapped person"}</b><small>{report.title || `EOD · ${formatWorkOsFullDate(report.report_date)}`}</small></span>
                       </span>
                     </td>
                     <td className="admin-quiet">{eodSnippet(report.submitted_markdown ?? report.markdown) ?? "No facts recorded"}</td>
-                    <td>{shortDate(`${report.report_date}T12:00:00Z`)}</td>
+                    <td>{formatWorkOsFullDate(report.report_date)}</td>
                     <td><Pill tone={reportTone(report.status)}>{statusLabel(report.status)}</Pill></td>
                     <td className="admin-quiet">{report.submitted_at ? relativeTime(report.submitted_at) : "not submitted"}</td>
                   </tr>
@@ -197,7 +197,7 @@ export default function ReviewPage({ initialReportId }: { initialReportId?: stri
         open={!!selected}
         onClose={() => setSelectedId(null)}
         title={selected?.person?.display_name ?? "Report"}
-        subtitle={selected ? `${selected.title || `EOD report · ${shortDate(`${selected.report_date}T12:00:00Z`)}`}${selected.submitted_at ? ` · submitted ${relativeTime(selected.submitted_at)}` : ""}` : undefined}
+        subtitle={selected ? `${selected.title || `EOD report · ${formatWorkOsFullDate(selected.report_date)}`}${selected.submitted_at ? ` · submitted ${relativeTime(selected.submitted_at)}` : ""}` : undefined}
         width={680}
         footer={selected ? (
           <div className="admin-decision">

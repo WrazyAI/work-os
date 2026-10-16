@@ -7,6 +7,7 @@ import {
   MessageSquareText,
   Users,
 } from "lucide-react";
+import { formatWorkOsFullDate } from "../dateFormat";
 import { relativeTime, statusLabel } from "./data";
 import type { AdminOverviewActivity, AdminSection, AdminSectionFocus } from "./types";
 import { AdminButton, Avatar, Drawer, KeyValue, Pill } from "./ui";
@@ -120,7 +121,7 @@ export function activityRecordFromUpdate(
     { label: "Update kind", value: statusLabel(kind) },
     { label: "Substantive", value: substantive ? "Yes — recorded as progress" : "No — routine check-in" },
   ];
-  if (update.shift_date) facts.push({ label: "Workday", value: String(update.shift_date) });
+  if (update.shift_date) facts.push({ label: "Workday", value: formatWorkOsFullDate(update.shift_date) });
   return {
     id: `update:${String(update.id ?? at ?? "record")}`,
     kind: "update",
