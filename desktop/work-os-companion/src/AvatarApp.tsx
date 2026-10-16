@@ -4,7 +4,7 @@ import { getCurrentWindow, currentMonitor, LogicalSize, LogicalPosition } from "
 import { emit, listen } from "./tauriEvents";
 import { RecapPrompter } from "./RecapPrompter";
 import { createRecapSpeechPlayer, type RecapSpeechPlayer, type RecapSpeechSnapshot } from "./recapSpeechPlayer";
-import { DEFAULT_RECAP_VOICE, grownWindow, normalizeRecapVoice, RECAP_BUBBLE_RESTING } from "./recapSpeech";
+import { DEFAULT_RECAP_VOICE, grownWindow, normalizeRecapVoice, RECAP_BUBBLE_RESTING, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { prefersReducedMotion } from "./listShift";
 import { apiRequestAudio } from "./api";
 import { isVoiceEventFor, useVoiceInput, VOICE_HOTKEY_LABEL } from "./chat/voiceInput";
@@ -572,6 +572,15 @@ export default function AvatarApp(): React.ReactElement {
     })();
     return () => { cancelled = true; };
   }, [win, expanded, recapSpeech.status]);
+
+  // Settings lives in the main window; a change there reaches this one live, so
+  // the next read uses the new voice without a restart.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ recapVoice?: unknown }>(RECAP_VOICE_EVENT, (event) => setRecapVoice(normalizeRecapVoice(event.payload?.recapVoice)))
+      .then((fn) => { unlisten = fn; }).catch(() => undefined);
+    return () => unlisten?.();
+  }, []);
 
   // A hidden companion does not read to an empty room.
   useEffect(() => {

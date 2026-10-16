@@ -15,17 +15,26 @@ export interface RecapSpeechLine {
   time: string | null;
 }
 
-/** The voices the app ships. The server's whitelist must match; the server test
- * asserts the two lists agree, and a companion test asserts this list matches
- * the samples in `public/voices`. */
+/** The voices the app ships.
+ *
+ * `id` is what the provider answers to; `label` is the only name the employee
+ * ever sees, and it names the delivery rather than the vendor's character, so
+ * the picker reads as a choice about how Otto talks to you. The samples are the
+ * shipped clips (see `public/voices/README.md`), which makes auditioning free
+ * and independent of the network. The server's whitelist must match these ids;
+ * a companion test asserts the shipped files match these labels. */
 export const RECAP_VOICE_OPTIONS = [
-  { id: "Kore", label: "Kore", sample: "/voices/kore.mp3" },
-  { id: "Puck", label: "Puck", sample: "/voices/puck.mp3" },
-  { id: "Aoede", label: "Aoede", sample: "/voices/aoede.mp3" },
-  { id: "Charon", label: "Charon", sample: "/voices/charon.mp3" },
+  { id: "Kore", label: "Warm", sample: "/voices/warm.mp3" },
+  { id: "Charon", label: "Calm", sample: "/voices/calm.mp3" },
+  { id: "Leda", label: "Bright", sample: "/voices/bright.mp3" },
+  { id: "Iapetus", label: "Deep", sample: "/voices/deep.mp3" },
 ] as const;
 
 export const DEFAULT_RECAP_VOICE: string = RECAP_VOICE_OPTIONS[0].id;
+
+/** Fired when the employee picks a voice in Settings; the floating companion
+ * listens so the next read uses it without a restart. */
+export const RECAP_VOICE_EVENT = "work-os://recap-voice-changed";
 
 export function normalizeRecapVoice(value: unknown): string {
   const candidate = typeof value === "string" ? value.trim() : "";

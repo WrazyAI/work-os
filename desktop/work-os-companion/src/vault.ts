@@ -279,13 +279,14 @@ export const secureState = {
       return fallback;
     }
   },
-  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize }) => {
+  saveSettings: async (settings: { apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: TextSize; mascotSize?: MascotSize; recapVoice?: string }) => {
     if (!isTauri()) return;
-    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown }>("settings");
+    const current = await get<{ apiBase?: string; autoCheckUpdates?: boolean; voiceHotkey?: boolean; textSize?: unknown; mascotSize?: unknown; recapVoice?: unknown }>("settings");
     await set("settings", {
       apiBase: httpsOrigin(settings.apiBase ?? current?.apiBase ?? defaultApiBase),
       autoCheckUpdates: settings.autoCheckUpdates ?? current?.autoCheckUpdates !== false,
       voiceHotkey: settings.voiceHotkey ?? current?.voiceHotkey !== false,
+      recapVoice: settings.recapVoice ?? (typeof current?.recapVoice === "string" ? current.recapVoice : undefined),
       ...appearanceFromChange(normalizeAppearance(current), settings),
     });
   },

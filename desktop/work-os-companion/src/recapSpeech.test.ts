@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RECAP_VOICE,
@@ -17,6 +18,20 @@ const lines = (count: number): RecapSpeechLine[] =>
   Array.from({ length: count }, (_, index) => ({ text: `7:0${index} PM Reviewed item ${index}`, time: `7:0${index} PM` }));
 
 describe("recap voice settings", () => {
+  it("names the voices for how Otto talks, and ships a sample for each", () => {
+    expect(RECAP_VOICE_OPTIONS.map((option) => option.label)).toEqual(["Warm", "Calm", "Bright", "Deep"]);
+    expect(RECAP_VOICE_OPTIONS.map((option) => option.id)).toEqual(["Kore", "Charon", "Leda", "Iapetus"]);
+    for (const option of RECAP_VOICE_OPTIONS) {
+      const file = option.sample.replace("/voices/", "");
+      expect(existsSync(new URL(`../public/voices/${file}`, import.meta.url))).toBe(true);
+      // No vendor name ever reaches the screen.
+      expect(option.label).not.toMatch(/Kore|Charon|Leda|Iapetus|Gemini|Google/i);
+    }
+    // The server's whitelist is exactly these ids, in these terms.
+    const server = readFileSync(new URL("../../../src/lib/work-os-recap-speech.ts", import.meta.url), "utf8");
+    expect(server).toContain(`export const RECAP_VOICES = [${RECAP_VOICE_OPTIONS.map((option) => `"${option.id}"`).join(", ")}] as const;`);
+  });
+
   it("keeps the shipped voices and falls back to the first", () => {
     expect(RECAP_VOICE_OPTIONS.length).toBeGreaterThanOrEqual(3);
     for (const option of RECAP_VOICE_OPTIONS) {

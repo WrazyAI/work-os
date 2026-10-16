@@ -60,10 +60,11 @@ export function buildRecapSpeechLines(interval: RecapSpeechSource): RecapSpeechL
  * and no word timings, which is why the client's prompter is driven by the
  * audio's own clock rather than by anything here. */
 
-/** The voices the app offers. Task 13 of the plan replaces this list with the
- * operator's pick from generated samples; the server whitelist and the client's
- * picker must always agree, and a test asserts they do. */
-export const RECAP_VOICES = ["Kore", "Puck", "Aoede", "Charon"] as const;
+/** The provider voices the app offers: the operator's pick, by ear, from six
+ * candidates. The companion's picker shows these under its own delivery names
+ * ("Warm", "Calm", …); this list is the whitelist, and a test asserts the two
+ * agree so a label can never drift from the voice it plays. */
+export const RECAP_VOICES = ["Kore", "Charon", "Leda", "Iapetus"] as const;
 export const DEFAULT_RECAP_VOICE: string = RECAP_VOICES[0];
 
 /** Delivery, never transcript: the words stay exactly the recap's own. */
