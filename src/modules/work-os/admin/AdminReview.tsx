@@ -10,14 +10,12 @@ import {
   ChevronDown,
   FileCheck2,
   FilePlus2,
-  MessageSquareText,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { formatWorkOsDate } from "@/modules/work-os/date-format";
 import { embeddedRow } from "@/lib/work-os-embed-shape";
 import { adminFetch, adminKeys, type ActivityIntervalView, type EvidenceRow, type ReportsResponse, type WorkOsReportRow } from "./api";
-import { StackedCountBars } from "./charts";
 import { eodMetricFacts, eodSnippet, parseEodMarkdown } from "./eod";
 import {
   AdminCard,
@@ -25,12 +23,11 @@ import {
   Drawer,
   EmptyState,
   Notice,
-  ProvenanceChip,
   SectionHeading,
   SegmentedControl,
   SelectField,
   Skeleton,
-  StatusPill,
+  StateMark,
   TextField,
   cx,
   relativeTime,
@@ -117,27 +114,8 @@ export default function AdminReviewPage() {
 
   return (
     <div className="grid gap-5">
-      {/* Submission cadence — lead with the two-week picture, then the queue */}
-      {(reports.data?.series ?? []).length ? (
-        <AdminCard>
-          <SectionHeading
-            icon={FileCheck2}
-            title="Submission cadence"
-            detail="Reports submitted per day over the last 14 days, split by teammate."
-          />
-          <StackedCountBars
-            ariaLabel="Reports submitted per day over the last 14 days, split by teammate"
-            data={(reports.data?.series ?? []).map((point) => ({
-              date: point.date,
-              people: (point.people ?? []).map((person) => ({ personId: person.personId, name: person.name, submitted: person.submitted })),
-            }))}
-          />
-          <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Drafts are counted in the tabs below; the chart stacks each day&apos;s submitted reports by teammate.</p>
-        </AdminCard>
-      ) : null}
-
       <AdminCard padded={false}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border-subtle)" }}>
           <SegmentedControl<StatusFilter>
             ariaLabel="Report status"
             value={status}
@@ -161,7 +139,7 @@ export default function AdminReviewPage() {
         </div>
         {reports.error ? <div className="px-5 py-4"><Notice tone="err">{(reports.error as Error).message}</Notice></div> : null}
 
-        {/* Queue — full width; a report opens in the side panel */}
+        {/* Queue — the page's one object; a report opens in the side panel */}
         <div>
           {reports.isLoading ? (
             <div className="grid gap-2 p-4">
@@ -186,9 +164,9 @@ export default function AdminReviewPage() {
                           <span className="truncate text-[13px] font-semibold text-[var(--text-primary)]">{report.person?.display_name ?? "Unmapped person"}</span>
                           <span className="shrink-0 text-[11.5px] text-[var(--text-tertiary)]">{formatWorkOsDate(report.report_date)}</span>
                         </span>
-                        <span className="flex shrink-0 items-center gap-2.5">
+                        <span className="flex shrink-0 items-center gap-3">
                           <span className="text-[11px] text-[var(--text-tertiary)]">{report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}</span>
-                          <StatusPill tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusPill>
+                          <StateMark tone={statusTone(report.status)}>{statusLabel(report.status)}</StateMark>
                         </span>
                       </div>
                       {snippet ? <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-4 text-[var(--text-secondary)]">{snippet}</p> : null}
@@ -277,14 +255,12 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
     <div className="grid gap-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold text-[var(--text-primary)]">{report.person?.display_name ?? "Unmapped person"}</h2>
-          <p className="mt-0.5 text-[12px] text-[var(--text-tertiary)]">
-            {report.title || `EOD report · ${formatWorkOsDate(report.report_date)}`}
-            {report.submitted_at ? ` · submitted ${relativeTime(report.submitted_at)}` : ""}
+          <p className="text-[13px] font-semibold text-[var(--text-primary)]">{report.title || `EOD report · ${formatWorkOsDate(report.report_date)}`}</p>
+          <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">
+            {report.submitted_at ? `submitted ${relativeTime(report.submitted_at)}` : "not submitted"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusPill tone={statusTone(report.status)}>{statusLabel(report.status)}</StatusPill>
           <Button
             variant="secondary"
             size="sm"
@@ -309,21 +285,26 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
       {receipt ? <Notice tone="ok">{receipt}</Notice> : null}
 
       {metricFacts.length ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-[var(--text-secondary)]">
           {metricFacts.map((fact) => (
-            <StatusPill key={fact.label} tone="neutral">{fact.label}: {fact.value}</StatusPill>
+            <span key={fact.label}>
+              {fact.label} <strong className="font-semibold tabular-nums text-[var(--text-primary)]">{fact.value}</strong>
+            </span>
           ))}
-          <StatusPill tone="observed"><Camera size={11} aria-hidden /> {evidence.data?.evidence.length ?? 0} evidence items</StatusPill>
+          <StateMark tone="observed">
+            <Camera size={11} className="shrink-0" aria-hidden /> {evidence.data?.evidence.length ?? 0} evidence items
+          </StateMark>
         </div>
       ) : null}
 
+      {/* The report as a document: meta, sections, disclaimer */}
       <AdminCard>
         <div className="grid gap-5">
           {document.meta.length ? (
-            <dl className="grid gap-2 sm:grid-cols-2">
+            <dl className="grid gap-x-5 gap-y-2.5 sm:grid-cols-2">
               {document.meta.map((meta) => (
-                <div key={meta.label} className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">{meta.label}</dt>
+                <div key={meta.label} className="min-w-0">
+                  <dt className="text-[10.5px] text-[var(--text-tertiary)]">{meta.label}</dt>
                   <dd className="mt-0.5 text-[12.5px] text-[var(--text-primary)]">{meta.value}</dd>
                 </div>
               ))}
@@ -331,7 +312,9 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
           ) : null}
           {document.sections.map((section) => (
             <section key={section.heading} className="grid gap-2">
-              <h3 className={cx("text-[12px] font-semibold uppercase tracking-[0.08em]", /activity context/i.test(section.heading) ? "text-[var(--status-observed)]" : "text-[var(--text-tertiary)]")}>
+              <h3 className={cx("text-[11.5px] font-semibold", /activity context/i.test(section.heading) ? "" : "text-[var(--text-secondary)]")}
+                style={/activity context/i.test(section.heading) ? { color: "var(--status-observed)" } : undefined}
+              >
                 {section.heading}
               </h3>
               <ul className="grid gap-1.5">
@@ -340,7 +323,7 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
                     key={`${section.heading}-${index}`}
                     className={cx("text-[13px] leading-6", line.kind === "note" ? "text-[var(--text-tertiary)]" : "text-[var(--text-secondary)]")}
                   >
-                    {line.kind === "bullet" ? <span className="mr-2 inline-block size-1.5 rounded-full align-middle" style={{ background: "var(--accent)" }} aria-hidden /> : null}
+                    {line.kind === "bullet" ? <span className="mr-2 inline-block size-1.5 rounded-full align-middle" style={{ background: "var(--text-tertiary)" }} aria-hidden /> : null}
                     {line.text}
                   </li>
                 ))}
@@ -356,19 +339,19 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         {evidence.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : evidence.data?.evidence.length ? (
-          <ul className="grid gap-2">
+          <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {evidence.data.evidence.map((item) => {
               const event = item.event ?? null;
               const screenshot = embeddedRow<Record<string, any>>(event?.screenshot);
               return (
-                <li key={item.id} className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--bg-secondary)" }}>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                <li key={item.id} className="py-3 first:pt-1 last:pb-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <span className="text-[12.5px] font-semibold text-[var(--text-primary)]">{item.title}</span>
-                    <span className="flex items-center gap-1.5">
-                      {event?.evidence_class ? <ProvenanceChip>{statusLabel(event.evidence_class)}</ProvenanceChip> : null}
-                      <ProvenanceChip>{item.source === "loom" ? "Loom recording" : item.source}</ProvenanceChip>
-                      {event?.correction_status && event.correction_status !== "original" ? <StatusPill tone="warn">{statusLabel(event.correction_status)}</StatusPill> : null}
-                      {screenshot && !screenshot.deleted_at ? <StatusPill tone="observed">Screenshot retained</StatusPill> : null}
+                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
+                      {event?.evidence_class ? <span>{statusLabel(event.evidence_class)}</span> : null}
+                      <span>{item.source === "loom" ? "Loom recording" : item.source}</span>
+                      {event?.correction_status && event.correction_status !== "original" ? <StateMark tone="warn">{statusLabel(event.correction_status)}</StateMark> : null}
+                      {screenshot && !screenshot.deleted_at ? <StateMark tone="observed">Screenshot retained</StateMark> : null}
                     </span>
                   </div>
                   {item.summary ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{item.summary}</p> : null}
@@ -386,23 +369,23 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
         {intervals.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : intervals.data?.intervals.length ? (
-          <ul className="grid gap-3">
+          <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {intervals.data.intervals.map((interval) => (
-              <li key={interval.id} className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border-subtle)", background: "var(--status-observed-soft)" }}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--status-observed)]">{interval.label}</span>
-                  <span className="flex items-center gap-1.5">
-                    <ProvenanceChip>
+              <li key={interval.id} className="py-3 first:pt-1 last:pb-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="text-[11.5px] font-semibold" style={{ color: "var(--status-observed)" }}>{interval.label}</span>
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[var(--text-tertiary)]">
+                    <span>
                       {interval.reviewStatus === "confirmed" ? "Employee confirmed" : interval.reviewStatus === "amended" ? "Employee amended" : "AI-inferred, not reviewed"}
-                    </ProvenanceChip>
-                    <ProvenanceChip>{interval.evidenceCount} frames</ProvenanceChip>
+                    </span>
+                    <span>{interval.evidenceCount} frames</span>
                   </span>
                 </div>
                 {interval.headline ? <p className="mt-1.5 text-[13px] font-semibold text-[var(--text-primary)]">{interval.headline}</p> : null}
                 {interval.detail ? <p className="mt-1 text-[12px] leading-5 text-[var(--text-secondary)]">{interval.detail}</p> : null}
                 {interval.evidence.length ? (
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-[11px] font-semibold text-[var(--status-observed)]">
+                    <summary className="cursor-pointer text-[11px] font-semibold" style={{ color: "var(--status-observed)" }}>
                       Evidence · {interval.evidence.length} frame{interval.evidence.length === 1 ? "" : "s"}
                     </summary>
                     <ul className="mt-1.5 grid gap-1">
@@ -427,22 +410,21 @@ function ReviewDetail({ report }: { report: WorkOsReportRow }) {
 
       <AdminCard>
         <SectionHeading icon={ShieldCheck} title="Decision record" detail="Notes and an optional manager version are saved with the decision." />
-        <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+        <label className="grid gap-1.5 text-[11.5px] font-medium text-[var(--text-secondary)]">
           Manager notes
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             rows={3}
             placeholder="Context for the decision, follow-ups, or coaching notes."
-            className="w-full resize-y rounded-[10px] border bg-transparent px-3 py-2 text-[12.5px] font-normal normal-case tracking-normal text-[var(--text-primary)] outline-none"
+            className="w-full resize-y rounded-[10px] border bg-transparent px-3 py-2 text-[12.5px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
             style={{ borderColor: "var(--border)" }}
           />
         </label>
         <button
           type="button"
           onClick={() => setEditorOpen((value) => !value)}
-          className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold"
-          style={{ color: "var(--accent)" }}
+          className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
           aria-expanded={editorOpen}
         >
           <ChevronDown size={13} className={cx("transition", editorOpen && "rotate-180")} aria-hidden />
