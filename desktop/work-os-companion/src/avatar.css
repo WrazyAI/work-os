@@ -112,6 +112,62 @@ body.avatar-window {
 }
 .avatar-drag-surface:active { cursor: grabbing; }
 
+/* The teleprompter: while Otto reads a recap, the bubble's preview lines become
+   a window the words slide through. Its palette is the bubble's own dark
+   surface (light ink, cream waveform, signal-lime progress), never the light
+   workspace's tokens, which would be invisible here. */
+.recap-prompter {
+  position: relative;
+  margin: 2px 0 0;
+}
+.recap-prompter-window {
+  position: relative;
+  height: 96px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 22%, #000 78%, transparent 100%);
+}
+.recap-prompter-track {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.recap-prompter-line {
+  margin: 0;
+  color: #8e9686;
+  font: 600 12.5px/1.35 Manrope, Inter, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  letter-spacing: -0.005em;
+}
+.recap-prompter-line[data-active="true"] {
+  color: #f4f5ee;
+}
+.recap-prompter-line time {
+  margin-right: 6px;
+  color: #8e9686;
+  font-size: 11px;
+  font-weight: 700;
+}
+.recap-prompter-progress {
+  position: relative;
+  display: block;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: rgba(244, 245, 238, 0.16);
+  overflow: hidden;
+}
+.recap-prompter-progress i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: 0;
+  background: #d5ff54;
+}
+.recap-prompter[data-reduced="true"] .recap-prompter-track {
+  transition: none;
+}
+
 .avatar-prompt-bubble {
   position: absolute;
   top: 2px;
