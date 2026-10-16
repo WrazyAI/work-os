@@ -113,11 +113,12 @@ trusting — and the card underneath remains the audit record.
 2. **The route returns the words and the audio together**:
    `POST /api/work-os/voice/recap` with the recap's id, not arbitrary text. The
    server assembles the script from the stored recap, synthesises, caches per
-   (recap id, voice), and answers `{ lines, audio (base64 or a short-lived URL),
-   durationMs, voice }`. This makes the “one text” rule enforceable, keeps the
-   billed input bounded, and guarantees the prompter shows exactly what is said.
-   Failure copy mirrors the STT route (`not_configured`, `provider_error`,
-   `timeout`, `too_long`), each with the recap's own retry route.
+   (recap id, revision, voice), and answers `{ lines, audio (base64 or a
+   short-lived URL), durationMs, voice }`. This makes the “one text” rule
+   enforceable, keeps the billed input bounded, and guarantees the prompter shows
+   exactly what is said. Failure copy mirrors the STT route (`not_configured`,
+   `provider_error`, `timeout`, `too_long`), each with the recap's own retry
+   route.
 3. **Deterministic script assembly** (no second model): the lines are the
    recap's activities in order, joined with light glue (“First… then… last…”),
    boundary times only where a gap matters, never the flow chips, never the
@@ -137,12 +138,35 @@ trusting — and the card underneath remains the audit record.
    either cancels the other, and the mic chip shows only one meaning at a time.
 8. **Caching**: server-side per (recap, voice) so a replay is free and instant;
    the client keeps the last clip in memory for the current session.
+9. **What is spoken**: the lead sentence (`detail`) followed by the `activities[]`
+   lines, in order — the words the card shows in its body. The flow chips, the
+   evidence counts, the screenshots, the gap notes and the GitHub
+   recorded-activity list are **not** spoken; they stay disclosures on the card.
+   If GitHub facts are ever added to a read, a `triggered` item may never be
+   spoken as the employee's own action (§9 provenance).
+10. **Surfaces**: this ships in the floating companion — the collapsed bubble's
+    Listen pill and, once expanded, the composer's mic chip. The main window's
+    recap cards are deliberately out of scope; the same route can serve them
+    later. Playback has one owner per companion window and **survives** expanding
+    and collapsing, so looking at the card while it is read never kills the read.
+    Tapping the mic chip while Otto reads stops it; when idle the chip records as
+    it does today.
+11. **Revision-aware clips**: recaps can be revised while still unreviewed
+    (`ensureActivityInterval`), so a clip keyed only by id could speak words the
+    card no longer shows — the drift this design calls its worst failure. The
+    cache key is therefore (recap id, revision, voice); the client sends the
+    revision it rendered, and on mismatch the route answers with the current
+    script and the companion refreshes the card before playing, so what is
+    heard, shown and stored never diverge.
 
 ## How it works
 
 - **Server**: new route + a small `work-os-recap-speech.ts` module (script
   assembly + provider call + cache). Same auth shape as the transcribe route
-  (`requireWorkOsAccess`, `requirePerson`, feature flag), same server-only key.
+  (`requireWorkOsAccess`, `requirePerson`), same server-only key. **Which
+  feature flag gates it is the open question below** — listening is a new
+  charge on the organisation's fal account, so it is the operator's call whether
+  it rides `voice_input` or gets its own opt-in.
 - **Companion**: a playback controller (one audio element, one owner), the
   prompter component, the Otto speaking animation, the dots on the bubble and the
   mic chip, and the settings row for the voice.
@@ -165,8 +189,12 @@ trusting — and the card underneath remains the audit record.
   the card shows; plus the companion's own macOS/Windows startup gate.
 - **The operator's test**: press Listen on a real recap and confirm by ear.
 
-## Open items for the plan
+## Open items
 
+- **The operator's call**: does recap listening ride the existing `voice_input`
+  flag (one switch; every org that has voice input starts paying for text to
+  speech) or get its own opt-in flag (a second switch, and a rollout order
+  between the web deploy and the companion release)?
 - The exact three or four voices (samples generated, the operator picks).
 - Growth pixel math per text size / mascot size (both are accessibility
   settings, so the bubble's resting and grown heights differ).
