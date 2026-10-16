@@ -264,7 +264,7 @@ export default function EmployeeInsights() {
             <div className="px-5 py-4">
               <DayBars points={series} />
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-[var(--text-tertiary)]">
-                <span>Peak day: {summary.peak ? `${summary.peak.label} · ${summary.peak.observedMinutes} min observed` : "—"}</span>
+                <span>Most observed day: {summary.peak ? `${summary.peak.label} · ${summary.peak.observedMinutes} min observed` : "—"}</span>
                 <span>Recorded days: {summary.recordedDays}</span>
                 <span>Average plan completion: {summary.averageCompletionPercent != null ? `${summary.averageCompletionPercent}%` : "—"}</span>
               </div>
