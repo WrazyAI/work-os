@@ -832,3 +832,8 @@ assert.equal(
 );
 assert.match(read("src-tauri/Cargo.toml"), new RegExp(`^version = "${companionPackage.version}"$`, "m"));
 assert.match(read("src-tauri/tauri.conf.json"), new RegExp(`"version": "${companionPackage.version}"`));
+// package-lock.json drifted silently across two releases before this guard:
+// both its root version and the "" package entry must track package.json.
+const companionLockFile = JSON.parse(read("package-lock.json"));
+assert.equal(companionLockFile.version, companionPackage.version, "package-lock.json's version must match package.json");
+assert.equal(companionLockFile.packages[""].version, companionPackage.version, "package-lock.json's root package version must match package.json");
