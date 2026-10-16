@@ -119,15 +119,48 @@ describe("administration task table sorting affordances", () => {
     expect(thFor(head, "Task")).toContain("lucide-chevrons-up-down");
   });
 
-  it("keeps the record in default recency order until a column is activated", () => {
+  it("keeps the record in the default newest-created order until a column is activated", () => {
     const markup = renderPage();
     const body = markup.slice(markup.indexOf("<tbody>"), markup.indexOf("</tbody>"));
     const titles = [...body.matchAll(/<b[^>]*>([^<]+)<\/b>/g)].map((match) => match[1]);
-    expect(titles.slice(0, 3)).toEqual([
-      "Retry handling for failed billing webhooks",
-      "Settings information architecture",
+    // Newest created first — matching the Created column the operator reads —
+    // with the one row that records no created date last.
+    expect(titles).toEqual([
+      "Quarterly retention policy review",
+      "Vendor comparison matrix",
+      "Accessibility pass on the composer",
+      "Design review for the admin surface",
+      "Migration dry-run script",
       "Search indexing backfill",
+      "Settings information architecture",
+      "Retry handling for failed billing webhooks",
+      "Deployment runbook for staging",
     ]);
+  });
+});
+
+describe("administration task controls band", () => {
+  it("keeps the views, search, both record filters, and Add task on one compact controls row", () => {
+    const markup = renderPage();
+    const band = markup.slice(markup.indexOf("admin-card-controls"), markup.indexOf("admin-card-body"));
+    // One controls row, not two: the tabs/search row and the selects/action row
+    // collapsed into a single band (design.md §8.2, §16.2).
+    expect((band.match(/class="admin-controls(?: admin-task-controls)?"/g) ?? []).length).toBe(1);
+    const groups = [...band.matchAll(/class="admin-controls-group( is-end)?"/g)].map((match) => match[1] ?? "");
+    expect(groups).toEqual(["", "", "", " is-end"]);
+    // Reading order: views, search, person and project filters, then the action.
+    const needles = ["admin-seg", "admin-search", 'aria-label="Filter by person"', 'aria-label="Filter by project"', "Add task"];
+    const positions = needles.map((needle) => band.indexOf(needle));
+    for (const [index, position] of positions.entries()) expect(position, needles[index]).toBeGreaterThan(-1);
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    // The trailing group owns the primary Add task action and is marked `end`
+    // so it keeps the row's right edge while there is room.
+    const endGroup = band.slice(band.lastIndexOf('class="admin-controls-group is-end"'));
+    expect(endGroup).toContain("Add task");
+    expect(endGroup).toContain("admin-button primary");
+    // The card title row carries no controls: the first control follows the
+    // title's detail line.
+    expect(markup.indexOf("admin-card-controls")).toBeGreaterThan(markup.indexOf("admin-card-title"));
   });
 });
 

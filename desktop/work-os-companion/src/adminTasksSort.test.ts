@@ -18,14 +18,56 @@ const asc = (key: TaskSortState["key"]): TaskSortState => ({ key, direction: "as
 const desc = (key: TaskSortState["key"]): TaskSortState => ({ key, direction: "desc" });
 
 describe("administration task ordering", () => {
-  it("opens in recency order: most recently updated first, missing timestamps last", () => {
+  it("opens newest created first — the created date the row shows — with the updated stamp as the tiebreak", () => {
     const rows = [
-      row("t-old", { title: "Old", updated_at: "2026-10-10T09:00:00.000Z" }),
-      row("t-new-b", { title: "Beta", updated_at: "2026-10-15T11:00:00.000Z" }),
-      row("t-none", { title: "Undated", updated_at: null }),
-      row("t-new-a", { title: "Alpha", updated_at: "2026-10-15T11:00:00.000Z" }),
+      row("t-old-created", { title: "Old record", provider_created_at: "2026-09-01T09:00:00.000Z", updated_at: "2026-10-16T09:00:00.000Z" }),
+      row("t-new-created", { title: "New record", created_at: "2026-10-15T09:00:00.000Z", updated_at: "2026-10-15T09:00:00.000Z" }),
+      row("t-mid-created", { title: "Mid record", provider_created_at: "2026-10-10T09:00:00.000Z", updated_at: "2026-10-16T09:30:00.000Z" }),
     ];
-    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["Alpha", "Beta", "Old", "Undated"]);
+    // The updated stamps contradict the created order; created still leads.
+    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["New record", "Mid record", "Old record"]);
+  });
+
+  it("breaks a created-date tie by the updated stamp, newest first", () => {
+    const created = "2026-10-10T08:00:00.000Z";
+    const rows = [
+      row("t-b", { title: "Beta", provider_created_at: created, updated_at: "2026-10-11T10:00:00.000Z" }),
+      row("t-a", { title: "Alpha", provider_created_at: created, updated_at: "2026-10-15T10:00:00.000Z" }),
+      row("t-c", { title: "Gamma", provider_created_at: created, updated_at: null }),
+    ];
+    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  it("falls through to the updated stamp when a row records no created date, keeping undated rows last", () => {
+    const rows = [
+      row("t-undated-new", { title: "Undated new", updated_at: "2026-10-15T10:00:00.000Z" }),
+      row("t-undated-old", { title: "Undated old", updated_at: "2026-10-02T10:00:00.000Z" }),
+      row("t-created-old", { title: "Created old", created_at: "2026-10-01T10:00:00.000Z", updated_at: "2026-10-16T10:00:00.000Z" }),
+    ];
+    // A present created date always leads a missing one; the undated pair
+    // then keeps its own newest-updated order.
+    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["Created old", "Undated new", "Undated old"]);
+  });
+
+  it("falls through to the effective due date when created and updated both tie, deriving the default", () => {
+    const stamp = "2026-10-10T08:00:00.000Z";
+    const rows = [
+      row("t-due-late", { title: "Due late", created_at: stamp, updated_at: stamp, due_date: "2026-10-20" }),
+      row("t-due-early", { title: "Due early", created_at: stamp, updated_at: stamp, due_date: "2026-10-05" }),
+      row("t-due-derived", { title: "Due derived", created_at: stamp, updated_at: stamp, due_date: null }),
+    ];
+    // The derived due date reads created + 1 day (2026-10-11), between the two.
+    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["Due late", "Due derived", "Due early"]);
+  });
+
+  it("orders purely by title then id when no row records any date", () => {
+    const rows = [
+      row("t-2", { title: "beta" }),
+      row("t-1", { title: "Alpha" }),
+      row("t-3", { title: null, name: "cherry" }),
+      row("t-4", { title: null, name: null }),
+    ];
+    expect(labels(sortTaskRows(rows, null, TODAY))).toEqual(["Alpha", "beta", "cherry", ""]);
   });
 
   it("breaks equal keys by title A→Z and then id, so the order never jitters", () => {

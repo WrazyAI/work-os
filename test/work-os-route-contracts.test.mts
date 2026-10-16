@@ -661,6 +661,12 @@ test("admin task routes only select columns that exist in the migration DDL", as
   assert.ok(selectSpecs(list, "work_tasks").length >= 1, "the admin task list counts work_tasks rows");
   for (const spec of selectSpecs(list, "work_tasks")) assertSelectColumnsExist(spec, "work_tasks", tables, "tasks");
   for (const spec of selectSpecs(list, "work_task_day_events")) assertSelectColumnsExist(spec, "work_task_day_events", tables, "tasks");
+  // The list rows come from the shared lib query; it must keep the wildcard
+  // select so every created/updated stamp reaches the companion's default
+  // newest-created ordering, which falls back through updated and due when a
+  // stamp is absent or ties.
+  const lib = await source("src/lib/work-os-tasks.ts");
+  assert.match(lib, /\.from\("work_tasks"\)\s*\.select\("\*/, "the shared task list selects every work_tasks column");
   // A guard on the guard: the DDL parser must actually see the title column.
   assert.ok(tables.get("work_tasks")?.has("title"), "work_tasks DDL parsed with its title column");
   assert.ok(!tables.get("work_tasks")?.has("name"), "work_tasks has no name column");

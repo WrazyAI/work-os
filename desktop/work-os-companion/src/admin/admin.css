@@ -557,6 +557,19 @@ body:has(.admin-workspace) .notifications-card {
   }
 }
 
+/* The task record's single compact controls row wraps below the compact
+   desktop class; once it wraps, every control keeps a 40px target (design.md
+   §11, §12). Scoped to that row so other sections keep their own band
+   breakpoints. */
+@media (max-width: 720px) {
+  .admin-task-controls .admin-seg button,
+  .admin-task-controls .admin-search,
+  .admin-task-controls .admin-field select,
+  .admin-task-controls .admin-button {
+    min-height: 40px;
+  }
+}
+
 /* --- Compact date-range control (EOD Review) ------------------------------
    One button names the current report range in letter months and expands a
    small popup with the native From/To pickers. The popup anchors under the

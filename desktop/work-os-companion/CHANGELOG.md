@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- The administration task list now opens newest-created first, and its filters and Add task button share one compact row.
+
 ## 0.4.58 — 2026-10-16
 
 - EOD Review shows the newest reports first, with a compact date-range button and the people filter on the same line as the tabs.

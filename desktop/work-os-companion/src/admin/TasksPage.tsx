@@ -27,15 +27,19 @@ import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Noti
 type TaskFilter = "open" | "completed" | "all";
 
 /* --- Task ordering ------------------------------------------------------
- * The organization task record opens most-recently-updated first, and every
- * labeled column sorts the fetched list in place: the first activation applies
- * the column's natural direction, a second activation reverses it, and another
- * column starts its own natural order. Missing values stay last in both
- * directions, and ties fall back to title A→Z then id so equal keys never
- * jitter. Status ranks by attention (Overdue → Open → Done) exactly as the
- * pill reads the recorded completion flag; a row whose record states no flag
- * claims no rank and stays last. Pure functions, exported for the comparator
- * tests (design.md §16.2 sortable tables). */
+ * The organization task record opens newest-created first — the created date
+ * the row shows, provider stamp first — with the most recently updated row as
+ * the tiebreak, then the effective due date, so the default order always
+ * matches the Created column the operator reads even when every updated
+ * timestamp ties or is absent. Every labeled column sorts the fetched list in
+ * place: the first activation applies the column's natural direction, a
+ * second activation reverses it, and another column starts its own natural
+ * order. Missing values stay last in both directions, and ties fall back to
+ * title A→Z then id so equal keys never jitter. Status ranks by attention
+ * (Overdue → Open → Done) exactly as the pill reads the recorded completion
+ * flag; a row whose record states no flag claims no rank and stays last. Pure
+ * functions, exported for the comparator tests (design.md §16.2 sortable
+ * tables). */
 
 export type TaskSortKey = "task" | "assignees" | "created" | "due" | "status";
 export type TaskSortDirection = "asc" | "desc";
@@ -150,23 +154,30 @@ function compareTiebreak(a: AdminTaskRow, b: AdminTaskRow) {
     || compareNullable(trimmedText(a.id) || null, trimmedText(b.id) || null, 1, compareText);
 }
 
-/** `sort` null keeps the record's default recency order (most recently updated
- * first, missing timestamps last); `today` is the caller's workday for the
+/** `sort` null keeps the record's default order: newest created first (the
+ * provider stamp, then the local record — the same date the row shows),
+ * most recently updated as the tiebreak, then the effective due date; missing
+ * values stay last in every step. `today` is the caller's workday for the
  * Status ranks. Created and Due read the date helpers above, so a derived due
  * date orders exactly like a recorded one. */
 export function compareAdminTasks(a: AdminTaskRow, b: AdminTaskRow, sort: TaskSortState | null, today = todayIso()) {
-  const direction: 1 | -1 = sort?.direction === "desc" ? -1 : 1;
-  const primary = !sort
-    ? compareNullable(updatedValue(a), updatedValue(b), -1, (left, right) => left - right)
-    : sort.key === "task"
-      ? compareNullable(taskLabel(a), taskLabel(b), direction, compareText)
-      : sort.key === "assignees"
-        ? compareNullable(assigneeLabel(a), assigneeLabel(b), direction, compareText)
-        : sort.key === "created"
-          ? compareNullable(dayValue(taskCreatedDate(a)), dayValue(taskCreatedDate(b)), direction, (left, right) => left - right)
-          : sort.key === "due"
-            ? compareNullable(dayValue(taskEffectiveDueDate(a)), dayValue(taskEffectiveDueDate(b)), direction, (left, right) => left - right)
-            : compareNullable(statusRank(a, today), statusRank(b, today), direction, (left, right) => left - right);
+  const numeric = (left: number, right: number) => left - right;
+  if (!sort) {
+    return compareNullable(dayValue(taskCreatedDate(a)), dayValue(taskCreatedDate(b)), -1, numeric)
+      || compareNullable(updatedValue(a), updatedValue(b), -1, numeric)
+      || compareNullable(dayValue(taskEffectiveDueDate(a)), dayValue(taskEffectiveDueDate(b)), -1, numeric)
+      || compareTiebreak(a, b);
+  }
+  const direction: 1 | -1 = sort.direction === "desc" ? -1 : 1;
+  const primary = sort.key === "task"
+    ? compareNullable(taskLabel(a), taskLabel(b), direction, compareText)
+    : sort.key === "assignees"
+      ? compareNullable(assigneeLabel(a), assigneeLabel(b), direction, compareText)
+      : sort.key === "created"
+        ? compareNullable(dayValue(taskCreatedDate(a)), dayValue(taskCreatedDate(b)), direction, numeric)
+        : sort.key === "due"
+          ? compareNullable(dayValue(taskEffectiveDueDate(a)), dayValue(taskEffectiveDueDate(b)), direction, numeric)
+          : compareNullable(statusRank(a, today), statusRank(b, today), direction, numeric);
   return primary || compareTiebreak(a, b);
 }
 
@@ -291,8 +302,9 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
     if (!needle) return list;
     return list.filter((task) => [task.name, task.title, task.project?.name].some((value) => String(value ?? "").toLowerCase().includes(needle)));
   }, [tasks.data, search]);
-  // No column active means the record's default recency order; client-side
-  // sorting is honest here because the page holds the full normalized list.
+  // No column active means the record's default order — newest created first,
+  // updated as the tiebreak; client-side sorting is honest here because the
+  // page holds the full normalized list.
   const sortedRows = useMemo(() => sortTaskRows(rows, sort), [rows, sort]);
   const summary = tasks.data?.summary;
 
@@ -305,9 +317,12 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
         padded={false}
         controls={
           <>
-            {/* Views and search share the first controls row; the selects and
-                the primary Add task action sit on the row below it. */}
-            <AdminControls>
+            {/* One compact controls row: views, search, and the two record
+                filters read in order, with the primary Add task action last
+                and right-aligned while the row has room (design.md §8.2,
+                §16.2). The row wraps deliberately at narrow widths; the
+                action keeps the trailing edge. */}
+            <AdminControls className="admin-task-controls">
               <AdminControlsGroup>
                 <Segmented<TaskFilter>
                   ariaLabel="Task filter"
@@ -326,8 +341,6 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   <input type="search" value={search} placeholder="Search tasks" aria-label="Search tasks" onChange={(event) => setSearch(event.target.value)} />
                 </label>
               </AdminControlsGroup>
-            </AdminControls>
-            <AdminControls>
               <AdminControlsGroup>
                 <SelectField ariaLabel="Filter by person" value={personId} onChange={setPersonId} placeholder="All people" options={personOptions} />
                 <SelectField ariaLabel="Filter by project" value={projectId} onChange={setProjectId} placeholder="All projects" options={projectOptions} />

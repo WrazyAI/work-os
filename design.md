@@ -742,15 +742,18 @@ Inputs have persistent labels where the field is not self-evident, visible
 focus, inline validation, and deliberate disabled/loading states. Placeholder
 text is not the only label.
 
-Tasks search is always visible, sharing its controls row with the views; the
-person/project selects and Add task follow on the row below. A card never
-shares its title row with controls: the name and its one-line detail own the
-first row, and filters and toolbar controls group into rows beneath it
+The task record's controls are one compact row: the views, the always-visible
+search, and the person/project selects read in order, and the primary Add task
+action stays last, right-aligned while the row has room. A card never shares
+its title row with controls: the name and its one-line detail own the first
+row, and filters and toolbar controls group into rows beneath it
 (`.admin-controls`, grouped by `.admin-controls-group`) in reading order —
 filters first, the primary action last, right-aligned while its row has room
-and full-width once the row wraps. Date range stays a peer control or
-popover, with clear/reset behavior and a result count when active. Filtered
-empty says No tasks match these filters, never No tasks.
+and full-width once the row wraps. Below the compact desktop class the task
+row wraps deliberately, filters before the action, with 40px targets once
+stacked. Date range stays a peer control or popover, with clear/reset behavior
+and a result count when active. Filtered empty says No tasks match these
+filters, never No tasks.
 
 ### 8.3 Menus and detached surfaces
 
@@ -1791,8 +1794,10 @@ they show — so it renders no page refresh.
 Every section keeps one header rhythm: the card's name and its one-line detail
 own the first row, and the card's filters and toolbar controls sit in grouped
 rows beneath it (`.admin-controls`, design.md §8.2) — segmented views, then
-search, then selects, then the primary action. Overview stays quiet meta only;
-Settings keeps each field group inside its own card instead of the header.
+search, then selects, then the primary action. The task record keeps all of
+those on one compact row that wraps deliberately at narrow widths. Overview
+stays quiet meta only; Settings keeps each field group inside its own card
+instead of the header.
 
 - **Overview** is the command center: a needs-attention list (reviews pending,
   outstanding EODs, overdue tasks, disputed evidence, configuration blockers),
@@ -1815,9 +1820,10 @@ Settings keeps each field group inside its own card instead of the header.
 - **People** is a roster with a person drawer: mappings, schedule and
   exceptions, recent workdays, reports, updates and recaps, and a seven-day
   evidence summary.
-- **Tasks** is the organization task record with bounded filters and the local
-  add-task flow: one flat list, never grouped or ordered by project, which
-  stays a small per-task detail beside the task's priority and labels.
+- **Tasks** is the organization task record with bounded filters on one compact
+  controls row and the local add-task flow: one flat list, never grouped or
+  ordered by project, which stays a small per-task detail beside the task's
+  priority and labels.
   **Settings** groups system status, features, memberships, teams, provider
   connections, field mappings, and blueprints into sections with one action
   per decision area.
@@ -1861,8 +1867,11 @@ window focus and reconnect, the Overview snapshot is the one deliberate poll
 (60 seconds, paused while the window is hidden), and the masthead refresh
 control is the explicit force-fresh path for the current section.
 
-**Sortable tables.** The administration task record opens most-recently-updated
-first. Every labeled column header is a button: the first activation applies
+**Sortable tables.** The administration task record opens newest-created first
+— the created date the row shows, the provider's stamp before the local record
+— with the most recently updated row as the tiebreak, then the effective due
+date; a row missing a value in any step stays after the rows that record one.
+Every labeled column header is a button: the first activation applies
 that column's natural order — A→Z for Task and Assignees, newest first for
 Created, earliest first for Due (which orders by the row's effective due date,
 the derived default included), attention order (Overdue → Open → Done) for
