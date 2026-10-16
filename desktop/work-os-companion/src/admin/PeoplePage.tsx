@@ -51,7 +51,9 @@ export default function PeoplePage({ initialPersonId, onOpenReport }: { initialP
     queryKey: adminKeys.people(),
     queryFn: fetchPeople,
     select: normalizePeople,
-    staleTime: ADMIN_DETAIL_STALE_MS,
+    // The roster is a list read: the same `adminKeys.people()` entry five
+    // sections share, so it carries the list TTL like every other reader.
+    staleTime: ADMIN_STALE_MS,
   });
   const detail = useQuery<PersonDetailResponse>({
     queryKey: adminKeys.person(selectedId ?? ""),

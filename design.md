@@ -1783,6 +1783,21 @@ Settings keeps each field group inside its own card instead of the header.
   teams, provider connections, field mappings, and blueprints into sections
   with one action per decision area.
 
+**Cached state.** Administration reads through the shared in-memory TanStack
+Query cache, not a fetch per visit: list and summary reads revalidate after 45
+seconds, record/detail reads after 60 seconds, and the two live queues (Tasks
+and EOD Review) plus the Overview snapshot keep a deliberate shorter 30-second
+TTL. Moving between sections inside that window paints the cached record
+immediately; returning to a stale section keeps the cached record on screen
+while it revalidates in the background, so a refresh never replaces content
+with a loading skeleton. Administration reads are deliberately excluded from
+the on-disk query cache: they are the workspace's shared record, not this
+device's employee session, so a snapshot saved on one device can never
+masquerade as the organization's live state. Stale reads still revalidate on
+window focus and reconnect, the Overview snapshot is the one deliberate poll
+(60 seconds, paused while the window is hidden), and the masthead refresh
+control is the explicit force-fresh path for the current section.
+
 ### 16.3 Data and provenance
 
 Administration endpoints are admin- or manager-scoped and organization-scoped

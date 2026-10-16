@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+- Administration sections keep their data while you move between them, so switching pages no longer reloads everything each time.
+
 - The administration workspace now has the same refresh button as the employee view: it refreshes the page you're on and spins while that page's data syncs.
 
 ## 0.4.52 — 2026-10-15

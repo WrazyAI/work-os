@@ -4,6 +4,7 @@ import { Activity, Camera, Check, FileCheck2, FilePlus2, ScrollText, X } from "l
 import { useNotifications } from "../NotificationFlyouts";
 import {
   adminKeys,
+  ADMIN_DETAIL_STALE_MS,
   ADMIN_STALE_MS,
   draftAdminReport,
   fetchAdminReports,
@@ -239,14 +240,14 @@ function ReportBody({ report }: { report: WorkOsReportRow }) {
     queryFn: () => fetchReportEvidence(report.person_id!, report.report_date),
     select: normalizeEvidence,
     enabled: !!report.person_id,
-    staleTime: 60_000,
+    staleTime: ADMIN_DETAIL_STALE_MS,
   });
   const intervals = useQuery({
     queryKey: adminKeys.reportIntervals(report.person_id ?? "", report.report_date),
     queryFn: () => fetchReportIntervals(report.person_id!, report.report_date),
     select: normalizeIntervals,
     enabled: !!report.person_id,
-    staleTime: 60_000,
+    staleTime: ADMIN_DETAIL_STALE_MS,
   });
 
   return (

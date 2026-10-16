@@ -56,7 +56,10 @@ export default function OverviewPage({ onOpenSection, onOpenPerson }: {
     // the normalized shape either way.
     select: normalizeAdminOverview,
     staleTime: 30_000,
+    // The dashboard's one deliberate poll: every 60 seconds while the window
+    // is focused, so a hidden window never revalidates the snapshot unseen.
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   // A snapshot that stopped refreshing is a standing condition the page cannot
