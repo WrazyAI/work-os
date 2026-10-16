@@ -109,9 +109,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       throw new ApiRequestError("Connect this device to WrazyOS.", 401, false);
     }
     const signal = init.signal ?? AbortSignal.timeout(20_000);
+    const url = `${cleanBase(session.apiBase)}${path}`;
     let response: Response;
     try {
-      response = await fetch(`${cleanBase(session.apiBase)}${path}`, {
+      response = await fetch(url, {
         ...init,
         signal,
         cache: "no-store",
@@ -127,6 +128,17 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     } catch (error) {
       if (init.signal?.aborted && error instanceof Error && error.name === "AbortError") throw error;
       const failure = classifyRequestFailure(error);
+      /* A request that never produced a response is worth naming exactly: the
+         host proves where it was addressed, and the error name separates a
+         timeout from a connection-level failure. */
+      let host = "";
+      try { host = new URL(url).host; } catch { /* a relative dev-proxy URL has no host */ }
+      diagnostics.warn("api.request.transport_failed", failure.message, {
+        path,
+        method: init.method ?? "GET",
+        host,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       throw new ApiRequestError(failure.message, null, true);
     }
     const result = response.status === 204 ? undefined : await response.json().catch(() => ({}));

@@ -47,7 +47,7 @@ import "./chat/tool-surfaces.css";
 
 installDiagnosticErrorHandlers();
 installBootTrace();
-diagnostics.info("app.webview.start", "WebView booting", { search: window.location.search, userAgent: navigator.userAgent });
+diagnostics.info("app.webview.start", "WebView booting", { search: window.location.search, origin: window.location.origin, userAgent: navigator.userAgent });
 
 const params = new URLSearchParams(window.location.search);
 if (params.get("window") === "avatar") {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiRequest } from "../api";
+import { apiRequest, ApiRequestError } from "../api";
 import { diagnostics } from "../diagnostics";
 
 /**
@@ -85,6 +85,13 @@ export function recorderFileExtension(mime: string): string {
   if (mime.includes("ogg")) return "ogg";
   if (mime.includes("mp4") || mime.includes("m4a")) return "m4a";
   return "webm";
+}
+
+/** True when a failed upload never reached the server: `apiRequest` wraps a
+ * transport-level failure (no HTTP response) in an `ApiRequestError` with a
+ * null status. Only then is a retry safe — nothing was transcribed yet. */
+export function isVoiceTransportFailure(failure: unknown): boolean {
+  return failure instanceof ApiRequestError && failure.status === null;
 }
 
 /** `0:07` — the recording clock, tabular by convention in the composer. */
@@ -181,14 +188,64 @@ export function useVoiceInput(options: {
     form.append("audio", blob, `voice.${recorderFileExtension(mime)}`);
     form.append("mime", mime);
     form.append("language", language);
+    const recordingSeconds = startedAtRef.current ? Math.round((Date.now() - startedAtRef.current) / 1000) : 0;
+    /* The upload is the one request that carries a large body, and only the
+       floating companion has ever failed it with a transport error ("Failed to
+       fetch") after ~26s. The diagnostics below name the clip and the timing at
+       each boundary, so the next occurrence says whether the blob read stalled,
+       the connection died, or the window lost its network — without guessing. */
+    diagnostics.info("voice.upload.prepared", "Voice clip ready to upload", {
+      surface,
+      mime,
+      bytes: blob.size,
+      seconds: recordingSeconds,
+    });
     try {
+      const readStarted = performance.now();
+      const bytes = await blob.arrayBuffer();
+      diagnostics.info("voice.upload.blob_read", "Voice clip read locally", {
+        surface,
+        bytes: bytes.byteLength,
+        ms: Math.round(performance.now() - readStarted),
+      });
+    } catch (error) {
+      diagnostics.error("voice.upload.blob_read_failed", error instanceof Error ? error.message : String(error), { surface, bytes: blob.size });
+    }
+    const send = () => apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", {
+      method: "POST",
+      body: form,
       /* Outlast the server's own 25s provider timeout: giving up first would
          abandon a clip the route is still transcribing. */
-      const result = await apiRequest<{ text?: string }>("/api/work-os/voice/transcribe", {
-        method: "POST",
-        body: form,
-        signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
-      });
+      signal: AbortSignal.timeout(VOICE_UPLOAD_TIMEOUT_MS),
+    });
+    try {
+      let result: { text?: string };
+      try {
+        result = await send();
+      } catch (firstFailure) {
+        if (!isVoiceTransportFailure(firstFailure)) throw firstFailure;
+        /* The transport died before any response arrived, so the clip was never
+           transcribed — a retry cannot duplicate a result. Log the failure,
+           probe the window's network with a tiny request, then send the same
+           clip once more. */
+        const firstMs = startedAtRef.current ? Math.round(Date.now() - startedAtRef.current) : 0;
+        diagnostics.warn("voice.upload.transport_failed", firstFailure instanceof Error ? firstFailure.message : String(firstFailure), {
+          surface,
+          bytes: blob.size,
+          mime,
+          elapsedMs: firstMs,
+          errorName: firstFailure instanceof Error ? firstFailure.name : typeof firstFailure,
+        });
+        const probeStarted = performance.now();
+        try {
+          await apiRequest("/api/work-os/session", { signal: AbortSignal.timeout(8_000) });
+          diagnostics.info("voice.upload.probe", "A small request succeeded right after the failure", { surface, ms: Math.round(performance.now() - probeStarted) });
+        } catch (probeFailure) {
+          diagnostics.error("voice.upload.probe_failed", probeFailure instanceof Error ? probeFailure.message : String(probeFailure), { surface, ms: Math.round(performance.now() - probeStarted) });
+        }
+        diagnostics.info("voice.upload.retry", "Retrying the voice upload once after a transport failure", { surface, bytes: blob.size });
+        result = await send();
+      }
       const text = typeof result?.text === "string" ? result.text.trim() : "";
       if (!mountedRef.current) return;
       if (!text) {
