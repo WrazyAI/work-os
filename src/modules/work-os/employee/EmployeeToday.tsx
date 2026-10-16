@@ -35,7 +35,7 @@ import {
   QuietButton,
   SecondaryButton,
   Skeleton,
-  StatusPill,
+  StateMark,
   SyncChip,
   inputClass,
   inputStyle,
@@ -210,14 +210,14 @@ export default function EmployeeToday() {
   return (
     <div>
       <Masthead
-        eyebrow={`Work OS · ${longDateLabel(day.data?.shiftDate)}`}
+        eyebrow={longDateLabel(day.data?.shiftDate)}
         title="Today"
         meta={shift ? `${formatTime(shift.startsAt, timezone)} – ${formatTime(shift.endsAt, timezone)} · ${timezone}` : "No schedule is configured for today."}
         actions={
           <>
             {outstandingCount > 0 ? (
-              <Link href="/work-os/review" className="inline-flex items-center gap-2 rounded-[10px] border px-3.5 py-2 text-[12px] font-semibold" style={{ borderColor: "color-mix(in srgb, var(--status-warn) 45%, var(--border))", color: "var(--status-warn)", background: "var(--bg-card)" }}>
-                <FileCheck2 size={14} /> {outstandingCount} outstanding EOD{outstandingCount === 1 ? "" : "s"}
+              <Link href="/work-os/review" className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-2 text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+                <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: "var(--status-warn)" }} /> {outstandingCount} outstanding EOD{outstandingCount === 1 ? "" : "s"}
               </Link>
             ) : null}
             <SyncChip sync={day.data?.niftySync} syncing={syncing} onSync={() => sync.mutate()} />
@@ -289,9 +289,9 @@ export default function EmployeeToday() {
                   : "Worktivity has not observed attendance yet."
               }
               actions={
-                <StatusPill tone={attendance?.source === "worktivity" ? (attendance?.state === "active" ? "done" : attendance?.state === "paused" ? "open" : "info") : "open"}>
+                <StateMark tone={attendance?.source === "worktivity" ? (attendance?.state === "active" ? "ok" : attendance?.state === "paused" ? "warn" : "neutral") : "neutral"}>
                   {attendance?.source === "worktivity" ? operationLabel(String(attendance.state || "unknown")) : "Not observed"}
-                </StatusPill>
+                </StateMark>
               }
             />
             {pulse.schedulePhase !== "unavailable" || pulse.observedElapsedLabel !== "00:00" ? (
@@ -381,10 +381,10 @@ export default function EmployeeToday() {
               <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">Goal setting is independent of attendance. Building a plan drafts reviewable commitments — nothing is filed until you confirm it.</p>
 
               {day.data?.access?.featureFlags?.loom_updates === true ? (
-                <div className="mt-4 rounded-xl border px-4 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
+                <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">Recorded a Loom for today?</span>
-                    <button type="button" className="text-[12px] font-semibold" style={{ color: "var(--accent-deep)" }} onClick={() => { setGoalLoomOpen((value) => !value); setGoalLoomNote(null); }}>
+                    <span className="text-[12px] font-medium text-[var(--text-secondary)]">Recorded a Loom for today?</span>
+                    <button type="button" className="text-[12px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]" onClick={() => { setGoalLoomOpen((value) => !value); setGoalLoomNote(null); }}>
                       {goalLoomOpen ? "Close" : "Analyze a Loom"}
                     </button>
                   </div>
@@ -434,7 +434,7 @@ export default function EmployeeToday() {
               icon={<MessageSquareText size={16} />}
               title={day.data?.prompt.kind === "catch_up" ? "Shift check-in" : day.data?.prompt.kind === "eod" ? "End-of-day update" : "What are you working on?"}
               meta={day.data?.prompt.reason || "Add an update whenever your plan changes."}
-              actions={day.data?.prompt.required ? <StatusPill tone="overdue">Required</StatusPill> : null}
+              actions={day.data?.prompt.required ? <StateMark tone="warn">Required</StateMark> : null}
             />
             <div className="px-5 py-4">
               <CheckInComposer
@@ -505,8 +505,8 @@ export default function EmployeeToday() {
               />
               <div>
                 {(workspace?.carryOverGroups ?? []).map((group) => (
-                  <div key={group.key} className="border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border)" }}>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
+                  <div key={group.key} className="border-b px-5 py-3 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+                    <p className="text-[11.5px] font-semibold text-[var(--text-secondary)]">
                       {group.label} · {group.tasks?.length ?? 0}
                     </p>
                     <ul className="mt-1.5 grid gap-1.5">

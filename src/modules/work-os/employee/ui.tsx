@@ -3,7 +3,8 @@
 /** Shared presentational primitives for the employee workspace.
  *
  * One warm-paper language for every destination: panels with hairline edges
- * and a single shadow family, flat rows, one primary action per area
+ * and a single shadow family, flat rows, quiet dot-and-text state marks, ink
+ * values with tone carried by a small mark, and one primary action per area
  * (design.md §2, §8.1). The tokens resolve from the scoped Work OS block in
  * globals.css while these routes are mounted. */
 
@@ -46,10 +47,10 @@ export function PanelHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
+    <header className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-3.5" style={{ borderColor: "var(--border-subtle)" }}>
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-[15px] font-semibold leading-tight text-[var(--text-primary)]">
-          {icon ? <span className="shrink-0" style={{ color: "var(--accent-deep)" }}>{icon}</span> : null}
+        <h2 className="flex items-center gap-2 text-[14.5px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text-primary)]">
+          {icon ? <span className="shrink-0" style={{ color: "var(--text-tertiary)" }}>{icon}</span> : null}
           {title}
         </h2>
         {meta ? <div className="mt-1 text-[12px] leading-5 text-[var(--text-tertiary)]">{meta}</div> : null}
@@ -71,11 +72,11 @@ export function Masthead({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">{eyebrow}</p>
-        <h1 className="mt-1.5 text-[26px] font-bold leading-tight tracking-[-0.01em] text-[var(--text-primary)]">{title}</h1>
-        {meta ? <p className="mt-1.5 text-[12px] leading-5 text-[var(--text-secondary)]">{meta}</p> : null}
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{eyebrow}</p>
+        <h1 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.025em] text-[var(--text-primary)]">{title}</h1>
+        {meta ? <p className="mt-1 text-[12.5px] leading-5 text-[var(--text-secondary)]">{meta}</p> : null}
       </div>
       {actions ? <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">{actions}</div> : null}
     </header>
@@ -164,18 +165,43 @@ export function IconButton({
   );
 }
 
+/** One semantic tone vocabulary shared by marks, pills, and metric dots. */
+export type Tone = "neutral" | "ok" | "warn" | "err" | "info" | "observed" | "signal";
+
+export const TONE_COLOR: Record<Tone, string> = {
+  neutral: "var(--text-tertiary)",
+  ok: "var(--status-ok)",
+  warn: "var(--status-warn)",
+  err: "var(--status-error)",
+  info: "var(--status-info)",
+  observed: "var(--status-observed)",
+  signal: "var(--accent-deep)",
+};
+
+/** A restrained pill: neutral surface, tone carried by the text. */
 export function StatusPill({ tone = "open", children }: { tone?: "open" | "done" | "overdue" | "error" | "info"; children: ReactNode }) {
   const color =
     tone === "done" ? "var(--status-ok)"
       : tone === "overdue" ? "var(--status-warn)"
         : tone === "error" ? "var(--status-error)"
           : tone === "info" ? "var(--status-info)"
-            : "var(--text-tertiary)";
+            : "var(--text-secondary)";
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em]"
-      style={{ borderColor: `color-mix(in srgb, ${color} 45%, var(--border))`, color }}
+      className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-[10.5px] font-semibold leading-none whitespace-nowrap"
+      style={{ background: "var(--bg-tertiary)", color }}
     >
+      {children}
+    </span>
+  );
+}
+
+/** Dot + text state mark for rows and inline metadata. */
+export function StateMark({ tone = "neutral", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
+  const color = TONE_COLOR[tone];
+  return (
+    <span title={title} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium" style={{ color }}>
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: color }} />
       {children}
     </span>
   );
@@ -200,6 +226,7 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
+/** Flat empty state: a quiet icon, one sentence, one recovery path. */
 export function EmptyState({
   icon,
   title,
@@ -212,15 +239,21 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-      {icon ? <span style={{ color: "var(--text-tertiary)" }}>{icon}</span> : null}
+    <div className="flex flex-col items-start gap-1 px-5 py-6">
+      {icon ? (
+        <span className="mb-1.5 grid size-8 place-items-center rounded-[10px]" style={{ background: "var(--bg-tertiary)", color: "var(--text-tertiary)" }}>
+          {icon}
+        </span>
+      ) : null}
       <strong className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</strong>
-      {message ? <span className="max-w-md text-[12px] leading-5 text-[var(--text-secondary)]">{message}</span> : null}
-      {action ? <span className="mt-1">{action}</span> : null}
+      {message ? <span className="max-w-[52ch] text-[12px] leading-5 text-[var(--text-tertiary)]">{message}</span> : null}
+      {action ? <span className="mt-2.5">{action}</span> : null}
     </div>
   );
 }
 
+/** A quiet fact cell: uppercase label with a tone mark, ink value, one detail
+ * line. Tone never colors the value — the mark carries it. */
 export function Metric({
   label,
   value,
@@ -232,12 +265,15 @@ export function Metric({
   detail?: ReactNode;
   tone?: "neutral" | "warn" | "error";
 }) {
-  const color = tone === "warn" ? "var(--status-warn)" : tone === "error" ? "var(--status-error)" : "var(--text-primary)";
+  const mark = tone === "warn" ? TONE_COLOR.warn : tone === "error" ? TONE_COLOR.err : null;
   return (
-    <div className="rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border)", background: "var(--bg-primary)" }}>
-      <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)]">{label}</span>
-      <strong className="mt-1 block text-[20px] font-bold leading-none tabular-nums" style={{ color }}>{value}</strong>
-      {detail ? <span className="mt-1.5 block text-[11px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
+    <div className="grid min-w-0 gap-0.5">
+      <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--text-tertiary)]">
+        {mark ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: mark }} /> : null}
+        {label}
+      </span>
+      <strong className="text-[20px] font-semibold leading-none tabular-nums text-[var(--text-primary)]">{value}</strong>
+      {detail ? <span className="text-[11px] leading-4 text-[var(--text-tertiary)]">{detail}</span> : null}
     </div>
   );
 }
@@ -269,7 +305,7 @@ export function SyncChip({
       : sync?.syncedAt
         ? `Last provider sync ${formatDateTimeShort(sync.syncedAt)}`
         : "Refresh Nifty and Worktivity state for this day.";
-  const color = degraded ? "var(--status-warn)" : busy ? "var(--text-secondary)" : "var(--text-secondary)";
+  const color = degraded ? "var(--status-warn)" : "var(--text-secondary)";
   return (
     <button
       type="button"
