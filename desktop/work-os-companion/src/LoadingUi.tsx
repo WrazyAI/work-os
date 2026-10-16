@@ -14,6 +14,14 @@ export function Wave({ className, ...props }: React.ComponentProps<"span">) {
   </span>;
 }
 
+/** First Light bench: a decorative hairline under Otto with one soft light
+ * pulse. Crossing → rest shape lives in the keyframes (see loading.css). */
+export function Bench({ className, ...props }: React.ComponentProps<"span">) {
+  return <span className={`loading-bench${className ? ` ${className}` : ""}`} aria-hidden="true" {...props}>
+    <span className="loading-bench-pulse" />
+  </span>;
+}
+
 export function FadeArc({ className, size = 16, style, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   const baseId = useId().replace(/:/g, "");
   const leadingGradientId = `${baseId}-leading`;

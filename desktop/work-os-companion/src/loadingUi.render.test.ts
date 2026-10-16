@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DashboardSkeleton, FadeArc, InsightsSkeleton, TaskDetailSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
+import { Bench, DashboardSkeleton, FadeArc, InsightsSkeleton, TaskDetailSkeleton, TaskListSkeleton, Wave } from "./LoadingUi";
 
 describe("loading language", () => {
   it("wave renders a status with five animated bars", () => {
@@ -10,6 +10,14 @@ describe("loading language", () => {
     expect((markup.match(/loading-wave-bar/g) || []).length).toBe(5);
     expect(markup).toContain("Loading");
     expect(markup).toContain('class="loading-wave"');
+  });
+
+  it("bench renders a decorative hairline with one traveling pulse, no status role", () => {
+    const markup = renderToStaticMarkup(createElement(Bench));
+    expect(markup).toContain('class="loading-bench"');
+    expect(markup).toContain('class="loading-bench-pulse"');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).not.toContain('role="status"');
   });
 
   it("fade arc renders an accessible spinner with gradient stops", () => {

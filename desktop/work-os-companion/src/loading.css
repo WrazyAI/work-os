@@ -43,6 +43,37 @@
   animation: loading-ui-wave var(--duration, 1s) ease-in-out infinite;
 }
 
+/* First Light bench (pre-app loading): a hairline with one soft light pulse,
+   crossing left → right then resting quiet. Decorative (aria-hidden). */
+.loading-bench {
+  position: relative;
+  width: clamp(220px, 44vw, 300px);
+  height: 1px;
+  margin: 26px 0 4px;
+  background: rgba(237, 244, 238, 0.16);
+}
+
+.loading-bench-pulse {
+  position: absolute;
+  top: -1.5px;
+  left: -24%;
+  width: 22%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #a8f15b, transparent);
+  filter: blur(2px);
+  opacity: 0;
+  animation: bench-sweep 3.4s ease-in-out infinite;
+}
+
+@keyframes bench-sweep {
+  0% { left: -24%; opacity: 0; }
+  9% { opacity: 1; }
+  76% { left: 98%; opacity: 1; }
+  82% { left: 100%; opacity: 0; }
+  100% { left: 100%; opacity: 0; }
+}
+
 @keyframes loading-ui-fade-arc-spin {
   to {
     transform: rotate(360deg);
@@ -501,6 +532,7 @@
 @media (prefers-reduced-motion: reduce) {
   .loading-wave-bar,
   .loading-arc,
+  .loading-bench-pulse,
   .skeleton,
   .loading-shell,
   .workspace {
