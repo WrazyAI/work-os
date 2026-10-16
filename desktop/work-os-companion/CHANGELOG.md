@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.57 — 2026-10-16
+
+- If a voice update can't reach the workspace, the companion quietly tries once more before it gives up.
+
 ## 0.4.56 — 2026-10-16
 
 - The administration task list now shows each task's created date, and a task with no due date reads due one day after it was created.
