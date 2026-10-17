@@ -65,7 +65,6 @@ import { fireCompanionToast } from "./scheduler";
 import { CheckedMoment } from "./CheckedMoment";
 import { BootOverlay, useBootRise } from "./BootHandoff";
 import { DashboardSkeleton, FadeArc, TaskListSkeleton } from "./LoadingUi";
-import { resolveBootScreen } from "./bootScreen";
 import { PlanningSession, type PlanningInterpretation } from "./PlanningSession";
 import { ActivityIntervalStream } from "./ActivityIntervalList";
 import { buildPlanItemsFromInterpretation } from "./planItems";
@@ -515,7 +514,10 @@ export default function App() {
     workspace,
     role: workSessionQuery.data?.role ?? null,
     syncBypass,
+    dayReady: !!visibleDay,
+    dayFailed: !!error,
   });
+  const bootRise = useBootRise(landing);
   const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
   const employeeWorkspaceBranch = landing === "workspace";
 
@@ -3758,16 +3760,7 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen]);
 
-  const boot = resolveBootScreen({
-    vault: vaultGate.status === "pending" ? "pending" : vaultGate.status === "failed" ? "failed" : "opened",
-    hasSession: !!visibleSession,
-    adminReady: landing === "admin" && (!!session || ADMIN_SHELL_BOOT) && workSessionQuery.data?.role === "admin",
-    onboarding: visibleOnboarding ? { onboardingRequired: visibleOnboarding.onboardingRequired } : null,
-    dayReady: !!visibleDay,
-    dayFailed: !!error,
-  });
-  const bootRise = useBootRise(boot);
-  if (boot.kind === "failed") return <LoadingScreen
+  if (landing === "vault_failed") return <LoadingScreen
       failed
       retry={retryVaultGate}
       note={vaultGate.failure.message}
@@ -4271,15 +4264,15 @@ export default function App() {
   };
 
   let bootContent: ReactNode = null;
-  if (boot.kind === "content") {
-    switch (boot.surface) {
+  if (landing === "connect" || landing === "onboarding" || landing === "admin" || landing === "workspace") {
+    switch (landing) {
       case "connect": bootContent = renderConnect(); break;
       case "onboarding": bootContent = renderOnboarding(); break;
       case "admin": bootContent = renderAdmin(); break;
       case "workspace": bootContent = renderWorkspace(); break;
     }
   }
-  return <BootOverlay screen={boot}>{bootContent}</BootOverlay>;
+  return <BootOverlay surface={landing}>{bootContent}</BootOverlay>;
 }
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) { return <article className="metric"><Icon size={18} /><small>{label}</small><strong>{value}</strong></article>; }

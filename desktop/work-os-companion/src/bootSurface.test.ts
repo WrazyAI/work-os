@@ -11,6 +11,8 @@ const base: BootInput = {
   workspace: "employee",
   role: "employee",
   syncBypass: false,
+  dayReady: true,
+  dayFailed: false,
 };
 
 const surface = (patch: Partial<BootInput>) => bootSurface({ ...base, ...patch });
@@ -67,34 +69,44 @@ describe("boot surface", () => {
   it("gives an ordinary employee their workspace", () => {
     expect(surface({})).toBe("workspace");
   });
+
+  // §4.1: the boot overlay exits only once the workspace will render real
+  // content — the day payload, or its failure — never a skeleton reveal.
+  it("holds the boot surface until the workspace will render real content", () => {
+    expect(surface({ dayReady: false })).toBe("data_loading");
+    expect(surface({ dayReady: false, dayFailed: true })).toBe("workspace");
+    expect(surface({ dayReady: false, dayFailed: true, onboardingRequired: true })).toBe("onboarding");
+  });
 });
 
 /**
  * The module above is only load-bearing if `App` actually consults it in the
  * same order. These read the boot gates out of the source, because the bug this
  * replaced was never a wrong decision — it was a right decision asked in the
- * wrong order, which no unit test of the decision alone can catch.
+ * wrong order, which no unit test of the decision alone can catch. Now that the
+ * decision and the order both live in this module, the wiring tests guard the
+ * other half of the contract: `App` asks the seam, renders every content
+ * surface through the one boot overlay, and decides no gate inline.
  */
 describe("boot gate wiring", () => {
   const app = readFileSync(fileURLToPath(new URL("./App.tsx", import.meta.url)), "utf8");
 
   it("asks the tested seam for the landing surface", () => {
-    expect(app).toMatch(/bootSurface\(\{/);
-    expect(app).toMatch(/if \(landing === "admin"/);
+    expect(app).toMatch(/const landing = bootSurface\(\{/);
+    // The administration gate still reads the seam's answer, not its own copy.
+    expect(app).toMatch(/landing === "admin"/);
   });
 
-  it("puts the onboarding gate above the administration gate", () => {
-    const onboarding = app.indexOf("visibleOnboarding.onboardingRequired) return <Onboarding");
-    const admin = app.indexOf('if (landing === "admin"');
-    expect(onboarding, "the onboarding gate is missing from App.tsx").toBeGreaterThan(-1);
-    expect(admin, "the administration gate is missing from App.tsx").toBeGreaterThan(-1);
-    expect(onboarding, "onboarding must be decided before the admin console").toBeLessThan(admin);
+  it("renders every content surface through the one boot overlay", () => {
+    expect(app).toMatch(/<BootOverlay/);
+    for (const surface of ["connect", "onboarding", "admin", "workspace"]) {
+      expect(app).toMatch(new RegExp(`case "${surface}": bootContent = render`));
+    }
   });
 
-  it("puts both of them below the session and vault gates", () => {
-    const connect = app.indexOf("if (!visibleSession) return <ConnectScreen");
-    const onboarding = app.indexOf("visibleOnboarding.onboardingRequired) return <Onboarding");
-    expect(connect).toBeGreaterThan(-1);
-    expect(connect).toBeLessThan(onboarding);
+  it("no longer decides the gates inline — the seam owns the order", () => {
+    expect(app).not.toMatch(/if \(!visibleSession\) return </);
+    expect(app).not.toMatch(/if \(!visibleOnboarding\) return </);
+    expect(app).not.toMatch(/visibleOnboarding\.onboardingRequired\) return </);
   });
 });

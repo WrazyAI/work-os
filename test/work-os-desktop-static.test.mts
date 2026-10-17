@@ -50,7 +50,7 @@ assert.match(redesignStyles, /\.focus-edit-button/);
 
 const app = read("src/App.tsx");
 const boot = read("src/BootHandoff.tsx");
-const bootModel = read("src/bootScreen.ts");
+const bootModel = read("src/bootSurface.ts");
 const insightsView = read("src/InsightsView.tsx");
 const taskSurfaces = read("src/taskSurfaces.tsx");
 
@@ -101,17 +101,17 @@ assert.doesNotMatch(onboarding, /Saved · revision/);
 assert.match(onboarding, /<header><span>Workspace setup<\/span><\/header>/);
 assert.match(boot, /agent="working" workday="active"/);
 assert.match(app, /agent="blocked" workday="active"/);
-assert.match(bootModel, /Opening this device’s saved session/);
+assert.match(boot, /Opening this device’s saved session/);
 assert.match(boot, /Getting your day ready/);
-// The boot seam: resolver-driven gate chain, one persistent overlay, and the
-// handoff rise wired only onto the workspace root.
-assert.match(app, /resolveBootScreen\(/);
+// The boot seam: one persistent overlay over the landing surface, the hold
+// decided by bootSurface, and the handoff rise wired only onto the workspace.
+assert.match(app, /const landing = bootSurface\(\{/);
 assert.match(app, /<BootOverlay/);
 assert.match(app, /boot-rise/);
 assert.match(app, /dayReady: !!visibleDay/);
 assert.match(app, /dayFailed: !!error/);
 assert.doesNotMatch(app, /loading-wave-large/);
-assert.match(bootModel, /!state\.dayReady && !state\.dayFailed/);
+assert.match(bootModel, /!input\.dayReady && !input\.dayFailed/);
 assert.doesNotMatch(app, /wordmark-badge/);
 assert.match(app, /useMemo\(\(\) => applyOnboardingScenario/);
 assert.match(app, /finally \{ setBusy\(false\); \}/);

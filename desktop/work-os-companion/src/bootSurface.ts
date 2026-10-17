@@ -43,6 +43,10 @@ export interface BootInput {
   role: string | null;
   /** Offline fixtures: no backend, so no administration surface. */
   syncBypass: boolean;
+  /** The first day payload has landed, so the workspace's first paint is real. */
+  dayReady: boolean;
+  /** The day read failed; the workspace surfaces the failure itself. */
+  dayFailed: boolean;
 }
 
 export function bootSurface(input: BootInput): BootSurface {
@@ -68,6 +72,10 @@ export function bootSurface(input: BootInput): BootSurface {
   // The administration workspace is a real session talking to a real server; it
   // has no offline fixture, so bypass mode always lands on the employee shell.
   if (input.workspace === "admin" && input.role === "admin" && !input.syncBypass) return "admin";
+
+  // §4.1: the boot overlay exits only once the workspace will render real
+  // content — the day payload, or its failure — never a skeleton reveal.
+  if (!input.dayReady && !input.dayFailed) return "data_loading";
 
   return "workspace";
 }

@@ -25,7 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
-- The app now opens into a quieter First Light screen — Otto works at a bench of light while your day loads, and your workspace rises into place the moment it's ready.
+- The app opens into a quieter First Light screen — Otto works at a bench of light while your day loads, and your workspace rises in when it's ready.
 
 ## 0.4.59 — 2026-10-16
 

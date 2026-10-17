@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bench } from "./LoadingUi";
 import { MascotPet } from "./MascotPet";
-import { BOOT_STAGE_COPY, bootRiseClass, type BootScreen } from "./bootScreen";
+import type { BootSurface } from "./bootSurface";
+
+/** Exact stage copy for the two loading phases; the apostrophe is U+2019
+ * exactly as the boot screen has always used. */
+export const BOOT_STAGE_COPY = {
+  vault_loading: "Opening this device’s saved session",
+  data_loading: "Reading your schedule and workday",
+} as const;
+
+const CONTENT_SURFACES: readonly BootSurface[] = ["connect", "onboarding", "admin", "workspace"];
+const isContentSurface = (surface: BootSurface): boolean => CONTENT_SURFACES.includes(surface);
+const isLoadingSurface = (surface: BootSurface): boolean => surface === "vault_loading" || surface === "data_loading";
 
 /** Reduced-motion is read fresh at each handoff so a mid-boot preference change
  * is honored; the choice for one handoff is remembered on the state ref. */
@@ -22,38 +33,39 @@ export function FirstLightSurface({ stage }: { stage: string }) {
 
 /** Thin wrapper over bootRiseClass — App spreads it onto the workspace root so
  * only a loading→content handoff plays the one-shot rise. */
-export function useBootRise(screen: BootScreen): string {
-  const prevKindRef = useRef<BootScreen["kind"] | null>(null);
+export function useBootRise(surface: BootSurface): string {
+  const prevRef = useRef<BootSurface | null>(null);
   const [rise, setRise] = useState(false);
   useEffect(() => {
-    const previous = prevKindRef.current;
-    if (previous === screen.kind) return;
-    const isHandoff = bootRiseClass(previous, screen.kind).includes("boot-rise");
-    prevKindRef.current = screen.kind;
+    const previous = prevRef.current;
+    if (previous === surface) return;
+    const isHandoff = isLoadingSurface(previous) && isContentSurface(surface);
+    prevRef.current = surface;
     if (!isHandoff) return;
     setRise(true);
     const timer = setTimeout(() => setRise(false), 700);
     return () => clearTimeout(timer);
-  }, [screen.kind]);
+  }, [surface]);
   return rise ? "boot-rise" : "";
 }
 
 type BootExit = "idle" | "landing" | "exiting" | "done";
 
-/** Persistent boot overlay: renders the First Light surface while `screen` is
- * loading; on a loading→content handoff plays Landing→Rise above `children`.
- * Never renders children while loading; never blocks them after the handoff. */
-export function BootOverlay({ screen, children, onExitStart }: {
-  screen: Exclude<BootScreen, { kind: "failed" }>;
+/** Persistent boot overlay: renders the First Light surface while the seam says
+ * a loading phase is up; on a loading→content handoff plays Landing→Rise above
+ * `children`. Never renders children while loading; never blocks them after. */
+export function BootOverlay({ surface, children, onExitStart }: {
+  surface: Exclude<BootSurface, "vault_failed">;
   children: ReactNode;
   onExitStart?: () => void;
 }) {
   const [exit, setExit] = useState<BootExit>("idle");
   const [reduced, setReduced] = useState(false);
-  const prevKindRef = useRef<BootScreen["kind"] | null>(null);
+  const prevSurfaceRef = useRef<BootSurface | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const lastStageRef = useRef<string>("");
-  const stage = screen.kind === "loading" ? BOOT_STAGE_COPY[screen.phase] : lastStageRef.current;
+  const loading = isLoadingSurface(surface);
+  const stage = loading ? BOOT_STAGE_COPY[surface] : lastStageRef.current;
   const onExitStartRef = useRef(onExitStart);
   onExitStartRef.current = onExitStart;
   const timersRef = useRef<number[]>([]);
@@ -66,67 +78,68 @@ export function BootOverlay({ screen, children, onExitStart }: {
   };
   useEffect(() => () => clearTimers(), []);
   useEffect(() => {
-    if (screen.kind === "loading") lastStageRef.current = BOOT_STAGE_COPY[screen.phase];
-  }, [screen.kind, screen.phase]);
+    if (loading) lastStageRef.current = BOOT_STAGE_COPY[surface];
+  }, [loading, surface]);
 
   // The handoff detector. The pulse's landing beat is the only WAAPI work; the
   // night's exit is one CSS class applied to an already-stable overlay node.
   useEffect(() => {
-    const previous = prevKindRef.current;
-    if (previous === screen.kind) return;
-    prevKindRef.current = screen.kind;
-    if (screen.kind === "content" && previous === "loading") {
-      onExitStartRef.current?.();
-      // If the boot replayed loading after content (debugger scenario), timers
-      // from the previous handoff are stale.
-      clearTimers();
-      const isReduced = prefersReducedMotion();
-      setReduced(isReduced);
-      const startExit = () => setExit("exiting");
-      if (isReduced) {
-        setExit("exiting");
-        later(() => setExit("done"), 400);
-        return;
-      }
-      const pulse = overlayRef.current?.querySelector<HTMLElement>(".loading-bench-pulse") ?? null;
-      const cssAnimation = pulse?.getAnimations()[0];
-      const cycle = 3400;
-      const time = cssAnimation?.currentTime;
-      const phase = typeof time === "number" && Number.isFinite(time) ? time % cycle : null;
-      const travelStart = 290; // keyframe 9% of the sweep: pulse fully lit
-      const travelEnd = 2790;  // keyframe 82%: pulse faded back out
-      if (!pulse || !cssAnimation || phase == null || phase < travelStart || phase > travelEnd) {
-        // The bench is resting (or the landing cannot run): exit immediately —
-        // the landing beat already happened visually.
-        setExit("exiting");
-        later(() => setExit("done"), 900);
-        return;
-      }
-      setExit("landing");
-      try {
-        cssAnimation.cancel();
-        const computed = window.getComputedStyle(pulse);
-        const landing = pulse.animate(
-          [
-            { left: computed.left, opacity: Number(computed.opacity) },
-            { left: "100%", opacity: 1 },
-          ],
-          { duration: Math.min(300, Math.max(120, (travelEnd - phase) * 0.4)), easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" },
-        );
-        landing.finished.then(() => {
-          later(startExit, 150);
-        }, () => {
-          startExit();
-        });
-      } catch {
-        startExit();
-      }
-      // Safety: the landing never holds the overlay past its budget.
-      later(startExit, 650);
+    const previous = prevSurfaceRef.current;
+    if (previous === surface) return;
+    const isHandoff = isLoadingSurface(previous) && isContentSurface(surface);
+    prevSurfaceRef.current = surface;
+    if (!isHandoff) {
+      if (loading) setExit("idle");
       return;
     }
-    if (screen.kind === "loading") setExit("idle");
-  }, [screen.kind]);
+    onExitStartRef.current?.();
+    // If the boot replayed loading after content (debugger scenario), timers
+    // from the previous handoff are stale.
+    clearTimers();
+    const isReduced = prefersReducedMotion();
+    setReduced(isReduced);
+    const startExit = () => setExit("exiting");
+    if (isReduced) {
+      setExit("exiting");
+      later(() => setExit("done"), 400);
+      return;
+    }
+    const pulse = overlayRef.current?.querySelector<HTMLElement>(".loading-bench-pulse") ?? null;
+    const cssAnimation = pulse?.getAnimations()[0];
+    const cycle = 3400;
+    const time = cssAnimation?.currentTime;
+    const phase = typeof time === "number" && Number.isFinite(time) ? time % cycle : null;
+    const travelStart = 290; // keyframe 9% of the sweep: pulse fully lit
+    const travelEnd = 2790;  // keyframe 82%: pulse faded back out
+    if (!pulse || !cssAnimation || phase == null || phase < travelStart || phase > travelEnd) {
+      // The bench is resting (or the landing cannot run): exit immediately —
+      // the landing beat already happened visually.
+      setExit("exiting");
+      later(() => setExit("done"), 900);
+      return;
+    }
+    setExit("landing");
+    try {
+      cssAnimation.cancel();
+      const computed = window.getComputedStyle(pulse);
+      const landedPulse = pulse.animate(
+        [
+          { left: computed.left, opacity: Number(computed.opacity) },
+          { left: "100%", opacity: 1 },
+        ],
+        { duration: Math.min(300, Math.max(120, (travelEnd - phase) * 0.4)), easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" },
+      );
+      landedPulse.finished.then(() => {
+        later(startExit, 150);
+      }, () => {
+        startExit();
+      });
+    } catch {
+      startExit();
+    }
+    // Safety: the landing never holds the overlay past its budget.
+    later(startExit, 650);
+  }, [surface, loading]);
 
   // The exit always reaches "done" even if an animationend never arrives.
   useEffect(() => {
@@ -138,11 +151,11 @@ export function BootOverlay({ screen, children, onExitStart }: {
   }, [exit, reduced]);
 
   if (exit === "done") return <>{children}</>;
-  const covering = screen.kind === "content" && (exit === "landing" || exit === "exiting");
+  const covering = !loading && (exit === "landing" || exit === "exiting");
   const exitClass = exit === "exiting" ? (reduced ? " boot-exit-reduced" : " boot-exit") : "";
-  const overlayVisible = screen.kind === "loading" || covering;
+  const overlayVisible = loading || covering;
   return <>
-    {screen.kind === "content" ? children : null}
+    {!loading ? children : null}
     {overlayVisible && <div
       ref={covering ? overlayRef : null}
       className={`boot-overlay${exitClass}${covering ? " boot-cover" : ""}`}
