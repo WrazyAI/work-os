@@ -389,9 +389,12 @@ describe("operational visualizations", () => {
     expect(dashboardStyles).toContain(".tasks-toolbar > .task-search-toolbar { display: flex; flex-direction: row;");
     // Status labels center inside their pill instead of hugging the top edge.
     expect(dashboardStyles).toContain(".task-state { display: inline-flex; align-items: center; justify-content: center;");
-    expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto auto/);
+    expect(dashboardStyles).toMatch(/\.task-agenda-strip \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
     expect(dashboardStyles).toMatch(/\.agenda-strip-focus \{[\s\S]*?min-width: 0;/);
-    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus focus"[\s\S]*?"stats carry"/);
+    // The strip states the focus and the carry action. The counts it used to
+    // restate here already lead the day-group headers and the view chips.
+    expect(dashboardStyles).not.toContain(".task-focus-stats");
+    expect(dashboardStyles).toMatch(/grid-template-areas:[\s\S]*?"focus"[\s\S]*?"carry"/);
     expect(workspaceStyles).toMatch(/@media \(max-width: 900px\) \{[\s\S]*?\.agenda-strip-chips \{ flex-wrap: wrap; \}/);
     // Title line never wraps the On today tag onto the metadata line.
     expect(workspaceStyles).toMatch(/\.task-row-line\.primary-line \{[\s\S]*?flex-wrap: nowrap;/);

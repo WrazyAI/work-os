@@ -4961,11 +4961,11 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     : goal ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "offline" ? "Queued offline" : saveState === "conflict" ? "Resolving conflict" : "Saved";
   const dateFilterActive = !!filterFrom || !!filterTo;
-  // One source for the day's counts: the groups are built from the same
-  // my-day list the view renders, so the strip can never contradict the list.
+  // One source for the day's groups: they are built from the same my-day list
+  // the view renders, so a group's count can never contradict the rows beneath
+  // it. The strip no longer restates those counts — it states the focus and the
+  // carry action, and the groups and view chips carry the numbers.
   const dayGroups = dayTaskGroups(myDayTasks, currentDate, taskSort);
-  const dayGroupCount = (id: "overdue" | "today" | "later" | "undated") => dayGroups.find((group) => group.id === id)?.tasks.length ?? 0;
-  const focusDoneTodayCount = completedTasks.filter((task) => String(task.completed_at ?? task.due_date ?? "").slice(0, 10) === currentDate).length;
   useEffect(() => {
     if (!filtersOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -5043,7 +5043,6 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
         {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><span className="agenda-strip-text">{agendaText}</span><Pencil size={13} aria-hidden="true" /></button> : <span className="agenda-strip-text">{agendaText}</span>}
         <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small>
       </div>
-      {!historical && <div className="task-focus-stats" aria-label="Today’s counts"><span className={dayGroupCount("overdue") > 0 ? "attention" : undefined}><b>{dayGroupCount("overdue")}</b><small>overdue</small></span><span><b>{dayGroupCount("today")}</b><small>due today</small></span><span><b>{focusDoneTodayCount}</b><small>done today</small></span></div>}
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" onClick={() => onCarryOverOpen(true)}><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}
     </section>
     <div className="tasks-toolbar">

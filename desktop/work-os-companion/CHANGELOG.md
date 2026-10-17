@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.61 — 2026-10-17
+
+- The focus strip stops repeating the overdue and due-today counts that the view tabs and group headers already show, so your focus text is no longer cut off.
+
 ## 0.4.60 — 2026-10-17
 
 - The app opens into a quieter First Light screen — Otto works at a bench of light while your day loads, and your workspace rises in when it's ready.

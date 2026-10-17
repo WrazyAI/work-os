@@ -472,8 +472,9 @@ status, and menu columns remain intrinsic and aligned. At narrow widths, the
 due/status columns fold into a labeled line in the row body (Overdue · date,
 Due today, Due date) before anything is hidden; then the project name and
 description drop, so the title, completion control, and due signal always
-survive. The agenda strip stays one compact row down to 780px — focus
-statement, counts, and the carry action — and becomes a two-line stack below.
+survive. The agenda strip stays one compact row down to 780px — the focus
+statement and the carry action — and becomes a two-line stack below. The counts
+it once restated live in the view chips and the per-group headers.
 
 Rows:
 

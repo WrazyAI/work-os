@@ -473,7 +473,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .date-navigator button { border-color: var(--dash-line); color: var(--dash-muted); }
 .formatted-date-picker { color: var(--dash-ink); }
 
-.task-agenda-strip { display: grid; grid-template-columns: minmax(250px, 1.05fr) minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--dash-line); border-radius: 14px; background: rgba(255, 255, 252, 0.88); box-shadow: none; }
+.task-agenda-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 13px 16px; border: 1px solid var(--dash-line); border-radius: 14px; background: rgba(255, 255, 252, 0.88); box-shadow: none; }
 .agenda-strip-focus { min-width: 0; }
 .agenda-strip-text { overflow: hidden; color: var(--dash-ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .agenda-strip-meta { color: var(--dash-muted); font-size: 10px; }
@@ -653,7 +653,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
    are separate beats so the top of the page reads as a decision surface rather
    than one crowded toolbar. */
 .task-agenda-strip {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   min-height: 74px;
   padding: 12px 16px;
@@ -681,7 +681,7 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-list-kicker svg { color: var(--dash-signal-deep); }
 .agenda-strip-edit {
   width: fit-content;
-  max-width: min(620px, 100%);
+  max-width: min(760px, 100%);
   justify-content: flex-start;
   gap: 8px;
   padding: 1px 0;
@@ -690,17 +690,9 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .agenda-strip-edit:hover .agenda-strip-text { text-decoration: none; }
 .agenda-strip-text { font-size: 15px; letter-spacing: -0.025em; }
 .agenda-strip-meta { padding-left: 0; }
-.task-focus-stats {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-left: 14px;
-  border-left: 1px solid rgba(190, 207, 183, 0.8);
-}
-.task-focus-stats span { display: grid; gap: 2px; min-width: 44px; }
-.task-focus-stats b { color: var(--dash-ink); font-size: 18px; letter-spacing: -0.05em; line-height: 1; }
-.task-focus-stats span.attention b { color: #9a670c; }
-.task-focus-stats small { color: var(--dash-muted); font-size: 8.5px; line-height: 1.2; white-space: nowrap; }
+/* The strip's stat trio is gone: the overdue and due-today counts it repeated
+   already lead the day-group headers and the view chips, and "done today" was a
+   third copy. The strip states the focus and the carry action only. */
 .agenda-strip-chips {
   display: flex;
   align-items: center;
@@ -971,9 +963,8 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 @keyframes taskSurfaceEnter { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 720px) {
-  .task-agenda-strip { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "focus focus" "stats carry"; row-gap: 10px; }
+  .task-agenda-strip { grid-template-columns: minmax(0, 1fr); grid-template-areas: "focus" "carry"; row-gap: 10px; }
   .agenda-strip-focus { grid-area: focus; min-width: 0; }
-  .task-focus-stats { grid-area: stats; justify-content: flex-start; padding: 0; border-top: 0; border-left: 0; }
   .agenda-strip-carry { grid-area: carry; justify-self: end; }
   .agenda-strip-chips { width: 100%; overflow-x: auto; }
   .agenda-strip-chips .agenda-strip-chip { flex: 0 0 auto; }
