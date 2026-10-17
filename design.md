@@ -1505,9 +1505,14 @@ build — so the gate that holds every screen until the vault opens always settl
 
 | Gate state | Surface |
 |---|---|
-| Opening | Loading screen: the companion in his working pose, heading, the real stage line, wave, no recovery controls |
+| Opening | Loading screen: the companion in his working pose, heading, the real stage line, the bench pulse, no recovery controls |
 | Opened | The workspace, or whatever screen the workspace itself requires next |
 | Failed | Failure screen: the bounded reason as its explanation, `Retry`, and `Start fresh on this device` only when a stored key cannot be read |
+
+The opening screen is one persistent overlay across the vault and day-read
+phases — only the stage line changes between them. It exits through the
+Morning Rise choreography (§10) once the next surface holds real content,
+never on a timer.
 
 The gate never offers an action it cannot honor. An offline bypass appears only
 on surfaces that can actually run offline; `Start fresh` arms on the first click
@@ -1555,6 +1560,16 @@ its line, replay on its own, or compete with anything else animating. Reduced
 motion renders every one of those states flat. A step change moves in the
 direction the employee moved (forward or back) so the panel's arrival explains
 what changed.
+
+The companion's boot overlay (First Light) carries the launch wait: the bench
+pulse crossing every 3.4s with a ~600ms rest, and the glow breathing at low
+amplitude — the surface's two purposeful loops, the loading-wait exception to
+the no-ambient-loops rule. When the next surface holds real content, the
+handoff plays once: the pulse lands within 300ms (skipped under reduced
+motion), then the night lifts 8px and fades over 640ms with the product
+easing while the workspace rises 8px and fades in; reduced motion gets a
+single 150ms opacity fade. The exit starts only when the data is really
+ready — never a fixed delay.
 
 Respect prefers-reduced-motion. Remove transforms, shimmer, and nonessential
 animation while preserving state, labels, and final geometry.
@@ -1618,7 +1633,8 @@ It may appear as:
 - a restrained full figure in a ready hero;
 - a full figure on the first-run stage — the connect screen, the welcome, and
   the setup steps — and on the pre-app loading screen and its failure state,
-  where he is honestly working or recovering;
+  where he is honestly working at his bench of light or recovering; the
+  launch loader is his bench, never a generic widget;
 - a compact orb in the floating companion;
 - a thinking/recovering/celebrating state when the corresponding event is real.
 
