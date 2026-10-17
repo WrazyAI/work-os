@@ -361,6 +361,10 @@ export default function App() {
   const [report, setReport] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The boot hold releases on a DAY failure only — the shared error string also
+  // carries unrelated failures (task history, insights, notifications) that must
+  // never end the First Light wait early (bootSurface §4.1).
+  const [dayLoadFailed, setDayLoadFailed] = useState(false);
   const [worktivityPending, setWorktivityPending] = useState<PendingWorktivityControl | null>(null);
   const [worktivityControlPhase, setWorktivityControlPhase] = useState<WorktivityControlPhase | null>(null);
   const [clockOutExtendedPrompt, setClockOutExtendedPrompt] = useState(false);
@@ -515,7 +519,7 @@ export default function App() {
     role: workSessionQuery.data?.role ?? null,
     syncBypass,
     dayReady: !!visibleDay,
-    dayFailed: !!error,
+    dayFailed: !!dayLoadFailed,
   });
   const bootRise = useBootRise(landing);
   const adminWorkspaceBranch = landing === "admin" && (!!session || ADMIN_SHELL_BOOT);
@@ -676,6 +680,7 @@ export default function App() {
   const planDirtyRef = useRef(false);
   const applyDayPayload = useCallback((nextDay: DayData) => {
     setError("");
+    setDayLoadFailed(false);
     setReport(nextDay.report?.markdown ?? "");
     setDay((current) => mergeDayPayload(current, nextDay));
     const plan = nextDay.plan;
@@ -1127,6 +1132,7 @@ export default function App() {
         ? "The provider sync is taking longer than usual. Give it a moment and retry — nothing was lost."
         : rawMessage;
       diagnostics.warn("bootstrap.day.degraded", message);
+      setDayLoadFailed(true);
       showError(message, message, "Workday refresh failed");
       return null;
     }
@@ -3635,7 +3641,7 @@ export default function App() {
       : !visibleSession ? "boot:connect_screen"
         : !visibleOnboarding ? "boot:waiting_for_data"
           : visibleOnboarding.onboardingRequired ? "boot:onboarding"
-            : (visibleDay || error) ? "boot:workspace_ready"
+            : (visibleDay || dayLoadFailed) ? "boot:workspace_ready"
               : "boot:waiting_for_data";
   useEffect(() => {
     markBootPhase(bootPhase);

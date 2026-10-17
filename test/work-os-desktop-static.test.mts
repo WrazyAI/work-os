@@ -109,7 +109,7 @@ assert.match(app, /const landing = bootSurface\(\{/);
 assert.match(app, /<BootOverlay/);
 assert.match(app, /boot-rise/);
 assert.match(app, /dayReady: !!visibleDay/);
-assert.match(app, /dayFailed: !!error/);
+assert.match(app, /dayFailed: !!dayLoadFailed/);
 assert.doesNotMatch(app, /loading-wave-large/);
 assert.match(bootModel, /!input\.dayReady && !input\.dayFailed/);
 assert.doesNotMatch(app, /wordmark-badge/);
