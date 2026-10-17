@@ -236,11 +236,17 @@ describe("operational visualizations", () => {
     expect(app).toContain("My day is open work only");
     expect(app).toContain("const openToday = tasks.filter((task) => task.completed !== true);");
     expect(app).toContain("Today <em>{openToday.length}</em>");
-    // My day is assembled on the client, so its chip, the strip counts, and
-    // the list it opens all derive from dayTaskGroups over the same day list.
+    // My day is assembled on the client, so its chip and the list it opens all
+    // derive from dayTaskGroups over the same day list.
     expect(app).toContain("dayTaskGroups(myDayTasks, currentDate, taskSort)");
     expect(app).toContain("dayTaskGroups(displayedTasks, currentDate, taskSort)");
-    expect(app).toContain('className="task-record-section"');
+    // One flat list in group order. The urgency groups lead the sequence and
+    // print no header row: §6.2 keeps status section headers out of the list,
+    // because one stacked under the column row reads as a second header.
+    expect(app).toContain("dayGroupsForDisplay.flatMap((group) => group.tasks).map(renderTaskRow)");
+    expect(app).not.toContain('className="task-record-section"');
+    expect(dashboardStyles).not.toContain(".task-record-section");
+    expect(styles).not.toContain(".task-record-section");
     expect(app).toContain("historyOrder === \"server\" && serverBackedRows");
     // Rows fold their due/status line at narrow widths instead of losing it.
     expect(app).toContain("task-meta-project");

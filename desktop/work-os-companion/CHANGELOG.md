@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.62 — 2026-10-17
+
+- My day is one clean list now: the OVERDUE, DUE TODAY, LATER and NO DATE bands above each block are gone, and every task still shows its own status.
+
 ## 0.4.61 — 2026-10-17
 
 - The focus strip stops repeating the overdue and due-today counts that the view tabs and group headers already show, so your focus text is no longer cut off.

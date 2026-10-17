@@ -538,9 +538,13 @@ selection must not be communicated by color alone.
 ### 6.4 Views and ordering
 
 My day is strictly day-scoped and leads with its work split into urgency
-groups: Overdue, Due today, Later, then No date last, with one quiet header per
-group. The group order never changes with sorting so urgency can never be
-buried; the active column sort orders rows inside each group. Unfinished is
+groups: Overdue, Due today, Later, then No date last. The group order never
+changes with sorting so urgency can never be buried, and the active column sort
+orders rows inside each group. The groups do not print a header row each: §6.2
+keeps status section headers out of the list, and a group header stacked
+directly under the column row reads as a second header while only restating the
+status pill every row already carries. The row sequence carries the grouping and
+the view chips carry the counts. Unfinished is
 open backlog, with overdue work first; the default order applies within each
 group. Completed is historical record. All tasks is the complete inspectable
 set. Every view loads 50 parent

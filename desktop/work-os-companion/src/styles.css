@@ -2356,61 +2356,7 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   pointer-events: none;
 }
 .workspace-task:has(.ellipsis-button[aria-expanded="true"]) { position: relative; z-index: 10; }
-.task-record-section {
-  display: block;
-  position: relative;
-}
-.task-record-section + .task-record-section {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-.task-record-section > header {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 8px;
-}
-.task-record-section > header > div {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.task-record-section > header strong {
-  font-size: 10px;
-  letter-spacing: .055em;
-  text-transform: uppercase;
-}
-.task-record-section > header span {
-  min-width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #e8e7df;
-  color: #65685f;
-  font-size: 8px;
-  font-weight: 700;
-}
-.task-record-section > header small {
-  color: var(--muted);
-  font-size: 9px;
-}
-.task-record-section.overdue > header strong { color: #9b3f31; }
-.task-record-section.overdue > header span {
-  background: #f8ded8;
-  color: #91392d;
-}
 
-.task-record-section > header > .task-record-section-head {
-  flex: 1;
-  justify-content: flex-start;
-}
-.task-record-section > header > .task-record-section-head small {
-  margin-left: auto;
-}
 /* Functional sort row (design §27.3): real column headers with aria-sort, not
    an ornamental replica of the row grid. */
 .sort-header-row {
@@ -2521,8 +2467,6 @@ button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
   .workspace-task { grid-template-columns: 24px minmax(0, 1fr) 56px 30px !important; }
   .task-records .task-due { display: none; }
    .today-progress { gap: 8px; flex-wrap: wrap; }
-  .task-record-section > header { align-items: flex-start; }
-  .task-record-section > header small { max-width: 130px; text-align: right; }
 }
 .insight-grid {
   display: grid;
