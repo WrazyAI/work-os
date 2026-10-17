@@ -25,6 +25,8 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.60 — 2026-10-17
+
 - The app opens into a quieter First Light screen — Otto works at a bench of light while your day loads, and your workspace rises in when it's ready.
 - The administration workspace's page guides now play short film of the real pages instead of drawn scenes, just like the employee guides.
 
