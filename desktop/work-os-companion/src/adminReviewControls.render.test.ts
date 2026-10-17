@@ -124,17 +124,21 @@ describe("review range control", () => {
   }));
 
   it("renders the range as an icon-only filter-cone button that still names the range", () => {
-    const markup = renderRange("2026-09-16", "2026-10-16");
+    // The default range the component recognizes: 30 days back → today, computed
+    // the same way at mount — hardcoded dates broke this test on date rollover.
+    const from = isoDaysAgo(30);
+    const to = todayIso();
+    const markup = renderRange(from, to);
     expect(markup).toContain('class="admin-range-button"');
     expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).toContain('aria-expanded="false"');
-    expect(markup).toContain('aria-label="Filter reports by date range: Sep 16, 2026 – Oct 16, 2026"');
+    expect(markup).toContain(`aria-label="Filter reports by date range: ${formatWorkOsFullDate(from)} – ${formatWorkOsFullDate(to)}"`);
     // The cone icon is the button's only child: no visible range text.
     const button = markup.slice(markup.indexOf("admin-range-button"), markup.indexOf("</button>"));
     expect(button).toContain("<svg");
     expect(button).toContain("lucide-funnel");
     expect(button).not.toContain("<span");
-    expect(markup).not.toContain(">Sep 16, 2026");
+    expect(markup).not.toContain(`>${formatWorkOsFullDate(from)}`);
     expect(markup).not.toContain("admin-range-popup");
     expect(markup).not.toContain("<input");
   });
