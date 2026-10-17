@@ -663,7 +663,7 @@ describe("operational visualizations", () => {
     expect(adminWorkspace).toContain('aria-label={`Profile for ${profile.name}`}');
     expect(adminWorkspace).toContain('title="Open profile settings"');
     expect(adminWorkspace).toContain("<ProfileAvatar name={profile.name} avatarUrl={profile.avatarUrl} />");
-    expect(app).toContain("profile={{ name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }}");
+    expect(app).toContain("profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}");
     // Changelog: one administration-only workspace-menu item. The employee
     // rail reaches the changelog from Settings and never receives this.
     expect(sidebar).toContain("What's new");

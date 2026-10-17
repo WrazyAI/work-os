@@ -3771,15 +3771,19 @@ export default function App() {
     };
   }, [dismissTopLayer, modalOpen]);
 
-  if (landing === "vault_failed") return <LoadingScreen
+  if (landing === "vault_failed") {
+    // The seam decides the surface; the gate's own state carries the failure.
+    const vaultFailure = vaultGate.status === "failed" ? vaultGate.failure : null;
+    return <LoadingScreen
       failed
       retry={retryVaultGate}
-      note={vaultGate.failure.message}
-      onReset={vaultGate.failure.requiresReset ? startFreshOnThisDevice : undefined}
+      note={vaultFailure?.message}
+      onReset={vaultFailure?.requiresReset ? startFreshOnThisDevice : undefined}
       onDebug={() => void openDebugger()}
     />;
+  }
   const renderConnect = () => <ConnectScreen notice={connectNotice} apiBase={apiBase} setApiBase={setApiBase} connecting={connecting} onConnect={() => void connectWorkspace()} onSave={async () => { try { await secureState.saveSettings({ apiBase }); notifications.success("The server address was saved.", "Settings saved"); } catch (value) { showError(value, "The server address could not be saved.", "Settings not saved"); } }} />;
-  const renderOnboarding = () => <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} />;
+  const renderOnboarding = () => visibleOnboarding ? <Onboarding data={visibleOnboarding} simulated={debugScenario.enabled} busy={busy} onNotify={notifications.notify} onOpenDebug={() => void openDebugger()} onLogout={() => void logout()} onComplete={async () => { notifications.success("Your workspace setup is complete.", "Welcome to Work OS"); await refresh(); }} onSaveDraft={async (body) => { if (debugScenario.enabled) return visibleOnboarding ?? undefined; const next = await sendOrQueue("/api/work-os/me/onboarding", "PUT", body); if ((next as { queued?: boolean }).queued) { setQueueCount((await secureState.queue()).length); return { queued: true }; } const onboarding = next as OnboardingData; queryClient.setQueryData(workOsKeys.onboarding(), onboarding); setOnboarding(onboarding); return onboarding; }} onSubmit={async (body) => { if (debugScenario.enabled) { setScenario({ ...debugScenario, onboardingState: "complete", missingDetails: [] }); return visibleDay?.attendance; } const next = await apiRequest<OnboardingData>("/api/work-os/me/onboarding", { method: "POST", headers: { "Idempotency-Key": String(body.clientMutationKey ?? "") }, body: JSON.stringify(body) }); queryClient.setQueryData(workOsKeys.onboarding(), next); setOnboarding(next); const result = await apiRequest<{ attendance?: DayData["attendance"] }>("/api/work-os/me/workday"); return result.attendance; }} /> : null;
 
   /*
    * Administration sits below setup, and that order is the contract: see
@@ -3793,6 +3797,9 @@ export default function App() {
    * rendered owner here (design §9).
    */
   const renderAdmin = () => {
+    // The administration branch only renders with a session; the seam's string
+    // cannot narrow that for TypeScript.
+    if (!workSessionQuery.data) return null;
     /* The administration masthead's bell is the same surface the employee
      * masthead mounts, reading the signed-in account's own notifications. The
      * loading/error pins exist only in the dev-only shell harness, which has no
@@ -3830,7 +3837,7 @@ export default function App() {
         onNavigate={navigateAdmin}
         guideView={pageGuideView}
         onOpenGuide={openGuide}
-        profile={{ name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin }}
+        profile={visibleOnboarding ? { name: visibleOnboarding.profile.displayName, avatarUrl: visibleOnboarding.profile.avatarUrl, onOpen: openProfileFromAdmin } : null}
         onOpenWhatsNew={openChangelogFromAdmin}
         onSwitchToEmployee={() => setWorkspaceMode("employee")}
         onSignOut={() => { void logout(); }}
@@ -3840,6 +3847,9 @@ export default function App() {
   };
 
   const renderWorkspace = () => {
+  // The seam's string cannot narrow the data for TypeScript; this branch only
+  // renders with a session and a loaded onboarding record.
+  if (!visibleSession || !visibleOnboarding) return null;
   const dockVisible = view === "day" || (view === "tasks" && planHistoryDate === visibleDay?.shiftDate);
   const startNewChat = () => {
     clearComposerChat();

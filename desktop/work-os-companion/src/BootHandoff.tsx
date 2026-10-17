@@ -12,7 +12,7 @@ export const BOOT_STAGE_COPY = {
 
 const CONTENT_SURFACES: readonly BootSurface[] = ["connect", "onboarding", "admin", "workspace"];
 const isContentSurface = (surface: BootSurface): boolean => CONTENT_SURFACES.includes(surface);
-const isLoadingSurface = (surface: BootSurface): boolean => surface === "vault_loading" || surface === "data_loading";
+const isLoadingSurface = (surface: BootSurface | null): surface is "vault_loading" | "data_loading" => surface === "vault_loading" || surface === "data_loading";
 
 /** Reduced-motion is read fresh at each handoff so a mid-boot preference change
  * is honored; the choice for one handoff is remembered on the state ref. */
@@ -56,7 +56,9 @@ type BootExit = "idle" | "landing" | "exiting" | "done";
  * `children`. Never renders children while loading; never blocks them after. */
 export function BootOverlay({ surface, children, onExitStart }: {
   surface: Exclude<BootSurface, "vault_failed">;
-  children: ReactNode;
+  /** Absent while the overlay itself is the screen; the loading phases render
+   *  the First Light surface in their place. */
+  children?: ReactNode;
   onExitStart?: () => void;
 }) {
   const [exit, setExit] = useState<BootExit>("idle");
