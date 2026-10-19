@@ -56,9 +56,33 @@ assert.deepEqual(body.provider, { only: ["relace"], allow_fallbacks: false, requ
 /* 2. Send the captured body to the real provider                    */
 /* ---------------------------------------------------------------- */
 
+/** The routing metadata header makes the provider report which endpoint it
+ * selected, so the probe can prove the pin excluded every other provider
+ * instead of only reading back the name of the one that answered. */
+const ROUTING_HEADERS = {
+  Authorization: `Bearer ${KEY}`,
+  "Content-Type": "application/json",
+  "X-OpenRouter-Metadata": "enabled",
+};
+
+/** Asserts the request was served by Relace and by nothing else. */
+function assertRelaceServed(payload: any) {
+  assert.equal(payload.provider, "Relace", "the pinned request must be served by Relace");
+  const metadata = payload.openrouter_metadata;
+  assert.ok(metadata, "the provider must report its routing metadata");
+  assert.equal(metadata.strategy, "direct", "a pinned request must not be load balanced");
+  const available = metadata.endpoints?.available ?? [];
+  assert.equal(available.length, 1, "the pin must leave exactly one eligible endpoint");
+  assert.equal(available[0].provider, "Relace", "the eligible endpoint must be Relace");
+  assert.equal(available[0].selected, true, "Relace must be the selected endpoint");
+  console.log("routing strategy       :", metadata.strategy);
+  console.log("eligible endpoints     :", available.map((e: any) => `${e.provider}${e.selected ? " (selected)" : ""}`).join(", "));
+  console.log("endpoints available    :", `${available.length} of ${metadata.endpoints?.total}`);
+}
+
 const live = await fetch(URL_, {
   method: "POST",
-  headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+  headers: ROUTING_HEADERS,
   body: JSON.stringify(body),
 });
 const liveJson = await live.json() as any;
@@ -67,7 +91,7 @@ console.log("live model             :", liveJson.model);
 console.log("live finish_reason     :", liveJson.choices?.[0]?.finish_reason);
 console.log("live usage             :", JSON.stringify(liveJson.usage));
 assert.equal(live.status, 200, `provider responded ${live.status}: ${JSON.stringify(liveJson).slice(0, 300)}`);
-assert.equal(liveJson.provider, "Relace", "the pinned request must be served by Relace");
+assertRelaceServed(liveJson);
 assert.notEqual(liveJson.choices?.[0]?.finish_reason, "length", "the answer must not be truncated");
 const content = liveJson.choices?.[0]?.message?.content ?? "";
 assert.ok(content.includes("{"), "the provider must answer with JSON");
@@ -96,7 +120,7 @@ console.log("\nplan body reasoning     :", JSON.stringify(planBody.reasoning));
 const planStarted = Date.now();
 const planRes = await fetch(URL_, {
   method: "POST",
-  headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+  headers: ROUTING_HEADERS,
   body: JSON.stringify(planBody),
 });
 const planJson = await planRes.json() as any;
@@ -106,7 +130,7 @@ console.log("plan finish_reason      :", planJson.choices?.[0]?.finish_reason);
 console.log("plan elapsed            :", `${Date.now() - planStarted}ms`, "(timeout", `${AI_TIMEOUTS.plan}ms)`);
 console.log("plan usage              :", JSON.stringify(planUsage));
 assert.equal(planRes.status, 200, `plan provider responded ${planRes.status}`);
-assert.equal(planJson.provider, "Relace");
+assertRelaceServed(planJson);
 assert.equal(planJson.choices?.[0]?.finish_reason, "stop", "the plan must not be truncated");
 const planContent = planJson.choices?.[0]?.message?.content ?? "";
 assert.ok(planContent.length > 0, "the plan must not be empty");

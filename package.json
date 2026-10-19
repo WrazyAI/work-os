@@ -8,6 +8,7 @@
     "start": "next start",
     "runner": "tsx scripts/agent-runner.ts",
     "redeploy": "bash scripts/redeploy.sh",
+    "work-os:verify-ai-stack": "node --import tsx scripts/verify-ai-stack-live.mts",
     "db:apply": "node scripts/apply-migration.mjs",
     "db:apply:work-os": "node scripts/apply-work-os-migration.mjs",
     "work-os:pilot-audit": "node --import tsx scripts/work-os-pilot-audit.ts",
