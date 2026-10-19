@@ -32,9 +32,14 @@ export interface WorkOsAccess {
 }
 
 export class WorkOsConflictError extends Error {
-  constructor(message: string) {
+  /** A machine-readable reason a client can act on (for example
+   * `shift_open`), so it can show the right prompt instead of a generic
+   * failure. */
+  reason?: string;
+  constructor(message: string, reason?: string) {
     super(message);
     this.name = "WorkOsConflictError";
+    this.reason = reason;
   }
 }
 
@@ -292,7 +297,7 @@ export function jsonError(err: unknown, status?: number) {
     }, { status: 503 });
   }
   if (err instanceof WorkOsConflictError) {
-    return NextResponse.json({ error: err.message }, { status: 409 });
+    return NextResponse.json({ error: err.message, ...(err.reason ? { reason: err.reason } : {}) }, { status: 409 });
   }
   if (err instanceof WorkOsValidationError) {
     return NextResponse.json({ error: err.message }, { status: 400 });

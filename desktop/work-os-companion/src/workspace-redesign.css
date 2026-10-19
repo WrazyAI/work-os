@@ -7799,6 +7799,56 @@ button:not(:disabled):active {
   gap: 8px;
 }
 
+/* The destructive draft action stays apart from the draft-building actions:
+   red text, a trash glyph, and its own confirmation. */
+.eod-composer-actions .eod-delete-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid transparent;
+}
+
+.eod-composer-actions .eod-delete-draft:not(:disabled):hover {
+  background: #fbeceb;
+  border-color: #e7c3bd;
+}
+
+.eod-composer-actions .eod-delete-draft:focus-visible {
+  outline: 2px solid #a84232;
+  outline-offset: 2px;
+}
+
+/* An inline action that reads as text but behaves like the control it names. */
+.eod-inline-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.eod-inline-action:hover {
+  color: var(--ink);
+}
+
+.eod-inline-action:focus-visible {
+  outline: 2px solid #7cc936;
+  outline-offset: 2px;
+}
+
+.eod-shift-open-notice {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* Amber attention pill beside the page title when prior EODs are waiting. */
 .masthead-title-row {
   display: flex;

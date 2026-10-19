@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -21,6 +22,14 @@ import { CheckedMoment } from "./CheckedMoment";
 import { useEmployeeDay, useOutstandingEods } from "./useEmployeeDay";
 import { HttpError, fetchJson, calendarDateLabel, requestId, type AnyRow, type EmployeeDayResponse, type OutstandingEodDay } from "./model";
 import { assistantDraftFallbackNotice, assistantDraftNotice, prepareOneScreenshotRound, stripBottleneckSection, extractBottleneckSection, restoreBottleneckSection, type AssistantEodDraftResponse } from "./eod";
+import {
+  EOD_SHIFT_OPEN_LINK_LABEL,
+  EOD_SHIFT_OPEN_PREFIX,
+  EOD_SHIFT_OPEN_REASON,
+  EOD_SHIFT_OPEN_REBUILD_PREFIX,
+  EOD_SHIFT_OPEN_SUFFIX,
+  shiftStillOpen,
+} from "@/lib/work-os-shift-gate";
 import {
   EmptyState,
   IconButton,
@@ -95,6 +104,20 @@ export default function EmployeeReview() {
 
   const eodDay = historical ? selectedDay.data ?? null : day.data ?? null;
   const eodReport = eodDay?.report ?? null;
+  /* An open shift means the day is not finished, so its EOD cannot be
+     drafted. The server refuses the same draft; this is the prompt that
+     explains why, before the employee reaches for the button. A refusal is
+     remembered for the day it happened and drops when a fresh payload
+     arrives, so clocking out brings the action back. */
+  const [refusedDate, setRefusedDate] = useState<string | null>(null);
+  useEffect(() => { setRefusedDate(null); }, [selectedDate]);
+  const shiftOpen = shiftStillOpen({
+    session: eodDay?.session ?? null,
+    attendance: eodDay?.attendance ?? null,
+  });
+  // A fresh day payload is fresh truth: the refusal it supersedes is stale.
+  useEffect(() => { setRefusedDate(null); }, [eodDay?.at]);
+  const shiftBlocked = shiftOpen || refusedDate === selectedDate;
   /* The report date the editor is currently showing; an assistant response for
      another day must never alter the active editor. */
   const activeReportDateRef = useRef<string>("");
@@ -129,6 +152,12 @@ export default function EmployeeReview() {
     onError: (error, variables) => {
       if (variables.date !== activeReportDateRef.current) return;
       const gated = error instanceof HttpError && error.status === 409;
+      // The server refuses a draft for a day that has not ended; the prompt
+      // explains it instead of a bare failure.
+      if (gated && error instanceof HttpError && error.reason === EOD_SHIFT_OPEN_REASON) {
+        setRefusedDate(variables.date);
+        return;
+      }
       const message = error instanceof Error ? error.message : "The assistant draft failed.";
       if (variables.mode === "refine") {
         setEodNotice({ tone: gated ? "warn" : "err", text: `Your feedback was not applied. Your draft is unchanged.${gated ? ` ${message}` : ""}` });
@@ -142,10 +171,15 @@ export default function EmployeeReview() {
     },
   });
 
+  /* The day a draft attempt was made, so a late refusal never lands on the
+     day the employee has since opened. */
+  const attemptedDateRef = useRef("");
+
   const draftEod = useMutation({
     mutationFn: async () => {
       if (!eodDay?.shiftDate) throw new Error("Load the day before drafting its EOD");
       const date = eodDay.shiftDate;
+      attemptedDateRef.current = date;
       // Analyze one bounded batch of waiting frames first so the assistant
       // draft reads the freshest record (the companion runs its own rounds).
       if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
@@ -161,6 +195,12 @@ export default function EmployeeReview() {
         setReportMarkdown(String(created.report?.markdown ?? ""));
       }
       return { created, date };
+    },
+    onError: (error) => {
+      // A shift that is still open refuses the draft; the prompt replaces it.
+      if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
+        setRefusedDate(attemptedDateRef.current);
+      }
     },
     onSuccess: (result) => {
       void refresh();
@@ -248,10 +288,27 @@ export default function EmployeeReview() {
   const proposals = day.data?.proposals ?? [];
   const evidence = eodDay?.evidence ?? [];
   const outstandingDays = outstanding.data?.days ?? [];
-  const error = day.error || selectedDay.error || outstanding.error || draftEod.error || submitEod.error || review.error || disputeEvidence.error;
+  /* A refusal for an open shift is explained by the prompt, not by a raw
+     error banner. */
+  const shiftRefusal = draftEod.error instanceof HttpError && draftEod.error.status === 409 && draftEod.error.reason === EOD_SHIFT_OPEN_REASON;
+  const error = day.error || selectedDay.error || outstanding.error || (shiftRefusal ? null : draftEod.error) || submitEod.error || review.error || disputeEvidence.error;
   const status = String(eodReport?.status || "");
   const editorLocked = status === "pending_review" || status === "approved";
   const submitLabel = status === "pending_review" ? "Submitted for review" : status === "approved" ? "Approved" : "Submit for review";
+
+  /* The prompt for a shift that has not ended. The clock-out reads as inline
+     text, underlined, and behaves like the action it names: it takes the
+     employee to the dashboard, where the Windows Companion closes the
+     shift. */
+  const shiftOpenPrompt = (prefix: string, suffix: string) => (
+    <p className="max-w-[560px] text-[12px] leading-5 text-[var(--text-secondary)]">
+      {prefix}{" "}
+      <Link href="/work-os/today" className="font-semibold underline underline-offset-2" style={{ color: "var(--accent-deep)" }}>
+        {EOD_SHIFT_OPEN_LINK_LABEL}
+      </Link>
+      {suffix}
+    </p>
+  );
 
   const eodPanel = (() => {
     if (eodConfirmation) {
@@ -291,6 +348,7 @@ export default function EmployeeReview() {
       return (
         <>
           {eodNotice ? <Notice tone={eodNotice.tone} className="mb-3">{eodNotice.text}</Notice> : null}
+          {shiftBlocked && !editorLocked ? <div className="mb-3">{shiftOpenPrompt(EOD_SHIFT_OPEN_REBUILD_PREFIX, EOD_SHIFT_OPEN_SUFFIX.webRebuild)}</div> : null}
           <textarea
             value={reportMarkdown}
             onChange={(event) => setReportMarkdown(event.target.value)}
@@ -378,7 +436,7 @@ export default function EmployeeReview() {
               {draftSource ? ` · ${draftSource === "ai" ? "Assistant draft" : "Standard draft"}` : ""}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              {!editorLocked ? (
+              {!editorLocked && !shiftBlocked ? (
                 <SecondaryButton
                   disabled={redraftEod.isPending}
                   onClick={() => redraftEod.mutate()}
@@ -395,6 +453,14 @@ export default function EmployeeReview() {
             </div>
           </div>
         </>
+      );
+    }
+    if (shiftBlocked) {
+      return (
+        <div className="grid gap-2">
+          {shiftOpenPrompt(EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX.web)}
+          <p className="text-[11px] text-[var(--text-tertiary)]">Drafting reads your recorded day and asks the assistant for the narrative — activity context and outcomes, never a productivity claim.</p>
+        </div>
       );
     }
     return (

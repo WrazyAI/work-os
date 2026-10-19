@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
-import { EodComposer, EodLoadingState } from "./taskSurfaces";
+import { ArrowLeft, FileCheck2 } from "lucide-react";
+import { EodComposer, EodLoadingState, EodShiftOpenNotice } from "./taskSurfaces";
 import { CheckedMoment } from "./CheckedMoment";
+import { EOD_SHIFT_OPEN_PREFIX, EOD_SHIFT_OPEN_SUFFIX } from "../../../src/lib/work-os-shift-gate";
 import type { EodScreenshotGallery } from "./types";
 
 const draft = "## Summary\nCompleted the release checks and documented the results for review.\n\n## Completed\n- Verify the EOD refinement flow\n\n## Carried forward\n- Nothing pending";
@@ -109,6 +110,13 @@ const STRESS_RESOLVE_SRC = (summaryId: string, size: "thumb" | "preview" | "full
 export default function EodPreview() {
   const params = new URLSearchParams(window.location.search);
   const refiningPreview = params.has("refining");
+  /* The two states the EOD composer owns beyond the draft itself: an open
+     shift (the draft cannot be rebuilt) and the destructive delete action. */
+  const shiftOpenPreview = params.has("shift-open");
+  const deletePreview = params.has("delete");
+  /* The landing state: the day has not ended, so there is no draft to write
+     yet and the page offers the clock-out instead. */
+  const startPreview = params.has("start");
   const shotsPreview = params.has("shots");
   const stressPreview = params.has("shots-stress");
   const pendingPreview = params.has("shots-pending");
@@ -131,12 +139,27 @@ export default function EodPreview() {
       onDraftAnyway={() => setDraftedAnyway(true)}
     />
   </main></section></div>;
+  // The landing state with an open shift: no draft can be written yet, so the
+  // page offers the clock-out on the dashboard instead.
+  if (startPreview) return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
+    <section className="panel eod-start">
+      <header className="eod-start-head">
+        <FileCheck2 size={20} />
+        <div>
+          <h2>Prepare today’s EOD</h2>
+          <p>Build the report from today’s recorded work, review every line, then submit it. Drafting does not submit anything.</p>
+        </div>
+      </header>
+      <EodShiftOpenNotice prefix={EOD_SHIFT_OPEN_PREFIX} suffix={EOD_SHIFT_OPEN_SUFFIX.companion} onClockOut={() => undefined} />
+      <div className="eod-start-actions" />
+    </section>
+  </main></section></div>;
   return <div className="workspace preview-workspace"><section className="stage"><header className="masthead"><div><p>September 2</p><h1>EOD review</h1></div></header><main className="page">
     {submitted ? <section className="panel eod-submitted" role="status">
       <div className="eod-submitted-head"><button type="button" className="quiet-action" onClick={() => setSubmitted(false)}><ArrowLeft size={14} aria-hidden="true" /> All EODs</button></div>
       <CheckedMoment />
       <strong>EOD submitted</strong>
       <p>Your report is with your manager. You are done for today.</p>
-    </section> : <EodComposer initialMarkdown={markdown} source="ai" redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
+    </section> : <EodComposer initialMarkdown={markdown} source="ai" redrafting={refiningPreview} busy={false} screenshotContext={pendingPreview ? PENDING_CONTEXT : stressPreview ? STRESS_CONTEXT : shotsPreview ? SCREENSHOT_CONTEXT : null} screenshotGallery={pendingPreview ? PENDING_GALLERY : stressPreview ? STRESS_GALLERY : shotsPreview ? SCREENSHOT_GALLERY : null} screenshotResolveSrc={stressPreview ? STRESS_RESOLVE_SRC : shotsPreview ? RESOLVE_SRC : undefined} screenshotSyncUnavailable={params.has("shots-unavailable")} loomEnabled={loomPreview} onLoomPreview={async () => ({ title: "Settlement walkthrough", durationSeconds: 326, createdLocalDate: "2026-09-14", verdict: "same_day", usableForDay: true, metadataAvailable: true })} onLoomDraft={async () => ({ ok: true })} onRedraft={() => setMarkdown(draft)} onDelete={deletePreview ? () => undefined : undefined} shiftOpen={shiftOpenPreview} onOpenDashboard={shiftOpenPreview ? () => undefined : undefined} onRefine={async (_current, feedback, annotations) => { setMarkdown(`${draft}\n\n## Notes\n- Refined from employee feedback: ${feedback || "(none)"}${annotations.length ? ` (+ ${annotations.length} notes)` : ""}`); return true; }} onSubmit={(final) => { setMarkdown(final); setSubmitted(true); }} />}
   </main></section></div>;
 }

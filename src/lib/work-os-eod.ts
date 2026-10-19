@@ -8,6 +8,8 @@ import { localDateForTimezone, zonedDateTimeToUtc } from "@/modules/work-os/comp
 import { listEodScreenshots } from "@/lib/work-os-screenshots";
 import { ensureHourlyScreenshotSummaries } from "@/lib/work-os-screenshot-hours";
 import { eodActivityWindowFor, withinEodActivityWindow } from "@/lib/work-os-eod-window";
+import { eodDraftShiftGate } from "@/lib/work-os-eod-shift-gate";
+import { EOD_SHIFT_OPEN_REASON } from "@/lib/work-os-shift-gate";
 import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/lib/work-os-activity-intervals";
 import {
   clipText,
@@ -353,10 +355,45 @@ export async function draftWorkOsEod(access: WorkOsAccess, personId: string, bod
     }
   }
   const reportDate = dateOnly(body.date) ?? new Date().toISOString().slice(0, 10);
+  // A day that has not ended cannot be described yet: the report would claim
+  // a finished shift while the employee is still working.
+  const gate = await eodDraftShiftGate(access, personId, reportDate);
+  if (gate.blocked) throw new WorkOsConflictError(gate.message, EOD_SHIFT_OPEN_REASON);
   const report = await persistDailyWorkspaceEod(access, personId, reportDate, draftKey);
   await saveReportVersion(access, report, "draft", text(report.markdown) ?? "", draftKey);
   await audit(access, "report.drafted", "report", report.id as string, { personId, reportDate: report.report_date });
   return report;
+}
+
+/** Deletes an unsubmitted EOD draft. A submitted report is the manager's
+ * record and is never removed here; the audit entry keeps the fact that a
+ * draft was discarded. */
+export async function deleteWorkOsEodDraft(access: WorkOsAccess, personId: string, reportId: string) {
+  const { data: report, error: loadError } = await db().from("work_reports")
+    .select("id,person_id,kind,status,submitted_at,report_date")
+    .eq("organization_id", access.organizationId).eq("id", reportId).maybeSingle();
+  if (loadError) throw new Error(`load EOD draft for deletion: ${loadError.message}`);
+  if (!report) throw new WorkOsConflictError("That draft no longer exists.");
+  if (String(report.kind ?? "") !== "eod") throw new WorkOsConflictError("Only an EOD draft can be deleted here.");
+  if (String(report.person_id ?? "") !== personId) throw new WorkOsConflictError("That draft belongs to someone else.");
+  if (!["draft", "rejected"].includes(String(report.status ?? "")) || report.submitted_at) {
+    throw new WorkOsConflictError("A submitted EOD is already with your manager and cannot be deleted.");
+  }
+  // The delete is conditional on the same status the read confirmed, so a
+  // report submitted in the meantime is never removed.
+  const { data: deleted, error: deleteError } = await db().from("work_reports").delete()
+    .eq("organization_id", access.organizationId).eq("id", reportId).eq("person_id", personId)
+    .in("status", ["draft", "rejected"]).is("submitted_at", null).select("id");
+  if (deleteError) throw new Error(`delete EOD draft: ${deleteError.message}`);
+  if (!deleted || deleted.length === 0) {
+    throw new WorkOsConflictError("That draft was submitted or removed already, so it was not deleted.");
+  }
+  await audit(access, "report.deleted", "report", reportId, {
+    personId,
+    kind: "eod",
+    reportDate: report.report_date,
+  });
+  return { deleted: true, reportId };
 }
 
 export type OutstandingEodStatus = "no_draft" | "draft_unsubmitted" | "changes_requested";
