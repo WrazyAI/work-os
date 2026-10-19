@@ -325,8 +325,10 @@ export default function App() {
   const [eodQueued, setEodQueued] = useState(false);
   const [eodGate, setEodGate] = useState<{ gate: string; detail: string } | null>(null);
   const [eodClockedOut, setEodClockedOut] = useState(false);
-  /** The day a draft was refused because the shift was still open. */
-  const [eodShiftRefusedDate, setEodShiftRefusedDate] = useState<string | null>(null);
+  /** The day a draft was refused because the shift was still open, with the
+   * payload the server judged. A fresh payload supersedes the refusal, so
+   * clocking out brings the draft action back. */
+  const [eodShiftRefused, setEodShiftRefused] = useState<{ date: string; at: string | null } | null>(null);
   /** A draft is deleted only after the employee confirms the removal. */
   const [eodDeleteConfirmation, setEodDeleteConfirmation] = useState(false);
   const [eodDeleting, setEodDeleting] = useState(false);
@@ -1118,7 +1120,7 @@ export default function App() {
     eodPrepareCancelRef.current = true;
     eodPrepareAbandonRef.current = true;
     eodPrepareAbortRef.current?.abort();
-    setEodDraft(null); setEodSubmitted(false); setEodQueued(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null); setEodShiftRefusedDate(null); setEodDeleteConfirmation(false);
+    setEodDraft(null); setEodSubmitted(false); setEodQueued(false); setEodGate(null); setEodRedrafting(false); setEodClockedOut(false); setEodPreparing(null); setEodScreenshotNotice(null); setEodShiftRefused(null); setEodDeleteConfirmation(false);
   }, [eodDate]);
   useEffect(() => {
     if (historicalQuery.error) showError(historicalQuery.error, "Daily workspace history could not be loaded.", "History unavailable");
@@ -1743,7 +1745,7 @@ export default function App() {
         // The shift is still open: the day is not finished, so the draft is
         // refused and the prompt explains it.
         if ((value as { reason?: string | null }).reason === EOD_SHIFT_OPEN_REASON) {
-          setEodShiftRefusedDate(target.shiftDate);
+          setEodShiftRefused({ date: target.shiftDate, at: target.at ?? null });
           setEodDraft(null);
           return;
         }
@@ -1883,7 +1885,7 @@ export default function App() {
       // The shift is still open: the draft is refused and the prompt explains
       // it instead of a failure.
       if (value instanceof ApiRequestError && value.status === 409 && value.reason === EOD_SHIFT_OPEN_REASON) {
-        setEodShiftRefusedDate(target?.shiftDate ?? "");
+        setEodShiftRefused({ date: target?.shiftDate ?? "", at: target?.at ?? null });
         return;
       }
       showError(value, "Your EOD draft could not be created.", "EOD draft failed");
@@ -2656,10 +2658,7 @@ export default function App() {
   const reviewShiftOpen = shiftStillOpen({
     session: reviewDay?.session ?? null,
     attendance: reviewDay?.attendance ?? null,
-  }) || eodShiftRefusedDate === reviewShiftDate;
-  // Fresh shift data settles a stale refusal: the employee clocked out, so
-  // the draft action comes back.
-  useEffect(() => { setEodShiftRefusedDate(null); }, [visibleDay?.at, reportDayQuery.data?.at]);
+  }) || (eodShiftRefused?.date === reviewShiftDate && eodShiftRefused.at === (reviewDay?.at ?? null));
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
