@@ -2655,10 +2655,13 @@ export default function App() {
      drafted. The server refuses the same draft; this is the prompt that
      explains it before the employee reaches for the button. */
   const reviewShiftDate = eodDate ?? reviewDay?.shiftDate ?? "";
-  const reviewShiftOpen = shiftStillOpen({
+  /* The gate belongs to the running shift: today. An earlier day has ended,
+     so it stays draftable even when one of its sessions was never closed. */
+  const reviewIsCurrentDay = !eodDate || eodDate === visibleDay?.shiftDate;
+  const reviewShiftOpen = reviewIsCurrentDay && (shiftStillOpen({
     session: reviewDay?.session ?? null,
     attendance: reviewDay?.attendance ?? null,
-  }) || (eodShiftRefused?.date === reviewShiftDate && eodShiftRefused.at === (reviewDay?.at ?? null));
+  }) || (eodShiftRefused?.date === reviewShiftDate && eodShiftRefused.at === (reviewDay?.at ?? null)));
   const outstandingDays = outstandingQuery.data?.days ?? [];
   const goalSuggestion = useMemo(() => suggestDailyGoal(parentTasks(visibleDay?.tasks ?? []), visibleDay?.shiftDate ?? "", planItems), [visibleDay?.tasks, visibleDay?.shiftDate, planItems]);
   // The server backlog is the complete open set (not the paginated history
