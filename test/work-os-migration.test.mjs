@@ -67,6 +67,7 @@ const migrations = [
     "supabase/migrations/0053_work_activity_intervals.sql",
     "neon/migrations/0041_work_activity_intervals.sql",
     "supabase/migrations/0058_work_os_member_ui_state.sql",
+    "supabase/migrations/0061_work_os_membership_determinism.sql",
   ];
 
 test("Work OS companion migration is complete and idempotent", async () => {

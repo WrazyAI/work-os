@@ -4,6 +4,7 @@ import { requireUserProfile, type AppProfile } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminDbRole } from "@/lib/userRoles";
 import { isWorkOsMigrationRequired } from "@/lib/work-os";
+import { pickMembership, type WorkOsMembershipCandidate } from "@/lib/work-os-membership";
 import { checkInIntervalOption, firstFollowUpOption } from "@/modules/work-os/workday";
 
 export type WorkOsOrgRole = "employee" | "manager" | "admin";
@@ -133,20 +134,20 @@ async function resolveDesktopContext(authorization: string) {
 async function loadMembership(userId: string, organizationId?: string | null) {
   let query = createAdminClient()
     .from("work_org_members")
-    .select("id, organization_id, role, person_id, feature_flags")
+    .select("id, organization_id, role, person_id, feature_flags, created_at")
     .eq("user_id", userId)
-    .eq("active", true)
-    .order("created_at", { ascending: true })
-    .limit(1);
+    .eq("active", true);
   if (organizationId) query = query.eq("organization_id", organizationId);
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query;
   if (error) {
     if (companionSchemaMissing(error.message)) {
       throw new Error("Work OS Employee Companion migration required: apply supabase/migrations/0010_work_os_employee_companion.sql.");
     }
     throw new Error(`load Work OS membership: ${error.message}`);
   }
-  return data;
+  // Memberships created by one statement share created_at, so ordering on the
+  // server alone left the chosen organization to row order. Rank here instead.
+  return pickMembership((data ?? []) as WorkOsMembershipCandidate[]);
 }
 
 export async function requireWorkOsAccess(options: {
