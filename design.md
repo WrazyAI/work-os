@@ -485,6 +485,13 @@ and below 481px it keeps the number alone because there is no strip space to gro
 into. The count is also in the action's accessible name, so it is never
 hover-only information.
 
+The focus statement keeps a fixed readable measure rather than filling the
+strip. A longer goal is clipped there and fades at the edge it clips at: the
+right edge at rest, the left edge once it has panned. Hovering the line pans it
+to its end and stops, and leaving returns it to the start at once — the
+transition lives only in the hover state, so the return never animates. Reduced
+motion reaches the same end without the animation, so no text is unreachable.
+
 Rows:
 
 - Minimum 64px high, with 12–16px vertical breathing room.

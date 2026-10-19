@@ -727,14 +727,45 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 .task-list-kicker svg { color: var(--dash-signal-deep); }
 .agenda-strip-edit {
   width: fit-content;
-  max-width: min(760px, 100%);
+  max-width: min(660px, 100%);
   justify-content: flex-start;
   gap: 8px;
   padding: 1px 0;
 }
 .agenda-strip-edit svg { order: 2; color: var(--dash-signal-deep); }
 .agenda-strip-edit:hover .agenda-strip-text { text-decoration: none; }
-.agenda-strip-text { font-size: 15px; letter-spacing: -0.025em; }
+.agenda-strip-text { display: inline-block; overflow: visible; font-size: 15px; letter-spacing: -0.025em; text-overflow: clip; }
+
+/* Today's focus keeps a fixed readable measure, so a long goal is clipped. It
+   fades at the edge it clips at — the right edge at rest — and pans to its end
+   while the line is hovered, at which point the start has scrolled out of view
+   and the fade flips to the left edge. Leaving the line snaps it straight back,
+   so the transition is declared only inside the hover rule. The travel distance
+   is measured in the component and handed over as --focus-shift. */
+.agenda-strip-focus-scroll {
+  display: block;
+  min-width: 0;
+  max-width: min(620px, 100%);
+  overflow: hidden;
+}
+.agenda-strip-focus-scroll.is-overflowing {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+}
+.agenda-strip-focus-scroll.is-overflowing:hover {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 100%);
+}
+.agenda-strip-focus-scroll.is-overflowing .agenda-strip-text { transform: none; transition: none; }
+.agenda-strip-focus-scroll.is-overflowing:hover .agenda-strip-text {
+  transform: translateX(var(--focus-shift, 0px));
+  transition: transform 2200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Reduced motion still reaches the end of the line; it just gets there without
+   animating, so the clipped text is never unreachable. */
+@media (prefers-reduced-motion: reduce) {
+  .agenda-strip-focus-scroll.is-overflowing:hover .agenda-strip-text { transition: none; }
+}
 .agenda-strip-meta { padding-left: 0; }
 /* The strip's stat trio is gone: the overdue and due-today counts it repeated
    already lead the day-group headers and the view chips, and "done today" was a

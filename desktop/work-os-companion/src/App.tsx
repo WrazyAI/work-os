@@ -4956,6 +4956,20 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
   const agendaText = historical
     ? shownPlan?.focus_summary ?? (shownPlan?.freeform_intent || "No focus note was recorded for this day.")
     : goal || suggestion?.text || "Your open tasks define today’s work.";
+  // The focus line keeps a fixed readable measure, so a long goal is clipped and
+  // pans to its end on hover. This is the exact distance it has to travel, and
+  // zero means the line fits and nothing should fade or move.
+  const focusScrollRef = useRef<HTMLSpanElement | null>(null);
+  const [focusOverflow, setFocusOverflow] = useState(0);
+  useEffect(() => {
+    const el = focusScrollRef.current;
+    if (!el) return;
+    const measure = () => setFocusOverflow(Math.max(0, el.scrollWidth - el.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [agendaText]);
   const provenance = historical
     ? !shownPlan?.freeform_intent ? "Task record" : shownPlan.goal_provenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : shownPlan.goal_provenance === "accepted_suggestion" ? "Accepted from that day’s tasks" : "Written on this day"
     : goal ? goalProvenance === "ai_draft" ? `Drafted with ${MASCOT.name}` : goalProvenance === "accepted_suggestion" ? "Accepted from today’s tasks" : "Written by you" : suggestion ? "Suggested from today’s tasks" : "Task record";
@@ -5040,7 +5054,7 @@ export function TasksWorkspace({ currentDate, historyDate, backlog = null, backl
     <section className={`panel task-agenda-strip ${historical ? "historical" : ""}`} aria-label="Agenda">
       <div className="agenda-strip-focus">
         <span className="task-focus-kicker"><Target size={12} aria-hidden="true" /> {historical ? "Workday focus" : "Today's focus"}</span>
-        {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><span className="agenda-strip-text">{agendaText}</span><Pencil size={13} aria-hidden="true" /></button> : <span className="agenda-strip-text">{agendaText}</span>}
+        {!historical ? <button type="button" className="agenda-strip-edit" onClick={onEditFocus} title="Edit focus"><span ref={focusScrollRef} className={`agenda-strip-focus-scroll${focusOverflow > 0 ? " is-overflowing" : ""}`} style={{ "--focus-shift": `${-focusOverflow}px` } as CSSProperties}><span className="agenda-strip-text">{agendaText}</span></span><Pencil size={13} aria-hidden="true" /></button> : <span className="agenda-strip-focus-scroll"><span className="agenda-strip-text">{agendaText}</span></span>}
         <small className="agenda-strip-meta">{provenance}{!historical ? ` · ${saveLabel}` : ""}{!historical && saveState === "saving" ? <FadeArc size={11} /> : null}{!historical && (saveState === "offline" || saveState === "conflict") ? <button type="button" className="goal-retry" title={saveState === "conflict" ? "Goal not saved — refresh the day, then retry." : "Goal not saved — click to retry."} aria-label="Retry saving the goal" onClick={() => onRetryGoalSave?.()}><RefreshCw size={11} /></button> : null}</small>
       </div>
       {!historical && carryOver.length > 0 && <button className="agenda-strip-carry" aria-label={`Review unfinished work — ${carryOver.length} unfinished task${carryOver.length === 1 ? "" : "s"}`} onClick={() => onCarryOverOpen(true)}><span className="carry-count" aria-hidden="true"><b>{carryOver.length > 99 ? "99+" : carryOver.length}</b><small>{carryOver.length === 1 ? "unfinished task" : "unfinished tasks"}</small></span><AlertTriangle size={13} aria-hidden="true" /> Review unfinished work <ChevronRight size={13} aria-hidden="true" /></button>}

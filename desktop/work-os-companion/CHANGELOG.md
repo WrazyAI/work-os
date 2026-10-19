@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.64 — 2026-10-19
+
+- Today's focus keeps to a fixed width and fades where it's cut off; hover the line and it scrolls to the end, then snaps back the moment you move away.
+
 ## 0.4.63 — 2026-10-19
 
 - The Review unfinished work button now shows a small amber count of open tasks from earlier days, and expands to the full phrase when you hover or focus it.
