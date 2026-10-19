@@ -4,7 +4,7 @@ import { intervalProvenanceLabel, listActivityIntervalActivityLines } from "@/li
 import { analyzeLoomForAgent } from "@/lib/aiLoom";
 import { formatReportDate } from "@/lib/work-os-eod-facts";
 import { eodActivityWindowFor } from "@/lib/work-os-eod-window";
-import { eodDraftShiftGate } from "@/lib/work-os-eod-shift-gate";
+import { eodDraftExists, eodDraftShiftGate } from "@/lib/work-os-eod-shift-gate";
 import { EOD_SHIFT_OPEN_REASON } from "@/lib/work-os-shift-gate";
 import type { EodScreenshotHour } from "@/lib/work-os-screenshot-hours";
 import { loomMetadataEnabled } from "@/lib/work-os-loom";
@@ -38,8 +38,10 @@ firstFollowUpMinutes: req.headers.get("x-work-os-first-follow-up-minutes"),
     const personId = auth.access.personId as string;
     /* A fresh draft describes a finished day, so an open shift refuses it.
        Refining a draft that already exists stays available: the day being
-       refined is already recorded. */
-    const isRefinement = typeof body.draft === "string" && body.draft.trim().length > 0;
+       refined is already recorded. The exemption needs that stored draft —
+       arbitrary draft text is not a refinement. */
+    const submittedDraft = typeof body.draft === "string" ? body.draft.trim() : "";
+    const isRefinement = submittedDraft.length > 0 && await eodDraftExists(auth.access, personId, date);
     if (!isRefinement) {
       const gate = await eodDraftShiftGate(auth.access, personId, date);
       if (gate.blocked) {

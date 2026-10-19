@@ -21,7 +21,17 @@ export type ShiftGateAttendance = {
   source?: unknown;
   state?: unknown;
   stale?: unknown;
+  observedAt?: unknown;
 } | null | undefined;
+
+function instant(value: unknown): number | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
 
 /** True while the workday session is still running. A closed session — one
  * with a clock-out, or a state that names a finished shift — is never open. */
@@ -46,9 +56,28 @@ export function attendanceStillOpen(attendance: ShiftGateAttendance): boolean {
   return state === "active" || state === "paused";
 }
 
-/** Whether the employee's workday is still open. */
+/** Whether the workday is still open.
+ *
+ * Worktivity owns attendance, so the freshest fact decides: a provider
+ * observation that is newer than the mirrored session settles a conflict,
+ * and a clock-out recorded after the provider's last observation ends the
+ * shift even when the provider has not been polled again yet. */
 export function shiftStillOpen(input: { session?: ShiftGateSession; attendance?: ShiftGateAttendance }): boolean {
-  return sessionStillOpen(input.session) || attendanceStillOpen(input.attendance);
+  const session = input.session ?? null;
+  const attendance = input.attendance ?? null;
+  const closedAt = instant(session?.clocked_out_at);
+  const observedAt = instant(attendance?.observedAt);
+  // A clock-out newer than the last observation is the fresher fact: the
+  // employee has closed the shift, whatever the provider last reported.
+  if (closedAt !== null && (observedAt === null || closedAt >= observedAt)) return false;
+  if (attendance && String(attendance.source ?? "") === "worktivity" && attendance.stale !== true) {
+    const state = String(attendance.state ?? "");
+    if (state === "active" || state === "paused") return true;
+    // The provider is the attendance authority: a fresh off-shift observation
+    // ends the shift even when the mirrored session still says otherwise.
+    if (state === "off_shift") return false;
+  }
+  return sessionStillOpen(session);
 }
 
 /** The shared prompt for a shift that has not ended. The link label is inline

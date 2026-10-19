@@ -689,6 +689,7 @@ test("an unfinished day cannot be drafted, and a draft can be deleted", async ()
   const draftRoute = await source("src/app/api/work-os/me/eod/ai-draft/route.ts");
   assert.match(draftRoute, /eodDraftShiftGate/, "the assistant draft refuses a day whose shift is still open");
   assert.match(draftRoute, /isRefinement/, "refining an existing draft stays available while the shift is open");
+  assert.match(draftRoute, /eodDraftExists/, "the refinement exemption needs a stored draft to edit");
   const deleteRoute = await source("src/app/api/work-os/reports/[reportId]/route.ts");
   assert.match(deleteRoute, /export async function DELETE/, "the report route deletes a draft");
   assert.match(deleteRoute, /requireWorkOsPersonAccess/, "the delete is scoped to the caller's person");

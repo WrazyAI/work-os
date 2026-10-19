@@ -42,8 +42,22 @@ export async function eodDraftShiftGate(
         source: "worktivity",
         state: attendanceResult.data.state,
         stale: !Number.isFinite(observedAt) || at.getTime() - observedAt > STALE_OBSERVATION_MS,
+        observedAt: attendanceResult.data.observed_at,
       }
       : null,
   });
   return open ? { blocked: true, message: EOD_SHIFT_OPEN_SERVER_MESSAGE } : { blocked: false };
+}
+
+/** Whether an editable (unsubmitted) EOD draft exists for the day. A
+ * refinement only ever edits a stored draft, so this is what makes the
+ * refinement exemption from the open-shift gate safe. */
+export async function eodDraftExists(access: WorkOsAccess, personId: string, date: string): Promise<boolean> {
+  const { data, error } = await db().from("work_reports")
+    .select("id,status,submitted_at")
+    .eq("organization_id", access.organizationId).eq("person_id", personId).eq("kind", "eod")
+    .eq("report_date", date).in("status", ["draft", "rejected"]).is("submitted_at", null)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Error(`load EOD draft for refinement: ${error.message}`);
+  return !!data;
 }

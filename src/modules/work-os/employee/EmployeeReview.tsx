@@ -106,14 +106,18 @@ export default function EmployeeReview() {
   const eodReport = eodDay?.report ?? null;
   /* An open shift means the day is not finished, so its EOD cannot be
      drafted. The server refuses the same draft; this is the prompt that
-     explains why, before the employee reaches for the button. */
-  const [shiftRefused, setShiftRefused] = useState(false);
-  useEffect(() => { setShiftRefused(false); }, [selectedDate]);
+     explains why, before the employee reaches for the button. A refusal is
+     remembered for the day it happened and drops when a fresh payload
+     arrives, so clocking out brings the action back. */
+  const [refusedDate, setRefusedDate] = useState<string | null>(null);
+  useEffect(() => { setRefusedDate(null); }, [selectedDate]);
   const shiftOpen = shiftStillOpen({
     session: eodDay?.session ?? null,
     attendance: eodDay?.attendance ?? null,
   });
-  const shiftBlocked = shiftOpen || shiftRefused;
+  // A fresh day payload is fresh truth: the refusal it supersedes is stale.
+  useEffect(() => { setRefusedDate(null); }, [eodDay?.at]);
+  const shiftBlocked = shiftOpen || refusedDate === selectedDate;
   /* The report date the editor is currently showing; an assistant response for
      another day must never alter the active editor. */
   const activeReportDateRef = useRef<string>("");
@@ -151,7 +155,7 @@ export default function EmployeeReview() {
       // The server refuses a draft for a day that has not ended; the prompt
       // explains it instead of a bare failure.
       if (gated && error instanceof HttpError && error.reason === EOD_SHIFT_OPEN_REASON) {
-        setShiftRefused(true);
+        setRefusedDate(variables.date);
         return;
       }
       const message = error instanceof Error ? error.message : "The assistant draft failed.";
@@ -167,10 +171,15 @@ export default function EmployeeReview() {
     },
   });
 
+  /* The day a draft attempt was made, so a late refusal never lands on the
+     day the employee has since opened. */
+  const attemptedDateRef = useRef("");
+
   const draftEod = useMutation({
     mutationFn: async () => {
       if (!eodDay?.shiftDate) throw new Error("Load the day before drafting its EOD");
       const date = eodDay.shiftDate;
+      attemptedDateRef.current = date;
       // Analyze one bounded batch of waiting frames first so the assistant
       // draft reads the freshest record (the companion runs its own rounds).
       if (day.data?.access?.featureFlags?.screenshot_summaries === true) await prepareOneScreenshotRound(date);
@@ -190,7 +199,7 @@ export default function EmployeeReview() {
     onError: (error) => {
       // A shift that is still open refuses the draft; the prompt replaces it.
       if (error instanceof HttpError && error.status === 409 && error.reason === EOD_SHIFT_OPEN_REASON) {
-        setShiftRefused(true);
+        setRefusedDate(attemptedDateRef.current);
       }
     },
     onSuccess: (result) => {

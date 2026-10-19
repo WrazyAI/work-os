@@ -29,14 +29,14 @@ chores, and internal tooling unless they change what the employee sees or does.
 - The descriptions attached to your screenshots are now written by a newer AI too.
 - Your hourly activity recap now reaches the companion, instead of timing out before it was ready.
 
-## 0.4.73 — 2026-10-19
-
-- Long task names and descriptions in your task lists now scroll into view when you hover a row, so you can read them in full.
-
-## 0.4.73 — 2026-10-19
+## 0.4.74 — 2026-10-19
 
 - You cannot draft today's end-of-day report while your shift is still running. Clock out first, then write it.
 - An end-of-day draft can now be deleted, next to the other draft controls.
+
+## 0.4.73 — 2026-10-19
+
+- Long task names and descriptions in your task lists now scroll into view when you hover a row, so you can read them in full.
 
 ## 0.4.72 — 2026-10-19
 

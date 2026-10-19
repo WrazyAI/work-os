@@ -49,6 +49,33 @@ test("the shift is open when either the session or the provider says so", () => 
   assert.equal(shiftStillOpen({ session: null, attendance: null }), false);
 });
 
+test("the freshest fact settles a conflicting session and provider state", () => {
+  // The provider closed the shift while the mirrored session still says it is
+  // running: the provider is the attendance authority.
+  assert.equal(shiftStillOpen({
+    session: openSession,
+    attendance: { source: "worktivity", state: "off_shift", stale: false, observedAt: "2026-10-19T17:02:00.000Z" },
+  }), false);
+  // The provider says the employee is still working after the session closed:
+  // the provider wins again.
+  assert.equal(shiftStillOpen({
+    session: closedSession,
+    attendance: { source: "worktivity", state: "active", stale: false, observedAt: "2026-10-19T17:02:00.000Z" },
+  }), true);
+  // A clock-out recorded after the provider's last observation is newer than
+  // that observation, so the shift has ended even though the provider's last
+  // word was "active".
+  assert.equal(shiftStillOpen({
+    session: { ...closedSession, clocked_out_at: "2026-10-19T17:05:00.000Z" },
+    attendance: { source: "worktivity", state: "active", stale: false, observedAt: "2026-10-19T17:02:00.000Z" },
+  }), false);
+  // A stale provider observation never overrides the mirrored session.
+  assert.equal(shiftStillOpen({
+    session: openSession,
+    attendance: { source: "worktivity", state: "off_shift", stale: true, observedAt: "2026-10-19T16:00:00.000Z" },
+  }), true);
+});
+
 test("the prompt is one sentence with an inline clock-out link", () => {
   assert.match(EOD_SHIFT_OPEN_PREFIX, /shift has not ended/);
   assert.equal(EOD_SHIFT_OPEN_LINK_LABEL, "clock out");
