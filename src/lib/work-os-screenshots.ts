@@ -666,6 +666,34 @@ function terminalWindowIds(records: Map<string, WindowSummaryRecord>) {
  * Reuses terminally analyzed frames, processes only missing eligible frames
  * (bounded), and returns the exact persisted summary records available for an
  * activity interval. Never writes scheduled hourly/EOD ledger markers. */
+/** How many frames are analysed at once. Each one is a vision call, so this
+ * trades provider load against how long a window of frames takes to analyse. */
+const SCREENSHOT_ANALYSIS_CONCURRENCY = 6;
+
+/**
+ * Runs `run` over `items` with at most `limit` in flight, keeping the results
+ * in the order of the input. A failing item yields null rather than taking
+ * the whole batch down with it.
+ */
+export async function mapWithConcurrency<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<(R | null)[]> {
+  const results: (R | null)[] = new Array(items.length).fill(null);
+  if (!items.length) return results;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        results[index] = await run(items[index]);
+      } catch {
+        results[index] = null;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return results;
+}
+
 export async function prepareScreenshotWindow(input: {
   organizationId: string;
   personId: string;
@@ -710,10 +738,18 @@ export async function prepareScreenshotWindow(input: {
   await ensureBucket();
   const maxFrames = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(input.maxFrames ?? WINDOW_PREPARE_MAX_FRAMES)));
   let analyzedThisCall = 0;
-  for (const log of sampleScreenshots(pending, maxFrames)) {
+  // Every frame costs one vision call. Analysed them one after another, a
+  // window of a dozen frames took the better part of a minute — long enough
+  // that the companion gave up on the request building the recap before it
+  // could answer, and the recap never reached the employee. A small bounded
+  // pool keeps the work parallel without flooding the provider or the
+  // database.
+  const analyzed = await mapWithConcurrency(sampleScreenshots(pending, maxFrames), SCREENSHOT_ANALYSIS_CONCURRENCY, async (log) => {
     const captureDate = localDateForTimezone(new Date(captureAt(log)), timezone);
-    const row = await processScreenshotLog(access, input.personId, person.worktivity_employee_id, captureDate, log, config, timezone);
-    if (String((row as any)?.processing_status ?? "") !== "failed") analyzedThisCall += 1;
+    return processScreenshotLog(access, input.personId, person.worktivity_employee_id, captureDate, log, config, timezone);
+  });
+  for (const row of analyzed) {
+    if (row && String((row as any)?.processing_status ?? "") !== "failed") analyzedThisCall += 1;
   }
 
   const refreshed = await windowSummaries(access.organizationId, input.personId, bounds);
