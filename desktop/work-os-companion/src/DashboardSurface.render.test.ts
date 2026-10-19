@@ -49,6 +49,7 @@ describe("dashboard surfaces", () => {
     // One owner per count, and the queue states what it is previewing.
     expect(markup).toContain('aria-label="1 planned. Review today’s tasks"');
     expect(markup).toContain("Showing 1 of 1 open");
+    expect(markup).not.toContain("workday-band-footer");
     expect(markup).not.toContain("Observed context");
   });
 
@@ -75,9 +76,10 @@ describe("dashboard surfaces", () => {
     // rendered again.
     expect(markup).not.toContain("Worktivity confirms you are working; Work OS mirrors this session.");
     expect(markup).toContain("Mirrored Worktivity time");
-    expect(markup).toContain("Activity observed");
-    // The window bar's Now reads a clock time, not the elapsed duration.
-    expect(markup).toContain("1:46 PM");
+    // The axis names the scheduled window; the reader's own clock supplies now.
+    expect(markup).not.toContain("<small>Now</small>");
+    // The band footer only exists when it has a notice to carry.
+    expect(markup).not.toContain("workday-band-footer");
     expect(markup).toContain("Make the first task visible");
     // One owner per count, and each fact names where it goes.
     expect(markup).toContain("0</strong><small>completed");

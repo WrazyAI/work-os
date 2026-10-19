@@ -386,8 +386,8 @@ its shape when the shift starts:
 
 1. Attendance band. The state line (Ready to begin, Off shift, or Worktivity
    status), the short state detail plus the clock-in contract, one primary Clock
-   in action in the Windows Companion, one quiet Set focus action, and one
-   attendance sentence naming the provider. The web dashboard shows status and
+   in action in the Windows Companion, and one quiet Set focus action. The web
+   dashboard shows status and
    directs employees to the Companion for attendance actions. Otto is a
    restrained mark in the band, never the reason it is tall.
 2. Window instrument. The time until the window opens at the band's leading edge,
@@ -416,12 +416,15 @@ start attendance.
 The active dashboard is organized around one command surface:
 
 1. Attendance band: the state line (On shift, Paused, or Worktivity status), the
-   window instrument, Pause/Resume and Clock out in the connected Windows
-   Companion, and one freshness line naming Worktivity and the observation.
-   Worktivity owns the state and confirms each change before Work OS mirrors it.
+   window instrument, and Pause/Resume and Clock out in the connected Windows
+   Companion. Worktivity owns the state and confirms each change before Work OS
+   mirrors it. The band has no permanent footer: one exists only while it carries
+   a pending activity check or a focus-save retry, so the normal state spends its
+   height on the instrument instead of a restated status sentence.
 2. Window instrument: elapsed and remaining at the ends of one bounded progress
-   bar whose start, current clock time, and end label the axis. It is a calm
-   instrument, not a gamified score.
+   bar whose start and end label the axis. The position marker carries the
+   present without restating the reader's own clock. It is a calm instrument,
+   not a gamified score.
 3. Counts: completed, open today, overdue, and carried over sit in the band as
    four linked facts. Each has a single owner on the page and opens the view it
    measures; a zero is stated quietly and is not a control.
@@ -717,10 +720,11 @@ actions, so the day's goal and its interval check-ins read as one record. The
 stream is separated by a hairline. Each sheet tab scrolls as its own region.
 
 The goal sits in a collapsible section: a `Today's focus` eyebrow with one
-far-right disclosure. Collapsed, the section keeps the same one-line account
-the card would give — the goal text, or `No goal set for today.` — so the
-stream beneath it is reachable without scrolling past a tall editor the
-employee is not using. The choice is remembered on the device (best-effort
+far-right disclosure. Collapsed, the section hides its own body — the goal card
+or the editor — so the stream beneath it is reachable without scrolling past a
+tall editor the employee is not using. The collapsed row is the eyebrow and the
+disclosure only: it never repeats the goal as a subtitle above the body it was
+supposed to hide, and the body's own display rule never outranks `[hidden]`. The choice is remembered on the device (best-effort
 local storage, default expanded) and only the employee's own disclosure
 changes it; applying a goal never re-collapses the section. The recap stream
 below pages on demand: a small contiguous page with the same explicit

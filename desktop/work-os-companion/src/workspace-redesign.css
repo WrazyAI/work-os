@@ -2421,6 +2421,12 @@ body {
   min-width: 0;
 }
 
+/* The author display rule above outranks the UA [hidden] rule, so the goal body
+   stayed on screen when the section was collapsed. */
+.focus-goal-body[hidden] {
+  display: none;
+}
+
 .focus-goal.is-collapsed {
   gap: 6px;
 }
@@ -2473,17 +2479,6 @@ body {
 .focus-goal-disclosure:focus-visible {
   outline: 2px solid var(--color-focus, #4a7d22);
   outline-offset: 2px;
-}
-
-.focus-goal-preview {
-  margin: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .goal-editor-field {

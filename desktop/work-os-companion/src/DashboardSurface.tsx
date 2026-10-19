@@ -121,15 +121,15 @@ function DashboardTaskQueue({ tasks, currentDate, emptyTitle, emptyBody, busy, t
     : <div className="dashboard-empty-state"><span className="dashboard-empty-icon"><CheckCircle2 size={18} /></span><strong>{emptyTitle}</strong><p>{emptyBody}</p></div>;
 }
 
-function PulseTimeline({ model, showNow = true }: { model: WorkdayDashboardModel; showNow?: boolean }) {
+function PulseTimeline({ model, showPosition = true }: { model: WorkdayDashboardModel; showPosition?: boolean }) {
   const progress = Math.max(0, Math.min(100, model.pulse.progressPercent));
-  // Before the window opens there is no position to mark, so the axis shows the
-  // scheduled start and end only; the live fact is the time until it starts.
+  // The axis names the scheduled window only: the reader's own clock already
+  // tells them the time, so the marker carries the present without restating it.
+  // Before the window opens there is no position to mark.
   return <div className="dashboard-pulse-timeline">
-    <div className="dashboard-pulse-line"><i style={{ width: `${progress}%` }} />{showNow && <b style={{ left: `clamp(8px, ${progress}%, calc(100% - 8px))` }} />}</div>
+    <div className="dashboard-pulse-line"><i style={{ width: `${progress}%` }} />{showPosition && <b style={{ left: `clamp(8px, ${progress}%, calc(100% - 8px))` }} />}</div>
     <div className="dashboard-pulse-labels">
       <span><small>Start</small><strong>{formatWorkOsTime(model.schedule.startsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span>
-      {showNow && <span><small>Now</small><strong>{formatWorkOsTime(new Date(model.asOf).toISOString(), model.schedule.timezone ?? undefined)}</strong></span>}
       <span><small>End</small><strong>{formatWorkOsTime(model.schedule.endsAt ?? undefined, model.schedule.timezone ?? undefined)}</strong></span>
     </div>
   </div>;
@@ -169,7 +169,7 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
           <small>{startsIn ? "Starts in" : model.schedule.phase === "complete" ? "Window" : "Schedule"}</small>
           <strong>{windowReading}</strong>
         </div>
-        <PulseTimeline model={model} showNow={model.schedule.phase !== "upcoming"} />
+        <PulseTimeline model={model} showPosition={model.schedule.phase !== "upcoming"} />
       </div>
       <div className="workday-band-facts" aria-label="Workday counts">
         <BandFact value={model.metrics.planned} label="planned" review="Review today’s tasks" onClick={() => onOpenTasks("today")} />
@@ -177,11 +177,10 @@ export function OffShiftDashboard({ model, tasks, currentDate, busy = false, can
         <BandFact value={model.metrics.overdue} label="overdue" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
         <BandFact value={model.metrics.completed} label="completed" review="Review completed tasks" onClick={() => onOpenTasks("completed")} />
       </div>
-      <footer className="workday-band-footer">
-        <span className="dashboard-attendance"><i className={syncClass(model.stateTone)} aria-hidden="true" />{model.attendance?.message || "No active workday observed."}</span>
+      {(model.activityWatch === "clock-in" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-in" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will clock you in as soon as Worktivity sees you working.</small>}
         {goalSaveState !== "saved" && <small className="dashboard-save-warning"><RefreshCw size={12} aria-hidden="true" /> Focus changes are {goalSaveState === "saving" ? "saving" : "waiting to retry"}.</small>}
-      </footer>
+      </footer>}
     </section>
 
     <section className="day-focus-strip" aria-label="Today’s focus">
@@ -272,11 +271,10 @@ export function ActiveWorkdayDashboard({ model, tasks, previousTasks, otherTasks
         <BandFact value={model.metrics.overdue} label="overdue" review="Review overdue work" danger onClick={() => onOpenTasks("unfinished")} />
         <BandFact value={model.metrics.carryover} label="carried over" review="Review tasks carried over from earlier workdays" onClick={onOpenCarryover} />
       </div>
-      <footer className="workday-band-footer">
-        <span className="dashboard-attendance"><i className={syncClass(model.stateTone)} aria-hidden="true" />{model.attendance?.message || "Observed context is unavailable."}</span>
+      {(model.activityWatch === "clock-out" || goalSaveState !== "saved") && <footer className="workday-band-footer">
         {model.activityWatch === "clock-out" && <small className="dashboard-activity-watch" role="status">Checking your activity… Work OS will close the day when Worktivity observes your clock-out.</small>}
         {goalSaveState !== "saved" && <button className="dashboard-save-warning" onClick={onRetryGoalSave}><RefreshCw size={12} aria-hidden="true" /> Retry focus save</button>}
-      </footer>
+      </footer>}
     </section>
 
     <section className="day-focus-strip" aria-label="Today’s focus">

@@ -242,7 +242,7 @@ describe("ProgressComposer focus panel goal card", () => {
     expect(markup).toContain("focus-goal-body");
   });
 
-  it("collapses the goal section to its one-line preview from the stored choice", () => {
+  it("collapses the goal section itself from the stored choice", () => {
     const values = new Map([["work-os.focus.goal-collapsed.v1", "true"]]);
     vi.stubGlobal("window", {
       localStorage: {
@@ -283,8 +283,10 @@ describe("ProgressComposer focus panel goal card", () => {
         }),
       ));
       expect(markup).toContain("focus-goal is-collapsed");
-      expect(markup).toContain("focus-goal-preview");
-      expect(markup).toContain("Ship the focus card.");
+      // The body is present for the disclosure to control but carries `hidden`,
+      // and no duplicate preview line stands in for it.
+      expect(markup).toMatch(/id="focus-goal-body"[^>]*hidden/);
+      expect(markup).not.toContain("focus-goal-preview");
       expect(markup).toContain('aria-expanded="false"');
       expect(markup).toContain('aria-label="Show today’s focus"');
       // The stream stays reachable beneath the collapsed goal.

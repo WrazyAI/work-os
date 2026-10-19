@@ -4683,7 +4683,6 @@ export function ProgressComposer({ mode = "progress", displayName = null, input,
                 <ChevronDown size={16} aria-hidden="true" className={`chat-task-chevron${goalCollapsed ? "" : " is-open"}`} />
               </button>
             </header>
-            {goalCollapsed ? <p className="focus-goal-preview">{cardGoal || "No goal set for today."}</p> : null}
             <div id="focus-goal-body" className="focus-goal-body" hidden={goalCollapsed}>{cardGoal && !goalEditing ? <div className="goal-card">
          <button type="button" className="goal-card-edit" aria-label="Edit today’s focus" title="Edit today’s focus" onClick={() => { setGoalDraft(cardGoal); setGoalFromSuggestion(false); setGoalEditing(true); }}><Pencil size={14} aria-hidden="true" /></button>
          <p className="goal-card-text">{cardGoal}</p>

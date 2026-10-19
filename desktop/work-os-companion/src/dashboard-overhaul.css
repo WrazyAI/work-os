@@ -229,11 +229,6 @@ body {
 .dashboard-activity-watch { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.4; color: var(--muted); }
 .dashboard-sync-chip { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: 11px; font-weight: 750; }
 .dashboard-sync-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-/* The band's attendance line: one quiet dot and one sentence. The provider is
-   named inside the sentence or by the mirrored-time label, so the footer never
-   reads "Worktivity Worktivity reports…". */
-.dashboard-attendance { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.4; }
-.dashboard-attendance i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 .dashboard-save-warning { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: #96620d; font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; }
 
 .dashboard-pulse-timeline { display: grid; gap: 10px; }
@@ -242,7 +237,6 @@ body {
 .dashboard-pulse-line b { position: absolute; top: 50%; width: 13px; height: 13px; border: 3px solid #fff; border-radius: 50%; background: var(--dash-ink); box-shadow: 0 1px 4px rgba(20, 30, 18, 0.2); transform: translate(-50%, -50%); }
 .dashboard-pulse-labels { display: flex; justify-content: space-between; gap: 10px; }
 .dashboard-pulse-labels span { display: grid; gap: 3px; }
-.dashboard-pulse-labels span:nth-child(2) { text-align: center; }
 .dashboard-pulse-labels span:last-child { text-align: right; }
 .dashboard-pulse-labels small { color: var(--dash-muted); font-size: 10px; }
 .dashboard-pulse-labels strong { font-size: 11px; }
@@ -286,8 +280,8 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   grid-template-areas: "status status" "instrument facts" "footer footer";
-  gap: 8px 24px;
-  padding: 13px 20px 0;
+  gap: 12px 24px;
+  padding: 16px 20px 18px;
   border: 1px solid var(--dash-line);
   border-radius: var(--dash-radius);
   background: var(--dash-card-solid);
@@ -321,7 +315,7 @@ body {
 .band-fact.is-empty { cursor: default; }
 .band-fact.is-empty strong { color: var(--dash-muted); }
 
-.workday-band-footer { grid-area: footer; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 -20px; padding: 8px 20px; border-top: 1px solid var(--dash-line); color: var(--dash-muted); }
+.workday-band-footer { grid-area: footer; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 -20px -18px; padding: 9px 20px; border-top: 1px solid var(--dash-line); color: var(--dash-muted); }
 .workday-band-footer small { font-size: 10px; }
 .workday-band-footer .dashboard-save-warning { margin-left: auto; }
 
@@ -349,13 +343,12 @@ body {
 /* Work queue: the tabs are the panel's title, so no eyebrow or heading restates
    the selected view. */
 .work-queue-panel { min-width: 0; padding: 0; overflow: hidden; }
-.work-queue-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--dash-line); }
-.work-queue-actions { display: flex; align-items: center; gap: 13px; padding-bottom: 10px; }
+.work-queue-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 20px; border-bottom: 1px solid var(--dash-line); }
+.work-queue-actions { display: flex; align-items: center; gap: 13px; }
 .work-queue-header.is-static { align-items: center; padding: 15px 20px 13px; }
 .work-queue-header.is-static h3 { margin: 0; color: var(--dash-ink); font-size: 17px; letter-spacing: -0.02em; line-height: 1.2; }
-.work-queue-header.is-static .work-queue-actions { padding-bottom: 0; }
 .work-queue-tabs { display: flex; gap: 2px; margin: 0; }
-.work-queue-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.work-queue-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
 /* One quiet inset marks the selected view; there is no second underline. */
 .work-queue-tabs button.active { background: #e9eee5; color: var(--dash-ink); }
 .work-queue-tabs button:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
@@ -556,7 +549,7 @@ body {
   .stage { padding-inline: 14px; }
   .masthead { min-height: 86px; margin-bottom: 16px; }
   .mast-actions .provider { display: none; }
-  .workday-band { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "instrument" "facts" "footer"; gap: 10px; padding: 13px 17px 0; }
+  .workday-band { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "instrument" "facts" "footer"; gap: 12px; padding: 15px 17px 17px; }
   .workday-band-status { align-items: flex-start; flex-wrap: wrap; }
   .workday-band-actions { width: 100%; margin-left: 0; }
   .workday-band-instrument { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
@@ -565,8 +558,8 @@ body {
   .workday-band-footer { margin-inline: -17px; padding-inline: 17px; }
   .day-focus-strip { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "kicker copy" "source source"; gap: 3px 12px; padding: 10px 14px; }
   .day-focus-source { padding-left: 24px; }
-  .work-queue-header { display: grid; align-items: start; padding-inline: 14px; }
-  .work-queue-actions { padding-bottom: 8px; }
+  .work-queue-header { display: grid; align-items: start; gap: 8px; padding: 9px 14px 11px; }
+  .work-queue-actions { padding-bottom: 0; }
   .work-queue-tabs { margin-bottom: 0; }
   .work-queue-list { padding-inline: 14px; }
   .work-queue-panel > .dashboard-panel-footer { padding-inline: 14px; }
