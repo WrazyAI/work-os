@@ -724,12 +724,12 @@ describe("operational visualizations", () => {
     // twice, and the focus card restated the summary card's completed/open
     // counts. The band keeps the bar as its one instrument, the focus card's
     // duplicate flow legend is gone, and the four counts have a single owner.
-    expect(dashboardStyles).toContain(".active-band {");
-    expect(dashboardStyles).toContain(".active-focus-strip {");
+    expect(dashboardStyles).toContain(".workday-band {");
+    expect(dashboardStyles).toContain(".day-focus-strip {");
     expect(dashboardStyles).not.toContain(".active-progress-orb");
     expect(dashboardStyles).not.toContain(".active-summary-facts");
-    expect(dashboardSurface).toContain('<section className="active-band">');
-    expect(dashboardSurface).toContain('className="active-focus-strip"');
+    expect(dashboardSurface).toContain('<section className="workday-band">');
+    expect(dashboardSurface).toContain('className="day-focus-strip"');
     expect(dashboardSurface).not.toContain("Workday at a glance");
     expect(dashboardSurface).not.toContain("Keep the queue moving.");
     // One count per fact on the active surface, not a flow legend and a facts

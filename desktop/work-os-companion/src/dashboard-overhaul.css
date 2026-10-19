@@ -135,7 +135,7 @@ body {
 }
 
 .dashboard-panel-heading,
-.active-task-panel-header,
+.work-queue-header,
 .active-command-header {
   display: flex;
   align-items: flex-start;
@@ -144,7 +144,7 @@ body {
 }
 
 .dashboard-panel-heading h3,
-.active-task-panel-header h3 {
+.work-queue-header h3 {
   margin: 6px 0 0;
   color: var(--dash-ink);
   font-size: 17px;
@@ -181,55 +181,6 @@ body {
 .dashboard-status-dot.dashboard-status-warning { background: var(--dash-warning); box-shadow: 0 0 0 4px rgba(212, 139, 22, 0.14); }
 .dashboard-status-dot.dashboard-status-danger { background: var(--dash-danger); box-shadow: 0 0 0 4px rgba(183, 72, 61, 0.12); }
 
-.dashboard-readiness-panel {
-  position: relative;
-  display: grid;
-  grid-column: span 7;
-  min-height: 334px;
-  grid-template-columns: minmax(0, 1fr) 188px;
-  overflow: hidden;
-  background: var(--dash-card-solid);
-}
-
-.dashboard-readiness-panel::after {
-  position: absolute;
-  inset: 0 0 0 48%;
-  background: radial-gradient(circle at 72% 38%, rgba(168, 241, 91, 0.16), transparent 54%);
-  content: "";
-  pointer-events: none;
-}
-
-.dashboard-readiness-copy {
-  position: relative;
-  z-index: 1;
-  padding: 34px 32px 24px;
-}
-
-.dashboard-readiness-copy h2 {
-  max-width: 500px;
-  margin: 18px 0 12px;
-  color: var(--dash-ink);
-  font-size: clamp(30px, 3.5vw, 48px);
-  font-weight: 760;
-  letter-spacing: -0.07em;
-  line-height: 1.02;
-}
-
-.dashboard-readiness-copy > p {
-  max-width: 490px;
-  margin: 0;
-  color: var(--dash-muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.dashboard-primary-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 22px;
-}
-
 .dashboard-primary-action,
 .dashboard-secondary-action,
 .dashboard-danger-action {
@@ -261,38 +212,6 @@ body {
 .dashboard-danger-action:hover:not(:disabled) { background: #fff0ec; }
 .dashboard-primary-action:disabled, .dashboard-secondary-action:disabled, .dashboard-danger-action:disabled { cursor: not-allowed; opacity: 0.5; }
 
-.dashboard-readiness-art {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  padding: 20px;
-}
-
-.dashboard-readiness-art::before {
-  position: absolute;
-  width: 218px;
-  height: 218px;
-  border: 1px solid rgba(120, 175, 84, 0.18);
-  border-radius: 50%;
-  content: "";
-}
-
-.dashboard-art-orbit {
-  position: relative;
-  display: grid;
-  width: 142px;
-  height: 142px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 252, 0.68);
-  box-shadow: 0 14px 28px rgba(50, 78, 35, 0.08);
-}
-
-.dashboard-otto { width: 108px; height: 108px; }
-.dashboard-readiness-art > span { position: relative; margin-top: 17px; color: var(--dash-muted); font-size: 10px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
-
 .dashboard-panel-footer {
   display: flex;
   align-items: center;
@@ -304,52 +223,18 @@ body {
   color: var(--dash-muted);
 }
 
-.dashboard-readiness-panel > .dashboard-panel-footer { position: relative; z-index: 1; grid-column: 1 / -1; align-self: end; }
 .dashboard-panel-footer small { font-size: 11px; line-height: 1.4; }
 /* Attendance watch: a quiet line while Work OS waits for provider-observed
    clock-in/out activity. The manual clock controls stay available. */
 .dashboard-activity-watch { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.4; color: var(--muted); }
-.dashboard-readiness-copy .dashboard-activity-watch { margin: 0; }
 .dashboard-sync-chip { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: 11px; font-weight: 750; }
 .dashboard-sync-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+/* The band's attendance line: one quiet dot and one sentence. The provider is
+   named inside the sentence or by the mirrored-time label, so the footer never
+   reads "Worktivity Worktivity reports…". */
+.dashboard-attendance { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.4; }
+.dashboard-attendance i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 .dashboard-save-warning { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 0; background: transparent; color: #96620d; font: inherit; font-size: 10px; font-weight: 750; cursor: pointer; }
-
-.dashboard-pulse-panel {
-  grid-column: span 5;
-  align-self: stretch;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 24px 23px 0;
-  background: rgba(255, 255, 252, 0.9);
-}
-
-.dashboard-state-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 25px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: #eef2eb;
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.dashboard-pulse-value {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 32px 0 26px;
-}
-
-.dashboard-pulse-value > div { display: grid; gap: 5px; }
-.dashboard-pulse-value small, .dashboard-schedule-badge small { color: var(--dash-muted); font-size: 9px; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
-.dashboard-pulse-value strong { color: var(--dash-ink); font-size: 28px; letter-spacing: -0.06em; }
-.dashboard-schedule-badge { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 8px; min-width: 145px; padding: 11px 12px; border: 1px solid var(--dash-line); border-radius: 13px; background: #f6f9f4; }
-.dashboard-schedule-badge svg { grid-row: span 2; margin-top: 2px; color: var(--dash-signal-deep); }
-.dashboard-schedule-badge strong { font-size: 11px; letter-spacing: 0; }
 
 .dashboard-pulse-timeline { display: grid; gap: 10px; }
 .dashboard-pulse-line { position: relative; height: 7px; border-radius: 99px; background: #e5ebe2; }
@@ -359,42 +244,13 @@ body {
 .dashboard-pulse-labels span { display: grid; gap: 3px; }
 .dashboard-pulse-labels span:nth-child(2) { text-align: center; }
 .dashboard-pulse-labels span:last-child { text-align: right; }
-.dashboard-pulse-labels small { color: var(--dash-muted); font-size: 9px; }
+.dashboard-pulse-labels small { color: var(--dash-muted); font-size: 10px; }
 .dashboard-pulse-labels strong { font-size: 11px; }
-.dashboard-separation-note { display: flex; align-items: center; gap: 6px; margin: auto 0 17px; color: var(--dash-muted); font-size: 10px; line-height: 1.4; }
 
-.dashboard-metric-grid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.dashboard-metric { position: relative; display: flex; align-items: flex-start; gap: 11px; min-width: 0; min-height: 96px; padding: 15px; border: 1px solid var(--dash-line); border-radius: 14px; background: rgba(255, 255, 252, 0.82); color: var(--dash-ink); text-align: left; box-shadow: none; }
-button.dashboard-metric { width: 100%; font: inherit; cursor: pointer; transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease; }
-button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-shadow: var(--dash-shadow); transform: translateY(-1px); }
-.dashboard-metric-icon { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #edf4e9; }
-.dashboard-metric-copy { display: grid; min-width: 0; gap: 3px; }
-.dashboard-metric-copy small { color: var(--dash-muted); font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-.dashboard-metric-copy strong { font-size: 24px; letter-spacing: -0.06em; line-height: 1; }
-.dashboard-metric-copy em { overflow: hidden; color: var(--dash-faint); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.dashboard-metric-arrow { align-self: center; margin-left: auto; color: var(--dash-faint); }
-
-.dashboard-lower-grid { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr); gap: 16px; }
-.dashboard-flow-panel, .dashboard-queue-panel { min-width: 0; padding: 22px 23px 0; }
 .dashboard-inline-link, .dashboard-icon-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
 .dashboard-inline-link:hover { color: var(--dash-ink); }
 .dashboard-icon-link { width: 32px; height: 32px; justify-content: center; border: 1px solid var(--dash-line); border-radius: 10px; }
 .dashboard-icon-link:hover { border-color: var(--dash-line-strong); background: #f5f8f3; color: var(--dash-ink); }
-.dashboard-flow-visual { margin-top: 31px; }
-.dashboard-flow-bar { display: flex; height: 14px; overflow: hidden; border-radius: 999px; background: #e8eee5; }
-.dashboard-flow-bar i { min-width: 0; transition: width 250ms ease; }
-.dashboard-flow-bar .completed, .dashboard-flow-legend .completed { background: var(--dash-signal-deep); }
-.dashboard-flow-bar .carryover, .dashboard-flow-legend .carryover { background: #e1ad49; }
-.dashboard-flow-bar .open, .dashboard-flow-legend .open { background: #d9e1d7; }
-.dashboard-flow-legend { display: flex; flex-wrap: wrap; gap: 11px 18px; margin-top: 12px; }
-.dashboard-flow-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 10px; }
-.dashboard-flow-legend i { width: 7px; height: 7px; border-radius: 50%; }
-.dashboard-flow-legend b { color: var(--dash-ink); }
-.dashboard-focus-block { display: grid; gap: 6px; margin: 28px 0 20px; padding-top: 17px; border-top: 1px solid var(--dash-line); }
-.dashboard-focus-block > span { display: inline-flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
-.dashboard-focus-block > button { padding: 0; border: 0; background: transparent; color: var(--dash-ink); font: inherit; font-size: 15px; font-weight: 700; line-height: 1.35; text-align: left; cursor: pointer; }
-.dashboard-focus-block > small { color: var(--dash-faint); font-size: 10px; }
-
 .dashboard-task-queue { display: grid; gap: 2px; margin-top: 22px; }
 .dashboard-task-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; padding: 11px 0; border-top: 1px solid var(--dash-line); }
 .dashboard-task-row:first-child { border-top: 0; }
@@ -421,12 +277,12 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
    window percentage twice, and together they pushed the first task row past the
    fold at 1024×768, so the bar is the instrument that survives (design.md §5.2
    records the deviation). */
-.active-dashboard { gap: 12px; }
-.active-dashboard > .active-band,
-.active-dashboard > .active-focus-strip,
-.active-dashboard > .active-task-panel { grid-column: 1 / -1; }
+.active-dashboard, .off-shift-dashboard { gap: 12px; }
+.dashboard-shell > .workday-band,
+.dashboard-shell > .day-focus-strip,
+.dashboard-shell > .work-queue-panel { grid-column: 1 / -1; }
 
-.active-band {
+.workday-band {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   grid-template-areas: "status status" "instrument facts" "footer footer";
@@ -436,40 +292,42 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   border-radius: var(--dash-radius);
   background: var(--dash-card-solid);
 }
-.active-band-status { grid-area: status; display: flex; align-items: center; gap: 11px; min-width: 0; }
-.active-band-state { display: grid; gap: 2px; min-width: 0; }
-.active-band-label { display: inline-flex; align-items: center; gap: 7px; color: var(--dash-ink); font-size: 13px; font-weight: 750; letter-spacing: -0.015em; }
-.active-band-detail { margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.35; }
-.active-band-detail.dashboard-status-warning { color: #8a5c10; }
-.active-band-detail.dashboard-status-danger { color: #9a3d33; }
-.active-band-actions { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.workday-band-status { grid-area: status; display: flex; align-items: center; gap: 11px; min-width: 0; }
+.workday-band-state { display: grid; gap: 2px; min-width: 0; }
+.workday-band-label { display: inline-flex; align-items: center; gap: 7px; color: var(--dash-ink); font-size: 13px; font-weight: 750; letter-spacing: -0.015em; }
+.workday-band-detail { margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.35; }
+.workday-band-detail.dashboard-status-warning { color: #8a5c10; }
+.workday-band-detail.dashboard-status-danger { color: #9a3d33; }
+.workday-band-actions { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.workday-band-actions > button { flex: 0 0 auto; white-space: nowrap; }
 
-.active-band-instrument { grid-area: instrument; display: grid; grid-template-columns: auto minmax(140px, 1fr) auto; align-items: center; gap: 16px; min-width: 0; }
-.active-reading { display: grid; gap: 1px; min-width: 0; }
-.active-reading.is-end { justify-items: end; text-align: right; }
-.active-reading small { color: var(--dash-muted); font-size: 10px; font-weight: 750; }
-.active-reading strong { color: var(--dash-ink); font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: -0.045em; line-height: 1.05; }
-.active-reading span { color: var(--dash-muted); font-size: 10px; white-space: nowrap; }
-.active-band-instrument .dashboard-pulse-timeline { min-width: 0; }
-.active-band-instrument .dashboard-pulse-labels strong { font-variant-numeric: tabular-nums; }
+.workday-band-instrument { grid-area: instrument; display: grid; grid-template-columns: auto minmax(140px, 1fr) auto; align-items: center; gap: 16px; min-width: 0; }
+.workday-band-instrument.is-single { grid-template-columns: auto minmax(0, 1fr); }
+.band-reading { display: grid; gap: 1px; min-width: 0; }
+.band-reading.is-end { justify-items: end; text-align: right; }
+.band-reading small { color: var(--dash-muted); font-size: 10px; font-weight: 750; }
+.band-reading strong { color: var(--dash-ink); font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: -0.045em; line-height: 1.05; }
+.band-reading span { color: var(--dash-muted); font-size: 10px; white-space: nowrap; }
+.workday-band-instrument .dashboard-pulse-timeline { min-width: 0; }
+.workday-band-instrument .dashboard-pulse-labels strong { font-variant-numeric: tabular-nums; }
 
-.active-band-facts { grid-area: facts; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 6px; min-width: 0; padding-left: 20px; border-left: 1px solid var(--dash-line); }
-.active-fact { display: grid; gap: 1px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--dash-ink); text-align: left; cursor: pointer; }
-.active-fact strong { font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1.1; }
-.active-fact strong.is-danger { color: var(--dash-danger); }
-.active-fact small { overflow: hidden; color: var(--dash-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.active-fact:hover small { color: var(--dash-ink); text-decoration: underline; text-underline-offset: 2px; }
-.active-fact:focus-visible { border-radius: 4px; outline: 2px solid #4a7d22; outline-offset: 3px; }
-.active-fact.is-empty { cursor: default; }
-.active-fact.is-empty strong { color: var(--dash-muted); }
+.workday-band-facts { grid-area: facts; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 6px; min-width: 0; padding-left: 20px; border-left: 1px solid var(--dash-line); }
+.band-fact { display: grid; gap: 1px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--dash-ink); text-align: left; cursor: pointer; }
+.band-fact strong { font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1.1; }
+.band-fact strong.is-danger { color: var(--dash-danger); }
+.band-fact small { overflow: hidden; color: var(--dash-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.band-fact:hover small { color: var(--dash-ink); text-decoration: underline; text-underline-offset: 2px; }
+.band-fact:focus-visible { border-radius: 4px; outline: 2px solid #4a7d22; outline-offset: 3px; }
+.band-fact.is-empty { cursor: default; }
+.band-fact.is-empty strong { color: var(--dash-muted); }
 
-.active-band-footer { grid-area: footer; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 -20px; padding: 8px 20px; border-top: 1px solid var(--dash-line); color: var(--dash-muted); }
-.active-band-footer small { font-size: 10px; }
-.active-band-footer .dashboard-save-warning { margin-left: auto; }
+.workday-band-footer { grid-area: footer; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 -20px; padding: 8px 20px; border-top: 1px solid var(--dash-line); color: var(--dash-muted); }
+.workday-band-footer small { font-size: 10px; }
+.workday-band-footer .dashboard-save-warning { margin-left: auto; }
 
 /* Today's focus: one line with the same clipped-and-panned behaviour as the
    Tasks agenda strip, so the same sentence behaves the same on both surfaces. */
-.active-focus-strip {
+.day-focus-strip {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas: "kicker copy source";
@@ -481,31 +339,32 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   border-radius: 13px;
   background: var(--dash-card-solid);
 }
-.active-focus-kicker { grid-area: kicker; display: inline-flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 11px; font-weight: 750; }
-.active-focus-kicker svg { color: var(--dash-signal-deep); }
-.active-focus-copy { grid-area: copy; display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--dash-ink); font: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; text-align: left; cursor: pointer; }
-.active-focus-copy > svg { flex: 0 0 auto; color: var(--dash-signal-deep); }
-.active-focus-strip .agenda-strip-focus-scroll { max-width: min(760px, 100%); }
-.active-focus-source { grid-area: source; color: var(--dash-muted); font-size: 10px; white-space: nowrap; }
+.day-focus-kicker { grid-area: kicker; display: inline-flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 11px; font-weight: 750; }
+.day-focus-kicker svg { color: var(--dash-signal-deep); }
+.day-focus-copy { grid-area: copy; display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--dash-ink); font: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; text-align: left; cursor: pointer; }
+.day-focus-copy > svg { flex: 0 0 auto; color: var(--dash-signal-deep); }
+.day-focus-strip .agenda-strip-focus-scroll { max-width: min(760px, 100%); }
+.day-focus-source { grid-area: source; color: var(--dash-muted); font-size: 10px; white-space: nowrap; }
 
 /* Work queue: the tabs are the panel's title, so no eyebrow or heading restates
    the selected view. */
-.active-task-panel { min-width: 0; padding: 0; overflow: hidden; }
-.active-task-panel-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--dash-line); }
-.active-task-panel-actions { display: flex; align-items: center; gap: 13px; padding-bottom: 10px; }
-.active-task-tabs { display: flex; gap: 2px; margin: 0; }
-.active-task-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 11px; border: 0; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
-/* The selected fill comes from the shared active-view rule; this layer only
-   keeps the label at ink strength, so selection is one signal rather than a
-   fill plus an underline. */
-.active-task-tabs button.active { color: var(--dash-ink); }
-.active-task-tabs button:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
-.active-task-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #edf2e9; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
-.active-task-tabs button.active em { background: #e1f2d2; color: #427d21; }
-.active-task-queue { margin: 0; padding: 0 20px; }
-.active-task-queue .dashboard-task-queue { margin-top: 4px; }
-.active-task-panel > .dashboard-panel-footer { margin: 0; padding: 10px 20px; }
-.active-task-showing { margin-left: auto; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.work-queue-panel { min-width: 0; padding: 0; overflow: hidden; }
+.work-queue-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--dash-line); }
+.work-queue-actions { display: flex; align-items: center; gap: 13px; padding-bottom: 10px; }
+.work-queue-header.is-static { align-items: center; padding: 15px 20px 13px; }
+.work-queue-header.is-static h3 { margin: 0; color: var(--dash-ink); font-size: 17px; letter-spacing: -0.02em; line-height: 1.2; }
+.work-queue-header.is-static .work-queue-actions { padding-bottom: 0; }
+.work-queue-tabs { display: flex; gap: 2px; margin: 0; }
+.work-queue-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: var(--dash-muted); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+/* One quiet inset marks the selected view; there is no second underline. */
+.work-queue-tabs button.active { background: #e9eee5; color: var(--dash-ink); }
+.work-queue-tabs button:focus-visible { outline: 2px solid #4a7d22; outline-offset: -2px; }
+.work-queue-tabs em { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 999px; background: #edf2e9; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; font-style: normal; }
+.work-queue-tabs button.active em { background: #e1f2d2; color: #427d21; }
+.work-queue-list { margin: 0; padding: 0 20px; }
+.work-queue-list .dashboard-task-queue { margin-top: 4px; }
+.work-queue-panel > .dashboard-panel-footer { margin: 0; padding: 10px 20px; }
+.work-queue-showing { margin-left: auto; color: var(--dash-muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Task workspace rewrite */
 .tasks-workspace {
@@ -677,9 +536,6 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 @keyframes dashboardDrawerIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 
 @media (max-width: 980px) {
-  .dashboard-readiness-panel, .dashboard-pulse-panel { grid-column: 1 / -1; }
-  .dashboard-pulse-panel { min-height: 0; }
-  .dashboard-lower-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
@@ -700,29 +556,21 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   .stage { padding-inline: 14px; }
   .masthead { min-height: 86px; margin-bottom: 16px; }
   .mast-actions .provider { display: none; }
-  .dashboard-readiness-panel { display: block; min-height: 0; }
-  .dashboard-readiness-copy { padding: 28px 23px 20px; }
-  .dashboard-readiness-copy h2 { margin-top: 15px; font-size: 35px; }
-  .dashboard-readiness-art { display: none; }
-  .dashboard-readiness-panel > .dashboard-panel-footer { margin-top: 0; }
-  .dashboard-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-metric { min-height: 96px; padding: 13px; }
-  .dashboard-metric-copy strong { font-size: 21px; }
-  .active-band { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "instrument" "facts" "footer"; gap: 10px; padding: 13px 17px 0; }
-  .active-band-status { align-items: flex-start; flex-wrap: wrap; }
-  .active-band-actions { width: 100%; margin-left: 0; }
-  .active-band-instrument { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
-  .active-reading strong { font-size: 22px; }
-  .active-band-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 0 0; border-top: 1px solid var(--dash-line); border-left: 0; }
-  .active-band-footer { margin-inline: -17px; padding-inline: 17px; }
-  .active-focus-strip { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "kicker copy" "source source"; gap: 3px 12px; padding: 10px 14px; }
-  .active-focus-source { padding-left: 24px; }
-  .active-task-panel-header { display: grid; align-items: start; padding-inline: 14px; }
-  .active-task-panel-actions { padding-bottom: 8px; }
-  .active-task-tabs { margin-bottom: 0; }
-  .active-task-queue { padding-inline: 14px; }
-  .active-task-panel > .dashboard-panel-footer { padding-inline: 14px; }
-  .active-task-showing { margin-left: 0; }
+  .workday-band { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "instrument" "facts" "footer"; gap: 10px; padding: 13px 17px 0; }
+  .workday-band-status { align-items: flex-start; flex-wrap: wrap; }
+  .workday-band-actions { width: 100%; margin-left: 0; }
+  .workday-band-instrument { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
+  .band-reading strong { font-size: 22px; }
+  .workday-band-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 0 0; border-top: 1px solid var(--dash-line); border-left: 0; }
+  .workday-band-footer { margin-inline: -17px; padding-inline: 17px; }
+  .day-focus-strip { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "kicker copy" "source source"; gap: 3px 12px; padding: 10px 14px; }
+  .day-focus-source { padding-left: 24px; }
+  .work-queue-header { display: grid; align-items: start; padding-inline: 14px; }
+  .work-queue-actions { padding-bottom: 8px; }
+  .work-queue-tabs { margin-bottom: 0; }
+  .work-queue-list { padding-inline: 14px; }
+  .work-queue-panel > .dashboard-panel-footer { padding-inline: 14px; }
+  .work-queue-showing { margin-left: 0; }
   .task-records { padding-inline: 9px; }
   .task-record.workspace-task { grid-template-columns: 29px minmax(0, 1fr) 30px !important; gap: 9px; min-height: 67px; }
   .task-record.workspace-task .task-row-ring, .task-record.workspace-task .task-due, .task-record.workspace-task > .task-state { display: none; }
@@ -738,8 +586,8 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
 @keyframes dashboardSheetIn { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .rail nav button, .dashboard-primary-action, .dashboard-secondary-action, .dashboard-metric, .task-record.workspace-task { transition: none; }
-  .dashboard-flow-bar i, .task-modal-backdrop:has(.task-detail-modal) .task-detail-modal { animation: none; transition: none; }
+  .rail nav button, .dashboard-primary-action, .dashboard-secondary-action, .task-record.workspace-task { transition: none; }
+  .task-modal-backdrop:has(.task-detail-modal) .task-detail-modal { animation: none; transition: none; }
 }
 
 /* Focus-list task workspace: the focus statement, views, filters, and list
@@ -1119,18 +967,19 @@ button.dashboard-metric:hover { border-color: #b8cbb1; background: #fff; box-sha
   /* The three-part instrument cannot hold its readings and a readable window
      bar on one line at phone width, so the bar takes the full row beneath
      them instead of squeezing the Start/Now/End labels into each other. */
-  .active-band-instrument { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "elapsed remaining" "timeline timeline"; gap: 8px 12px; }
-  .active-band-instrument > .active-reading:first-child { grid-area: elapsed; }
-  .active-band-instrument > .active-reading.is-end { grid-area: remaining; }
-  .active-band-instrument > .dashboard-pulse-timeline { grid-area: timeline; }
+  .workday-band-instrument { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "elapsed remaining" "timeline timeline"; gap: 8px 12px; }
+  .workday-band-instrument > .band-reading:first-child { grid-area: elapsed; }
+  .workday-band-instrument > .band-reading.is-end { grid-area: remaining; }
+  .workday-band-instrument > .dashboard-pulse-timeline { grid-area: timeline; }
+  .workday-band-instrument.is-single { grid-template-columns: minmax(0, 1fr); grid-template-areas: "elapsed" "timeline"; }
   /* No hover means no pan, so the goal wraps instead of hiding behind a clip.
      Wrapping removes the overflow, which removes the pan class with it. */
-  .active-focus-strip .agenda-strip-text { white-space: normal; }
+  .day-focus-strip .agenda-strip-text { white-space: normal; }
   .dashboard-task-row-copy strong { display: -webkit-box; overflow: hidden; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 }
 
 /* Below 360px four count columns start truncating their own labels, so they
    take two rows of two rather than clipping the words. */
 @media (max-width: 360px) {
-  .active-band-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
+  .workday-band-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; }
 }

@@ -380,27 +380,32 @@ content axis, tokens, and action language.
 
 ### 5.1 Pre-shift / not clocked in
 
-The wide composition is a 7/5 split:
+The clocked-out dashboard uses the same three-part composition as the active
+day — one workday band, one focus strip, one queue — so the page does not change
+its shape when the shift starts:
 
-1. Readiness hero. One strong outcome statement, short state detail, one
-   primary Clock in action in the Windows Companion, one quiet Set focus
-   action, scheduled window, and one provenance sentence. The web dashboard
-   shows status and directs employees to the Companion for attendance actions.
-   Otto is a restrained visual anchor, never the reason the hero is tall.
-2. Workday pulse. A compact schedule/timeline surface with time-until-shift,
-   scheduled window, and one observation disclaimer. It does not repeat task
-   counts, reviews, or a six-fact provider diagnostic.
-3. Metric strip. Four compact questions, not four decorative tiles:
-   Planned today, Carryover, Completed today, Reviews pending. Each metric has
-   an action path when it has work behind it.
-4. Work in motion. One visual summary of completed/open/carryover work and
-   today's focus.
-5. First moves. A short open-task queue with direct completion and a full Tasks
-   path.
+1. Attendance band. The state line (Ready to begin, Off shift, or Worktivity
+   status), the short state detail plus the clock-in contract, one primary Clock
+   in action in the Windows Companion, one quiet Set focus action, and one
+   attendance sentence naming the provider. The web dashboard shows status and
+   directs employees to the Companion for attendance actions. Otto is a
+   restrained mark in the band, never the reason it is tall.
+2. Window instrument. The time until the window opens at the band's leading edge,
+   with the scheduled start and end on the axis. Before the window opens there is
+   no position to mark, so the axis carries no now dot; the live fact is the time
+   until it starts.
+3. Counts. Planned, carried over, overdue, and completed sit in the band as four
+   linked facts, each opening the view it measures. A zero is a quiet fact, not a
+   control.
+4. Focus strip. Today's focus on one line with its provenance, under the shared
+   pan contract (§6.2).
+5. First moves. A short open-task queue with direct completion, a full Tasks
+   path, and the task-record sync state in its footer.
 
-The readiness hero should feel like a composed editorial panel: large type,
-simple facts, a single ink action, and a small signal accent. Do not use a
-full-bleed green gradient, large decorative robot, or multiple calls to action.
+At 1024×768 the first task row is visible without scrolling, matching the active
+day. The readiness hero and its separate pulse, metric, and work-in-motion cards
+were removed: they restated the counts and the window, and together they pushed
+the queue below the fold.
 
 When no schedule exists, say so and keep the Companion's exception-start
 confirmation truthful. Planning before clock-in must state that it does not

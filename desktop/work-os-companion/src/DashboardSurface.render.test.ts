@@ -36,14 +36,19 @@ describe("dashboard surfaces", () => {
     const model = buildWorkdayDashboardModel({ active: false, paused: false, currentDate: "2026-08-26", shift, attendance, pulse: shiftPulse(null, shift, new Date(now), true, attendance), tasks: [task], carryover: [], focus: "Make the first task visible", focusSource: "Written by you", niftySync: { fresh: true, syncedAt: "2026-08-26T12:06:00Z" } }, now);
     const markup = renderToStaticMarkup(createElement(OffShiftDashboard, { ...baseActions(), model, tasks: [task], currentDate: "2026-08-26", onClockIn: noop }));
 
-    expect(markup).toContain("dashboard-readiness-panel");
-    expect(markup).toContain("Start the day with one clear move.");
-    expect(markup).toContain("2h 52m remaining");
+    expect(markup).toContain("workday-band");
+    expect(markup).toContain("Starts in");
+    expect(markup).toContain("2h 52m");
     expect(markup.match(/Your scheduled window is ready when you are\./g)?.length).toBe(1);
     expect(markup).toContain("Clock in");
     expect(markup).toContain("Clock in with Worktivity from the Windows Companion");
     expect(markup).toContain("Updated August 26, 12:06 PM");
     expect(markup).not.toContain("Scheduled window");
+    expect(markup).not.toContain("dashboard-readiness");
+    expect(markup).not.toContain("dashboard-metric");
+    // One owner per count, and the queue states what it is previewing.
+    expect(markup).toContain('aria-label="1 planned. Review today’s tasks"');
+    expect(markup).toContain("Showing 1 of 1 open");
     expect(markup).not.toContain("Observed context");
   });
 
@@ -55,12 +60,12 @@ describe("dashboard surfaces", () => {
     const model = buildWorkdayDashboardModel({ active: true, paused: false, currentDate: "2026-08-26", shift: activeShift, attendance: activeAttendance, pulse: shiftPulse(activeSession, activeShift, new Date(now), false, activeAttendance), tasks: [task], carryover: [{ id: "carry-1", title: "Resolve carryover", due_date: "2026-08-25", completed: false }], focus: "Make the first task visible", focusSource: "Your focus note", niftySync: { fresh: true, syncedAt: "2026-08-26T13:40:00Z" } }, now);
     const markup = renderToStaticMarkup(createElement(ActiveWorkdayDashboard, { ...baseActions(), model, tasks: [task], previousTasks: [{ id: "carry-1", title: "Resolve carryover", due_date: "2026-08-25", completed: false }], otherTasks: [], currentDate: "2026-08-26", canPause: true, canClockOut: true, taskFlight: new Map([["task-1", "completing" as const]]), onPause: noop, onClockOut: noop, onAddTask: noop }));
 
-    expect(markup).toContain("active-band");
+    expect(markup).toContain("workday-band");
     expect(markup).toContain("4:46");
     expect(markup).toContain("3h 14m");
     // The tabs are the panel's title; there is no second heading restating the
     // selected view.
-    expect(markup).toContain("active-task-tabs");
+    expect(markup).toContain("work-queue-tabs");
     expect(markup).toContain('aria-selected="true"');
     expect(markup).not.toContain("Today’s queue");
     expect(markup).toContain("Yesterday");

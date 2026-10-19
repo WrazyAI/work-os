@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.67 — 2026-10-19
+
+- My Day now looks the same before and after you clock in: one compact workday band, your focus on one line, and your first tasks on screen.
+
 ## 0.4.66 — 2026-10-19
 
 - My Day now leads with one compact workday band and a one-line focus, so your task queue is on screen when the page opens.
