@@ -42,7 +42,9 @@ function bodyOf(markup: string) {
 
 /** The `<tr>` that owns a task title, sliced out of the body markup. */
 function rowFor(body: string, title: string) {
-  const at = body.indexOf(`>${title}</b>`);
+  // The title now sits inside the shared reveal line, so anchor on the text and
+  // walk out to its row rather than assuming the title is the cell's last node.
+  const at = body.indexOf(`>${title}<`);
   expect(at, `task row not found: ${title}`).toBeGreaterThan(-1);
   const start = body.lastIndexOf("<tr", at);
   const end = body.indexOf("</tr>", at);
@@ -122,7 +124,8 @@ describe("administration task table sorting affordances", () => {
   it("keeps the record in the default newest-created order until a column is activated", () => {
     const markup = renderPage();
     const body = markup.slice(markup.indexOf("<tbody>"), markup.indexOf("</tbody>"));
-    const titles = [...body.matchAll(/<b[^>]*>([^<]+)<\/b>/g)].map((match) => match[1]);
+    // The title cell may wrap its text in the reveal line; strip tags and keep the text.
+    const titles = [...body.matchAll(/<b(?:\s[^>]*)?>([\s\S]*?)<\/b>/g)].map((match) => match[1].replace(/<[^>]+>/g, ""));
     // Newest created first — matching the Created column the operator reads —
     // with the one row that records no created date last.
     expect(titles).toEqual([

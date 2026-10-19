@@ -22,6 +22,7 @@ import {
   todayIso,
 } from "./data";
 import { formatWorkOsFullDate, shiftWorkOsDate } from "../dateFormat";
+import { OverflowPanText } from "../OverflowPan";
 import { AdminButton, AdminCard, AdminControls, AdminControlsGroup, Drawer, Notice, Pill, Segmented, SelectField, Skeleton, TextField } from "./ui";
 
 type TaskFilter = "open" | "completed" | "all";
@@ -371,10 +372,10 @@ export default function TasksPage({ initialTaskId }: { initialTaskId?: string })
                   const overdue = task.completed !== true && !!due && due < todayIso();
                   const priority = trimmedText(task.priority);
                   return (
-                    <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
+                    <tr key={id} onClick={() => setSelectedId(id)} tabIndex={0} data-pan-row="true" onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(id); }}>
                       <td>
                         <span className="admin-record">
-                          <b className={task.completed ? "is-done" : undefined}>{String(task.title ?? task.name ?? "Task")}</b>
+                          <b className={task.completed ? "is-done" : undefined}><OverflowPanText>{String(task.title ?? task.name ?? "Task")}</OverflowPanText></b>
                           {/* Project stays a small per-task detail — the list
                               is one flat record, never grouped by project. */}
                           <small>{task.project?.name ? String(task.project.name) : "No project"}{priority ? ` · ${statusLabel(priority)} priority` : ""}{Array.isArray(task.labels) && task.labels.length ? ` · ${task.labels.join(", ")}` : ""}</small>

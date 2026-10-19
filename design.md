@@ -529,9 +529,11 @@ long goal takes longer than a short one — and stops there. Leaving returns it 
 the start at once; the transition lives only in the hover state, so the return
 never animates. Reduced
 motion reaches the same end without the animation, so no text is unreachable.
-The same line carries every clipped task and subtask title in the chat task
-cards, where the row is the hover and focus target, so a title reveals wherever
-the pointer rests on the task. A surface without hover (below 481px) wraps the
+The same line carries every clipped task title — and the subtask titles in the
+chat cards — in the chat task cards and the inline task lists: the employee
+ledger's title and description, and the administration record's title. The row
+is the hover and focus target, so the text reveals wherever the pointer rests on
+the task. A surface without hover (below 481px) wraps the
 goal instead of clipping it, because a pointer-only reveal is not a reveal on a
 touch screen.
 

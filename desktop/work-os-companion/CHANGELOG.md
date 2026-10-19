@@ -29,6 +29,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 - The descriptions attached to your screenshots are now written by a newer AI too.
 - Your hourly activity recap now reaches the companion, instead of timing out before it was ready.
 
+## 0.4.73 — 2026-10-19
+
+- Long task names and descriptions in your task lists now scroll into view when you hover a row, so you can read them in full.
+
 ## 0.4.72 — 2026-10-19
 
 - Long task and subtask names in Otto's task lists now scroll into view when you hover them, so you can read the whole name.
