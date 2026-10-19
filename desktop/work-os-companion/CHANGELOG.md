@@ -25,6 +25,10 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.69 — 2026-10-19
+
+- Today is a little tighter: the extra clock and footer lines are gone, the queue's actions line up, and the Focus panel collapses to its heading.
+
 ## 0.4.68 — 2026-10-19
 
 - The administration page's Settings now carries your own settings — profile, this device, appearance, and page guides — so you don't have to switch views.
