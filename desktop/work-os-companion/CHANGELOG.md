@@ -25,7 +25,7 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
-## 0.4.76 — 2026-10-19
+## 0.4.77 — 2026-10-19
 
 - Long task names and focus lines now scroll at one steady speed, so short ones no longer crawl and long ones no longer race.
 - Your end-of-day draft, daily summaries and activity recaps are now written by a newer AI, so the wording has changed.
