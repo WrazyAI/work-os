@@ -511,10 +511,17 @@ export async function summarizeWorktivityScreenshots(
   await ensureBucket();
   const results = [];
   const maxScreenshots = Math.max(1, Math.min(MAX_SCREENSHOTS_PER_RUN, Math.floor(options.maxScreenshots ?? DEFAULT_SCREENSHOTS_PER_RUN)));
-  for (const log of sampleScreenshots(pending, maxScreenshots)) {
-    const row = await processScreenshotLog(access, personId, person.worktivity_employee_id, date, log, config, timezone);
-    if (String((row as any)?.processing_status ?? "") !== "failed") terminalAfter.add(`screenshot:${log.ID}`);
-    results.push(row);
+  // The same reason as the interval window: each frame is a vision call, and
+  // analysing a day's batch one after another leaves the backlog growing
+  // faster than it can be worked off.
+  const sampled = sampleScreenshots(pending, maxScreenshots);
+  const analyzedRows = await mapWithConcurrency(sampled, SCREENSHOT_ANALYSIS_CONCURRENCY, async (log) =>
+    processScreenshotLog(access, personId, person.worktivity_employee_id, date, log, config, timezone),
+  );
+  for (const [index, log] of sampled.entries()) {
+    const row = analyzedRows[index];
+    if (row && String((row as any)?.processing_status ?? "") !== "failed") terminalAfter.add(`screenshot:${log.ID}`);
+    if (row) results.push(row);
   }
   // Frames still lacking a terminal summary after this batch (failed frames are
   // retried, so they stay pending). Callers use this to keep an interactive

@@ -52,3 +52,13 @@ test("the screenshot window analyses its frames concurrently", async () => {
     "frames must not be analysed one after another",
   );
 });
+
+test("the scheduled day run analyses its frames concurrently", async () => {
+  const lib = await source("src/lib/work-os-screenshots.ts");
+  assert.match(lib, /mapWithConcurrency\(sampled, SCREENSHOT_ANALYSIS_CONCURRENCY/);
+  assert.doesNotMatch(
+    lib,
+    /for \(const log of sampleScreenshots\(pending, maxScreenshots\)\)/,
+    "a day's frames must not be analysed one after another",
+  );
+});
