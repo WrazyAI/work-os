@@ -222,9 +222,12 @@ export function useVoiceInput(options: {
        actually left this machine (encodedBodySize) and when the first byte of
        the answer arrived (responseStart): a request that never left reads
        differently from one the workspace answered late. */
+    const uploadStartedAt = performance.now();
     const uploadTiming = (outcome: string) => {
       const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-      const entry = entries.filter((item) => item.name.includes("/voice/transcribe")).pop();
+      /* Only this upload's entries: the retry overlaps the first attempt, and
+         the path alone cannot tell the two apart. */
+      const entry = entries.filter((item) => item.startTime >= uploadStartedAt - 1 && item.name.includes("/voice/transcribe")).pop();
       if (!entry) {
         diagnostics.warn("voice.upload.timing", "No timing entry for the voice upload", { surface, outcome });
         return;
