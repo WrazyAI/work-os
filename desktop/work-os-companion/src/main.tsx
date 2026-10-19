@@ -80,4 +80,26 @@ if (params.get("window") !== "avatar") startWorkOsQueryPersistence(workOsQueryCl
 // Restore runs in parallel with boot: the vault gate keeps screens hidden
 // until session/vault reads settle, so hydration lands before real data use.
 void restoreWorkOsQueryCache(workOsQueryClient);
-ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={workOsQueryClient}><NotificationProvider><ErrorBoundary><Root /></ErrorBoundary></NotificationProvider></QueryClientProvider></React.StrictMode>);
+/* DEV-only: `?frame=320x430` renders the surface at a fixed size, so a surface
+ * that lives in a resized desktop window (the companion's grown reading bubble,
+ * for instance) can be reviewed at its true proportions in a browser. */
+function frameFromSearch(): { width: number; height: number } | null {
+  if (!import.meta.env.DEV) return null;
+  const value = new URLSearchParams(window.location.search).get("frame");
+  const match = value?.match(/^(\d{3,4})x(\d{3,4})$/);
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
+}
+const frame = frameFromSearch();
+
+ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><QueryClientProvider client={workOsQueryClient}><NotificationProvider><ErrorBoundary>{frame
+  ? <div
+      data-dev-frame={`${frame.width}x${frame.height}`}
+      style={{
+        width: frame.width,
+        height: frame.height,
+        overflow: "hidden",
+        margin: "12px auto",
+        outline: "1px dashed rgba(140,140,140,.6)",
+      } as import("react").CSSProperties}
+    ><Root /></div>
+  : <Root />}</ErrorBoundary></NotificationProvider></QueryClientProvider></React.StrictMode>);

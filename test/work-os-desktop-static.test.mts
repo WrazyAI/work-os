@@ -574,7 +574,7 @@ assert.match(avatar, /lateReasonRequired: lateReasonRequired\(day\?\.session\)/)
 assert.match(avatar, /const agentActivity: MascotAgentActivity =/);
 assert.match(avatar, /const workdayState: MascotWorkdayState =/);
 assert.match(avatar, /const mascotVisual = useMascotRuntime\(/);
-assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" replayKey=\{snoozeReplayId\} \/>/);
+assert.match(avatar, /<MascotPet agent=\{agentActivity\} workday=\{workdayState\} className="avatar-pet" artClassName="avatar-pet-art" replayKey=\{snoozeReplayId\} speaking=\{recapSpeech\.status === "playing"\} \/>/);
 assert.match(avatar, /Late start — add a reason/);
 
 assert.match(app, /const lateReasonMissing = lateReasonRequired\(visibleDay\?\.session\);/);

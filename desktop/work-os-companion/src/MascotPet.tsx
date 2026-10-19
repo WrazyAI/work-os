@@ -16,12 +16,14 @@ export interface MascotPetProps {
   isolated?: boolean;
   reducedMotion?: boolean;
   replayKey?: number;
+  /** Otto is reading aloud: the mouth moves, everything else stays put. */
+  speaking?: boolean;
 }
 
 /** All live full-size surfaces consume one resolved presentation per window.
  * The isolated path also keeps server rendering and fixture tests deterministic. */
 export function MascotPet({ agent = "idle", workday = "active", className, artClassName, style,
-  isolated = false, reducedMotion = false, replayKey = 0 }: MascotPetProps) {
+  isolated = false, reducedMotion = false, replayKey = 0, speaking = false }: MascotPetProps) {
   const snapshot = useMascotRuntimeSnapshot();
   const runtime = isolated ? null : snapshot;
   const visual = runtime ?? deriveMascotVisualState({ agent, workday });
@@ -47,7 +49,7 @@ export function MascotPet({ agent = "idle", workday = "active", className, artCl
     data-attention-cycle={attention.playing ? attention.cycle : undefined}
     data-attention={visual.attention ? "true" : "false"} data-transient={visual.transient ? "true" : "false"}
     aria-hidden="true" onPointerMove={updateGaze} onPointerLeave={resetGaze}>
-    <Pet key={runtime?.replay ?? replayKey} pose={visual.pose} tone={visual.tone} crop="full"
+    <Pet key={runtime?.replay ?? replayKey} pose={visual.pose} tone={visual.tone} crop="full" speaking={speaking}
       className={cx("mascot-pet-art", artClassName)} style={style}
       ariaLabel={`${MASCOT.name}, ${MASCOT.role}, ${visual.label}`} />
   </span>;

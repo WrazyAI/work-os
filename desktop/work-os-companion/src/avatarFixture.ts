@@ -35,6 +35,18 @@ export const AVATAR_OBSERVED_FIXTURE = "observed-working";
 export const AVATAR_ATTENTION_PARAM = "avatar-attention";
 export const AVATAR_SNOOZE_FIXTURE = "snooze-reminder";
 export const AVATAR_RECAP_FIXTURE = "recap";
+export const AVATAR_RECAP_READING_FIXTURE = "recap-reading";
+/** The same reading, frozen mid-sentence: a still frame for review, so the
+ * prompters's proportions can be judged without pressing anything. */
+export const AVATAR_RECAP_READING_STILL_FIXTURE = "recap-reading-still";
+/** The frame after the voice stops: the words stay, and the bubble asks for the
+ * decision the listen was for. */
+export const AVATAR_RECAP_READING_DONE_FIXTURE = "recap-reading-done";
+/** The interactive preview: the plain recap bubble whose Listen really plays
+ * (a shipped sample, the words the prompter shows) and whose ✓ resolves on the
+ * device, so the whole loop — press, listen, confirm or dismiss — can be driven
+ * by hand without a session or a provider call. */
+export const AVATAR_RECAP_LIVE_FIXTURE = "recap-live";
 export const AVATAR_RECAP_PROCESSING_FIXTURE = "recap-processing";
 export const AVATAR_RECAP_NEXT_STEPS_FIXTURE = "recap-next-steps";
 export const AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE = "recap-next-steps-recovery";
@@ -87,7 +99,7 @@ export function avatarFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
   return fixture === AVATAR_RECORDED_FIXTURE || fixture === AVATAR_MULTI_SELECT_SCROLL_FIXTURE || fixture === AVATAR_SHIFT_PROGRESS_FIXTURE || fixture === AVATAR_SNOOZE_FIXTURE
-    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
+    || fixture === AVATAR_RECAP_FIXTURE || fixture === AVATAR_RECAP_LIVE_FIXTURE || fixture === AVATAR_RECAP_READING_FIXTURE || fixture === AVATAR_RECAP_READING_STILL_FIXTURE || fixture === AVATAR_RECAP_READING_DONE_FIXTURE || fixture === AVATAR_RECAP_PROCESSING_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_RECOVERY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_EMPTY_FIXTURE || fixture === AVATAR_RECAP_NEXT_STEPS_PAIR_FIXTURE || fixture === AVATAR_EOD_BUBBLE_FIXTURE || fixture === AVATAR_AGENDA_BUBBLE_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_RECAP_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_AFTER_FIXTURE || fixture === AVATAR_EOD_OUTSTANDING_EXPIRED_FIXTURE || fixture === AVATAR_OBSERVED_FIXTURE;
 }
 
 export function avatarMultiSelectScrollFixtureRequested(search: string): boolean {
@@ -99,6 +111,59 @@ export function avatarRecapFixtureRequested(search: string): boolean {
   if (!import.meta.env.DEV) return false;
   return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_FIXTURE;
 }
+
+/** DEV-only fixture for the read-aloud state: the same recap, already being
+ * spoken. It plays a shipped voice sample as though the route had answered, so
+ * the prompter's motion, Otto's mouth, the dots and the grown bubble can be
+ * watched in a browser without a session or a provider call. */
+export function avatarRecapReadingFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
+  return fixture === AVATAR_RECAP_READING_FIXTURE
+    || fixture === AVATAR_RECAP_READING_STILL_FIXTURE
+    || fixture === AVATAR_RECAP_READING_DONE_FIXTURE
+    || fixture === AVATAR_RECAP_LIVE_FIXTURE;
+}
+
+/** True only for the interactive preview, whose decisions stay on the device. */
+export function avatarRecapLiveFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_LIVE_FIXTURE;
+}
+
+/** True only for the frozen frame: the bubble renders mid-read with a fixed
+ * progress and no audio element at all. */
+export function avatarRecapReadingStillFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  const fixture = new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM);
+  return fixture === AVATAR_RECAP_READING_STILL_FIXTURE || fixture === AVATAR_RECAP_READING_DONE_FIXTURE;
+}
+
+/** True only for the finished frame: the ask row, with the read already over. */
+export function avatarRecapReadingDoneFixtureRequested(search: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  return new URLSearchParams(search).get(AVATAR_FIXTURE_PARAM) === AVATAR_RECAP_READING_DONE_FIXTURE;
+}
+
+/** The lines the reading fixture speaks.
+ *
+ * These are the exact words the shipped voice samples say (`public/voices/*`,
+ * see its README), so the preview can be used to judge whether the prompter
+ * keeps up with the audio: the text on screen and the voice in your ears are
+ * the same sentences. */
+export function avatarRecapReadingFixtureLines(): Array<{ text: string; time: string | null }> {
+  return [
+    { text: "Software-development review across three repositories.", time: null },
+    { text: "Reviewed the cursor-pagination code", time: "7:21 PM" },
+    { text: "Read the blocker notes and an admin work-dashboard request", time: "7:23 PM" },
+    { text: "Checked the review queue for pending reports", time: "7:38 PM" },
+    { text: "Opened the connect-screen implementation notes", time: "7:43 PM" },
+  ];
+}
+
+/** Which shipped sample the reading fixture plays: the first voice, so the
+ * preview shows the default the employee would hear. */
+export const AVATAR_RECAP_READING_SAMPLE = "/voices/warm.mp3";
 
 /** DEV-only fixture for the post-approval moment: the recap bubble plus the
  * three suggestion kinds, so the chat flow can be exercised end to end. */
@@ -367,13 +432,13 @@ export function avatarRecapFixtureCard(): ActivityIntervalCard {
     promptKind: "hourly_fallback",
     generationStatus: "ready",
     reviewStatus: "inferred",
-    headline: "Reviewed the recap bubble and chat scroll behavior",
-    detail: "Worked in the companion chat and the Tasks stream, checked the recap card actions, and verified the composer routing while the plan was pending.",
+    headline: "Reviewed the cursor-pagination work",
+    detail: "Software-development review across three repositories.",
     activities: [
-      "2:20 PM — Edited the recap card in VS Code",
-      "2:41 PM — Ran the render tests in Windows Terminal",
-      "2:58 PM — Checked the companion Tasks stream in Chrome",
-      "3:10 PM — Verified the composer routing in the companion",
+      "7:21 PM — Reviewed the cursor-pagination code",
+      "7:23 PM — Read the blocker notes and an admin work-dashboard request",
+      "7:38 PM — Checked the review queue for pending reports",
+      "7:43 PM — Opened the connect-screen implementation notes",
     ],
     workflow: ["implementation", "verification", "UI inspection"],
     uncertainties: [

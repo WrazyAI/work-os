@@ -20,6 +20,8 @@ function props(overrides: Partial<PersonalSettingsProps> = {}): PersonalSettings
     voiceHotkeyEnabled: true,
     voiceHotkeyError: null,
     onVoiceHotkey: noop,
+    recapVoice: "warm",
+    onRecapVoice: noop,
     autoCheckUpdates: true,
     onAutoCheckUpdates: noop,
     updateDetail: "You're on the latest version.",

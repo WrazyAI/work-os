@@ -423,6 +423,9 @@ export interface ActivityInterval {
   label: string;
   promptKind: "follow_up" | "hourly_fallback";
   generationStatus: "preparing" | "ready" | "unavailable" | "failed";
+  /** Bumped when the synthesis is rewritten; absent on older payloads. A read
+   * sends it back so a clip can never speak a revision the card is not showing. */
+  revision?: number;
   reviewStatus: "inferred" | "confirmed" | "amended";
   headline: string | null;
   detail: string | null;
@@ -461,7 +464,7 @@ export interface ActivityIntervalsData {
  * fields keep older compact payloads renderable. */
 export type ActivityIntervalCard = Pick<
   ActivityInterval,
-  "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus"
+  "id" | "windowStart" | "windowEnd" | "label" | "promptKind" | "generationStatus" | "reviewStatus" | "revision"
   | "headline" | "detail" | "activities" | "workflow" | "uncertainties" | "recordedActivity" | "employeeFeedback" | "failureReason" | "generatedAt" | "reviewedAt"
 > & Partial<Pick<ActivityInterval, "evidence" | "evidenceExpired" | "evidenceCount" | "coverage">>;
 

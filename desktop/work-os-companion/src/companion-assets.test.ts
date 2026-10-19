@@ -369,6 +369,32 @@ describe("floating companion integration", () => {
   });
 });
 
+describe("floating companion recap voice", () => {
+  // Reading a recap aloud: the bubble offers it, the prompter shows the spoken
+  // words, the window grows without moving Otto, and nothing here may become a
+  // second source of the words the server already fixed.
+  it("reads a recap from the bubble with one audio owner", () => {
+    const avatar = readFileSync(resolve(root, "src/AvatarApp.tsx"), "utf8");
+    expect(avatar).toContain("createRecapSpeechPlayer(");
+    expect(avatar).toContain("toggleRecapRead(pendingRecap.id, pendingRecap.revision ?? null)");
+    expect(avatar).toContain("grownWindow(RECAP_BUBBLE_RESTING");
+    expect(avatar).toContain("<RecapPrompter");
+    expect(avatar).toContain("avatar-bubble-listen");
+    // Never a second copy of the spoken words: they come from the route.
+    expect(avatar).not.toContain("buildRecapSpeechLines");
+    // Both hide paths stop the read, a hidden window stops it, and a recording
+    // takes the audio over.
+    expect(avatar.match(/stopRecapRead\(\); void invoke\("hide_avatar"\)/g)).toHaveLength(2);
+    expect(avatar).toContain('if (voice.state !== "idle") stopRecapRead();');
+    expect(avatar).toContain('if (document.visibilityState === "hidden") stopRecapRead();');
+    const css = readFileSync(resolve(root, "src/avatar.css"), "utf8");
+    expect(css).toContain(".avatar-bubble-listen");
+    expect(css).toContain(".avatar-reading-dots");
+    expect(css).toContain("@keyframes avatar-reading-dot");
+    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]{0,140}avatar-reading-dots i \{ animation: none/);
+  });
+});
+
 describe("app quit", () => {
   it("asks the webview for a clean-exit breadcrumb before the host quits", () => {
     const rust = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8");

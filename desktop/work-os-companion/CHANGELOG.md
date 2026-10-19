@@ -25,6 +25,12 @@ chores, and internal tooling unless they change what the employee sees or does.
 
 ## Unreleased
 
+## 0.4.71 — 2026-10-19
+
+- Recaps can be read aloud: press Listen, follow the words as they are spoken, and confirm right there when it ends.
+- Choose how Otto reads to you — Warm, Calm, Bright, or Deep — under Otto's voice in Settings.
+- The voice setting is now called "Voice input & output", since it covers listening and speaking.
+
 ## 0.4.70 — 2026-10-19
 
 - The unfinished count now waits for you to hover its own pill, and today's focus glides at a readable pace instead of racing.

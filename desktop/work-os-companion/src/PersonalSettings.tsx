@@ -2,6 +2,7 @@ import { Bug, ChevronRight, LogOut, RotateCcw } from "lucide-react";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { MemorySummary } from "./MemorySettings";
 import { Setting } from "./Setting";
+import { VoicePicker } from "./VoicePicker";
 import { SettingsSwitch } from "./SettingsSwitch";
 import { SuggestionReview } from "./SuggestionReview";
 import { UPDATE_CHECK_CADENCE_COPY } from "./updater";
@@ -25,6 +26,9 @@ export type PersonalSettingsProps = {
   voiceHotkeyEnabled: boolean;
   voiceHotkeyError?: string | null;
   onVoiceHotkey: (value: boolean) => void;
+  /** The recap voice saved on this device. */
+  recapVoice: string;
+  onRecapVoice: (value: string) => void;
   autoCheckUpdates: boolean;
   onAutoCheckUpdates: (value: boolean) => void;
   /** The desktop updates row's plain-language state line. */
@@ -65,6 +69,8 @@ export function PersonalSettings({
   voiceHotkeyEnabled,
   voiceHotkeyError,
   onVoiceHotkey,
+  recapVoice,
+  onRecapVoice,
   autoCheckUpdates,
   onAutoCheckUpdates,
   updateDetail,
@@ -132,6 +138,12 @@ export function PersonalSettings({
             </span>
           </Setting>
         </section>
+      </section>
+
+      <section className="settings-group" aria-labelledby="settings-voice-title">
+        <header className="settings-group-head"><h3 id="settings-voice-title">Otto's voice</h3></header>
+        <p className="settings-group-note">How recaps are read to you, on this device.</p>
+        <VoicePicker value={recapVoice} onChange={onRecapVoice} />
       </section>
 
       <section className="settings-group" aria-labelledby="settings-guides-title">

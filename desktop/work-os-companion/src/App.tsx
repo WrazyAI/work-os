@@ -78,6 +78,7 @@ import PageGuide from "./PageGuide";
 import GuideTour, { ADMIN_TOUR_PAGES } from "./GuideTour";
 import { usePageGuides } from "./usePageGuides";
 import { adminSectionForGuideView, guideViewForAdminSection, guideViewForSidebar, isAdminGuideView, type GuideView } from "./guideState";
+import { DEFAULT_RECAP_VOICE, normalizeRecapVoice, RECAP_VOICE_EVENT } from "./recapSpeech";
 import { APPEARANCE_EVENT, applyAppearance, normalizeAppearance, type MascotSize, type TextSize } from "./appearance";
 import { ProfileAvatar, ProfileSettings, type ProfileSettingsPatch } from "./ProfileSettings";
 import { PersonalInsights } from "./InsightsView";
@@ -397,6 +398,7 @@ export default function App() {
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
   const [textSize, setTextSize] = useState<TextSize>("small");
   const [mascotSize, setMascotSize] = useState<MascotSize>("large");
+  const [recapVoice, setRecapVoice] = useState<string>(DEFAULT_RECAP_VOICE);
   const [installedVersion, setInstalledVersion] = useState("Reading installed version…");
   const [installedVersionRaw, setInstalledVersionRaw] = useState<string | null>(null);
   const [whatsNew, setWhatsNew] = useState<{ version: string } | null>(null);
@@ -1252,7 +1254,7 @@ export default function App() {
     }
     setSession(current); setQueueCount(queue.length); setQueueAttentionCount(queue.filter((item) => item.status === "needs_attention").length); setApiBase(settings.apiBase); setAutoStart(enabled); setAutoCheckUpdates(settings.autoCheckUpdates); setVoiceHotkeyEnabled(settings.voiceHotkey);
     void applyVoiceHotkey(settings.voiceHotkey);
-    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance);
+    const appearance = normalizeAppearance(settings); setTextSize(appearance.textSize); setMascotSize(appearance.mascotSize); applyAppearance(appearance); setRecapVoice(normalizeRecapVoice(settings.recapVoice));
     if (snapshot && snapshot.access?.organizationId === current?.organizationId) {
       // Seed the cache with the last workday snapshot for an instant first
       // paint; the live query revalidates it in the background.
@@ -2297,6 +2299,20 @@ export default function App() {
       setMascotSize(previous);
       applyAppearance({ textSize, mascotSize: previous });
       showError(errorMessage(value, "The mascot size could not be saved."), "The mascot size could not be saved.", "Setting not saved");
+    }
+  }
+
+  async function chooseRecapVoice(next: string) {
+    const previous = recapVoice;
+    setRecapVoice(next);
+    try {
+      await secureState.saveSettings({ recapVoice: next });
+      // The floating companion is a separate window; tell it now instead of at
+      // its next launch.
+      void emit(RECAP_VOICE_EVENT, { recapVoice: next });
+    } catch (value) {
+      setRecapVoice(previous);
+      showError(errorMessage(value, "Otto's voice could not be saved."), "Otto's voice could not be saved.", "Setting not saved");
     }
   }
 
@@ -3752,6 +3768,8 @@ export default function App() {
       voiceHotkeyEnabled={voiceHotkeyEnabled}
       voiceHotkeyError={voiceHotkeyError}
       onVoiceHotkey={(value) => void toggleVoiceHotkey(value)}
+      recapVoice={recapVoice}
+      onRecapVoice={(next) => void chooseRecapVoice(next)}
       autoCheckUpdates={autoCheckUpdates}
       onAutoCheckUpdates={(value) => void toggleAutoCheckUpdates(value)}
       updateDetail={updateRowCopy(updateRowSummary, installedVersion)}

@@ -5,8 +5,16 @@ import "./studio-otto.css";
 
 const VIEWBOX = { full: "0 0 160 180", head: "9 10 142 110" } as const;
 
+/** The mouth while Otto reads: one bar that steps between closed and open, so
+ * the figure looks like it is the one talking rather than a player playing.
+ * Drawn only on the resting face — a working or alerting pose keeps its own
+ * glyphs, and the bubble's dots carry the reading state there. */
+function SpeakingMouth() {
+  return <path className="studio-speak-mouth" d="M69 74h22v4H69z" />;
+}
+
 /** Terminal glyphs are paths, not font-dependent text or an image of a face. */
-function TerminalFace({ pose }: { pose: MascotPose }) {
+function TerminalFace({ pose, speaking }: { pose: MascotPose; speaking: boolean }) {
   switch (pose) {
     case "think":
       return <g className="studio-terminal-working">
@@ -40,8 +48,10 @@ function TerminalFace({ pose }: { pose: MascotPose }) {
       return <g className="studio-terminal-idle">
         <path className="studio-eye eye-left" d="M57 50v16" />
         <path className="studio-eye eye-right" d="M101 50v16" />
-        <path className="studio-prompt" d="m72 79 7 6-7 6" />
-        <path className="studio-cursor" d="M85 91h10" />
+        {speaking ? <><SpeakingMouth /><path className="studio-cursor" d="M85 91h10" /></> : <>
+          <path className="studio-prompt" d="m72 79 7 6-7 6" />
+          <path className="studio-cursor" d="M85 91h10" />
+        </>}
       </g>;
   }
 }
@@ -50,7 +60,7 @@ function TerminalFace({ pose }: { pose: MascotPose }) {
  * Local SVG renderer; no network, random values, timers, or animation runtime.
  * Full/head crops share identity but the mark omits props, filters, and motion. */
 export function StudioOtto({
-  pose = "idle", tone = "signal", crop = "full", className = "", style, ariaLabel,
+  pose = "idle", tone = "signal", crop = "full", className = "", style, ariaLabel, speaking = false,
 }: MascotRendererProps) {
   const uid = `studio-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const id = (part: string) => `${uid}-${part}`;
@@ -70,6 +80,7 @@ export function StudioOtto({
   return <svg xmlns="http://www.w3.org/2000/svg"
     className={`studio-otto${className ? ` ${className}` : ""}`}
     data-pose={pose} data-tone={tone} data-crop={crop} data-palette={palette}
+    data-speaking={speaking ? "true" : undefined}
     viewBox={VIEWBOX[crop]} style={artStyle} role="img" focusable="false"
     aria-label={ariaLabel ?? `Studio Otto, ${pose}${tone === "late" ? ", late start needs a reason" : ""}`}>
     <defs>
@@ -154,7 +165,7 @@ export function StudioOtto({
           </g>}
           <g className="studio-gaze">
             <g className="studio-face" filter={full ? fill("phosphor") : undefined}>
-              <TerminalFace pose={pose} />
+              <TerminalFace pose={pose} speaking={speaking} />
             </g>
           </g>
         </g>

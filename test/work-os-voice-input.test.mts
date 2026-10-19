@@ -238,7 +238,7 @@ test("voice input is a real organization feature with a live readiness check", (
   const readiness = read("src/lib/work-os-readiness.ts");
   assert.match(readiness, /voice_input: asFlag\(flags\.voice_input\)/);
   assert.match(readiness, /runtime\.fal_key_missing/);
-  assert.match(readiness, /FAL_API_KEY is required for Work OS voice input transcription/);
+  assert.match(readiness, /FAL_API_KEY is required for Work OS voice input and for reading recaps aloud/);
   const migration = read("supabase/migrations/0054_work_os_voice_input.sql");
   assert.match(migration, /"voice_input": true/);
   assert.match(migration, /employee_companion' = 'true'/);
